@@ -7,18 +7,20 @@ This is the frontend for the ImpactAlphaSwarm project. It is built using React a
 - Node.js (v18 or higher recommended)
 - npm (installed with Node.js)
 
-## Installation
+## Installation & Recent TypeScript Migration ⚠️
+
+**Important for Team Members:** The frontend has been migrated from JavaScript (.jsx) to TypeScript (.tsx). After pulling the latest changes, you **must run `npm install` again** to install the required TypeScript dependencies and types.
 
 1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
 
-2. Install the necessary dependencies:
+2. Install/Update the necessary dependencies:
    ```bash
    npm install
    ```
-   *This will install all packages listed in `package.json`, including React, Vite, and Zustand.*
+   *This will install all packages listed in `package.json`, including React, Vite, Zustand, and the newly added TypeScript dev dependencies.*
 
 3. Start the development server:
    ```bash
