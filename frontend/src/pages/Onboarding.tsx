@@ -1,6 +1,5 @@
 import { useOnboarding } from '../hooks/useOnboarding'
 
-// Configuration for our engaging selection cards
 const RISK_PROFILES = [
   { id: 'Conservative', label: 'Shield & Protect', desc: 'Focus on wealth preservation. Steady, reliable dividend growth with minimal volatility.', color: 'hover:border-semantic-info' },
   { id: 'Moderate', label: 'Calculated Growth', desc: 'A balanced approach. Capturing upside momentum while hedging against major market drawdowns.', color: 'hover:border-semantic-success' },
@@ -22,7 +21,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen py-12 flex items-center justify-center bg-brand-bg p-4 relative overflow-hidden">
         
-      {/* Background glow tailored to AlphaSwarm brand */}
+
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-gradient-accent rounded-full blur-[120px] opacity-10 pointer-events-none"></div>
 
       <form 
@@ -40,32 +39,21 @@ export default function Onboarding() {
           </div>
         )}
         
-        {/* SECTION 1: Personal Info & Capital */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-[11px] text-brand-muted-fg font-semibold tracking-wider uppercase">First Name</label>
-            <input type="text" placeholder="Thabo" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={defaultInput} required disabled={loading} />
-          </div>
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-[11px] text-brand-muted-fg font-semibold tracking-wider uppercase">Last Name</label>
-            <input type="text" placeholder="Ndawula" value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className={defaultInput} required disabled={loading} />
-          </div>
-          
-          <div className="flex flex-col gap-1.5 md:col-span-2">
-            <label className="text-[11px] text-brand-muted-fg font-semibold tracking-wider uppercase">Initial Ammunition (ZAR)</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted-fg font-bold">R</span>
-              <input 
-                type="number" 
-                placeholder="100 000" 
-                value={formData.capital} 
-                onChange={(e) => setFormData({...formData, capital: e.target.value})} 
-                className={`${defaultInput} pl-9`} 
-                required 
-                disabled={loading} 
-                min="0"
-              />
-            </div>
+        {/* SECTION 1: Capital */}
+        <div className="flex flex-col gap-1.5 w-full">
+          <label className="text-[11px] text-brand-muted-fg font-semibold tracking-wider uppercase">Initial Ammunition (ZAR)</label>
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted-fg font-bold">R</span>
+            <input 
+              type="number" 
+              placeholder="100 000" 
+              value={formData.capital} 
+              onChange={(e) => setFormData({...formData, capital: e.target.value})} 
+              className={`${defaultInput} pl-9`} 
+              required 
+              disabled={loading} 
+              min="0"
+            />
           </div>
         </div>
 
@@ -92,7 +80,7 @@ export default function Onboarding() {
                     <span className={`font-bold ${isSelected ? 'text-brand-fg' : 'text-brand-muted-fg group-hover:text-brand-fg'}`}>
                       {risk.label}
                     </span>
-                    {/* Visual Checkmark Indicator */}
+                    
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors
                       ${isSelected ? 'border-brand-accent bg-brand-accent' : 'border-brand-border'}
                     `}>

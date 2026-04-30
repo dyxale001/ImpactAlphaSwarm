@@ -7,13 +7,13 @@ export function useOnboarding() {
   const { user, fetchProfile } = useAuthStore()
   const navigate = useNavigate()
   
+  // Removed firstName and lastName
   const [formData, setFormData] = useState({
-    firstName: '', 
-    lastName: '', 
     capital: '', 
     riskTolerance: '', 
     universe: [] as string[] 
   })
+  
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -43,27 +43,26 @@ export function useOnboarding() {
     setLoading(true)
     setError('')
 
-        const payload = {
-      id: user.id, 
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      email: user.email, 
-      role: 'user', 
+    // Payload strictly for user_preferences
+    const payload = {
+      user_id: user.id, // Using user_id to map to the preferences table
       capital: parseFloat(formData.capital), 
       risk_tolerance: formData.riskTolerance, 
       investment_universe: formData.universe, 
       is_active: true
     }
 
-    console.log("SENDING PAYLOAD TO SUPABASE:", payload)
+    console.log("SENDING PREFERENCES TO SUPABASE:", payload)
 
-    const { error: dbError } = await supabase.from('users').insert([payload])
+    // Insert into user_preferences instead of users
+    const { error: dbError } = await supabase.from('user_preferences').insert([payload])
 
     if (dbError) {
       console.error("SUPABASE ERROR DETAILS:", dbError)
       setError(dbError.message)
       setLoading(false)
     } else {
+      // Re-fetch the store to pull both profile and the new preferences
       await fetchProfile(user.id)
       navigate('/')
     }

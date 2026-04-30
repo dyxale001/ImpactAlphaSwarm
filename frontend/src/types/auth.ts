@@ -4,9 +4,14 @@ export interface UserProfile {
   last_name: string
   email: string
   role: 'user' | 'admin'
-  risk_tolerance: 'Conservative' | 'Moderate' | 'Aggressive' | 'Very Aggressive'
+  created_at: string
+}
+
+export interface UserPreferences {
+  id: string
+  user_id: string
+  risk_tolerance: string
   capital: number
   investment_universe: string[]
   is_active: boolean
-  created_at: string
 }

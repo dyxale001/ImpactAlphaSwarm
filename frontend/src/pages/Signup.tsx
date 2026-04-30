@@ -2,16 +2,18 @@ import { Link } from 'react-router-dom'
 import { useSignup } from '../hooks/useSignup'
 
 export default function Signup() {
-  const { email, setEmail, password, setPassword, error, loading, handleSignup } = useSignup()
+  const { formData, setFormData, error, loading, handleSubmit } = useSignup()
+
+  const defaultInput = "bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all w-full"
 
   return (
-    <div className="flex h-screen items-center justify-center bg-brand-bg p-4 flex-col">
+    <div className="flex min-h-screen items-center justify-center bg-brand-bg p-4 flex-col relative overflow-hidden">
         
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-primary rounded-full blur-[100px] opacity-10 pointer-events-none"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-primary rounded-full blur-[120px] opacity-10 pointer-events-none"></div>
 
       <form 
-        onSubmit={handleSignup} 
-        className="relative z-10 flex w-full max-w-sm flex-col gap-5 p-8 rounded-brand shadow-card bg-gradient-card border border-brand-border"
+        onSubmit={handleSubmit} 
+        className="relative z-10 flex w-full max-w-md flex-col gap-5 p-8 rounded-brand shadow-card bg-gradient-card border border-brand-border"
       >
         <div className="text-center mb-2">
           <h1 className="text-3xl font-bold text-brand-fg tracking-tight">AlphaSwarm</h1>
@@ -24,29 +26,60 @@ export default function Signup() {
           </div>
         )}
         
+        {/* FIRST & LAST NAME GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-brand-muted-fg font-medium tracking-wide uppercase">First Name</label>
+            <input 
+              type="text" 
+              placeholder="Thabo" 
+              value={formData.firstName} 
+              onChange={(e) => setFormData({...formData, firstName: e.target.value})} 
+              className={defaultInput}
+              required 
+              disabled={loading} 
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-brand-muted-fg font-medium tracking-wide uppercase">Last Name</label>
+            <input 
+              type="text" 
+              placeholder="Ndawula" 
+              value={formData.lastName} 
+              onChange={(e) => setFormData({...formData, lastName: e.target.value})} 
+              className={defaultInput}
+              required 
+              disabled={loading} 
+            />
+          </div>
+        </div>
+
+        {/* EMAIL */}
         <div className="flex flex-col gap-1">
           <label className="text-xs text-brand-muted-fg font-medium tracking-wide uppercase">Email</label>
           <input 
             type="email" 
             placeholder="investor@example.com" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            className="bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all" 
+            value={formData.email} 
+            onChange={(e) => setFormData({...formData, email: e.target.value})} 
+            className={defaultInput}
             required 
             disabled={loading} 
           />
         </div>
 
+        {/* PASSWORD */}
         <div className="flex flex-col gap-1 mb-2">
           <label className="text-xs text-brand-muted-fg font-medium tracking-wide uppercase">Password</label>
           <input 
             type="password" 
             placeholder="••••••••" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            className="bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all" 
+            value={formData.password} 
+            onChange={(e) => setFormData({...formData, password: e.target.value})} 
+            className={defaultInput}
             required 
             disabled={loading} 
+            minLength={6}
           />
         </div>
         

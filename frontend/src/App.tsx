@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
-import { useAuthStore } from './store/authStore' // Added this import
+import { useAuthStore } from './store/authStore' 
 
 // Route Guards
 import ProtectedRoute from './components/ProtectedRoute'
@@ -13,8 +13,8 @@ import Onboarding from './pages/Onboarding'
 
 // Updated Dashboard to test Zustand
 const Dashboard = () => {
-  // We use the Zustand store to pull the profile data
-  const { profile, user } = useAuthStore()
+  // Pull both profile (personal) and preferences (financial) from the store
+  const { profile, preferences, user } = useAuthStore()
 
   return (
     <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg flex-col gap-4">
@@ -25,15 +25,22 @@ const Dashboard = () => {
           <p className="text-brand-muted-fg text-sm">Welcome back,</p>
           <h2 className="text-2xl font-bold mb-6">{profile.first_name} {profile.last_name}</h2>
           
-          <div className="flex justify-between border-b border-brand-border/50 pb-3 mb-3">
-            <span className="text-brand-muted-fg">Capital:</span>
-            <span className="text-semantic-success font-mono font-bold">R {profile.capital}</span>
-          </div>
-          
-          <div className="flex justify-between">
-            <span className="text-brand-muted-fg">Risk DNA:</span>
-            <span className="text-brand-primary font-medium">{profile.risk_tolerance}</span>
-          </div>
+          {/* Read financial data from preferences instead of profile */}
+          {preferences ? (
+            <>
+              <div className="flex justify-between border-b border-brand-border/50 pb-3 mb-3">
+                <span className="text-brand-muted-fg">Capital:</span>
+                <span className="text-semantic-success font-mono font-bold">R {preferences.capital}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-brand-muted-fg">Risk DNA:</span>
+                <span className="text-brand-primary font-medium">{preferences.risk_tolerance}</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-brand-muted-fg text-sm italic">Swarm unconfigured. Please complete onboarding.</p>
+          )}
         </div>
       ) : (
         <p>Loading profile...</p>
