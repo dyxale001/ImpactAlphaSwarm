@@ -14,6 +14,10 @@ full reasoning traces.
 
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Any
+
+from quant_analyst import analyze_tickers as analyze_quant_tickers
+from sentiment_scout import analyze_tickers as analyze_sentiment_tickers
+
 import json
 
 
@@ -93,26 +97,34 @@ def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
     - Compute indicators (RSI, MACD, Sharpe, Beta, Volatility).
     - Produce Raw Quant Score (0–100).
     
-    In production: Replace mock data with actual yfinance + pandas_ta.
+    Integration: Uses the quant_analyst module for real market data analysis.
     """
     print("- Phase 2A: Quant Analyst analyzing market data...")
     
-    quant_results = {}
+    try:        
+        # Batch analyze all tickers with real data
+        quant_results = analyze_quant_tickers(state["tickers"])
+        
+        print(f"  ✓ Computed metrics for {len(quant_results)} assets")
+        return {"quant_results": quant_results}
     
-    for ticker in state["tickers"]:
-        # MOCK: Simulated technical analysis results
-        mock_quant = {
-            "rsi": 65 + hash(ticker) % 20,  # RSI range: 30–100
-            "macd": "bullish_crossover" if hash(ticker) % 2 == 0 else "bearish",
-            "sharpe_ratio": round(0.5 + (hash(ticker) % 10) / 10, 2),
-            "beta": round(0.8 + (hash(ticker) % 10) / 10, 2),
-            "volatility": round(0.15 + (hash(ticker) % 10) / 100, 3),
-            "raw_quant_score": 50 + (hash(ticker) % 40)  # 50–90 range for testing
-        }
-        quant_results[ticker] = mock_quant
-    
-    print(f"  ✓ Computed metrics for {len(quant_results)} assets")
-    return {"quant_results": quant_results}
+    except ImportError:
+        print("  ⚠ quant_analyst module not found; falling back to mock data")
+        # Fallback to mock data if module unavailable
+        quant_results = {}
+        for ticker in state["tickers"]:
+            mock_quant = {
+                "ticker": ticker,
+                "rsi": 65 + hash(ticker) % 20,
+                "macd": "bullish_crossover" if hash(ticker) % 2 == 0 else "bearish",
+                "sharpe_ratio": round(0.5 + (hash(ticker) % 10) / 10, 2),
+                "beta": round(0.8 + (hash(ticker) % 10) / 10, 2),
+                "volatility": round(0.15 + (hash(ticker) % 10) / 100, 3),
+                "raw_quant_score": 50 + (hash(ticker) % 40)
+            }
+            quant_results[ticker] = mock_quant
+        print(f"  ✓ Generated mock metrics for {len(quant_results)} assets")
+        return {"quant_results": quant_results}
 
 
 # 3. PHASE 2B: SENTIMENT SCOUT (Runs in Parallel)
@@ -129,20 +141,23 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     """
     print("- Phase 2B: Sentiment Scout scraping social signals...")
     
-    sentiment_results = {}
-    
-    for ticker in state["tickers"]:
-        # MOCK: Simulated sentiment analysis results
-        mock_sentiment = {
-            "sentiment_score": 40 + (hash(ticker) % 50),  # 40–90 range
-            "bullish_posts": (hash(ticker) % 20) + 5,
-            "bearish_posts": (hash(ticker) % 15),
-            "top_posts": [
-                f"Mock post 1: '{ticker} looking strong'",
-                f"Mock post 2: '{ticker} potential pump'"
-            ]
-        }
-        sentiment_results[ticker] = mock_sentiment
+    try:
+        sentiment_results = analyze_sentiment_tickers(state["tickers"])
+    except ImportError:
+        print("  ⚠ sentiment_scout module not found; falling back to mock data")
+        sentiment_results = {}
+        for ticker in state["tickers"]:
+            mock_sentiment = {
+                "ticker": ticker,
+                "sentiment_score": 40 + (hash(ticker) % 50),  # 40–90 range
+                "bullish_posts": (hash(ticker) % 20) + 5,
+                "bearish_posts": (hash(ticker) % 15),
+                "top_posts": [
+                    f"Mock post 1: '{ticker} looking strong'",
+                    f"Mock post 2: '{ticker} potential pump'"
+                ]
+            }
+            sentiment_results[ticker] = mock_sentiment
     
     print(f"  ✓ Analyzed sentiment for {len(sentiment_results)} assets")
     return {"sentiment_results": sentiment_results}
@@ -349,9 +364,9 @@ if __name__ == "__main__":
     # Run example analysis
     result = run_analysis(
         user_id="user_123",
-        risk_tolerance="Moderate",
-        universes=["Tech", "AI & Robotics"],
-        watchlist=["PLTR", "AI"],
+        risk_tolerance="Aggressive",
+        universes=["Tech", "AI & Robotics", "Green Energy"],
+        watchlist=["AI", "PLTR"],
         run_id="run_001"
     )
     
