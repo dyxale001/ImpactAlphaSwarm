@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { validateEmail, validatePassword } from '../utils/validation' // <-- Import validators
 
 export function useSignup() {
   const navigate = useNavigate()
@@ -26,7 +27,22 @@ export function useSignup() {
     setLoading(true)
     setError('')
 
-    // 1. Create the user in Supabase Auth
+    // --- 1. Client-Side Validation ---
+    if (!validateEmail(formData.email)) {
+      setError('Please enter a valid email address.')
+      setLoading(false)
+      return
+    }
+
+    const passwordCheck = validatePassword(formData.password)
+    if (!passwordCheck.isValid) {
+      setError(passwordCheck.message)
+      setLoading(false)
+      return
+    }
+
+
+    //Creating the user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,

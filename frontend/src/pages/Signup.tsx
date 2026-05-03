@@ -1,10 +1,19 @@
 import { Link } from 'react-router-dom'
+import { Check, X } from 'lucide-react'
 import { useSignup } from '../hooks/useSignup'
 
 export default function Signup() {
   const { formData, setFormData, error, loading, handleSubmit } = useSignup()
 
   const defaultInput = "bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all w-full"
+
+  const passwordCriteria = [
+    { label: 'At least 8 characters', met: formData.password.length >= 8 },
+    { label: 'Uppercase letter', met: /[A-Z]/.test(formData.password) },
+    { label: 'Lowercase letter', met: /[a-z]/.test(formData.password) },
+    { label: 'Number', met: /[0-9]/.test(formData.password) },
+    { label: 'Special character', met: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password) }
+  ]
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-bg p-4 flex-col relative overflow-hidden">
@@ -79,13 +88,28 @@ export default function Signup() {
             className={defaultInput}
             required 
             disabled={loading} 
-            minLength={6}
           />
+          
+          {/* PASSWORD CRITERIA CHECKLIST */}
+          <div className="mt-2 grid grid-cols-1 gap-1.5 p-2 bg-brand-bg rounded border border-brand-border/50">
+            {passwordCriteria.map((criterion, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-xs">
+                {criterion.met ? (
+                  <Check className="w-3.5 h-3.5 text-semantic-success" />
+                ) : (
+                  <X className="w-3.5 h-3.5 text-brand-muted-fg/50" />
+                )}
+                <span className={criterion.met ? "text-brand-fg" : "text-brand-muted-fg"}>
+                  {criterion.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
         
         <button 
           type="submit" 
-          disabled={loading} 
+          disabled={loading || !passwordCriteria.every(c => c.met)} 
           className="bg-gradient-primary hover:shadow-glow-primary text-brand-fg p-3 rounded-lg font-medium tracking-wide transition-all disabled:opacity-50 disabled:hover:shadow-none"
         >
           {loading ? 'Creating account...' : 'Sign Up'}

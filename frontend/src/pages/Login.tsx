@@ -4,9 +4,13 @@ import { useLogin } from '../hooks/useLogin'
 export default function Login() {
   const { email, setEmail, password, setPassword, error, loading, handleLogin } = useLogin()
 
+  const inputBorderClass = error 
+    ? "border-semantic-danger focus:ring-semantic-danger focus:border-semantic-danger" 
+    : "border-brand-border focus:ring-brand-primary focus:border-brand-primary";
+
   return (
     <div className="flex h-screen items-center justify-center bg-brand-bg p-4 flex-col">
-      {/* Glow Effect Background element */}
+      
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-primary rounded-full blur-[100px] opacity-10 pointer-events-none"></div>
 
       <form 
@@ -19,8 +23,8 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="text-semantic-danger text-sm bg-semantic-danger/10 border border-semantic-danger/20 p-3 rounded-lg">
-            {error}
+          <div className="text-semantic-danger text-sm font-medium bg-semantic-danger/10 border border-semantic-danger/30 p-3 rounded-lg flex items-center gap-2">
+            <span>⚠️ {error}</span>
           </div>
         )}
         
@@ -31,7 +35,7 @@ export default function Login() {
             placeholder="investor@example.com" 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
-            className="bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all" 
+            className={`bg-brand-secondary border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 transition-all ${inputBorderClass}`} 
             required 
             disabled={loading} 
           />
@@ -44,7 +48,7 @@ export default function Login() {
             placeholder="••••••••" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
-            className="bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary transition-all" 
+            className={`bg-brand-secondary border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 transition-all ${inputBorderClass}`} 
             required 
             disabled={loading} 
           />
