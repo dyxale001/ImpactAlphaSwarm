@@ -1,9 +1,6 @@
-// Note: This file defines a Zustand store for managing authentication state in a React application using Supabase. 
-// It includes the user's session, profile (personal info), preferences (financial info), and loading state.
-
 import { create } from 'zustand'
 import { Session, User } from '@supabase/supabase-js'
-import { UserProfile, UserPreferences } from '../types/auth'
+import { UserProfile, UserPreferences, RiskProfile } from '../types/auth'
 import { supabase } from '../lib/supabase'
 
 interface AuthState {
@@ -11,7 +8,10 @@ interface AuthState {
   user: User | null
   profile: UserProfile | null
   preferences: UserPreferences | null
+  riskProfile: RiskProfile | null
   isLoading: boolean
+
+  isProfileLoading: boolean
   setSession: (session: Session | null) => void
   fetchProfile: (userId: string) => Promise<void>
 }
@@ -21,7 +21,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
   preferences: null,
+  riskProfile: null,
   isLoading: true, 
+  isProfileLoading: true, 
   
   setSession: (session) => set({ 
     session, 
@@ -30,6 +32,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   }),
   
   fetchProfile: async (userId) => {
+    set({ isProfileLoading: true }) 
+    
+    // 1. Fetch Profile
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .select('*')
@@ -38,18 +43,29 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     if (profileError) {
       console.error("Error fetching user profile:", profileError.message)
+      set({ isProfileLoading: false })
       return
     }
 
+    // 2. Fetch User Preferences
     const { data: prefData } = await supabase
       .from('user_preferences')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle()
 
+    // 3. Fetch Risk Profile
+    const { data: riskData } = await supabase
+      .from('risk_profile')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+
     set({ 
       profile: profileData as UserProfile,
-      preferences: prefData ? (prefData as UserPreferences) : null
+      preferences: prefData ? (prefData as UserPreferences) : null,
+      riskProfile: riskData ? (riskData as RiskProfile) : null,
+      isProfileLoading: false 
     })
   }
 }))

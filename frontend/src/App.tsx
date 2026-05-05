@@ -1,6 +1,8 @@
-import { Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { useAuthStore } from './store/authStore' 
+import AdminEditUser from './pages/AdminEditUser'
 
 // Route Guards
 import ProtectedRoute from './components/ProtectedRoute'
@@ -10,11 +12,26 @@ import AdminRoute from './components/AdminRoute'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Onboarding from './pages/Onboarding'
+import AdminDashboard from './pages/AdminDashboard'
 
-// Updated Dashboard to test Zustand
 const Dashboard = () => {
-  // Pull both profile (personal) and preferences (financial) from the store
-  const { profile, preferences, user } = useAuthStore()
+  const { profile, preferences, riskProfile, user, isLoading, isProfileLoading } = useAuthStore()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const currentlyLoading = isProfileLoading !== undefined ? isProfileLoading : isLoading;
+    if (!currentlyLoading && profile?.role === 'admin') {
+      navigate('/admin', { replace: true })
+    }
+  }, [profile, isProfileLoading, isLoading, navigate])
+
+  const currentlyLoading = isProfileLoading !== undefined ? isProfileLoading : isLoading;
+  
+  if (currentlyLoading) {
+    return <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg">Loading workspace...</div>
+  }
+
+  if (profile?.role === 'admin') return null;
 
   return (
     <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg flex-col gap-4">
@@ -25,21 +42,40 @@ const Dashboard = () => {
           <p className="text-brand-muted-fg text-sm">Welcome back,</p>
           <h2 className="text-2xl font-bold mb-6">{profile.first_name} {profile.last_name}</h2>
           
-          {/* Read financial data from preferences instead of profile */}
-          {preferences ? (
+          {riskProfile ? (
             <>
               <div className="flex justify-between border-b border-brand-border/50 pb-3 mb-3">
                 <span className="text-brand-muted-fg">Capital:</span>
-                <span className="text-semantic-success font-mono font-bold">R {preferences.capital}</span>
+                <span className="text-semantic-success font-mono font-bold">R {riskProfile.capital}</span>
               </div>
               
               <div className="flex justify-between">
                 <span className="text-brand-muted-fg">Risk DNA:</span>
-                <span className="text-brand-primary font-medium">{preferences.risk_tolerance}</span>
+                <span className="text-brand-primary font-medium">{riskProfile.risk_tolerance}</span>
               </div>
             </>
           ) : (
             <p className="text-brand-muted-fg text-sm italic">Swarm unconfigured. Please complete onboarding.</p>
+          )}
+          
+          
+          {preferences && (
+             <div className="mt-4 pt-3 border-t border-brand-border/50 flex flex-col gap-2">
+               <div className="flex justify-between items-center">
+                 <span className="text-brand-muted-fg text-sm">Archetype:</span>
+                 {preferences.investor_archetype ? (
+                   <span className="text-brand-accent font-bold">{preferences.investor_archetype}</span>
+                 ) : (
+                   <span className="text-brand-muted-fg text-xs italic animate-pulse">Gemini Analyzing Profile...</span>
+                 )}
+               </div>
+               
+               
+               <div className="flex justify-between items-center">
+                 <span className="text-brand-muted-fg text-sm">Target Sectors:</span>
+                 <span className="text-brand-fg text-sm">{preferences.investment_universe?.length || 0} active</span>
+               </div>
+             </div>
           )}
         </div>
       ) : (
@@ -51,29 +87,22 @@ const Dashboard = () => {
   )
 }
 
-const AdminDashboard = () => (
-  <div className="flex h-screen items-center justify-center bg-brand-bg text-semantic-danger">
-    <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-  </div>
-)
-
 export default function App() {
-  useAuth() // Initializes Supabase auth listener globally
+  useAuth() 
 
   return (
     <Routes>
-      {/* Public Routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
 
-      {/* Routes needing Auth via ProtectedRoute */}
       <Route element={<ProtectedRoute />}>
         <Route path="/onboarding" element={<Onboarding />} />
+        
         <Route path="/" element={<Dashboard />} />
         
-        {/* Routes strictly requiring 'admin' role */}
         <Route element={<AdminRoute />}>
            <Route path="/admin" element={<AdminDashboard />} />
+           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
         </Route>
       </Route>
     </Routes>

@@ -14,7 +14,8 @@ export function useLogin() {
     setLoading(true)
     setError('')
     
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    // 1. Authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
     
     if (authError) {
       if (authError.message === 'Invalid login credentials') {
@@ -23,8 +24,23 @@ export function useLogin() {
         setError(authError.message)
       }
       setLoading(false)
-    } else {
-      navigate('/')
+      return
+    }
+
+    if (authData.user) {
+      // 2. Fetch the user's profile to check their role
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single()
+
+      // 3. Route accordingly based on role
+      if (profile?.role === 'admin') {
+        navigate('/admin')
+      } else {
+        navigate('/')
+      }
     }
   }
 

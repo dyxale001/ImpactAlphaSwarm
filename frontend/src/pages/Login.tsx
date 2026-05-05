@@ -24,7 +24,7 @@ export default function Login() {
 
         {error && (
           <div className="text-semantic-danger text-sm font-medium bg-semantic-danger/10 border border-semantic-danger/30 p-3 rounded-lg flex items-center gap-2">
-            <span>⚠️ {error}</span>
+            <span>{error}</span>
           </div>
         )}
         
