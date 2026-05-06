@@ -1,12 +1,8 @@
-//Note: This file defines a custom React hook called `useSignup` that manages the state and logic for a user signup form. 
-// It handles form data, submission, and interaction with the Supabase backend to create a new user account. 
-// The hook also manages loading and error states during the signup process.
-
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
-import { validateEmail, validatePassword } from '../utils/validation' // <-- Import validators
+import { validateEmail, validatePassword } from '../utils/validation'
 
 export function useSignup() {
   const navigate = useNavigate()
@@ -20,14 +16,15 @@ export function useSignup() {
   })
   
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuccessMessage('')
 
-    // --- 1. Client-Side Validation ---
     if (!validateEmail(formData.email)) {
       setError('Please enter a valid email address.')
       setLoading(false)
@@ -41,11 +38,16 @@ export function useSignup() {
       return
     }
 
-
-    //Creating the user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
+      options: {
+        data: {
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          role: 'user'
+        }
+      }
     })
 
     if (authError) {
@@ -55,28 +57,35 @@ export function useSignup() {
     }
 
     if (authData.user) {
-      const { error: dbError } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: authData.user.id,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            email: formData.email,
-            role: 'user'
-          }
-        ])
+      // If we have a session immediately, they are logged in.
+      // We can safely try inserting the profile here.
+      // Otherwise, we skip the insert because RLS will block it for unauthenticated users,
+      // and we handle profile creation upon their first successful login (in fetchProfile).
+      if (authData.session) {
+        const { error: dbError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: authData.user.id,
+              first_name: formData.firstName,
+              last_name: formData.lastName,
+              email: formData.email,
+              role: 'user'
+            }
+          ])
 
-      if (dbError) {
-        setError(dbError.message)
+        if (dbError) {
+          console.error("Profile creation error on signup:", dbError)
+        }
+        
+        setSession(authData.session)
+        navigate('/onboarding')
+      } else {
+        setSuccessMessage('A confirmation link has been sent to your email address. Please click the link to verify your account.')
         setLoading(false)
-        return
       }
-
-      setSession(authData.session)
-      navigate('/onboarding')
     }
   }
 
-  return { formData, setFormData, error, loading, handleSubmit }
+  return { formData, setFormData, error, successMessage, loading, handleSubmit }
 }

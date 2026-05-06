@@ -23,28 +23,56 @@ export const useAuthStore = create<AuthState>((set) => ({
   preferences: null,
   riskProfile: null,
   isLoading: true, 
-  isProfileLoading: true, 
+  isProfileLoading: false, 
   
-  setSession: (session) => set({ 
+  setSession: (session) => set(() => ({ 
     session, 
     user: session?.user ?? null,
-    isLoading: false 
-  }),
+    isLoading: false,
+    ...(session === null ? { isProfileLoading: false } : {})
+  })),
   
   fetchProfile: async (userId) => {
     set({ isProfileLoading: true }) 
     
     // 1. Fetch Profile
-    const { data: profileData, error: profileError } = await supabase
+    let { data: profileData, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       console.error("Error fetching user profile:", profileError.message)
       set({ isProfileLoading: false })
       return
+    }
+
+    // If profile doesn't exist, we attempt to create it using auth metadata (helpful when RLS prevented insert on signup)
+    if (!profileData) {
+      const { data: userData } = await supabase.auth.getUser()
+      const metadata = userData?.user?.user_metadata || {}
+      
+      const { data: newProfile, error: insertError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: userId,
+            first_name: metadata.first_name || '',
+            last_name: metadata.last_name || '',
+            email: userData?.user?.email || '',
+            role: 'user'
+          }
+        ])
+        .select()
+        .single()
+        
+      if (insertError) {
+        console.error("Error creating user profile on first login:", insertError.message)
+        set({ isProfileLoading: false })
+        return
+      }
+      profileData = newProfile
     }
 
     // 2. Fetch User Preferences
