@@ -13,12 +13,32 @@ full reasoning traces.
 """
 
 from langgraph.graph import StateGraph, START, END
-from typing import TypedDict, Any
+from typing import TypedDict, Any, Optional
 
 from quant_analyst import analyze_tickers as analyze_quant_tickers
 from sentiment_scout import analyze_tickers as analyze_sentiment_tickers
+from traces import Tracer, SocialMention, QuantMetrics
+from report_generator import generate_narrative_report, save_report
+
+from dotenv import load_dotenv
+load_dotenv()
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Module-level tracer (set during run_analysis)
+_current_tracer: Optional[Tracer] = None
+
+def set_tracer(tracer: Optional[Tracer]):
+    """Set the active tracer for the current analysis run."""
+    global _current_tracer
+    _current_tracer = tracer
+
+def get_tracer() -> Optional[Tracer]:
+    """Get the active tracer."""
+    return _current_tracer
 
 
 # 1. DEFINE STATE SCHEMA
@@ -79,6 +99,14 @@ def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
     tickers = list(set(tickers))[:30]
     
     print(f"  ✓ Curated {len(tickers)} tickers for analysis")
+    tracer = get_tracer()
+    if tracer:
+        tracer.tickers = tickers
+        tracer.log_step("phase_1_init", {
+            "tickers_count": len(tickers),
+            "universes": state["universes"],
+            "watchlist_count": len(state["watchlist"]),
+        })
     return {
         "tickers": tickers,
         "status": "initialized",
@@ -100,10 +128,26 @@ def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
     Integration: Uses the quant_analyst module for real market data analysis.
     """
     print("- Phase 2A: Quant Analyst analyzing market data...")
+    tracer = get_tracer()
     
     try:        
         # Batch analyze all tickers with real data
         quant_results = analyze_quant_tickers(state["tickers"])
+        
+        # Log to tracer
+        if tracer:
+            for ticker, metrics in quant_results.items():
+                quant_metrics = QuantMetrics(
+                    ticker=ticker,
+                    rsi=metrics.get("rsi"),
+                    macd_signal=metrics.get("macd"),
+                    sharpe_ratio=metrics.get("sharpe_ratio"),
+                    beta=metrics.get("beta"),
+                    volatility=metrics.get("volatility"),
+                    raw_quant_score=metrics.get("raw_quant_score"),
+                )
+                tracer.add_quant_metrics(ticker, quant_metrics)
+            tracer.log_step("phase_2_quant", {"count": len(quant_results), "tickers": list(quant_results.keys())})
         
         print(f"  ✓ Computed metrics for {len(quant_results)} assets")
         return {"quant_results": quant_results}
@@ -140,6 +184,7 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     In production: Replace mock data with real social scraping.
     """
     print("- Phase 2B: Sentiment Scout scraping social signals...")
+    tracer = get_tracer()
     
     try:
         sentiment_results = analyze_sentiment_tickers(state["tickers"])
@@ -158,6 +203,15 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
                 ]
             }
             sentiment_results[ticker] = mock_sentiment
+    
+    # Log to tracer
+    if tracer:
+        for ticker, sentiment_data in sentiment_results.items():
+            tracer.add_sentiment_output(ticker, sentiment_data)
+        tracer.log_step("phase_2_sentiment", {
+            "count": len(sentiment_results),
+            "tickers": list(sentiment_results.keys())
+        })
     
     print(f"  ✓ Analyzed sentiment for {len(sentiment_results)} assets")
     return {"sentiment_results": sentiment_results}
@@ -236,6 +290,15 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
     print(f"  ✓ Generated Top 5 rankings")
     for i, asset in enumerate(top_5, 1):
         print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
+    
+    # Log to tracer
+    tracer = get_tracer()
+    if tracer:
+        tracer.add_aggregates(top_5, unified_scores)
+        tracer.log_step("phase_3_synthesis", {
+            "top_5": [asset["ticker"] for asset in top_5],
+            "unified_scores": {t: unified_scores[t]["unified_score"] for t in unified_scores}
+        })
 
     return {"final_rankings": top_5, "status": "synthesized"}
 
@@ -249,18 +312,6 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
     - Format final rankings with full transparency.
     - Include reasoning traces (generated from execution audit trail).
     - Ready for REST API or WebSocket delivery to frontend.
-    
-    Reasoning trace example:
-    {
-        "ticker": "NVDA",
-        "quant_score": 78,
-        "sentiment_score": 85,
-        "adjustments": { "hype_penalty": -5, "risk_penalty": -8 },
-        "unified_score": 75,
-        "key_metrics": { "rsi": 68, "macd_signal": "bullish_crossover", ... },
-        "reasoning": "Strong quantitative indicators with bullish momentum...",
-        "decision": "High Confidence: bullish momentum backed by MACD crossover..."
-    }
     """
     print("- Phase 4: Formatting output with reasoning traces...")
     
@@ -335,27 +386,64 @@ def run_analysis(user_id: str, risk_tolerance: str, universes: list[str], watchl
         run_id: Unique analysis run identifier
     
     Returns:
-        Final state with Top 5 rankings and all analysis results
+        Final state with Top 5 rankings and all analysis results + trace path
     """
-    # Initialize state
-    initial_state = {
-        "user_id": user_id,
-        "risk_tolerance": risk_tolerance,
-        "universes": universes,
-        "watchlist": watchlist,
-        "tickers": [],
-        "quant_results": {},
-        "sentiment_results": {},
-        "final_rankings": [],
-        "run_id": run_id,
-        "status": "pending"
-    }
+    # Initialize tracer
+    tracer = Tracer(
+        run_id=run_id,
+        user_id=user_id,
+        risk_tolerance=risk_tolerance,
+        universes=universes,
+    )
+    set_tracer(tracer)
+    logger.info(f"Starting analysis run {run_id} for user {user_id}")
     
-    # Compile and run graph
-    app = build_graph()
-    result = app.invoke(initial_state)
+    try:
+        # Initialize state
+        initial_state = {
+            "user_id": user_id,
+            "risk_tolerance": risk_tolerance,
+            "universes": universes,
+            "watchlist": watchlist,
+            "tickers": [],
+            "quant_results": {},
+            "sentiment_results": {},
+            "final_rankings": [],
+            "run_id": run_id,
+            "status": "pending"
+        }
+        
+        # Compile and run graph
+        app = build_graph()
+        result = app.invoke(initial_state)
+        
+        # Update tracer with tickers (after phase 1)
+        if tracer:
+            tracer.tickers = result.get("tickers", [])
+            tracer.log_step("phase_1_init", {"tickers_count": len(result.get("tickers", []))})
+        
+        # Save trace and add to result
+        if tracer:
+            trace_path = tracer.save()
+            result["trace_path"] = trace_path
+            result["run_id"] = run_id
+            logger.info(f"Analysis run {run_id} completed. Trace saved to {trace_path}")
+
+            try:
+                print("  ✓ Generating narrative report via Groq...")
+                report = generate_narrative_report(trace_path)
+                report_path = save_report(report, f"data/reports/{run_id}.md")
+                result["report_path"] = report_path
+                tracer.trace["artifacts"]["report_path"] = report_path
+                tracer.save()
+                print(f"  ✓ Report saved to {report_path}")
+            except Exception as e:
+                logger.warning(f"Failed to generate report: {e}")
+        
+        return result
     
-    return result
+    finally:
+        set_tracer(None)
 
 
 if __name__ == "__main__":
@@ -365,8 +453,8 @@ if __name__ == "__main__":
     result = run_analysis(
         user_id="user_123",
         risk_tolerance="Aggressive",
-        universes=["Tech", "AI & Robotics", "Green Energy"],
-        watchlist=["AI", "PLTR"],
+        universes=["Tech"],
+        watchlist=[],
         run_id="run_001"
     )
     
@@ -374,6 +462,8 @@ if __name__ == "__main__":
     print("FINAL RESULT:")
     print("\n")
     print(f"Status: {result['status']}")
+    print(f"Run ID: {result.get('run_id', 'N/A')}")
+    print(f"Trace saved to: {result.get('trace_path', 'N/A')}")
     print(f"Top 5 Assets:")
     for i, asset in enumerate(result['final_rankings'], 1):
         print(f"  {i}. {asset['ticker']}: {asset['unified_score']:.0f} (Quant: {asset['quant_score']}, Sentiment: {asset['sentiment_score']})")

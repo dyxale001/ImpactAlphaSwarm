@@ -43,3 +43,5 @@ telethon==1.40.0
 vaderSentiment==3.3.2
 transformers==4.48.3
 torch>=2.5.1
+groq>=0.4.1
+python-dotenv>=1.0.0
