@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { useIdleTimeout } from './hooks/useIdleTimeout'
 import { useAuthStore } from './store/authStore' 
 import AdminEditUser from './pages/AdminEditUser'
 
@@ -89,6 +90,7 @@ const Dashboard = () => {
 
 export default function App() {
   useAuth() 
+  useIdleTimeout(15)
 
   return (
     <Routes>
