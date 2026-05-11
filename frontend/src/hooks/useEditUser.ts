@@ -45,7 +45,9 @@ export function useEditUser(userId: string | undefined) {
         first_name: formData.first_name, 
         last_name: formData.last_name 
       })
-      .eq('id', userId);
+      .eq('id', userId)
+      .select()
+      .single();
       
     if (updateError) {
       setError(updateError.message);
