@@ -3,33 +3,54 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 
-// The Psychometric Scoring Engine
-const determineExpertiseAndArchetype = (scenarios: Record<string, string>, sliders: Record<string, number>, risk: string) => {
+//Scoring Engine
+const determinePsychometrics = (scenarios: Record<string, string>, sliders: Record<string, number>, risk: string) => {
   let riskScore = 0;
   let expertiseScore = 0; 
+  
+  let sentimentBias = 'fundamentals';
+  let volatilityReaction = 'hold_steady';
 
-  // 1. Explicit Risk Tolerance (Contributes to risk, but rarely expertise)
+  // 1. Explicit Risk Tolerance
   if (risk === 'Conservative') riskScore -= 10;
   if (risk === 'Moderate') riskScore += 0;
   if (risk === 'Aggressive') riskScore += 10;
   if (risk === 'Very Aggressive') riskScore += 20;
 
-  // 2. Scenario Adjustments
-  if (scenarios.q_market_crash === 'panic_sell') { riskScore -= 10; expertiseScore -= 5; } // Novices panic
-  if (scenarios.q_market_crash === 'buy_dip') { riskScore += 5; expertiseScore += 5; } // Pros buy the dip
+  // 2. Scenario Adjustments & Trait Extraction
+  if (scenarios.q_market_crash === 'panic_sell') { 
+    riskScore -= 10; expertiseScore -= 5;
+    volatilityReaction = 'protective';
+  } 
+  else if (scenarios.q_market_crash === 'buy_dip') { 
+    riskScore += 5; expertiseScore += 5;
+    volatilityReaction = 'buy_the_dip';
+  }
+  else if (scenarios.q_market_crash === 'ignore') {
+    riskScore += 2; expertiseScore += 2;
+    volatilityReaction = 'hold_steady';
+  }
 
-  if (scenarios.q_hype_trend === 'momentum') { riskScore += 5; expertiseScore -= 2; }
-  if (scenarios.q_hype_trend === 'fundamentals') { riskScore -= 2; expertiseScore += 5; } // Looking at math = higher expertise
+  if (scenarios.q_hype_trend === 'momentum') { 
+    riskScore += 5; expertiseScore -= 2;
+    sentimentBias = 'momentum_and_hype';
+  }
+  else if (scenarios.q_hype_trend === 'fundamentals') { 
+    riskScore -= 2; expertiseScore += 5;
+    sentimentBias = 'fundamentals';
+  }
+  else if (scenarios.q_hype_trend === 'contrarian') {
+    riskScore -= 5; expertiseScore += 5;
+    sentimentBias = 'contrarian';
+  }
 
   if (scenarios.q_ai_relationship === 'quant') expertiseScore += 15;
   if (scenarios.q_ai_relationship === 'mentor') expertiseScore -= 15;
 
   // 3. Slider Adjustments
-  // Control
   const controlSlider = (sliders.q_control || 50) - 50; 
   expertiseScore += (controlSlider / 4); 
 
-  // Financial Literacy
   const literacySlider = (sliders.q_financial_literacy || 50) - 50; 
   expertiseScore += (literacySlider / 2);
 
@@ -53,7 +74,12 @@ const determineExpertiseAndArchetype = (scenarios: Record<string, string>, slide
     calculatedArchetype = "Moderate Growth Investor";
   }
   
-  return { calculatedExpertise, calculatedArchetype };
+  return { 
+    calculatedExpertise, 
+    calculatedArchetype,
+    sentimentBias,
+    volatilityReaction
+  };
 };
 
 export function useOnboarding() {
@@ -163,7 +189,7 @@ export function useOnboarding() {
       explicit_risk: formData.riskTolerance
     }
 
-    const { calculatedExpertise, calculatedArchetype } = determineExpertiseAndArchetype(
+    const { calculatedExpertise, calculatedArchetype, sentimentBias, volatilityReaction} = determinePsychometrics(
       formData.scenarioAnswers, 
       formData.sliderAnswers, 
       formData.riskTolerance
@@ -177,6 +203,8 @@ export function useOnboarding() {
       survey_answers: surveyResults,
       ai_derived_expertise: calculatedExpertise,
       investor_archetype: calculatedArchetype,
+      ai_derived_sentiment: sentimentBias,
+      ai_derived_volatility: volatilityReaction,
       is_active: true
     }
 

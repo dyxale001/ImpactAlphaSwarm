@@ -93,7 +93,7 @@ export default function Landing() {
               <div className="order-2 lg:order-1 relative group">
                 <div className="absolute -inset-2 bg-gradient-to-r from-brand-primary to-brand-accent rounded-xl blur-xl opacity-20 group-hover:opacity-40 transition duration-500"></div>
                 <img 
-                  src="/screenshots/dashboard.png" 
+                  src="/screenshots/Dashboard.png" 
                   alt="AlphaSwarm Dashboard" 
                   className="relative rounded-xl border border-brand-border/50 shadow-2xl object-cover backdrop-blur-sm bg-brand-bg/40"
                 />
