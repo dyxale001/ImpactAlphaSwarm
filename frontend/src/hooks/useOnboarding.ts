@@ -157,12 +157,6 @@ export function useOnboarding() {
 
     const currentUserId = sessionData.session.user.id
    
-    const riskPayload = {
-      user_id: currentUserId,
-      capital: parseFloat(formData.capital), 
-      risk_tolerance: formData.riskTolerance, 
-    }
-    
     const surveyResults = {
       scenarios: formData.scenarioAnswers,
       sliders: formData.sliderAnswers,
@@ -175,8 +169,10 @@ export function useOnboarding() {
       formData.riskTolerance
     );
 
-    const preferencesPayload = {
+    const analysisPayload = {
       user_id: currentUserId,
+      capital: parseFloat(formData.capital), 
+      risk_tolerance: formData.riskTolerance, 
       investment_universe: formData.universe,
       survey_answers: surveyResults,
       ai_derived_expertise: calculatedExpertise,
@@ -184,16 +180,13 @@ export function useOnboarding() {
       is_active: true
     }
 
-    const { error: riskError } = await supabase.from('risk_profile').insert([riskPayload])
-    if (riskError) {
-      setError(`Database Error (Risk Profile): ${riskError.message}`)
-      setLoading(false)
-      return
-    }
+  
+    const { error: analysisError } = await supabase
+      .from('user_analysis')
+      .insert([analysisPayload])
 
-    const { error: prefError } = await supabase.from('user_preferences').insert([preferencesPayload])
-    if (prefError) {
-      setError(`Database Error (Preferences): ${prefError.message}`) 
+    if (analysisError) {
+      setError(`Database Error: ${analysisError.message}`) 
       setLoading(false)
       return
     }

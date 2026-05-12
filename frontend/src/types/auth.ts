@@ -7,30 +7,19 @@ export interface UserProfile {
   created_at: string
 }
 
-export interface RiskProfile {
-  user_id: string
-  capital: number
-  risk_tolerance: string
-  created_at?: string
-  updated_at?: string
-}
-
-export interface UserPreferences {
+export interface UserAnalysis {
   user_id: string
   investment_universe: string[]
-  
-  survey_answers: {
-    scenarios: Record<string, string>
-    sliders: Record<string, number>
-    explicit_risk: string
-  }
-  
-  ai_derived_expertise?: 'novice' | 'intermediate' | 'advanced'
-  ai_derived_sentiment?: 'fundamentals' | 'momentum_and_hype' | 'contrarian'
+  survey_answers: any
+  ai_derived_expertise?: 'beginner' | 'intermediate' | 'expert'
+  ai_derived_sentiment?: 'bullish' | 'bearish' | 'neutral'
   ai_derived_volatility?: 'protective' | 'buy_the_dip' | 'hold_steady'
-  
   investor_archetype?: string
   ai_system_prompt?: string
+  
+  // Migrated from risk_profile
+  capital: any // Update to correct type (e.g., number | string)
+  risk_tolerance: string
   
   is_active: boolean
   created_at?: string
@@ -39,7 +28,7 @@ export interface UserPreferences {
 
 export type AdminUserView = UserProfile & { 
   user_preferences: Pick<
-    UserPreferences, 
+    UserAnalysis, 
     'investor_archetype' | 'ai_derived_expertise' | 'ai_derived_sentiment' | 'ai_derived_volatility'
   > | null;
 };

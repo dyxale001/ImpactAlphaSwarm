@@ -1,8 +1,8 @@
 import { supabase } from '../../lib/supabase'
-import { UserProfile, UserPreferences, RiskProfile } from '../../types/auth'
+import { UserProfile, UserAnalysis } from '../../types/auth'
 
 export async function fetchUserProfileData(userId: string) {
-  // 1. Fetch Profile
+  //fetch profile data
   let { data: profileData, error: profileError } = await supabase
     .from('users')
     .select('*')
@@ -14,7 +14,7 @@ export async function fetchUserProfileData(userId: string) {
     return { error: profileError }
   }
 
-  // Auto-create profile if missing
+  //Auto Create profile if missing
   if (!profileData) {
     const { data: userData } = await supabase.auth.getUser()
     const metadata = userData?.user?.user_metadata || {}
@@ -40,24 +40,16 @@ export async function fetchUserProfileData(userId: string) {
     profileData = newProfile
   }
 
-  // 2. Fetch User Preferences
-  const { data: prefData } = await supabase
-    .from('user_preferences')
+  const { data: analysisData } = await supabase
+    .from('user_analysis') 
     .select('*')
     .eq('user_id', userId)
     .maybeSingle()
 
-  // 3. Fetch Risk Profile
-  const { data: riskData } = await supabase
-    .from('risk_profile')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle()
 
   return {
     profile: (profileData as UserProfile) || null,
-    preferences: (prefData as UserPreferences) || null,
-    riskProfile: (riskData as RiskProfile) || null,
+    analysis: (analysisData as UserAnalysis) || null,
     error: null
   }
 }

@@ -15,7 +15,7 @@ export function useAdminUsers() {
       .from('users')
       .select(`
         *,
-        user_preferences!left(investor_archetype, ai_derived_expertise, ai_derived_sentiment, ai_derived_volatility)
+        user_analysis!left(investor_archetype, ai_derived_expertise, ai_derived_sentiment, ai_derived_volatility, ai_system_prompt, risk_tolerance, capital)
       `)
       .eq('role', 'user')
       .order('created_at', { ascending: false });

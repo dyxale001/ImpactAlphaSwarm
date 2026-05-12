@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore'
 
 export default function ProtectedRoute() {
 
-  const { session, profile, preferences, isLoading, isProfileLoading } = useAuthStore()
+  const { session, profile, analysis, isLoading, isProfileLoading } = useAuthStore()
   const location = useLocation()
 
  
@@ -21,7 +21,7 @@ export default function ProtectedRoute() {
   }
 
 
-  if (profile && profile.role !== 'admin' && !preferences && location.pathname !== '/onboarding') {
+  if (profile && profile.role !== 'admin' && !analysis && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />
   }
 

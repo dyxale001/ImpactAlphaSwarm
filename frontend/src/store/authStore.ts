@@ -1,14 +1,13 @@
 import { create } from 'zustand'
 import { Session, User } from '@supabase/supabase-js'
-import { UserProfile, UserPreferences, RiskProfile } from '../types/auth'
+import { UserProfile, UserAnalysis } from '../types/auth'
 import { fetchUserProfileData } from '../services/supabase/authService'
 
 interface AuthState {
   session: Session | null
   user: User | null
   profile: UserProfile | null
-  preferences: UserPreferences | null
-  riskProfile: RiskProfile | null
+  analysis: UserAnalysis | null
   isLoading: boolean
   isProfileLoading: boolean
 
@@ -20,8 +19,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
   profile: null,
-  preferences: null,
-  riskProfile: null,
+  analysis: null,
   isLoading: true, 
   isProfileLoading: false, 
   
@@ -35,8 +33,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   fetchProfile: async (userId) => {
     set({ isProfileLoading: true }) 
     
-    // Calls Supabase service
-    const { profile, preferences, riskProfile, error } = await fetchUserProfileData(userId)
+
+    const { profile, analysis, error } = await fetchUserProfileData(userId)
 
     if (error) {
       set({ isProfileLoading: false })
@@ -45,8 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set({ 
       profile,
-      preferences,
-      riskProfile,
+      analysis,
       isProfileLoading: false 
     })
   }
