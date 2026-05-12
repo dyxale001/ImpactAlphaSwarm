@@ -1,5 +1,6 @@
 import { useOnboarding } from '../hooks/useOnboarding'
 import SelectionCard from '../components/SelectionCard'
+import { formatNumberWithSpaces, unformatNumberSpaces } from '../utils/stringFormatters'
 import { 
   RISK_PROFILES, 
   SCENARIO_QUESTIONS, 
@@ -17,19 +18,18 @@ export default function Onboarding() {
   const defaultInput = "bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-accent focus:border-brand-accent transition-all w-full"
 
   return (
-    <div className="min-h-screen py-12 flex items-center justify-center bg-brand-bg p-4 relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-gradient-accent rounded-full blur-[120px] opacity-10 pointer-events-none"></div>
+    <div className="min-h-screen py-12 flex items-center justify-center bg-brand-bg p-4 relative overflow-hidden selection:bg-brand-primary selection:text-white">
+      <div 
+        className="fixed inset-0 z-0 opacity-20 bg-cover bg-center pointer-events-none mix-blend-luminosity"
+        style={{
+          backgroundImage: 'url("/backgrounds/abstract-dark.jpg")'
+        }}
+      />
+      <div className="fixed inset-0 z-0 bg-gradient-to-b from-brand-bg/40 via-brand-bg/80 to-brand-bg pointer-events-none"></div>
+      
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-brand-accent/20 rounded-full blur-[150px] pointer-events-none"></div>
 
-      <form onSubmit={handleSubmit} className="relative z-10 flex w-full max-w-2xl flex-col gap-6 p-8 md:p-10 rounded-brand shadow-card bg-gradient-card border border-brand-border">
-        
-        {/* Progress Bar */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex gap-2 flex-1">
-            {[1, 2, 3].map(i => (
-              <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-brand-accent shadow-glow-accent' : 'bg-brand-border/50'}`} />
-            ))}
-          </div>
-        </div>
+      <form onSubmit={handleSubmit} className="relative z-10 flex w-full max-w-2xl flex-col gap-6 p-8 md:p-10 rounded-2xl shadow-2xl bg-brand-bg/60 backdrop-blur-xl border border-brand-border/60">
 
         <div className="text-center mb-2">
           <h1 className="text-3xl font-bold text-brand-fg tracking-tight">
@@ -57,7 +57,18 @@ export default function Onboarding() {
               <label className="text-[11px] text-brand-muted-fg font-semibold tracking-wider uppercase">Initial Ammunition (ZAR)</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted-fg font-bold">R</span>
-                <input type="number" placeholder="100 000" value={formData.capital} onChange={(e) => setFormData({...formData, capital: e.target.value})} className={`${defaultInput} pl-9`} min="0" />
+                <input 
+                  type="text" // <-- Changed from number to text to allow spaces
+                  inputMode="numeric" // <-- Keeps the numeric keyboard on mobile
+                  placeholder="100 000" 
+                  value={formatNumberWithSpaces(formData.capital)} // <-- Apply formatting to display
+                  onChange={(e) => {
+      
+                    const rawValue = unformatNumberSpaces(e.target.value)
+                    setFormData({...formData, capital: rawValue})
+                  }} 
+                  className={`${defaultInput} pl-9`} 
+                />
               </div>
             </div>
 
