@@ -1,7 +1,7 @@
 
 export const UNIVERSE_OPTIONS = [
-  "Technology & AI", "Healthcare & Biotech", "Financials & Fintech", 
-  "Real Estate", "Energy & Renewables", "Consumer Discretionary", "Emerging Markets", "Digital Assets"
+  "Technology", "Green Energy", "Finance", 
+  "AI & Robotics", "Healthcare"
 ]
 
 // --- PHASE 2: FULL RISK & DEMOGRAPHIC SURVEY ---
