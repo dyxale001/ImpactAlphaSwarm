@@ -20,6 +20,7 @@ import ResearchPage from './pages/Research'
 import WatchlistPage from './pages/Watchlist'
 import PortfolioPage from './pages/Portfolio'
 import AssetDetailsPage from './pages/AssetDetailsPage'
+import SettingsPage from './pages/Settings'
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/asset/:ticker" element={<AssetDetailsPage />} />
         </Route>
         

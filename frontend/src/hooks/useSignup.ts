@@ -12,7 +12,8 @@ export function useSignup() {
     firstName: '',
     lastName: '',
     email: '',
-    password: ''
+    password: '',
+    confirmPassword: ''
   })
   
   const [error, setError] = useState('')
@@ -27,6 +28,12 @@ export function useSignup() {
 
     if (!validateEmail(formData.email)) {
       setError('Please enter a valid email address.')
+      setLoading(false)
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.')
       setLoading(false)
       return
     }
@@ -57,10 +64,6 @@ export function useSignup() {
     }
 
     if (authData.user) {
-      // If we have a session immediately, they are logged in.
-      // We can safely try inserting the profile here.
-      // Otherwise, we skip the insert because RLS will block it for unauthenticated users,
-      // and we handle profile creation upon their first successful login (in fetchProfile).
       if (authData.session) {
         const { error: dbError } = await supabase
           .from('users')

@@ -9,18 +9,15 @@ import {
 
 export default function AppLayout() {
   const navItems = [
-    { name: "Dashboard", path: "/", icon: LayoutDashboard },
+    { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
-  // Temporary toggle to hide specific sidebar tabs during this iteration
-  const hideSideNav = true;
-  const visibleNavItems = hideSideNav
-    ? navItems.filter((i) => i.name === "Dashboard")
-    : navItems;
+  // Show only Dashboard and Settings for now
+  const visibleNavItems = navItems.filter((i) => i.name === "Dashboard" || i.name === "Settings");
 
   return (
     <div className="flex h-screen bg-brand-bg text-brand-fg overflow-hidden">
@@ -62,7 +59,6 @@ export default function AppLayout() {
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />{" "}
-        {/* This will render Dashboard, Research, etc., based on routing */}
       </main>
     </div>
   );

@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Check, X, Terminal, LockKeyhole, ArrowRight, ShieldAlert, User, Mail } from 'lucide-react'
+import { Check, X, Terminal, LockKeyhole, ArrowRight, ShieldAlert, User, Mail, Eye, EyeOff } from 'lucide-react'
 import { useSignup } from '../hooks/useSignup'
+import { useState } from 'react'
 
 export default function Signup() {
   const { formData, setFormData, error, successMessage, loading, handleSubmit } = useSignup()
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const passwordCriteria = [
     { label: 'At least 8 characters', met: formData.password.length >= 8 },
@@ -144,16 +147,56 @@ export default function Signup() {
                 <div className="relative group">
                   <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     placeholder="••••••••" 
                     value={formData.password} 
                     onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                    className={`bg-brand-bg/50 border text-brand-fg placeholder:text-brand-muted-fg/40 pl-11 pr-4 py-3.5 w-full rounded-xl outline-none transition-all shadow-sm ${inputBorderClass}`}
+                    className={`bg-brand-bg/50 border text-brand-fg placeholder:text-brand-muted-fg/40 pl-11 pr-10 py-3.5 w-full rounded-xl outline-none transition-all shadow-sm ${inputBorderClass}`}
                     required 
                     disabled={loading} 
                   />
+                  <button
+                    type="button"
+                    aria-label="Show password while holding"
+                    onMouseDown={() => setShowPassword(true)}
+                    onMouseUp={() => setShowPassword(false)}
+                    onMouseLeave={() => setShowPassword(false)}
+                    onBlur={() => setShowPassword(false)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg/60 hover:text-brand-primary transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
-                
+
+                <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1 mt-3">Confirm Password</label>
+                <div className="relative group">
+                  <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={formData.confirmPassword || ''}
+                    onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                    className={`bg-brand-bg/50 border text-brand-fg placeholder:text-brand-muted-fg/40 pl-11 pr-10 py-3.5 w-full rounded-xl outline-none transition-all shadow-sm ${inputBorderClass}`}
+                    required
+                    disabled={loading}
+                  />
+                  <button
+                  type="button"
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  onMouseDown={() => setShowConfirmPassword(true)}
+                  onMouseUp={() => setShowConfirmPassword(false)}
+                  onMouseLeave={() => setShowConfirmPassword(false)}
+                  onBlur={() => setShowConfirmPassword(false)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg/60 hover:text-brand-primary transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+                </div>
+
+                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  <p className="text-semantic-danger text-sm mt-2">Passwords do not match.</p>
+                )}
+
                 {/* PASSWORD CRITERIA CHECKLIST */}
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 p-3 bg-brand-bg/40 rounded-xl border border-brand-border/40">
                   {passwordCriteria.map((criterion, idx) => (

@@ -11,7 +11,7 @@ export interface UserAnalysis {
   user_id: string
   investment_universe: string[]
   survey_answers: any
-  ai_derived_expertise?: 'beginner' | 'intermediate' | 'expert'
+  ai_derived_expertise?: 'novice' | 'intermediate' | 'advanced'
   ai_derived_sentiment?: 'bullish' | 'bearish' | 'neutral'
   ai_derived_volatility?: 'protective' | 'buy_the_dip' | 'hold_steady'
   investor_archetype?: string
