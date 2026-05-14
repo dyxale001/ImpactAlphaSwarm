@@ -1,7 +1,3 @@
-//Note: This file defines a custom React hook called `useLogin` that manages the state and logic for a user login form. 
-// It handles form data, submission, and interaction with the Supabase backend to authenticate the user. 
-// The hook also manages loading and error states during the login process.
-
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -18,13 +14,33 @@ export function useLogin() {
     setLoading(true)
     setError('')
     
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // 1. Authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
     
-    if (error) {
-      setError(error.message)
+    if (authError) {
+      if (authError.message === 'Invalid login credentials') {
+        setError('Incorrect email or password. Please try again.')
+      } else {
+        setError(authError.message)
+      }
       setLoading(false)
-    } else {
-      navigate('/')
+      return
+    }
+
+    if (authData.user) {
+      // 2. Fetch the user's profile to check their role
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single()
+
+      // 3. Route accordingly based on role
+      if (profile?.role === 'admin') {
+        navigate('/admin')
+      } else {
+        navigate('/')
+      }
     }
   }
 

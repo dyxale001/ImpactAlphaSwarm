@@ -1,21 +1,28 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { determinePsychometrics } from '../utils/scoringEngine'
 
 export function useOnboarding() {
   const { user, fetchProfile } = useAuthStore()
   const navigate = useNavigate()
   
-  // Removed firstName and lastName
+  const [step, setStep] = useState(1)
+
   const [formData, setFormData] = useState({
     capital: '', 
-    riskTolerance: '', 
-    universe: [] as string[] 
+    surveyAnswers: {} as Record<string, string>,
+    universe: [] as string[]
   })
   
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+
+  const psychometrics = useMemo(() => {
+    return determinePsychometrics(formData.surveyAnswers);
+  }, [formData.surveyAnswers]);  
 
   const toggleUniverse = (item: string) => {
     setFormData(prev => ({
@@ -26,47 +33,98 @@ export function useOnboarding() {
     }))
   }
 
+  const handleSurveyAnswer = (questionId: string, answerValue: string) => {
+    setFormData(prev => ({
+      ...prev,
+      surveyAnswers: {
+        ...prev.surveyAnswers,
+        [questionId]: answerValue
+      }
+    }))
+  }
+
+  const nextStep = () => {
+    setError('')
+    if (step === 1) {
+      if (!formData.capital || parseFloat(formData.capital) <= 0) return setError("Please enter valid initial capital.")
+    }
+    if (step === 2) {
+      if (Object.keys(formData.surveyAnswers).length < 20) return setError("Please answer all survey questions.")
+      if (formData.universe.length === 0) return setError("Please select at least one Investment Universe.")
+    }
+    setStep(prev => prev + 1)
+  }
+
+  const prevStep = () => {
+    setError('')
+    setStep(prev => prev - 1)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) return
     
-    // Validation
-    if (!formData.riskTolerance) {
-      setError("Please select a Risk Profile to continue.")
+   
+    if (step !== 3) {
+      nextStep()
       return
     }
-    if (formData.universe.length === 0) {
-      setError("Please select at least one sector for your Investment Universe.")
+
+    if (!user) {
+      setError("Critical Error: No user found. Please log in again.")
       return
     }
 
     setLoading(true)
     setError('')
 
-    // Payload strictly for user_preferences
-    const payload = {
-      user_id: user.id, // Using user_id to map to the preferences table
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !sessionData.session) {
+      setError("Session expired. Please log in again.")
+      setLoading(false)
+      return
+    }
+
+    const currentUserId = sessionData.session.user.id
+
+  
+    const analysisPayload = {
+      user_id: currentUserId,
       capital: parseFloat(formData.capital), 
-      risk_tolerance: formData.riskTolerance, 
-      investment_universe: formData.universe, 
+      risk_tolerance: psychometrics.calculatedArchetype,
+      investment_universe: formData.universe,
+      survey_answers: formData.surveyAnswers,
+      ai_derived_expertise: psychometrics.calculatedExpertise,
+      investor_archetype: psychometrics.calculatedArchetype,
+      ai_derived_sentiment: psychometrics.sentimentBias,
+      ai_derived_volatility: psychometrics.volatilityReaction,
       is_active: true
     }
 
-    console.log("SENDING PREFERENCES TO SUPABASE:", payload)
+    const { error: analysisError } = await supabase
+      .from('user_analysis')
+      .insert([analysisPayload])
 
-    // Insert into user_preferences instead of users
-    const { error: dbError } = await supabase.from('user_preferences').insert([payload])
-
-    if (dbError) {
-      console.error("SUPABASE ERROR DETAILS:", dbError)
-      setError(dbError.message)
+    if (analysisError) {
+      setError(`Database Error: ${analysisError.message}`) 
       setLoading(false)
-    } else {
-      // Re-fetch the store to pull both profile and the new preferences
-      await fetchProfile(user.id)
-      navigate('/')
+      return
     }
+
+    await fetchProfile(currentUserId)
+    navigate('/')
   }
 
-  return { formData, setFormData, error, loading, handleSubmit, toggleUniverse }
+  return { 
+    step, 
+    formData, 
+    setFormData, 
+    error, 
+    loading, 
+    psychometrics, 
+    handleSubmit, 
+    toggleUniverse, 
+    nextStep, 
+    prevStep, 
+    handleSurveyAnswer 
+  }
 }

@@ -6,7 +6,7 @@ export function useAuth() {
   const { setSession, fetchProfile } = useAuthStore()
 
   useEffect(() => {
-    // 1. Get initial session
+    // 1. This function gets the initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session?.user) fetchProfile(session.user.id)

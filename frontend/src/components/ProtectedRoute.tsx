@@ -2,16 +2,26 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
 export default function ProtectedRoute() {
-  const { session, profile, isLoading } = useAuthStore()
+
+  const { session, profile, analysis, isLoading, isProfileLoading } = useAuthStore()
   const location = useLocation()
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>
+ 
+  if (isLoading || isProfileLoading) {
+    return <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg">Verifying session...</div>
+  }
   
-  // Not logged in
-  if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (!session) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
   
-  // Logged in but hasn't completed onboarding, and not currently ON the onboarding page
+
   if (!profile && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />
+  }
+
+
+  if (profile && profile.role !== 'admin' && !analysis && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />
   }
 

@@ -19,6 +19,19 @@
   --color-semantic-danger: #CC5A3D;
   --color-semantic-info: #94A45C;
 
+ 
+  --color-background: var(--color-brand-bg);
+  --color-foreground: var(--color-brand-fg);
+  --color-muted: var(--color-brand-muted);
+  --color-muted-foreground: var(--color-brand-muted-fg);
+  --color-primary: var(--color-brand-primary);
+  --color-primary-foreground: var(--color-brand-bg);
+  --color-secondary: var(--color-brand-secondary);
+  --color-border: var(--color-brand-border);
+  --color-accent: var(--color-brand-accent);
+  --color-accent-foreground: var(--color-brand-bg);
+  --color-warning: var(--color-semantic-warning);
+
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
@@ -35,7 +48,37 @@
   --background-image-gradient-card-soft: linear-gradient(180deg, #303030, #242424);
 }
 
-/* Optional global styles for your dark theme */
+@layer components {
+
+  .soft-card {
+    @apply bg-brand-secondary border border-brand-border rounded-brand shadow-card;
+  }
+  .glass-card {
+    @apply bg-brand-card/80 backdrop-blur-md border border-brand-border rounded-brand shadow-card;
+  }
+  .chip {
+    @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase transition-colors;
+  }
+  .bento-grid {
+    @apply grid grid-cols-6 gap-4;
+  }
+  .glow-primary {
+    @apply shadow-[var(--shadow-glow-primary)];
+  }
+  .gradient-text {
+    @apply text-transparent bg-clip-text;
+    background-image: var(--background-image-gradient-mixed);
+  }
+}
+
+@keyframes shine {
+  0% { transform: translateX(-150%) skewX(-12deg); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateX(150%) skewX(-12deg); opacity: 0; }
+}
+
+
 body {
   background-color: var(--color-brand-bg);
   color: var(--color-brand-fg);
