@@ -23,6 +23,7 @@ from langsmith.client import Client
 from ..agents.quant_analyst import analyze_tickers as analyze_quant_tickers
 from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_tickers
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
+from ..utils.supabase_client import save_top_assets
 
 load_dotenv()
 
@@ -142,17 +143,10 @@ class AnalysisState(TypedDict):
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 1: Initializing session and scoping data...")
 
-    ticker_pool = {
-        "Tech": ["NVDA", "MSFT", "AAPL", "TSLA", "META", "GOOGL", "AMZN", "AMD", "AVGO", "CRM"],
-    "Green Energy": ["NEE", "ICLN", "PLUG", "RUN", "ENPH", "FSLR", "BEP", "SEDG", "TAN", "CWEN"],
-    "AI & Robotics": ["UPST", "CRSP", "ROBO", "ARKQ", "PLTR", "BOTZ", "ISRG", "PATH", "TER", "SYM"]
-    }
+    from ..utils.supabase_client import get_assets_by_universes
 
-    tickers = []
-    for universe in state["universes"]:
-        if universe in ticker_pool:
-            tickers.extend(ticker_pool[universe])
-
+    # Fetch tickers from Supabase by universe
+    tickers = get_assets_by_universes(state["universes"])
     tickers.extend(state["watchlist"])
     tickers = list(set(tickers))[:30]
 
@@ -315,6 +309,18 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
 
     print("Output ready for frontend:")
     print(json.dumps(output, indent=2))
+    # Persist top-5 to Supabase (ensure this runs before returning)
+    try:
+        save_res = save_top_assets(
+            run_id=state["run_id"],
+            user_id=state["user_id"],
+            top_5=state["final_rankings"],
+            quant_results=state.get("quant_results", {}),
+            sentiment_results=state.get("sentiment_results", {}),
+        )
+        logger.info(f"Saved top-5 to Supabase: {save_res.get('status')}")
+    except Exception as e:
+        logger.error(f"Failed to save top-5 to Supabase: {e}")
 
     print("Output formatted and ready")
     return {"status": "complete"}
@@ -430,14 +436,37 @@ def run_analysis(
 def main() -> None:
     print("AlphaSwarm LangGraph Orchestrator - Full Pipeline Demo\n")
 
-    result = run_analysis(
-        user_id="user_123",
-        risk_tolerance="Aggressive",
-        universes=["Green Energy"],
-        watchlist=[],
-        run_id="run_001",
-        expertise_level="intermediate",
-    )
+    # Fetch user preferences from Supabase
+    from ..utils.supabase_client import get_user_preferences, get_assets_by_universes
+    from ..utils.supabase_client import create_ai_run, update_ai_run_status
+    
+    user_id = "d7593d52-b416-42ea-95c8-8d183aade83c"  # Example user from your CSV
+    user_prefs = get_user_preferences(user_id)
+    
+    if not user_prefs:
+        print(f"Error: User {user_id} not found in database")
+        return
+    
+    print(f"Loaded user: {user_id}")
+    print(f"  Universes: {user_prefs['universes']}")
+    print(f"  Risk Tolerance: {user_prefs['risk_tolerance']}")
+    print(f"  Expertise Level: {user_prefs['expertise_level']}\n")
+
+    ai_run_id = create_ai_run(user_id=user_id, status="running")
+
+    try:
+        result = run_analysis(
+            user_id=user_id,
+            risk_tolerance=user_prefs["risk_tolerance"],
+            universes=user_prefs["universes"],
+            watchlist=[],
+            run_id=ai_run_id,
+            expertise_level=user_prefs["expertise_level"],
+        )
+        update_ai_run_status(ai_run_id, "complete")
+    except Exception:
+        update_ai_run_status(ai_run_id, "failed")
+        raise
 
     print("\n" + "\n")
     print("FINAL RESULT:")
