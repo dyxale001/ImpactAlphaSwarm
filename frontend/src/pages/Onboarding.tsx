@@ -173,14 +173,12 @@ export default function Onboarding() {
               lastName={user?.user_metadata?.last_name || "Investor"} 
               capital={formData.capital}
               universe={formData.universe}
-              archetype={psychometrics.calculatedArchetype}
+              tolerance={psychometrics.riskTolerance}
               expertise={psychometrics.calculatedExpertise}
-              sentiment={psychometrics.sentimentBias}
-              volatility={psychometrics.volatilityReaction}
             />
             
             <p className="text-center text-sm text-brand-muted-fg max-w-md mx-auto mt-2">
-              Based on your answers, AlphaSwarm has classified you as a <span className="text-brand-fg font-semibold">{psychometrics.calculatedArchetype}</span>. All future AI recommendations will be filtered through this risk mandate.
+              Based on your answers, AlphaSwarm has classified you as a <span className="text-brand-fg font-semibold">{psychometrics.riskTolerance}</span>. All future AI recommendations will be filtered through this risk mandate.
             </p>
           </div>
         )}

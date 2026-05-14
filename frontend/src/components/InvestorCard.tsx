@@ -5,10 +5,8 @@ interface InvestorCardProps {
   lastName?: string;
   capital: string;
   universe: string[];
-  archetype: string;
+  tolerance: string;
   expertise: string;
-  sentiment: string;
-  volatility: string;
 }
 
 export default function InvestorCard({ 
@@ -16,10 +14,8 @@ export default function InvestorCard({
   lastName = "Investor", 
   capital, 
   universe, 
-  archetype, 
-  expertise, 
-  sentiment, 
-  volatility 
+  tolerance, 
+  expertise
 }: InvestorCardProps) {
   
   return (
@@ -56,7 +52,7 @@ export default function InvestorCard({
 
         <div className="mt-auto pt-4 border-t border-gray-100 w-full">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1">Archetype</p>
-            <p className="text-sm font-bold text-gray-900">{archetype}</p>
+            <p className="text-sm font-bold text-gray-900">{tolerance}</p>
         </div>
       </div>
 
@@ -83,17 +79,6 @@ export default function InvestorCard({
             </p>
           </div>
 
-
-          <div className="flex items-center gap-3">
-            <div className="w-4 flex justify-center">
-              <svg className="w-3 h-3 text-brand-muted-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <p className="text-xs text-brand-fg capitalize">
-               {sentiment.replace(/_/g, ' ')} / {volatility.replace(/_/g, ' ')}
-            </p>
-          </div>
 
           <div className="flex items-start gap-3 mt-1">
             <div className="w-4 flex justify-center mt-0.5">

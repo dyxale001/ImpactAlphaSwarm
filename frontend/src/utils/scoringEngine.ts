@@ -9,7 +9,6 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
     }
   });
 
-  // Approx Max score for pure risk questions is ~45
   const baseTolerancePercentage = Math.min((riskToleranceScore / 45) * 100, 100);
 
   // 2. Assess Risk Capacity (Demographics)
@@ -27,7 +26,6 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   // 3. Calculate Final Adjusted Score
   const finalRiskScore = baseTolerancePercentage * capacityMultiplier;
 
-  let calculatedArchetype = "Moderate Growth Investor"; 
   let calculatedExpertise: 'novice' | 'intermediate' | 'advanced' = 'intermediate';
 
   // 4. Expertise check
@@ -40,45 +38,19 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   if (literacyScore >= 6) calculatedExpertise = 'advanced';
   else if (literacyScore <= 3) calculatedExpertise = 'novice';
 
-  // 5. Assign Final Institutional Profile
-  if (finalRiskScore >= 80) {
-    calculatedArchetype = calculatedExpertise === 'advanced' ? "Aggressive Active Investor" : "Aggressive Growth Investor";
-  } else if (finalRiskScore >= 60) {
-    calculatedArchetype = "Moderate Growth Investor";
+  // 5. Assign Final Tolerance Level
+  let riskTolerance = "Moderate";
+  if (finalRiskScore >= 70) {
+    riskTolerance = "Aggressive";
   } else if (finalRiskScore >= 40) {
-    calculatedArchetype = "Conservative Investor";
+    riskTolerance = "Moderate";
   } else {
-    calculatedArchetype = "Capital Preservation Portfolio";
+    riskTolerance = "Passive";
   }
 
-  // 6. Derive Sentiment Bias (Based on Speculation vs Fundamentals)
-  // Q6 (word for risk: 4 = Thrill) and Q10 (Gold mine speculation: 4 = 6 months salary)
-  const sentimentScore = parseInt(surveyAnswers['q_word_risk'] || "2") + parseInt(surveyAnswers['q_geologist_mine'] || "1");
-  let sentimentBias = 'fundamentals';
-  if (sentimentScore >= 6) {
-    sentimentBias = 'momentum_and_hype'; 
-  } else if (sentimentScore <= 3) {
-    sentimentBias = 'fundamentals';
-  } else {
-    sentimentBias = 'contrarian'; 
-  }
-
-  // 7. Derive Volatility Reaction (Based on Losses / Shock Events)
-  // Q3 (Vacation / Job loss shock: 1=Cancel, 4=Extend) and Q8 (Willingness to take worst-case loss)
-  const volatilityScore = parseInt(surveyAnswers['q_vacation_loss'] || "2") + parseInt(surveyAnswers['q_worst_best_case'] || "2");
-  let volatilityReaction = 'hold_steady';
-  if (volatilityScore >= 6) {
-    volatilityReaction = 'buy_the_dip';
-  } else if (volatilityScore <= 3) {
-    volatilityReaction = 'protective';
-  } else {
-    volatilityReaction = 'hold_steady';
-  }
   
   return { 
     calculatedExpertise, 
-    calculatedArchetype,
-    sentimentBias,
-    volatilityReaction
+    riskTolerance,
   };
 };

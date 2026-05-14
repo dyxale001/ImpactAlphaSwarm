@@ -55,14 +55,3 @@ If you are developing a production application, we recommend using TypeScript wi
 
 ---
 
-## Psychometric Data Engine
-
-The onboarding flow collects and derives psychometric data to tailor the AI Investment Committee's behavior to the user's specific psychology. Below are key derived metrics:
-
-### `ai_derived_sentiment` (Sentiment Bias - e.g., 'fundamentals' vs 'momentum')
-- **Why you need it:** An AI Investment Committee needs to know if the user cares more about solid financial math (P/E ratios, earnings) or social energy (Twitter hype, news momentum).
-- **How it's used:** If the user is biased toward "fundamentals", the AI agent might filter out highly volatile meme stocks and focus on undervalued cash-flow-positive companies. If they are "momentum" biased, the AI will actively look for hype breakouts.
-
-### `ai_derived_volatility` (Volatility Reaction - e.g., 'panic_sell' vs 'buy_dip' vs 'hold_steady')
-- **Why you need it:** The platform needs to understand how the user behaves under stress.
-- **How it's used:** If the AI detects a 10% market drop and knows the user's `volatility_reaction` is `panic_sell`, the AI might automatically suggest hedging strategies, send calming alerts, or pivot to defensive assets before the user panic-sells.

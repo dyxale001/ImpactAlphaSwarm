@@ -90,13 +90,10 @@ export function useOnboarding() {
     const analysisPayload = {
       user_id: currentUserId,
       capital: parseFloat(formData.capital), 
-      risk_tolerance: psychometrics.calculatedArchetype,
+      risk_tolerance: psychometrics.riskTolerance,
       investment_universe: formData.universe,
       survey_answers: formData.surveyAnswers,
       ai_derived_expertise: psychometrics.calculatedExpertise,
-      investor_archetype: psychometrics.calculatedArchetype,
-      ai_derived_sentiment: psychometrics.sentimentBias,
-      ai_derived_volatility: psychometrics.volatilityReaction,
       is_active: true
     }
 

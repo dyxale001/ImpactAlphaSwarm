@@ -14,6 +14,7 @@ import {
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
 import { type AssetRecommendation } from "../hooks/useDashboardStats";
+import { supabase } from "../lib/supabase";
 
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
@@ -74,8 +75,18 @@ export default function DashboardPage() {
 
   const topPickPreview = getTopPickPreview(topPickTab);
 
-  const { profile, isLoading, isProfileLoading } = useAuthStore();
+  const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
   const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+
+    }
+    setSession(null)
+    navigate('/', { replace: true })
+  }
 
   const currentlyLoading =
     isProfileLoading !== undefined ? isProfileLoading : isLoading;
@@ -118,6 +129,12 @@ export default function DashboardPage() {
               ? new Date(latestRunCreatedAt).toLocaleString()
               : "—"}
           </span>
+          <button
+            onClick={handleSignOut}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-semantic-danger/10 border border-semantic-danger/20 text-sm font-medium text-semantic-danger hover:bg-semantic-danger/20"
+          >
+            Sign out
+          </button>
           <div
             className={
               hideHeaderControls
