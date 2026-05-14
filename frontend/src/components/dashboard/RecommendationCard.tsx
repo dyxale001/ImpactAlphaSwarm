@@ -12,24 +12,22 @@ function getPreview(asset: AssetRecommendation, tab: PreviewTab) {
       return {
         title: "Market Vibe",
         body:
-          asset.sentimentScore >= 75
-            ? `Social channels are loudly bullish on ${asset.ticker}.`
-            : `Mixed-to-neutral sentiment.`,
+          asset.sentimentScore >= 70
+            ? `Strong social momentum. With a score of ${asset.sentimentScore}/100, the internet is highly bullish on ${asset.ticker}.`
+            : `Neutral chatter. A score of ${asset.sentimentScore}/100 indicates balanced or quiet discussion online.`,
       };
     case "fundamentals":
       return {
         title: "Hard Numbers",
-        body:
-          asset.fundamentalsScore >= 75
-            ? `Strong financials, reasonable valuation.`
-            : `Weak or stretched fundamentals.`,
+        body: `Quantitative Score: ${asset.fundamentalsScore}/100. Higher quant scores indicate stronger technical signals and healthier financials backing the AI's decision.`,
       };
     case "hype":
       return {
         title: "Hype Check",
-        body: asset.isHype
-          ? `Hype penalty: ${asset.hypePenalty}`
-          : `Hype penalty: ${asset.hypePenalty} (no penalty applied)`,
+        body:
+          asset.hypePenalty > 0
+            ? `Hype Penalty Applied: The AI deducted ${asset.hypePenalty} points from ${asset.ticker}'s final score because social hype is outpacing the math.`
+            : `Clear Signal. No hype penalties were applied (${asset.hypePenalty} points deducted).`,
       };
     default:
       return { title: "Quick Take", body: asset.reasoning };
@@ -164,7 +162,7 @@ export default function RecommendationCard({
         ))}
       </div>
 
-      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50 min-h-22">
+      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50">
         <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold">
           {preview.title}
         </p>

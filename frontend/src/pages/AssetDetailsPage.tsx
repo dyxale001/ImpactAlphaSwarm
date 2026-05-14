@@ -120,7 +120,7 @@ export default function AssetDetailsPage() {
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-brand-muted-fg">
-                  Last run:{" "}
+                  Last AI run:{" "}
                   {latestRunCreatedAt
                     ? new Date(latestRunCreatedAt).toLocaleString()
                     : "—"}

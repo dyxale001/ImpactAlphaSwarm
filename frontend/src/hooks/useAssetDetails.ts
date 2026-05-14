@@ -17,7 +17,12 @@ export function useAssetDetails(ticker: string | undefined) {
 
   useEffect(() => {
     async function fetchDetails() {
-      if (!ticker || !profile?.id) return;
+      if (!ticker || !profile?.id) {
+        setLatestRunCreatedAt(null);
+        setRecommendation(null);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
 
       try {
@@ -40,8 +45,9 @@ export function useAssetDetails(ticker: string | undefined) {
           .limit(1)
           .maybeSingle();
 
+        setLatestRunCreatedAt(latestRun?.created_at ?? null);
+
         if (latestRun) {
-          setLatestRunCreatedAt(latestRun.created_at ?? null);
           // 3. Fetch the specific recommendation for this asset in that run
           const { data: recData } = await supabase
             .from("ai_recommendation")
@@ -50,10 +56,14 @@ export function useAssetDetails(ticker: string | undefined) {
             .eq("asset_id", assetData.id)
             .maybeSingle();
 
-          if (recData) setRecommendation(recData);
+          setRecommendation(recData ?? null);
+        } else {
+          setRecommendation(null);
         }
       } catch (error) {
         console.error("Error fetching asset details:", error);
+        setLatestRunCreatedAt(null);
+        setRecommendation(null);
       } finally {
         setIsLoading(false);
       }

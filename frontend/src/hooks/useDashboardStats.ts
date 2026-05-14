@@ -23,6 +23,7 @@ export function useDashboardStats() {
   const [recommendationError, setRecommendationError] = useState<string | null>(
     null,
   );
+  const [latestRunCreatedAt, setLatestRunCreatedAt] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function useDashboardStats() {
 
         if (!profile?.id) {
           setRecs([]);
+          setLatestRunCreatedAt(null);
           setRecommendationError(
             "Unable to load dashboard data until your profile is available.",
           );
@@ -42,7 +44,7 @@ export function useDashboardStats() {
         // 1. Get the latest AI run for this user only.
         const { data: userLatestRun, error: userRunError } = await supabase
           .from("ai_runs")
-          .select("id")
+          .select("id, created_at")
           .eq("user_id", profile.id)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -53,9 +55,11 @@ export function useDashboardStats() {
         }
 
         const latestRunId = userLatestRun?.id ?? null;
+        setLatestRunCreatedAt(userLatestRun?.created_at ?? null);
 
         if (!latestRunId) {
           setRecs([]);
+          setLatestRunCreatedAt(null);
           setRecommendationError(
             "No AI runs are associated with your account yet.",
           );
@@ -135,6 +139,7 @@ export function useDashboardStats() {
         setRecs(formattedRecs);
       } catch (error) {
         setRecs([]);
+        setLatestRunCreatedAt(null);
         setRecommendationError(
           "We couldn't load your dashboard recommendations right now.",
         );
@@ -194,5 +199,6 @@ export function useDashboardStats() {
     sparkPoints,
     isLoadingRecs,
     recommendationError,
+    latestRunCreatedAt,
   };
 }

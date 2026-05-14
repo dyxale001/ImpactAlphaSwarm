@@ -20,8 +20,14 @@ import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 
 export default function DashboardPage() {
-  const { search, setSearch, topPick, filteredRecs, recommendationError } =
-    useDashboardStats();
+  const {
+    search,
+    setSearch,
+    topPick,
+    filteredRecs,
+    recommendationError,
+    latestRunCreatedAt,
+  } = useDashboardStats();
 
   type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
   const [topPickTab, setTopPickTab] = useState<PreviewTab>("overview");
@@ -105,27 +111,37 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-        <div
-          className={
-            hideHeaderControls ? "hidden" : "flex items-center gap-2 flex-wrap"
-          }
-        >
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search assets..."
-              className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
-            />
+        <div className="flex items-center gap-4 text-sm text-brand-muted-fg">
+          <span>
+            Last AI run:{" "}
+            {latestRunCreatedAt
+              ? new Date(latestRunCreatedAt).toLocaleString()
+              : "—"}
+          </span>
+          <div
+            className={
+              hideHeaderControls
+                ? "hidden"
+                : "flex items-center gap-2 flex-wrap"
+            }
+          >
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search assets..."
+                className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
+              />
+            </div>
+            <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-secondary/60 border border-brand-border text-sm font-medium hover:bg-brand-secondary text-brand-fg">
+              <RefreshCw className="w-4 h-4 text-brand-muted-fg" /> Refresh
+            </button>
+            <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold hover:opacity-90 shadow-lg shadow-brand-primary/20">
+              <Download className="w-4 h-4" /> Export
+            </button>
           </div>
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-secondary/60 border border-brand-border text-sm font-medium hover:bg-brand-secondary text-brand-fg">
-            <RefreshCw className="w-4 h-4 text-brand-muted-fg" /> Refresh
-          </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold hover:opacity-90 shadow-lg shadow-brand-primary/20">
-            <Download className="w-4 h-4" /> Export
-          </button>
         </div>
       </div>
 
@@ -150,7 +166,7 @@ export default function DashboardPage() {
               label="Confidence Score"
             />
           </Link>
-          <div className="flex-1 space-y-3">
+          <div className="flex-1 space-y-3 w-full min-w-0">
             <Link
               to={`/asset/${topPick?.ticker}`}
               className="flex items-start gap-3 hover:opacity-80 transition-opacity w-fit"
@@ -199,11 +215,11 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            <div className="bg-brand-bg/60 backdrop-blur-md rounded-2xl p-3 border border-brand-border/50">
-              <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold">
+            <div className="bg-brand-bg/60 backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
+              <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-2 font-semibold">
                 {topPickPreview.title}
               </p>
-              <p className="text-xs text-brand-fg/85 leading-relaxed font-mono">
+              <p className="text-xs text-brand-fg/85 leading-relaxed w-full">
                 {topPickPreview.body}
               </p>
             </div>
