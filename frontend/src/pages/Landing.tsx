@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, Activity, Terminal, CheckCircle2, ShieldAlert, Cpu, Lock } from 'lucide-react';
+import { ChevronRight, Activity, Terminal, CheckCircle2, ShieldAlert, Cpu, } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Landing() {
@@ -93,7 +93,7 @@ export default function Landing() {
               <div className="order-2 lg:order-1 relative group">
                 <div className="absolute -inset-2 bg-gradient-to-r from-brand-primary to-brand-accent rounded-xl blur-xl opacity-20 group-hover:opacity-40 transition duration-500"></div>
                 <img 
-                  src="/screenshots/dashboard.png" 
+                  src="/screenshots/Dashboard.png" 
                   alt="AlphaSwarm Dashboard" 
                   className="relative rounded-xl border border-brand-border/50 shadow-2xl object-cover backdrop-blur-sm bg-brand-bg/40"
                 />
@@ -163,33 +163,6 @@ export default function Landing() {
                 </div>
               </div>
             </div>
-
-            {/* Feature 4: The War Room / Vault (Onboarding) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-              <div className="flex flex-col gap-6 lg:pr-10 p-6 rounded-2xl bg-brand-bg/30 backdrop-blur-sm border border-white/5">
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20 backdrop-blur-md">
-                  <Lock size={24} />
-                </div>
-                <h3 className="text-3xl font-bold tracking-tight drop-shadow-md">The Vault & War Room</h3>
-                <p className="text-brand-muted-fg leading-relaxed">
-                  The AI works for *you*. During onboarding, establish your financial boundaries in the Vault and psychometrically align the AI's logic with your risk timeline in the War Room. 
-                </p>
-                <ul className="space-y-3 mt-2">
-                  <li className="flex items-center gap-3 text-sm text-brand-muted-fg"><CheckCircle2 className="text-amber-500 w-5 h-5" /> Strict Foundational Risk Limits</li>
-                  <li className="flex items-center gap-3 text-sm text-brand-muted-fg"><CheckCircle2 className="text-amber-500 w-5 h-5" /> Custom Liquidity & Mandate Sliders</li>
-                  <li className="flex items-center gap-3 text-sm text-brand-muted-fg"><CheckCircle2 className="text-amber-500 w-5 h-5" /> Select target Combat Zones (Sectors)</li>
-                </ul>
-              </div>
-              <div className="relative group">
-                 <div className="absolute -inset-2 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl blur-xl opacity-20 group-hover:opacity-40 transition duration-500"></div>
-                 <img 
-                    src="/screenshots/war-room.png" 
-                    alt="The War Room Customization" 
-                    className="relative w-full rounded-xl border border-brand-border/50 shadow-2xl object-cover backdrop-blur-sm bg-brand-bg/40"
-                  />
-              </div>
-            </div>
-
           </div>
         </section>
 
