@@ -1,22 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
+import { UNIVERSE_OPTIONS } from '../utils/onboardingData'
 
 type RiskTolerance = 'aggresive' | 'moderate' | 'conservative'
 type Expertise = 'novice' | 'intermediate' | 'advanced'
 
 const normalizeRiskTolerance = (value?: string): RiskTolerance => {
   const v = (value || '').toLowerCase().trim()
-
-  // Canonical values
-  if (v === 'aggresive') return 'aggresive'
+  if (v === 'aggresive' || v === 'aggressive') return 'aggresive'
   if (v === 'moderate') return 'moderate'
-  if (v === 'conservative') return 'conservative'
-
-  // Legacy aliases from old code/data
-  if (v === 'aggressive' || v === 'agressive') return 'aggresive'
-  if (v === 'passive' || v === 'tolerant') return 'conservative'
-
+  if (v === 'conservative' || v === 'passive' || v === 'tolerant') return 'conservative'
   return 'moderate'
 }
 
@@ -31,6 +25,7 @@ export const useUserSettings = () => {
     last_name: '',
     risk_tolerance: 'moderate' as RiskTolerance,
     expertise_level: 'intermediate' as Expertise,
+    investment_universe: [] as string[],
   })
 
   useEffect(() => {
@@ -38,20 +33,24 @@ export const useUserSettings = () => {
       analysis?.ai_derived_expertise === 'advanced'
         ? 'advanced'
         : analysis?.ai_derived_expertise === 'novice'
-          ? 'novice'
-          : 'intermediate'
+        ? 'novice'
+        : 'intermediate'
 
     setFormData({
       first_name: profile?.first_name || '',
       last_name: profile?.last_name || '',
       risk_tolerance: normalizeRiskTolerance(analysis?.risk_tolerance),
       expertise_level: normalizedExpertise,
+      investment_universe: Array.isArray(analysis?.investment_universe)
+        ? analysis!.investment_universe
+        : [],
     })
   }, [
     profile?.first_name,
     profile?.last_name,
     analysis?.risk_tolerance,
     analysis?.ai_derived_expertise,
+    analysis?.investment_universe,
   ])
 
   const updateFormField = (field: string, value: string) => {
@@ -62,6 +61,22 @@ export const useUserSettings = () => {
     setError(null)
     setSuccessMessage(null)
   }
+
+  const toggleUniverse = (item: string) => {
+    setFormData((prev) => {
+      const exists = prev.investment_universe.includes(item)
+      return {
+        ...prev,
+        investment_universe: exists
+          ? prev.investment_universe.filter((u) => u !== item)
+          : [...prev.investment_universe, item],
+      }
+    })
+    setError(null)
+    setSuccessMessage(null)
+  }
+
+  const availableUniverse = UNIVERSE_OPTIONS.filter((o) => !formData.investment_universe.includes(o))
 
   const saveChanges = async () => {
     if (!profile?.id) return
@@ -86,6 +101,7 @@ export const useUserSettings = () => {
         .upsert(
           {
             user_id: profile.id,
+            investment_universe: formData.investment_universe,
             risk_tolerance: normalizeRiskTolerance(formData.risk_tolerance),
             ai_derived_expertise: formData.expertise_level,
             is_active: true,
@@ -111,6 +127,9 @@ export const useUserSettings = () => {
       last_name: profile?.last_name || '',
       risk_tolerance: normalizeRiskTolerance(analysis?.risk_tolerance),
       expertise_level: (analysis?.ai_derived_expertise || 'intermediate') as Expertise,
+      investment_universe: Array.isArray(analysis?.investment_universe)
+        ? analysis!.investment_universe
+        : [],
     })
     setError(null)
     setSuccessMessage(null)
@@ -119,6 +138,8 @@ export const useUserSettings = () => {
   return {
     formData,
     updateFormField,
+    toggleUniverse,
+    availableUniverse,
     saveChanges,
     resetChanges,
     isSaving,

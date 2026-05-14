@@ -45,7 +45,7 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   } else if (finalRiskScore >= 40) {
     riskTolerance = "Moderate";
   } else {
-    riskTolerance = "Passive";
+    riskTolerance = "Conservative";
   }
 
   
