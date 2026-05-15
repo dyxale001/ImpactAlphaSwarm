@@ -4,54 +4,63 @@ import {
   ArrowLeft,
   BrainCircuit,
   Flame,
-  Eye,
-  MessageSquare,
   BarChart3,
+  MessageSquare,
+  TriangleAlert,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
-import DualBar from "../components/dashboard/DualBar";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 
-type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
-
-function getPreview(
-  recommendation: {
-    confidence_score: number;
-    sentiment_score: number;
-    quant_score: number;
-    hype_penalty: number;
-    reasoning_trace: string;
-  },
-  tab: PreviewTab,
-) {
-  switch (tab) {
-    case "sentiment":
-      return {
-        title: "Market Vibe",
-        body:
-          recommendation.sentiment_score >= 70
-            ? `Strong social momentum. With a score of ${recommendation.sentiment_score}/100, the internet is highly bullish on this asset.`
-            : `Neutral chatter. A score of ${recommendation.sentiment_score}/100 indicates balanced or quiet discussion online.`,
-      };
-    case "fundamentals":
-      return {
-        title: "Hard Numbers",
-        body: `Quantitative Score: ${recommendation.quant_score}/100. Higher quant scores indicate stronger technical signals and healthier financials backing the AI's decision.`,
-      };
-    case "hype":
-      return {
-        title: "Hype Check",
-        body:
-          recommendation.hype_penalty > 0
-            ? `Hype Penalty Applied: The AI deducted ${recommendation.hype_penalty} points from the final score because social hype is outpacing the math.`
-            : `Clear Signal. No hype penalties were applied (${recommendation.hype_penalty} points deducted).`,
-      };
-    default:
-      return {
-        title: "AlphaSwarm Thesis",
-        body: recommendation.reasoning_trace,
-      };
+function formatMetric(value: unknown, digits = 2) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(digits);
   }
+  return String(value);
+}
+
+function SectionCard({
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="soft-card w-full p-5 space-y-4 hover:border-brand-primary/30 transition-all">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
+            <Icon className="w-3 h-3 text-brand-primary" />
+            {title}
+          </p>
+          <p className="text-sm text-brand-muted-fg">{description}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MetricPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3">
+      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
+        {label}
+      </div>
+      <div className="text-sm font-semibold text-brand-fg">{value}</div>
+    </div>
+  );
 }
 
 export default function AssetDetailsPage() {
@@ -59,7 +68,7 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>("overview");
+  const [previewTab] = useState<"overview">("overview");
 
   if (isLoading) {
     return (
@@ -83,13 +92,12 @@ export default function AssetDetailsPage() {
     );
   }
 
-  const preview = recommendation
-    ? getPreview(recommendation, previewTab)
-    : { title: "AlphaSwarm Thesis", body: "" };
+  const reasoningTrace = recommendation?.reasoning_trace ?? "";
+  const hypePenalty = recommendation?.hype_penalty ?? 0;
+  const riskPenalty = recommendation?.risk_penalty ?? 0;
 
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
-      {/* Navigation Header */}
       <button
         onClick={() => navigate(-1)}
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
@@ -97,7 +105,6 @@ export default function AssetDetailsPage() {
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
       </button>
 
-      {/* Title & Pricing Hero */}
       <div className="flex flex-col gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -111,107 +118,137 @@ export default function AssetDetailsPage() {
           </p>
         </div>
 
-        {recommendation && (
-          <div className="flex items-start gap-6">
-            <ConfidenceRing
-              score={recommendation.confidence_score || 0}
-              label="Confidence Score"
-            />
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-brand-muted-fg">
-                  Last AI run:{" "}
-                  {latestRunCreatedAt
-                    ? new Date(latestRunCreatedAt).toLocaleString()
-                    : "—"}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <DualBar
-                  sentimentScore={recommendation.sentiment_score || 0}
-                  quantitativeScore={recommendation.quant_score || 0}
+        {recommendation ? (
+          <div className="soft-card w-full p-5 space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+              <div className="shrink-0">
+                <ConfidenceRing
+                  score={recommendation.confidence_score || 0}
+                  label="Confidence Score"
                 />
               </div>
 
-              {recommendation.hype_penalty > 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-2 mt-3 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                  <Flame className="w-4 h-4" /> Hype Risk
+              <div className="flex-1 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm text-brand-muted-fg">
+                    Last AI run:{" "}
+                    {latestRunCreatedAt
+                      ? new Date(latestRunCreatedAt).toLocaleString()
+                      : "—"}
+                  </div>
+                  <div className="chip bg-brand-primary/15 text-brand-primary">
+                    Score {formatMetric(recommendation.confidence_score)}/100
+                  </div>
                 </div>
-              )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
+                      <BrainCircuit className="w-3 h-3 text-brand-primary" />
+                      Reasoning Trace
+                    </div>
+                    <p className="text-sm leading-relaxed text-brand-fg/90">
+                      {reasoningTrace || "No reasoning trace available."}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                    <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
+                      <Flame className="w-3 h-3 text-brand-primary" />
+                      Risk and Hype
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 text-sm">
+                      <span className="text-brand-muted-fg">Hype penalty</span>
+                      <span className="font-semibold text-brand-fg">
+                        {formatMetric(hypePenalty)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 text-sm">
+                      <span className="text-brand-muted-fg">Risk penalty</span>
+                      <span className="font-semibold text-brand-fg">
+                        {formatMetric(riskPenalty)}
+                      </span>
+                    </div>
+
+                    {(hypePenalty > 0 || riskPenalty > 0) && (
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
+                        <TriangleAlert className="w-4 h-4" />
+                        Penalties applied to the final score
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+        ) : (
+          <div className="soft-card w-full p-5">
+            <p className="text-brand-muted-fg text-sm italic">
+              No recent AI analysis found for this asset.
+            </p>
           </div>
         )}
       </div>
 
-      <div className="w-full">
-        <div className="soft-card w-full p-5 space-y-4 hover:border-brand-primary/30 transition-all">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                AlphaSwarm Thesis
-              </p>
-              <p className="text-sm text-brand-muted-fg">
-                The latest AI reasoning, formatted like the dashboard cards.
-              </p>
+      {recommendation && (
+        <>
+          <SectionCard
+            title="Sentiment Data"
+            description="Social sentiment for this asset, pulled directly from the latest ai_recommendation row."
+            icon={MessageSquare}
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MetricPill
+                label="Bullish posts"
+                value={formatMetric(recommendation.bullish_posts, 0)}
+              />
+              <MetricPill
+                label="Bearish posts"
+                value={formatMetric(recommendation.bearish_posts, 0)}
+              />
+              <MetricPill
+                label="Sources"
+                value={recommendation.sources ? String(recommendation.sources) : "—"}
+              />
             </div>
-            {recommendation && (
-              <div className="chip bg-brand-primary/15 text-brand-primary">
-                Score {recommendation.confidence_score}/100
-              </div>
-            )}
-          </div>
+          </SectionCard>
 
-          {recommendation && (
-            <div className="flex items-center gap-1 bg-brand-bg/60 border border-brand-border/60 rounded-full p-1">
-              {[
-                {
-                  id: "overview" as PreviewTab,
-                  label: "Overview",
-                  icon: Eye,
-                },
-                {
-                  id: "sentiment" as PreviewTab,
-                  label: "Vibe",
-                  icon: MessageSquare,
-                },
-                {
-                  id: "fundamentals" as PreviewTab,
-                  label: "Numbers",
-                  icon: BarChart3,
-                },
-                { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setPreviewTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded-full transition-colors ${previewTab === tab.id ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:text-brand-fg"}`}
-                >
-                  <tab.icon className="w-3 h-3" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              ))}
+          <SectionCard
+            title="Quantitative Data"
+            description="Technical and risk metrics used by the model."
+            icon={BarChart3}
+          >
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <MetricPill
+                label="Beta"
+                value={formatMetric(recommendation.beta)}
+              />
+              <MetricPill
+                label="MACD"
+                value={formatMetric(recommendation.macd)}
+              />
+              <MetricPill
+                label="MACD histogram"
+                value={formatMetric(recommendation.macd_histogram)}
+              />
+              <MetricPill
+                label="RSI"
+                value={formatMetric(recommendation.rsi)}
+              />
+              <MetricPill
+                label="Sharpe ratio"
+                value={formatMetric(recommendation.sharpe_ratio)}
+              />
+              <MetricPill
+                label="Volatility"
+                value={formatMetric(recommendation.volatility)}
+              />
             </div>
-          )}
-
-          <div className="bg-brand-bg/50 rounded-2xl p-4 border border-brand-border/50 min-h-22">
-            <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold">
-              {preview.title}
-            </p>
-            {recommendation ? (
-              <p className="text-brand-fg/90 leading-relaxed text-sm">
-                {preview.body}
-              </p>
-            ) : (
-              <p className="text-brand-muted-fg text-sm italic">
-                No recent AI analysis found for this asset.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+          </SectionCard>
+        </>
+      )}
     </div>
   );
 }

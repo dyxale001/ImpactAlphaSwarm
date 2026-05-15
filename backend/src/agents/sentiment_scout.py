@@ -245,7 +245,7 @@ def analyze_ticker(ticker: str) -> dict[str, Any]:
 	scored = _score_mentions(mentions)
 	scored["ticker"] = ticker.upper()
 	scored["sources"] = {
-		"stocktwits": sum(1 for mention in mentions if mention.source.startswith("stocktwits:")),
+		"stocktwits",
 	}
 	return scored
 

@@ -138,6 +138,19 @@ def save_top_assets(
         quant = quant_results.get(ticker, {})
         sentiment = sentiment_results.get(ticker, {})
 
+        raw_sources = sentiment.get("sources")
+        normalized_sources = None
+        if isinstance(raw_sources, dict):
+            # prefer stocktwits when present and non-zero
+            if raw_sources.get("stocktwits"):
+                normalized_sources = "Stocktwits"
+            else:
+                # fallback: join any other present sources, capitalized
+                present = [k.capitalize() for k, v in raw_sources.items() if v]
+                normalized_sources = ", ".join(present) if present else None
+        else:
+            normalized_sources = raw_sources if raw_sources not in ("", []) else None
+
         row = {
             "asset_id": asset_id,
             "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
@@ -155,7 +168,7 @@ def save_top_assets(
             "rsi": quant.get("rsi"),
             "sharpe_ratio": quant.get("sharpe_ratio"),
             "volatility": quant.get("volatility"),
-            "sources": sentiment.get("sources"),
+            "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
         }
