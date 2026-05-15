@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { determinePsychometrics } from '../utils/scoringEngine'
+import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
+import { pollUntilComplete } from "../services/api/poll";
 
 export function useOnboarding() {
   const { user, fetchProfile } = useAuthStore()
@@ -108,6 +110,35 @@ export function useOnboarding() {
     }
 
     await fetchProfile(currentUserId)
+
+    try {
+      const { run_id } = await startAnalysis({
+        universes: formData.universe,
+        watchlist: [],
+        risk_tolerance: psychometrics.riskTolerance,
+        expertise_level: psychometrics.calculatedExpertise,
+      });
+
+      // store or surface run_id (localStorage shown as minimal approach)
+      localStorage.setItem("latest_run_id", run_id);
+
+      // optional: poll and wait before navigating
+      pollUntilComplete(run_id, getStatus, getResult, (s) => {
+        // update UI or notify user of progress
+      })
+        .then((res) => {
+          // optionally refresh profile/data or navigate
+          fetchProfile(currentUserId);
+          navigate("/");
+        })
+        .catch((err) => {
+          // handle failure (set error state)
+          console.error("Analysis failed", err);
+        });
+    } catch (err) {
+      console.error("Failed to start analysis", err);
+    }
+    
     navigate('/')
   }
 

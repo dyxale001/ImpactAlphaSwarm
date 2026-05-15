@@ -1,0 +1,45 @@
+import { supabase } from "../../lib/supabase";
+
+const BASE = import.meta.env.VITE_API_BASE ?? "";
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession();
+  return data?.session?.access_token ?? null;
+}
+
+export async function startAnalysis(payload: {
+  universes: string[];
+  watchlist?: string[];
+  risk_tolerance?: string;
+  expertise_level?: string;
+}) {
+  const token = await getToken();
+  console.log("Token from session:", token ? "✓ exists" : "✗ null");
+  
+  if (!token) {
+    throw new Error("No auth token — user may not be logged in");
+  }
+
+  const res = await fetch(`${BASE}/api/analysis/start`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getStatus(runId: string) {
+  const res = await fetch(`${BASE}/api/analysis/status/${runId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getResult(runId: string) {
+  const res = await fetch(`${BASE}/api/analysis/result/${runId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

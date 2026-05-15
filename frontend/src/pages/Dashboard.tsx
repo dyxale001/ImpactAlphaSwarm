@@ -20,6 +20,9 @@ import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 
+import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
+import { pollUntilComplete } from "../services/api/poll";
+
 export default function DashboardPage() {
   const {
     search,
@@ -75,8 +78,10 @@ export default function DashboardPage() {
 
   const topPickPreview = getTopPickPreview(topPickTab);
 
-  const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
+  const { profile, analysis, isLoading, isProfileLoading, setSession, fetchProfile } = useAuthStore();
   const navigate = useNavigate();
+
+  const [isRunning, setIsRunning] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -87,6 +92,31 @@ export default function DashboardPage() {
     setSession(null)
     navigate('/', { replace: true })
   }
+
+  const handleRefresh = async () => {
+  if (!profile?.id) return;
+
+  setIsRunning(true);
+  try {
+    const universes = Array.isArray(analysis?.investment_universe)
+      ? analysis.investment_universe
+      : [];
+
+    const { run_id } = await startAnalysis({
+      universes,
+      watchlist: [],
+      risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
+      expertise_level: analysis?.ai_derived_expertise ?? "novice",
+    });
+
+    await pollUntilComplete(run_id, getStatus, getResult);
+    await fetchProfile(profile.id);
+  } catch (e) {
+    console.error("Refresh analysis failed:", e);
+  } finally {
+    setIsRunning(false);
+  }
+};
 
   const currentlyLoading =
     isProfileLoading !== undefined ? isProfileLoading : isLoading;
@@ -135,6 +165,14 @@ export default function DashboardPage() {
           >
             Sign out
           </button>
+          <button
+            onClick={handleRefresh}
+            disabled={isRunning}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-secondary/60 border border-brand-border text-sm font-medium hover:bg-brand-secondary text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className="w-4 h-4 text-brand-muted-fg" />
+            {isRunning ? "Running..." : "Refresh"}
+          </button>
           <div
             className={
               hideHeaderControls
@@ -152,9 +190,6 @@ export default function DashboardPage() {
                 className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
               />
             </div>
-            <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-secondary/60 border border-brand-border text-sm font-medium hover:bg-brand-secondary text-brand-fg">
-              <RefreshCw className="w-4 h-4 text-brand-muted-fg" /> Refresh
-            </button>
             <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold hover:opacity-90 shadow-lg shadow-brand-primary/20">
               <Download className="w-4 h-4" /> Export
             </button>

@@ -45,3 +45,5 @@ torch>=2.5.1
 groq>=0.4.1
 python-dotenv>=1.0.0
 supabase
+fastapi
+uvicorn[standard]
