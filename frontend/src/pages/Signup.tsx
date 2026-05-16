@@ -21,45 +21,17 @@ export default function Signup() {
     : "border-brand-border/60 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/50";
 
   return (
-    <div className="flex min-h-screen bg-brand-bg relative selection:bg-brand-primary selection:text-white">
-      
-      {/* Left side branding/marketing panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0a0d13]">
-        <div 
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity"
-          style={{
-            backgroundImage:'url("/screenshots/laptop-background.png")'
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/50 to-transparent"></div>
-        <div className="absolute inset-0 bg-brand-primary/5 mix-blend-color-dodge"></div>
-        <div className="relative z-10 flex flex-col justify-between p-12 h-full w-full">
-          <Link to="/" className="w-fit">
-            <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-brand-fg to-brand-muted-fg flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <Terminal size={24} className="text-brand-primary" /> AlphaSwarm
-            </span>
-          </Link>
-          
-          <div className="max-w-lg mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-brand-primary/10 text-brand-primary border-l-2 border-brand-primary text-xs font-mono uppercase tracking-widest mb-6">
-              Institutional Grade AI
-            </div>
-            <h2 className="text-4xl font-bold text-white leading-tight tracking-tight mb-4">
-              Join the <br />Swarm.
-            </h2>
-            <p className="text-brand-muted-fg text-lg font-light leading-relaxed">
-              Create an account to deploy our multi-agent AI system. Analyze market sentiment, evaluate risk, and construct unshakeable portfolios.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="flex items-center justify-center min-h-screen bg-brand-bg relative selection:bg-brand-primary selection:text-white">
 
       {/* Right side form panel */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-hidden h-screen overflow-y-auto">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand-primary/10 rounded-full blur-[100px] -z-10 lg:hidden pointer-events-none"></div>
 
         <div className="w-full max-w-md flex flex-col z-10 py-10">
-          
+          <div className="mb-4">
+            <Link to="/" className="text-sm text-brand-muted-fg hover:text-brand-primary transition-colors font-medium">← Go back</Link>
+          </div>
+
           {successMessage ? (
              <div className="text-center bg-brand-bg/60 border border-brand-border/60 p-8 rounded-2xl shadow-lg backdrop-blur-md animate-in zoom-in-95 duration-500">
                <div className="mx-auto w-16 h-16 bg-semantic-success/20 rounded-full flex items-center justify-center mb-6 border border-semantic-success/30 shadow-[0_0_15px_rgba(var(--semantic-success),0.2)]">
@@ -93,7 +65,7 @@ export default function Signup() {
               {/* FIRST & LAST NAME GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1">First Name</label>
+                  <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1">First Name</label>
                   <div className="relative group">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                     <input 
@@ -108,7 +80,7 @@ export default function Signup() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1">Last Name</label>
+                  <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1">Last Name</label>
                   <div className="relative group">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                     <input 
@@ -126,7 +98,7 @@ export default function Signup() {
 
               {/* EMAIL */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1">Email Address</label>
+                <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1">Email Address</label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                   <input 
@@ -143,7 +115,7 @@ export default function Signup() {
 
               {/* PASSWORD */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1">Password</label>
+                <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1">Password</label>
                 <div className="relative group">
                   <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                   <input 
@@ -168,7 +140,7 @@ export default function Signup() {
                   </button>
                 </div>
 
-                <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1 mt-3">Confirm Password</label>
+                <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1 mt-3">Confirm Password</label>
                 <div className="relative group">
                   <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg/50 group-focus-within:text-brand-primary transition-colors" />
                   <input
@@ -217,7 +189,7 @@ export default function Signup() {
               <button 
                 type="submit" 
                 disabled={loading || !passwordCriteria.every(c => c.met)} 
-                className="mt-3 w-full flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white py-4 rounded-xl font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] hover:shadow-[0_0_20px_rgba(var(--brand-primary),0.4)] disabled:opacity-50 disabled:shadow-none"
+                className="mt-3 w-full flex items-center justify-center gap-2 bg-accent/95 hover:shadow-glow-accent text-brand-fg hover:bg-accent/70 py-4 rounded-xl font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] disabled:opacity-50 disabled:shadow-none"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">

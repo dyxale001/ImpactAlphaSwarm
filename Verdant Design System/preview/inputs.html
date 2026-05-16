@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<style>
+  .stack { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+  .field-pill { background: #fff; border: 1px solid #EFEFEF; border-radius: 999px; padding: 4px 4px 4px 22px; display: flex; align-items: center; gap: 12px; height: 56px; }
+  .field-pill input { flex: 1; border: 0; background: transparent; outline: none; font-family: 'Manrope', sans-serif; font-size: 15px; color: #1B3530; }
+  .field-pill input::placeholder { color: #9AAAA4; }
+  .field-pill button { border: 0; background: #1B3530; color: #fff; font-family: 'Manrope', sans-serif; font-weight: 500; padding: 0 22px; border-radius: 999px; font-size: 14px; height: 44px; cursor: pointer; }
+  .field-pill.accent button { background: #C7F269; color: #1B3530; }
+  .search { background: #fff; border: 1px solid #EFEFEF; border-radius: 999px; padding: 14px 22px; display: flex; align-items: center; gap: 10px; color: #9AAAA4; font-size: 14px; }
+  .search svg { width: 16px; height: 16px; stroke: #9AAAA4; }
+  .label-row { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6F827C; font-weight: 500; }
+</style></head>
+<body><div class="card" style="flex-direction: column; padding: 22px 28px; gap: 14px;">
+  <div class="stack">
+    <div class="label-row">Email capture (light)</div>
+    <div class="field-pill"><input placeholder="Enter your email or phone number"/><button>Try it free</button></div>
+  </div>
+  <div class="stack">
+    <div class="label-row">Email capture (on dark) — accent button</div>
+    <div class="field-pill accent" style="background:#fff;"><input placeholder="Enter your email or phone number"/><button>Try it free</button></div>
+  </div>
+  <div class="stack">
+    <div class="label-row">Search</div>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>Search your question…</div>
+  </div>
+</div></body></html>

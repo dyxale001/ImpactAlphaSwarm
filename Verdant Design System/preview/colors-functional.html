@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<style>
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+  .tile { border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; min-height: 70px; background: #FFFFFF; border: 1px solid #EFEFEF; }
+  .dot { width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0; }
+  .lab { font-size: 12px; font-weight: 600; color: var(--fg-heading); letter-spacing: 0.04em; text-transform: uppercase; }
+  .val { font-size: 11px; font-family: ui-monospace, monospace; color: var(--fg-muted); margin-top: 2px; }
+  h6 { margin: 0 0 10px 0; color: var(--fg-heading); font-size: 14px; font-weight: 600; }
+</style></head>
+<body><div class="card" style="flex-direction: column;">
+  <h6>Functional</h6>
+  <div class="row">
+    <div class="tile"><div class="dot" style="background:#4FB970"></div><div><div class="lab">Success</div><div class="val">#4FB970</div></div></div>
+    <div class="tile"><div class="dot" style="background:#F2C94C"></div><div><div class="lab">Warning</div><div class="val">#F2C94C</div></div></div>
+    <div class="tile"><div class="dot" style="background:#E25757"></div><div><div class="lab">Danger</div><div class="val">#E25757</div></div></div>
+    <div class="tile"><div class="dot" style="background:#5BA4E6"></div><div><div class="lab">Info</div><div class="val">#5BA4E6</div></div></div>
+  </div>
+</div></body></html>

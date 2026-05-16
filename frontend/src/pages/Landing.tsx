@@ -8,10 +8,7 @@ export default function Landing() {
       
       {/*Background */}
       <div 
-        className="fixed inset-0 z-0 opacity-15 bg-cover bg-center pointer-events-none mix-blend-luminosity"
-        style={{
-          backgroundImage: 'url("/backgrounds/abstract-dark.jpg")'
-        }}
+        className="fixed inset-0 z-0 opacity-15 bg-cover bg-center bg-background pointer-events-none mix-blend-luminosity"
       />
       
       <div className="relative z-10 w-full min-h-screen flex flex-col">
@@ -21,17 +18,17 @@ export default function Landing() {
           <div className="absolute inset-0 bg-brand-bg/60 backdrop-blur-md border-b border-brand-border/30 rounded-b-2xl"></div>
           
           <div className="flex items-center relative z-10">
-            <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-brand-fg to-brand-muted-fg flex items-center gap-2">
+            <span className="text-2xl font-black tracking-tighter bg-clip-text text-primary flex items-center gap-2">
               <Terminal size={24} className="text-brand-primary" /> AlphaSwarm
             </span>
           </div>
           <div className="flex items-center gap-6 relative z-10">
             <Link to="/login" className="text-brand-muted-fg font-medium hover:text-brand-primary transition-colors text-sm uppercase tracking-wider">
-              Client Portal
+              Sign In
             </Link>
             <Link 
               to="/signup" 
-              className="bg-brand-primary text-white px-6 py-2.5 rounded-lg font-bold hover:bg-brand-primary/90 transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] text-sm uppercase tracking-wider"
+              className="bg-accent/95 hover:shadow-glow-accent text-brand-fg hover:bg-accent/70 px-6 py-2.5 rounded-lg font-bold transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] text-sm uppercase tracking-wider"
             >
               Open Account
             </Link>
@@ -52,7 +49,7 @@ export default function Landing() {
             
             <h1 className="text-5xl lg:text-7xl font-black leading-[1.1] tracking-tighter drop-shadow-2xl">
               Institutional Grade.<br />
-              <span className="text-brand-muted-fg font-medium">Retail Access.</span>
+              <span className="text-primary font-medium">Retail Access.</span>
             </h1>
             
             <p className="text-xl text-brand-muted-fg max-w-2xl leading-relaxed font-light drop-shadow-md">
@@ -63,7 +60,7 @@ export default function Landing() {
             <div className="flex items-center justify-center gap-4 pt-6">
               <Link 
                 to="/signup" 
-                className="bg-brand-fg text-brand-bg px-8 py-4 rounded-lg font-bold hover:opacity-90 transition-all flex items-center gap-2 active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                className="bg-accent/95 hover:shadow-glow-accent text-brand-fg hover:bg-accent/70 px-8 py-4 rounded-lg font-bold hover:opacity-90 transition-all flex items-center gap-2 active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]"
               >
                 Launch Platform <ChevronRight size={20} />
               </Link>
@@ -73,7 +70,7 @@ export default function Landing() {
                   e.preventDefault();
                   document.getElementById('platform-tour')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="px-8 py-4 rounded-lg font-bold border border-brand-border/50 bg-brand-bg/50 backdrop-blur-sm text-brand-fg hover:bg-brand-secondary/50 transition-all"
+                className="px-8 py-4 rounded-lg font-bold border border-brand-border/50 bg-brand-bg/50 backdrop-blur-sm text-brand-fg hover:bg-primary/80 hover:text-background transition-all"
               >
                 View Platform
               </Link>

@@ -110,6 +110,8 @@ async def analysis_result(run_id: str):
     top_5 = []
     for rec in rec_rows[:5]:
         asset = asset_map.get(rec.get("ticker"), {})
+        # Prefer the snapshot price stored on the recommendation (price_at_run), fallback to current asset price
+        price_at_run = rec.get("price_at_run") or asset.get("current_price")
         top_5.append({
             "ticker": rec.get("ticker"),
             "rank": rec.get("rank"),
@@ -117,6 +119,6 @@ async def analysis_result(run_id: str):
             "fundamentals_score": rec.get("fundamentals_score"),
             "sentiment_score": rec.get("sentiment_score"),
             "name": asset.get("name"),
-            "current_price": asset.get("current_price"),
+            "current_price": price_at_run,
         })
     return {"top_5": top_5}

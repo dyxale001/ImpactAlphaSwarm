@@ -72,7 +72,7 @@ export default function DashboardPage() {
               : `Clear Signal. No hype penalties were applied (${topPick.hypePenalty} points deducted).`,
         };
       default:
-        return { title: "AlphaSwarm Thesis", body: topPick.reasoning };
+        return { title: "Quick Take", body: topPick.reasoning };
     }
   }
 
@@ -140,7 +140,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-l-4 border-brand-primary bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
         <div className="flex items-center gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-brand-fg">
@@ -161,16 +161,16 @@ export default function DashboardPage() {
           </span>
           <button
             onClick={handleSignOut}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-semantic-danger/10 border border-semantic-danger/20 text-sm font-medium text-semantic-danger hover:bg-semantic-danger/20"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger hover:bg-semantic-danger/20"
           >
             Sign out
           </button>
           <button
             onClick={handleRefresh}
             disabled={isRunning}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-secondary/60 border border-brand-border text-sm font-medium hover:bg-brand-secondary text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className="w-4 h-4 text-brand-muted-fg" />
+            <RefreshCw className="w-4 h-4 text-brand-fg" />
             {isRunning ? "Running..." : "Refresh"}
           </button>
           <div
@@ -198,7 +198,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Top Pick */}
-      <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-brand-primary rounded-lg p-6 relative z-50 overflow-visible hover:border-brand-border/60 transition-colors">
+      <div className="bg-accent/90 backdrop-blur-xl rounded-lg p-6 relative z-50 overflow-visible transition-colors glass-card">
         <Link
           to={`/asset/${topPick?.ticker}`}
           className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit"
@@ -227,10 +227,10 @@ export default function DashboardPage() {
                 <h2 className="text-2xl font-bold font-mono">
                   {topPick?.ticker}
                 </h2>
-                <span className="px-3 py-1 bg-brand-secondary rounded-full text-xs font-mono text-brand-muted-fg">
+                <span className="px-3 py-1 bg-primary rounded-full text-xs font-mono text-background bt-2">
                   {topPick?.name}
                 </span>
-                <div className="text-sm font-mono text-brand-muted-fg mt-1">
+                <div className="text-xl font-mono text-primary mt-3">
                   R{" "}
                   <span className="font-mono">
                     {topPick?.currentPrice?.toFixed(2)}
@@ -242,7 +242,7 @@ export default function DashboardPage() {
               sentimentScore={topPick?.sentimentScore || 0}
               quantitativeScore={topPick?.fundamentalsScore || 0}
             />
-            <div className="flex items-center gap-1 bg-brand-bg/60 border border-brand-border/50 rounded-full p-1 backdrop-blur-md">
+            <div className="flex items-center gap-1 bg-brand-bg border border-brand-border/50 rounded-full p-1 backdrop-blur-md">
               {[
                 { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
                 {
@@ -267,11 +267,11 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            <div className="bg-brand-bg/60 backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
-              <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-2 font-semibold">
+            <div className="bg-brand-bg backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
+              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold">
                 {topPickPreview.title}
               </p>
-              <p className="text-xs text-brand-fg/85 leading-relaxed w-full">
+              <p className="text-xs text-brand-fg leading-relaxed w-full">
                 {topPickPreview.body}
               </p>
             </div>
@@ -289,18 +289,18 @@ export default function DashboardPage() {
 
       {/* Grid */}
       <div>
-        <h2 className="text-lg font-semibold text-brand-fg mb-4">
+        <h2 className="text-2xl font-semibold text-brand-fg mb-4">
           Personalized Recommendations
         </h2>
         {recommendationError ? (
-          <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-brand-muted-fg">
-            <p className="font-semibold text-brand-fg mb-2">
+          <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-primary">
+            <p className="font-semibold text-primary mb-2">
               No dashboard data available
             </p>
             <p>{recommendationError}</p>
           </div>
         ) : filteredRecs.length === 0 ? (
-          <div className="glass-card p-6 text-center text-sm text-brand-muted-fg">
+          <div className="glass-card p-6 text-center text-sm text-primary">
             No recommendations available right now.
           </div>
         ) : (

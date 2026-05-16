@@ -109,7 +109,7 @@ export default function AssetDetailsPage() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-4xl font-bold text-brand-fg">{asset.ticker}</h1>
-            <span className="px-3 py-1 bg-brand-secondary rounded-full text-xs font-mono text-brand-muted-fg">
+            <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary">
               {asset.name}
             </span>
           </div>
@@ -196,23 +196,42 @@ export default function AssetDetailsPage() {
         <>
           <SectionCard
             title="Sentiment Data"
-            description="Social sentiment for this asset, pulled directly from the latest ai_recommendation row."
+            description="Social sentiment for this asset."
             icon={MessageSquare}
           >
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MetricPill
-                label="Bullish posts"
-                value={formatMetric(recommendation.bullish_posts, 0)}
-              />
-              <MetricPill
-                label="Bearish posts"
-                value={formatMetric(recommendation.bearish_posts, 0)}
-              />
-              <MetricPill
-                label="Sources"
-                value={recommendation.sources ? String(recommendation.sources) : "—"}
-              />
+            <div className="mb-3">
+              <div className="flex justify-between">
+                <span className="relative group inline-block">
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                    Confidence
+                  </span>
+                </span>
+                <span className="text-foreground font-mono font-semibold">
+                  {formatMetric(recommendation.sentiment_score, 0)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
+                <div
+                  className="h-full bg-primary flex items-center justify-end pr-2"
+                  style={{ width: `${recommendation.sentiment_score ?? 0}%` }}
+                >
+                </div>
+              </div>
             </div>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <MetricPill
+                    label="Bullish posts"
+                    value={formatMetric(recommendation.bullish_posts, 0)}
+                  />
+                  <MetricPill
+                    label="Bearish posts"
+                    value={formatMetric(recommendation.bearish_posts, 0)}
+                  />
+                  <MetricPill
+                    label="Sources"
+                    value={recommendation.sources ? String(recommendation.sources) : "—"}
+                  />
+                </div>
           </SectionCard>
 
           <SectionCard
@@ -220,32 +239,51 @@ export default function AssetDetailsPage() {
             description="Technical and risk metrics used by the model."
             icon={BarChart3}
           >
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <MetricPill
-                label="Beta"
-                value={formatMetric(recommendation.beta)}
-              />
-              <MetricPill
-                label="MACD"
-                value={formatMetric(recommendation.macd)}
-              />
-              <MetricPill
-                label="MACD histogram"
-                value={formatMetric(recommendation.macd_histogram)}
-              />
-              <MetricPill
-                label="RSI"
-                value={formatMetric(recommendation.rsi)}
-              />
-              <MetricPill
-                label="Sharpe ratio"
-                value={formatMetric(recommendation.sharpe_ratio)}
-              />
-              <MetricPill
-                label="Volatility"
-                value={formatMetric(recommendation.volatility)}
-              />
+            <div className="mb-3">
+              <div className="flex justify-between">
+                <span className="relative group inline-block">
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                    Confidence
+                  </span>
+                </span>
+                <span className="text-foreground font-mono font-semibold">
+                  {formatMetric(recommendation.quant_score, 0)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
+                <div
+                  className="h-full bg-primary flex items-center justify-end pr-2"
+                  style={{ width: `${recommendation.quant_score ?? 0}%` }}
+                >
+                </div>
+              </div>
             </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <MetricPill
+                    label="Beta"
+                    value={formatMetric(recommendation.beta)}
+                  />
+                  <MetricPill
+                    label="MACD"
+                    value={formatMetric(recommendation.macd)}
+                  />
+                  <MetricPill
+                    label="MACD histogram"
+                    value={formatMetric(recommendation.macd_histogram)}
+                  />
+                  <MetricPill
+                    label="RSI"
+                    value={formatMetric(recommendation.rsi)}
+                  />
+                  <MetricPill
+                    label="Sharpe ratio"
+                    value={formatMetric(recommendation.sharpe_ratio)}
+                  />
+                  <MetricPill
+                    label="Volatility"
+                    value={formatMetric(recommendation.volatility)}
+                  />
+                </div>
           </SectionCard>
         </>
       )}

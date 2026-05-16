@@ -1,0 +1,17 @@
+/* Shared base for preview cards. */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #FFFFFF;
+  font-family: 'Manrope', system-ui, sans-serif;
+  color: #112320;
+  overflow: hidden;
+}
+.card {
+  padding: 24px 28px;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+* { box-sizing: border-box; }

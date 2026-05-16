@@ -151,6 +151,20 @@ def save_top_assets(
         else:
             normalized_sources = raw_sources if raw_sources not in ("", []) else None
 
+        # Capture the asset's current price at the time of the run (snapshot)
+        price_at_run = None
+        try:
+            asset_row_resp = supabase.table("assets").select("current_price").eq("id", asset_id).limit(1).execute()
+            asset_row_data = asset_row_resp.data or []
+            if asset_row_data and asset_row_data[0].get("current_price") is not None:
+                try:
+                    price_at_run = float(asset_row_data[0].get("current_price"))
+                except Exception:
+                    price_at_run = asset_row_data[0].get("current_price")
+        except Exception as e:
+            print(f"Failed to fetch asset price for {ticker}: {e}")
+            price_at_run = None
+
         row = {
             "asset_id": asset_id,
             "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
@@ -160,6 +174,7 @@ def save_top_assets(
             "created_at": now,
             "run_id": run_id,
             "rank": rank,
+            "price_at_run": price_at_run,
             "quant_score": int(asset.get("quant_score") or 0),
             "beta": float(quant.get("beta")) if quant.get("beta") is not None else None,
             "risk_penalty": int(asset.get("adjustments", {}).get("risk_penalty", 0)),

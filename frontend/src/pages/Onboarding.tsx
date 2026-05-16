@@ -15,7 +15,7 @@ export default function Onboarding() {
     handleSurveyAnswer 
   } = useOnboarding()
 
-  const defaultInput = "bg-brand-secondary border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-accent focus:border-brand-accent transition-all w-full"
+  const defaultInput = "bg-brand-bg border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-accent focus:border-brand-accent transition-all w-full"
   
   const answeredCount = Object.keys(formData.surveyAnswers).length;
   const totalQuestions = SURVEY_QUESTIONS.length;
@@ -113,7 +113,7 @@ export default function Onboarding() {
                           className={`text-left p-3.5 rounded-lg border transition-all duration-200 group ${
                             isSelected 
                               ? 'border-brand-accent bg-brand-accent/5 shadow-glow-sm' 
-                              : 'border-brand-border/40 bg-brand-secondary/30 hover:border-brand-accent/40 hover:bg-brand-secondary'
+                              : 'border-brand-border/40 bg-brand-bg/30 hover:border-brand-accent/40 hover:bg-brand-secondary/10'
                           }`}
                         >
                           <div className="flex items-center gap-3.5">
@@ -151,7 +151,7 @@ export default function Onboarding() {
                         className={`px-4 py-2.5 rounded-full text-xs font-medium transition-all duration-200 border ${
                           isSelected 
                             ? 'bg-brand-primary border-brand-primary text-white shadow-glow-primary' 
-                            : 'bg-brand-secondary/40 border-brand-border/60 text-brand-muted-fg hover:border-brand-primary/40 hover:text-brand-fg'
+                            : 'bg-brand-bg/30 border-brand-border/60 text-brand-muted-fg hover:border-brand-primary/40 hover:text-brand-fg'
                         }`}
                       >
                         {item}
@@ -190,7 +190,7 @@ export default function Onboarding() {
               type="button" 
               onClick={prevStep} 
               disabled={loading} 
-              className="px-6 py-3 bg-brand-secondary/50 border border-brand-border hover:border-brand-fg/30 text-brand-fg rounded-xl font-semibold transition-all duration-200"
+              className="px-6 py-3 bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger hover:shadow-glow-accent rounded-xl font-semibold transition-all duration-200"
             >
               Back
             </button>
@@ -199,7 +199,7 @@ export default function Onboarding() {
           <button 
             type="submit" 
             disabled={loading || (step === 2 && (progressPercent < 100 || formData.universe.length === 0))} 
-            className={`flex-1 bg-gradient-accent hover:shadow-glow-accent text-brand-fg py-3 rounded-xl font-bold tracking-wide transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none`}
+            className={`flex-1 bg-accent hover:shadow-glow-accent text-brand-fg py-3 rounded-xl font-bold tracking-wide transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none`}
           >
             {loading 
               ? 'Initializing AlphaSwarm...' 

@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+  .tile { border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 96px; }
+  .lab { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+  .val { font-size: 12px; font-family: ui-monospace, monospace; opacity: 0.7; }
+  .sample { font-size: 18px; font-weight: 500; }
+  h6 { margin: 0 0 10px 0; color: var(--fg-heading); font-size: 14px; font-weight: 600; }
+</style></head>
+<body><div class="card" style="flex-direction: column;">
+  <h6>Semantic tokens</h6>
+  <div class="grid">
+    <div class="tile" style="background:#F8F8F8;">
+      <div><div class="lab" style="color:#1B3530;">bg-page</div><div class="sample" style="color:#1B3530;">Aa</div></div>
+      <div class="val" style="color:#1B3530;">#F8F8F8</div>
+    </div>
+    <div class="tile" style="background:#FFFFFF;border:1px solid #EFEFEF;">
+      <div><div class="lab" style="color:#1B3530;">bg-elevated</div><div class="sample" style="color:#1B3530;">Aa</div></div>
+      <div class="val" style="color:#1B3530;">#FFFFFF</div>
+    </div>
+    <div class="tile" style="background:#112320;">
+      <div><div class="lab" style="color:#fff;">bg-inverse</div><div class="sample" style="color:#fff;">Aa</div></div>
+      <div class="val" style="color:#C7F269;">#112320</div>
+    </div>
+    <div class="tile" style="background:#C7F269;">
+      <div><div class="lab" style="color:#1B3530;">bg-accent</div><div class="sample" style="color:#1B3530;">Aa</div></div>
+      <div class="val" style="color:#1B3530;">#C7F269</div>
+    </div>
+    <div class="tile" style="background:#FFFFFF;border:1px solid #EFEFEF;">
+      <div><div class="lab" style="color:#9AAAA4;">fg-heading</div><div class="sample" style="color:#1B3530;">Headline</div></div>
+      <div class="val" style="color:#9AAAA4;">#1B3530</div>
+    </div>
+    <div class="tile" style="background:#FFFFFF;border:1px solid #EFEFEF;">
+      <div><div class="lab" style="color:#9AAAA4;">fg-body</div><div class="sample" style="color:#112320;">Body copy</div></div>
+      <div class="val" style="color:#9AAAA4;">#112320</div>
+    </div>
+    <div class="tile" style="background:#FFFFFF;border:1px solid #EFEFEF;">
+      <div><div class="lab" style="color:#9AAAA4;">fg-muted</div><div class="sample" style="color:#6F827C;">Secondary</div></div>
+      <div class="val" style="color:#9AAAA4;">#6F827C</div>
+    </div>
+    <div class="tile" style="background:#FFFFFF;border:1px solid #EFEFEF;">
+      <div><div class="lab" style="color:#9AAAA4;">fg-subtle</div><div class="sample" style="color:#9AAAA4;">Meta label</div></div>
+      <div class="val" style="color:#9AAAA4;">#9AAAA4</div>
+    </div>
+  </div>
+</div></body></html>

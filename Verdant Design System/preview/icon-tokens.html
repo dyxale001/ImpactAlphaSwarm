@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  .row { display: flex; gap: 24px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+  .lab { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6F827C; font-weight: 500; min-width: 84px; }
+  .token { width: 44px; height: 44px; border-radius: 999px; background: #1B3530; color: #C7F269; display: flex; align-items: center; justify-content: center; }
+  .token.lime { background: #C7F269; color: #1B3530; }
+  .token.soft { background: #EDFACC; color: #1B3530; }
+  .token.outline { background: transparent; border: 1.5px solid #1B3530; color: #1B3530; }
+  .token svg { width: 20px; height: 20px; stroke-width: 1.8; }
+  .inline { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 500; color: #1B3530; }
+  .inline .token-sm { width: 26px; height: 26px; border-radius: 999px; background: #1B3530; color: #C7F269; display: flex; align-items: center; justify-content: center; }
+  .inline .token-sm svg { width: 14px; height: 14px; }
+  h6 { margin: 0 0 6px 0; color: #1B3530; font-size: 14px; font-weight: 600; }
+</style></head>
+<body><div class="card" style="flex-direction: column; padding: 22px 28px; gap: 14px;">
+  <h6>Token icons (Lucide · substituted)</h6>
+  <div class="row">
+    <div class="lab">Variants</div>
+    <div class="token"><i data-lucide="zap"></i></div>
+    <div class="token lime"><i data-lucide="credit-card"></i></div>
+    <div class="token soft"><i data-lucide="wallet"></i></div>
+    <div class="token outline"><i data-lucide="arrow-up-right"></i></div>
+    <div class="token" style="background:#fff;border:1px solid #EFEFEF;color:#1B3530;"><i data-lucide="search"></i></div>
+  </div>
+  <div class="row">
+    <div class="lab">Inline</div>
+    <div class="inline">Streamline <span class="token-sm"><i data-lucide="zap"></i></span> Your Goals</div>
+    <div class="inline">Connect <span class="token-sm"><i data-lucide="layers"></i></span> tools</div>
+  </div>
+  <div class="row">
+    <div class="lab">Separator</div>
+    <div class="inline" style="font-size:14px;font-weight:500;background:#1B3530;color:#fff;padding:10px 20px;border-radius:999px;">
+      Invoices <i data-lucide="zap" style="color:#C7F269;width:14px;height:14px;"></i> Reports <i data-lucide="zap" style="color:#C7F269;width:14px;height:14px;"></i> Travel
+    </div>
+  </div>
+  <script>lucide.createIcons();</script>
+</div></body></html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<style>
+  body { background: #F8F8F8; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; width: 100%; }
+  .tile { background: #fff; border-radius: 20px; padding: 18px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .tile.dark { background: #112320; }
+  .wordmark { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 30px; letter-spacing: -0.04em; color: #1B3530; }
+  .wordmark.light { color: #fff; }
+  .badge { width: 48px; height: 48px; border-radius: 14px; background: #C7F269; display: flex; align-items: center; justify-content: center; font-family: 'Manrope', sans-serif; font-weight: 800; color: #1B3530; font-size: 24px; box-shadow: 0 4px 12px rgba(17,35,32,0.1); }
+  .lab { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #6F827C; font-weight: 500; }
+  .lab.light { color: #9DB6AF; }
+</style></head>
+<body><div class="card" style="flex-direction: column; padding: 22px 28px; background: #F8F8F8;">
+  <div class="grid">
+    <div class="tile">
+      <div class="wordmark">Expensify</div>
+      <div class="lab">Wordmark · Light bg</div>
+    </div>
+    <div class="tile dark">
+      <div class="wordmark light">Expensify</div>
+      <div class="lab light">Wordmark · Dark bg</div>
+    </div>
+    <div class="tile">
+      <div class="badge">E</div>
+      <div class="lab">App badge · Lime</div>
+    </div>
+  </div>
+</div></body></html>

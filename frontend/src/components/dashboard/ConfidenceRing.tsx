@@ -31,7 +31,7 @@ export default function ConfidenceRing({
             cx="40"
             cy="40"
             r={radius}
-            className="stroke-secondary fill-none"
+            className="stroke-background fill-none"
             strokeWidth="6"
           />
           <circle
@@ -49,7 +49,7 @@ export default function ConfidenceRing({
       </div>
 
       <div className="relative group">
-        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+        <span className="text-[10px] text-primary uppercase font-semibold">
           {label}
         </span>
         <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-full ml-3 top-1/2 -translate-y-1/2 w-64 z-50">

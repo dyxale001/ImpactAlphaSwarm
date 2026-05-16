@@ -45,9 +45,7 @@ function MiniSparkline({
     const v = Math.sin((seed + i) * 1.7) * 8 + Math.cos((seed + i) * 0.9) * 6;
     return `${i * 8},${20 - v}`;
   }).join(" ");
-  const stroke = positive
-    ? "hsl(var(--color-brand-accent))"
-    : "hsl(var(--color-brand-primary))";
+  const stroke = positive ? "var(--color-brand-accent)" : "var(--color-brand-primary)";
   return (
     <svg viewBox="0 0 112 40" className="w-full h-10">
       <polyline
@@ -83,7 +81,7 @@ export default function RecommendationCard({
 
   return (
     <div
-      className={`soft-card p-5 space-y-4 hover:border-brand-primary/40 transition-all ${sizeClass}`}
+      className={`soft-card p-5 space-y-4 hover:border-brand-primary/40 transition-all flex flex-col ${sizeClass}`}
       style={{ animation: `slide-up ${0.4 + delay * 0.08}s ease-out forwards` }}
     >
       <div className="flex items-center justify-between gap-3">
@@ -93,19 +91,19 @@ export default function RecommendationCard({
           </div>
 
           <div className="min-w-0">
-            <p className="text-sm font-semibold truncate text-brand-fg">
+            <p className="text-base font-semibold truncate text-primary">
               {asset.ticker}
             </p>
-            <p className="text-[11px] text-brand-muted-fg truncate">
+            <p className="text-[12px] text-primary truncate">
               {asset.name}
             </p>
-            <p className="text-sm font-mono text-brand-muted-fg mt-1">
+            <p className="text-base font-mono text-primary">
               R {asset.currentPrice.toFixed(2)}
             </p>
           </div>
         </div>
         <div
-          className={`chip ${asset.rank === 1 ? "bg-brand-primary/15 text-brand-primary" : "bg-brand-accent/15 text-brand-accent"}`}
+          className={`chip ${asset.rank === 1 ? "bg-brand-primary/15 text-brand-primary" : "bg-primary/15 text-primary"}`}
         >
           Rank {asset.rank}
         </div>
@@ -113,7 +111,7 @@ export default function RecommendationCard({
 
       <div className="flex items-end justify-between gap-3">
         <div className="relative group">
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+          <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
             Confidence Score
           </p>
           <p className="text-xl font-bold font-mono leading-tight text-brand-fg">
@@ -127,12 +125,6 @@ export default function RecommendationCard({
               financial strength.
             </div>
           </div>
-        </div>
-        <div className="flex-1 max-w-35">
-          <MiniSparkline
-            seed={asset.confidenceScore + asset.ticker.length}
-            positive={asset.confidenceScore >= 60}
-          />
         </div>
       </div>
 
@@ -171,7 +163,7 @@ export default function RecommendationCard({
         </p>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-auto">
         <Link
           to={`/asset/${asset.ticker}`}
           className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold"
