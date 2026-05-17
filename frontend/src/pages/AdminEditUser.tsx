@@ -24,7 +24,7 @@ export default function AdminEditUser() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-brand-secondary border border-brand-border rounded-lg p-6 shadow-card flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="bg-background border border-brand-border rounded-lg p-6 shadow-card flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-brand-muted-fg font-medium uppercase tracking-wide">First Name</label>
             <input 
@@ -50,7 +50,7 @@ export default function AdminEditUser() {
           <button 
             type="submit" 
             disabled={saving}
-            className="mt-4 bg-brand-primary hover:bg-brand-accent text-brand-fg font-medium p-3 rounded-lg transition-colors disabled:opacity-50"
+            className="mt-4 bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm hover:bg-accent/70 font-medium p-3 rounded-lg transition-colors disabled:opacity-50"
           >
             {saving ? 'Saving changes...' : 'Save User Details'}
           </button>

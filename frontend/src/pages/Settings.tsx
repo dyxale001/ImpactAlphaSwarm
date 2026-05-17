@@ -75,10 +75,10 @@ export default function SettingsPage() {
         </div>
 
         <div className="glass-card p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-brand-fg">Investment Preferences</h2>
+          <h2 className="text-sm font-semibold text-primary">Investment Preferences</h2>
 
           <div>
-            <label className="text-xs font-medium text-brand-muted-fg">Risk Tolerance</label>
+            <label className="text-xs font-medium text-primary">Risk Tolerance</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {[
                 { value: 'aggressive', label: 'Aggressive' },
@@ -107,7 +107,7 @@ export default function SettingsPage() {
 
           <div>
 
-            <label className="text-xs font-medium text-brand-muted-fg">Expertise Level</label>
+            <label className="text-xs font-medium text-primary">Expertise Level</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {[
                 { value: 'novice', label: 'Novice' },
@@ -137,7 +137,7 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-brand-muted-fg">Investment Universe</label>
+            <label className="text-xs font-medium text-primary">Investment Universe</label>
 
             <div className="mt-2 flex flex-wrap gap-2.5">
               {UNIVERSE_OPTIONS.map((item) => {
@@ -150,7 +150,7 @@ export default function SettingsPage() {
                     className={`px-4 py-2.5 rounded-full text-xs font-medium transition-all duration-200 border ${
                       isSelected
                         ? "bg-brand-primary border-brand-primary text-white shadow-glow-primary"
-                        : "bg-brand-secondary/40 border-brand-border/60 text-brand-muted-fg hover:border-brand-primary/40 hover:text-brand-fg"
+                        : "bg-brand-secondary/5 border-brand-border/60 text-brand-muted-fg hover:border-brand-primary/40 hover:text-brand-fg"
                     }`}
                   >
                     {item}
@@ -174,15 +174,15 @@ export default function SettingsPage() {
         )}
 
         <div className="flex flex-col sm:flex-row gap-3">
-          <button type="submit" disabled={isSaving} className="flex-1 px-4 py-2 rounded-full bg-brand-primary text-white">
+          <button type="submit" disabled={isSaving} className="flex-1 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg font-medium hover:bg-accent/70">
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
 
-          <button type="button" onClick={resetChanges} disabled={isSaving} className="flex-1 px-4 py-2 rounded-full bg-brand-surface border border-brand-border">
+          <button type="button" onClick={resetChanges} disabled={isSaving} className="flex-1 px-4 py-2 rounded-full bg-brand-surface border border-brand-border hover:bg-brand-border/30">
             Cancel
           </button>
 
-          <button type="button" onClick={handleSignOut} className="px-4 py-2 rounded-full bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger">
+          <button type="button" onClick={handleSignOut} className="px-4 py-2 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-semantic-danger">
             Sign out
           </button>
         </div>
