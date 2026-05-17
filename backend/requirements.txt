@@ -46,4 +46,5 @@ groq>=0.4.1
 python-dotenv>=1.0.0
 supabase
 fastapi
+gunicorn
 uvicorn[standard]
