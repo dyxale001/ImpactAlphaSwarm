@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from src.orchestration.langgraph_orchestrator import run_analysis
+# REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
 from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status
 
 logger = logging.getLogger("alpha-api")
@@ -65,6 +65,11 @@ async def start_analysis(
 
     async def _bg_job():
         try:
+            # ---> METHOD 1 FIX: LAZY IMPORT <---
+            # This ensures LangGraph/LangChain only loads when a user actually starts an analysis,
+            # allowing Gunicorn/Uvicorn to boot up and bind to the port instantly.
+            from src.orchestration.langgraph_orchestrator import run_analysis
+            
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
