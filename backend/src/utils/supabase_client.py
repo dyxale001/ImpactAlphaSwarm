@@ -5,6 +5,9 @@ import json
 from supabase import create_client
 from typing import List, Dict, Any, Optional
 
+import pandas as pd
+import yfinance as yf
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -12,6 +15,79 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars for Supabase client")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+
+def _latest_close_from_history(history: pd.DataFrame | None) -> float | None:
+    if history is None or history.empty or "Close" not in history.columns:
+        return None
+
+    close_values = pd.to_numeric(history["Close"], errors="coerce").dropna()
+    if close_values.empty:
+        return None
+
+    return float(close_values.iloc[-1])
+
+
+def _ticker_currency(ticker: str) -> str | None:
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        fast_info = getattr(ticker_obj, "fast_info", None)
+        if fast_info and fast_info.get("currency"):
+            return str(fast_info.get("currency")).upper()
+
+        info = getattr(ticker_obj, "info", None) or {}
+        currency = info.get("currency") or info.get("financialCurrency")
+        return str(currency).upper() if currency else None
+    except Exception:
+        return None
+
+
+def _fx_rate_to_zar(currency: str) -> float | None:
+    normalized_currency = (currency or "").upper()
+    if not normalized_currency or normalized_currency == "ZAR":
+        return 1.0
+
+    pair_candidates = (
+        (f"{normalized_currency}ZAR=X", False),
+        (f"ZAR{normalized_currency}=X", True),
+    )
+
+    for pair_symbol, invert_rate in pair_candidates:
+        try:
+            pair_history = yf.Ticker(pair_symbol).history(period="5d", interval="1d", auto_adjust=False)
+            rate = _latest_close_from_history(pair_history)
+            if rate is None or rate <= 0:
+                continue
+            return 1 / rate if invert_rate else rate
+        except Exception:
+            continue
+
+    return None
+
+
+def fetch_price_at_run_in_zar(ticker: str) -> float | None:
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        history = ticker_obj.history(period="5d", interval="1d", auto_adjust=False)
+        latest_close = _latest_close_from_history(history)
+        if latest_close is None:
+            return None
+
+        currency = _ticker_currency(ticker)
+        if not currency or currency == "ZAR":
+            return latest_close
+
+        if currency in {"ZAC", "ZA CENT", "ZACP"}:
+            return latest_close / 100.0
+
+        fx_rate = _fx_rate_to_zar(currency)
+        if fx_rate is None:
+            return latest_close
+
+        return latest_close * fx_rate
+    except Exception as e:
+        print(f"Failed to fetch yfinance price for {ticker}: {e}")
+        return None
 
 
 def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
@@ -151,19 +227,7 @@ def save_top_assets(
         else:
             normalized_sources = raw_sources if raw_sources not in ("", []) else None
 
-        # Capture the asset's current price at the time of the run (snapshot)
-        price_at_run = None
-        try:
-            asset_row_resp = supabase.table("assets").select("current_price").eq("id", asset_id).limit(1).execute()
-            asset_row_data = asset_row_resp.data or []
-            if asset_row_data and asset_row_data[0].get("current_price") is not None:
-                try:
-                    price_at_run = float(asset_row_data[0].get("current_price"))
-                except Exception:
-                    price_at_run = asset_row_data[0].get("current_price")
-        except Exception as e:
-            print(f"Failed to fetch asset price for {ticker}: {e}")
-            price_at_run = None
+        price_at_run = fetch_price_at_run_in_zar(ticker)
 
         row = {
             "asset_id": asset_id,

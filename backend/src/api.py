@@ -122,3 +122,60 @@ async def analysis_result(run_id: str):
             "current_price": price_at_run,
         })
     return {"top_5": top_5}
+
+class DeleteUserRequest(BaseModel):
+    user_id: str
+
+async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization.split(" ", 1)[-1]
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=10.0,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Supabase token")
+
+    user_info = resp.json() or {}
+    user_id = user_info.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unable to determine user id")
+    return user_id
+
+@app.post("/api/admin/delete-user")
+async def delete_user_admin(
+    req: DeleteUserRequest,
+    authorization: Optional[str] = Header(None),
+):
+    requester_id = await _get_user_id_from_bearer(authorization)
+
+    requester = (
+        supabase.table("users")
+        .select("role")
+        .eq("id", requester_id)
+        .maybe_single()
+        .execute()
+    )
+    requester_role = (requester.data or {}).get("role")
+    if requester_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    if req.user_id == requester_id:
+        raise HTTPException(status_code=400, detail="Admin cannot delete self")
+
+    try:
+        supabase.auth.admin.delete_user(req.user_id)
+
+        supabase.table("user_analysis").delete().eq("user_id", req.user_id).execute()
+        supabase.table("users").delete().eq("id", req.user_id).execute()
+        
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
