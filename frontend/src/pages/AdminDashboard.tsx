@@ -1,17 +1,29 @@
 
 
-import { Link } from 'react-router-dom';
 import { useAdminUsers } from '../hooks/useAdminUsers';
-import { formatDbString } from '../utils/stringFormatters';
+import { formatDbString, formatNumberWithSpaces } from '../utils/stringFormatters';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
+import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard() {
+
   const { users, loading, error, deleteUser } = useAdminUsers();
 
-  const handleDelete = async (userId: string) => {
-    if (window.confirm("Are you sure you want to permanently delete this user?")) {
-      await deleteUser(userId);
+  const {setSession} = useAuthStore();
+    const navigate = useNavigate();
+
+
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+
     }
-  };
+    setSession(null)
+    navigate('/', { replace: true })
+  }
 
   if (loading) return <div className="p-10 text-brand-fg flex justify-center">Loading platform users...</div>;
 
@@ -26,6 +38,12 @@ export default function AdminDashboard() {
           <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
             Total Users: {users.length}
           </div>
+          <button
+          onClick={handleSignOut}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger"
+        >
+          Sign out
+        </button>
         </div>
 
         {error && (
@@ -34,7 +52,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <div className="bg-brand-secondary border border-brand-border rounded-brand overflow-hidden shadow-card">
+        <div className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -58,9 +76,9 @@ export default function AdminDashboard() {
                     </td>
                     
                     <td className="p-5">
-                      {user.user_preferences?.investor_archetype ? (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-accent/10 border border-brand-accent/20 text-brand-accent">
-                          {user.user_preferences.investor_archetype}
+                      {user.user_preferences?.ai_derived_expertise ? (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-accent/10 border border-primary/20 text-primary">
+                          {formatDbString(user.user_preferences.ai_derived_expertise)}
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-border text-brand-muted-fg">
@@ -72,21 +90,27 @@ export default function AdminDashboard() {
                     <td className="p-5">
                       <div className="grid grid-cols-1 gap-1.5 text-sm">
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-16">Style:</span>
+                          <span className="text-brand-muted-fg w-24">Universe:</span>
                           <span className="font-medium text-brand-fg">
-                            {formatDbString(user.user_preferences?.ai_derived_sentiment)}
+                            {user.user_preferences?.investment_universe?.length
+                              ? user.user_preferences.investment_universe.join(', ')
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-16">Exp:</span>
+                          <span className="text-brand-muted-fg w-24">Risk:</span>
                           <span className="font-medium text-brand-fg">
-                            {formatDbString(user.user_preferences?.ai_derived_expertise)}
+                            {user.user_preferences?.risk_tolerance
+                              ? formatDbString(user.user_preferences.risk_tolerance)
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-16">Vol:</span>
+                          <span className="text-brand-muted-fg w-24">Capital:</span>
                           <span className="font-medium text-brand-fg">
-                            {formatDbString(user.user_preferences?.ai_derived_volatility)}
+                            {user.user_preferences?.capital != null
+                              ? `R ${formatNumberWithSpaces(user.user_preferences.capital as string | number)}`
+                              : 'N/A'}
                           </span>
                         </div>
                       </div>
@@ -100,7 +124,11 @@ export default function AdminDashboard() {
                         Edit
                       </Link>
                       <button 
-                        onClick={() => handleDelete(user.id)}
+                        onClick={async () => {
+                          if (window.confirm("Are you sure you want to permanently delete this user?")) {
+                            await deleteUser(user.id);
+                          }
+                        }}
                         className="text-semantic-danger hover:text-red-400 font-semibold text-sm transition-colors"
                       >
                         Delete

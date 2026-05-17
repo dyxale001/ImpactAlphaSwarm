@@ -14,43 +14,15 @@ export default function Login() {
     : "border-brand-border/60 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/50";
 
   return (
-    <div className="flex min-h-screen bg-brand-bg relative selection:bg-brand-primary selection:text-white">
-      
-     
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0a0d13]">
-        <div 
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity"
-          style={{
-            backgroundImage: 'url("/backgrounds/abstract-dark.jpg")'
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/50 to-transparent"></div>
-        <div className="absolute inset-0 bg-brand-primary/5 mix-blend-color-dodge"></div>
-        <div className="relative z-10 flex flex-col justify-between p-12 h-full w-full">
-          <Link to="/" className="w-fit">
-            <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-brand-fg to-brand-muted-fg flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <Terminal size={24} className="text-brand-primary" /> AlphaSwarm
-            </span>
-          </Link>
-          
-          <div className="max-w-lg">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-brand-primary/10 text-brand-primary border-l-2 border-brand-primary text-xs font-mono uppercase tracking-widest mb-6">
-              System Secured
-            </div>
-            <h2 className="text-4xl font-bold text-white leading-tight tracking-tight mb-4">
-              Return to the <br />Swarm.
-            </h2>
-            <p className="text-brand-muted-fg text-lg font-light leading-relaxed">
-              Log in to review your AI Investment Committee's latest reasoning traces, assess hype alerts, and manage your simulated portfolio.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="flex items-center justify-center min-h-screen bg-brand-bg auth-bg relative selection:bg-brand-primary selection:text-white">
 
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand-primary/10 rounded-full blur-[100px] -z-10 lg:hidden pointer-events-none"></div>
 
         <div className="w-full max-w-md flex flex-col z-10">
+          <div className="mb-4">
+            <Link to="/" className="text-sm text-brand-muted-fg hover:text-brand-primary transition-colors font-medium">← Go back</Link>
+          </div>
 
           <form 
             onSubmit={handleLogin} 
@@ -69,7 +41,7 @@ export default function Login() {
             )}
             
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-brand-muted-fg font-bold tracking-widest uppercase ml-1">Email Address</label>
+              <label className="text-xs text-primary font-bold tracking-widest uppercase ml-1">Email Address</label>
               <input 
                 type="email" 
                 placeholder="investor@example.com" 
@@ -108,7 +80,7 @@ export default function Login() {
             <button 
               type="submit" 
               disabled={loading} 
-              className="mt-2 w-full flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white py-4 rounded-xl font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] hover:shadow-[0_0_20px_rgba(var(--brand-primary),0.4)] disabled:opacity-70 disabled:shadow-none"
+              className="mt-2 w-full flex items-center justify-center gap-2 bg-accent/95 hover:shadow-glow-accent text-brand-fg hover:bg-accent/70 py-4 rounded-xl font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(var(--brand-primary),0.3)] disabled:opacity-70 disabled:shadow-none"
             >
               {loading ? (
                 <span className="flex items-center gap-2">

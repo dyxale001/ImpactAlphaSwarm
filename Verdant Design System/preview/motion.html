@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_base.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; width: 100%; }
+  .tile { background: #fff; border: 1px solid #EFEFEF; border-radius: 16px; padding: 16px; min-height: 92px; display: flex; flex-direction: column; gap: 6px; }
+  .name { font-size: 12px; font-weight: 600; color: #1B3530; }
+  .v { font-size: 11px; font-family: ui-monospace, monospace; color: #6F827C; }
+  .demo { height: 32px; background: #F8F8F8; border-radius: 10px; position: relative; overflow: hidden; }
+  .demo::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 30%; background: #C7F269; border-radius: 10px; animation-name: slide; animation-iteration-count: infinite; animation-direction: alternate; }
+  .fast::after  { animation-duration: 240ms; animation-timing-function: cubic-bezier(0.2,0.6,0.2,1); }
+  .base::after  { animation-duration: 400ms; animation-timing-function: cubic-bezier(0.2,0.6,0.2,1); }
+  .slow::after  { animation-duration: 640ms; animation-timing-function: cubic-bezier(0.16,1,0.3,1); }
+  @keyframes slide { 0% { left: 0; } 100% { left: 70%; } }
+  h6 { margin: 0 0 10px 0; color: #1B3530; font-size: 14px; font-weight: 600; }
+</style></head>
+<body><div class="card" style="flex-direction: column; padding: 22px 28px;">
+  <h6>Motion — quiet, functional easing</h6>
+  <div class="grid">
+    <div class="tile"><div class="name">Fast</div><div class="v">120 ms · standard</div><div class="demo fast"></div></div>
+    <div class="tile"><div class="name">Base</div><div class="v">200 ms · standard</div><div class="demo base"></div></div>
+    <div class="tile"><div class="name">Slow</div><div class="v">320 ms · emphasize</div><div class="demo slow"></div></div>
+  </div>
+</div></body></html>

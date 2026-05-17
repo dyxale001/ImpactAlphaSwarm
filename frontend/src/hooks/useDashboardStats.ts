@@ -77,7 +77,8 @@ export function useDashboardStats() {
             quant_score,
             sentiment_score,
             reasoning_trace,
-            hype_penalty
+            hype_penalty,
+            price_at_run
           `,
           )
           .eq("run_id", latestRunId)
@@ -99,7 +100,7 @@ export function useDashboardStats() {
         const { data: assets, error: assetsError } = assetIds.length
           ? await supabase
               .from("assets")
-              .select("id, ticker, name, current_price")
+              .select("id, ticker, name")
               .in("id", assetIds)
           : { data: [], error: null };
 
@@ -124,7 +125,7 @@ export function useDashboardStats() {
               assetId: rec.asset_id,
               ticker,
               name,
-              currentPrice: Number(asset?.current_price ?? 0),
+              currentPrice: Number(rec.price_at_run ?? 0),
               confidenceScore: rec.confidence_score ?? 0,
               fundamentalsScore: rec.quant_score ?? 0,
               sentimentScore: rec.sentiment_score ?? 0,

@@ -4,6 +4,7 @@ import {
   Search,
   Eye,
   LineChart,
+  Terminal,
   Settings,
 } from "lucide-react";
 
@@ -25,14 +26,9 @@ export default function AppLayout() {
       <aside className="w-64 border-r border-brand-border/50 bg-brand-card flex flex-col pt-8 pb-4 shrink-0">
         {/* Logo Area */}
         <div className="px-8 pb-8 mb-4">
-          <h1 className="text-2xl font-bold leading-none tracking-tight">
-            Alpha
-            <br />
-            Swarm
-          </h1>
-          <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mt-2 font-mono">
-            Team Hive
-          </p>
+          <span className="text-2xl font-black tracking-tighter bg-clip-text text-primary flex items-center gap-2">
+                        <Terminal size={24} className="text-brand-primary" /> AlphaSwarm
+                      </span>
         </div>
 
         {/* Navigation Items */}

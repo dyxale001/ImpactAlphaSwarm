@@ -1,0 +1,23 @@
+id,first_name,last_name,email,role,created_at
+0444bd1f-79f3-4458-9f4d-ec172399ac6d,test,tessst,test4@test.com,user,2026-05-15 20:48:47.266593+00
+2381a8f8-74ca-4adb-89e5-16c8b502a507,Bill,Ackman,ba@investor.com,user,2026-05-14 09:14:13.307356+00
+291755b4-a50c-483a-8e80-7c1d5edba43c,Bill,Gates,bg@investor.com,user,2026-05-14 12:18:01.892374+00
+35ce0bba-1c7e-4f55-9ddb-81b2990e9bad,test,tessst,test@testtt.com,user,2026-05-16 20:19:48.494809+00
+3773c61b-ae15-44a0-b323-4ac94e9ce81d,Kendall,Sables,ksables@gmail.com,user,2026-05-14 19:33:44.814567+00
+401434b1-9837-4bde-b5ac-c9ade108b0c0,Ally,Day,alexdayinthersa@gmail.com,user,2026-05-07 21:44:03.989992+00
+50e59e3b-c5b8-4c89-9d2f-b56ed4735560,Tatum,Anderson,ta@gmail.com,user,2026-05-14 16:10:40.885906+00
+5d0e74eb-03b2-4270-a7dd-68189cb0e82f,Li,Lu,ll@investor.com,user,2026-05-14 08:55:54.802153+00
+7f5d572a-14ff-48ef-a789-814ca2190926,test1,test,test1@test.com,user,2026-05-15 18:24:42.776877+00
+871ad69a-ad95-40ad-b339-b29c5b96ff99,Luke,Ruiters,ruitersluke2004@gmail.com,user,2026-05-14 19:26:51.337095+00
+8bf877f1-86fa-4fa2-9e93-0125ef11595f,Jane,Doe,rtrluk002@myuct.ac.za,user,2026-05-15 17:29:07.978862+00
+8ccf4bf2-4e53-42dd-91cc-73e47aaa75fe,Eric,Wanaman,em@investor.com,user,2026-05-14 16:31:13.628702+00
+b9b2dd41-8e8b-4720-9f92-6e71ad59141c,Sachint,Singh,sachint2108@gmail.com,admin,2026-05-05 17:12:09.461665+00
+c267c4ed-0404-4864-8b04-af860c11dbdd,Tara,Ruiters,tara@gmail.com,user,2026-05-16 13:02:24.515384+00
+c2a270bc-d7f4-4f74-867b-361cda98220d,Paula,Day,paulaaday@outlook.com,user,2026-05-14 09:08:32.882119+00
+c5137890-f581-408a-ae7e-b1c816e6dcdc,test2,test3,test7@test.com,user,2026-05-16 07:03:22.715178+00
+ca45304e-be60-4aef-893a-be5a50f350a1,test,test,testest@gmail.com,user,2026-05-16 20:16:42.698464+00
+d1baa962-b433-43a8-a6ba-4d3255b36a9b,Luke,Ruiters,ruitersluke@outlook.com,user,2026-05-12 17:31:14.193834+00
+d446c925-6e48-4153-b3f5-78d5ef9ac9f1,Harry,Potter,hp@gmail.com,user,2026-05-16 22:14:06.936366+00
+d74923f3-f45b-4a21-b73f-722356e8ec10,Tyler,Seethal,ts@investor.com,user,2026-05-14 16:04:51.150266+00
+d7593d52-b416-42ea-95c8-8d183aade83c,Dev,Singh,singh.sachint21@gmail.com,user,2026-05-09 18:53:43.839167+00
+e4f4017e-9e4c-4555-86b9-efdbe7012d1f,Warren,Buffet,wb@investor.com,user,2026-05-14 08:36:46.7747+00

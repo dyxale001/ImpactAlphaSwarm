@@ -10,7 +10,7 @@ export default function DualBar({
       <div className="space-y-1">
         <div className="flex justify-between">
           <span className="relative group inline-block">
-            <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+            <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
               Sentiment Score
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
@@ -25,9 +25,9 @@ export default function DualBar({
             {sentimentScore}%
           </span>
         </div>
-        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+        <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
           <div
-            className="h-full bg-slate-400/70"
+            className="h-full bg-primary"
             style={{ width: `${sentimentScore}%` }}
           />
         </div>
@@ -35,7 +35,7 @@ export default function DualBar({
       <div className="space-y-1">
         <div className="flex justify-between">
           <span className="relative group inline-block">
-            <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+            <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
               Quantitative Score
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
@@ -51,9 +51,9 @@ export default function DualBar({
             {quantitativeScore}%
           </span>
         </div>
-        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+        <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
           <div
-            className="h-full bg-slate-400"
+            className="h-full bg-primary"
             style={{ width: `${quantitativeScore}%` }}
           />
         </div>
