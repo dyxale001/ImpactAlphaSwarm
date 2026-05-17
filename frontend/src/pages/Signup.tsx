@@ -21,7 +21,7 @@ export default function Signup() {
     : "border-brand-border/60 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/50";
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-brand-bg relative selection:bg-brand-primary selection:text-white">
+    <div className="flex items-center justify-center min-h-screen bg-brand-bg auth-bg relative selection:bg-brand-primary selection:text-white">
 
       {/* Right side form panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto">

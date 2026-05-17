@@ -12,12 +12,6 @@ export interface UserAnalysis {
   investment_universe: string[]
   survey_answers: any
   ai_derived_expertise?: 'novice' | 'intermediate' | 'advanced'
-  ai_derived_sentiment?: 'bullish' | 'bearish' | 'neutral'
-  ai_derived_volatility?: 'protective' | 'buy_the_dip' | 'hold_steady'
-  investor_archetype?: string
-  ai_system_prompt?: string
-  
-  // Migrated from risk_profile
   capital: any // Update to correct type (e.g., number | string)
   risk_tolerance: string
   
@@ -29,6 +23,6 @@ export interface UserAnalysis {
 export type AdminUserView = UserProfile & { 
   user_preferences: Pick<
     UserAnalysis, 
-    'investor_archetype' | 'ai_derived_expertise' | 'ai_derived_sentiment' | 'ai_derived_volatility'
+    'investment_universe' | 'ai_derived_expertise' | 'risk_tolerance' | 'capital'
   > | null;
 };

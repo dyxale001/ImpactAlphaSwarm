@@ -114,7 +114,7 @@ export default function AssetDetailsPage() {
             </span>
           </div>
           <p className="text-3xl font-mono text-brand-fg">
-            R {asset.current_price.toFixed(2)}
+            R {recommendation.price_at_run.toFixed(2)}
           </p>
         </div>
 

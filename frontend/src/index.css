@@ -237,4 +237,31 @@ body {
   .font-sans { font-family: var(--font-sans) !important; }
   .font-display { font-family: var(--font-display) !important; }
   .font-mono { font-family: var(--font-mono) !important; }
+
+  /* Background used on auth pages. Place your image at `public/backgrounds/auth-bg.png` */
+  .auth-bg {
+    /* original auth artwork used for login/signup */
+    background-image: url('/backgrounds/Untitled%20design%20(1).png');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+  }
+
+  /* Landing-specific placement so the auth artwork sits to the sides nicely */
+  .landing-auth-bg {
+    background-image: url('/backgrounds/Untitled%20design%20(3).png');
+    background-repeat: no-repeat;
+    /* push artwork farther off the left/right edges and scale up */
+    background-position: center;
+    background-size: cover;
+  }
+
+  /* Mobile tweak: use cover on small screens so it doesn't crop oddly */
+  @media (max-width: 768px) {
+    .landing-auth-bg {
+      background-position: center top;
+      background-size: cover;
+      background-attachment: scroll;
+    }
+  }
 }

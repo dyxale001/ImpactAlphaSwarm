@@ -43,3 +43,20 @@ export async function getResult(runId: string) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function adminDeleteUser(userId: string) {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/admin/delete-user`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

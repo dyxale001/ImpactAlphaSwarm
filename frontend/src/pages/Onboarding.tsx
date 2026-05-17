@@ -22,11 +22,8 @@ export default function Onboarding() {
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
 
   return (
-    <div className="min-h-screen py-6 md:py-12 flex items-center justify-center bg-brand-bg p-4 relative overflow-hidden selection:bg-brand-primary selection:text-white">
-      <div 
-        className="fixed inset-0 z-0 opacity-20 bg-cover bg-center pointer-events-none mix-blend-luminosity"
-        style={{ backgroundImage: 'url("/backgrounds/abstract-dark.jpg")' }}
-      />
+    <div className="min-h-screen py-6 md:py-12 flex items-center justify-center bg-brand-bg auth-bg p-4 relative overflow-hidden selection:bg-brand-primary selection:text-white">
+
       <div className="fixed inset-0 z-0 bg-gradient-to-b from-brand-bg/40 via-brand-bg/80 to-brand-bg pointer-events-none"></div>
       
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-brand-accent/20 rounded-full blur-[150px] pointer-events-none"></div>

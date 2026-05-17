@@ -14,7 +14,7 @@ export default function Login() {
     : "border-brand-border/60 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/50";
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-brand-bg relative selection:bg-brand-primary selection:text-white">
+    <div className="flex items-center justify-center min-h-screen bg-brand-bg auth-bg relative selection:bg-brand-primary selection:text-white">
 
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand-primary/10 rounded-full blur-[100px] -z-10 lg:hidden pointer-events-none"></div>
