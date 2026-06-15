@@ -6,15 +6,11 @@ export function useAuth() {
   const { setSession, fetchProfile } = useAuthStore()
 
   useEffect(() => {
-    // 1. This function gets the initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      if (session?.user) fetchProfile(session.user.id)
-    })
-
-    // 2. Listen for auth changes (login, logout, token refresh)
+    // onAuthStateChange fires INITIAL_SESSION on subscription, covering the
+    // getSession() use case without a separate call that can race with recovery flows.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') return
         setSession(session)
         if (session?.user) {
           fetchProfile(session.user.id)

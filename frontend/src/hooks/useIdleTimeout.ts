@@ -6,6 +6,8 @@ export function useIdleTimeout(timeoutMinutes = 15) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    if (window.location.pathname === '/reset-password') return
+
     const logout = async () => {
       await supabase.auth.signOut()
     }

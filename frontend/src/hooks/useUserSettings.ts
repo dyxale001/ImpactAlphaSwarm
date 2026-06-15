@@ -3,12 +3,12 @@ import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 import { UNIVERSE_OPTIONS } from '../utils/onboardingData'
 
-type RiskTolerance = 'aggresive' | 'moderate' | 'conservative'
+type RiskTolerance = 'aggressive' | 'moderate' | 'conservative'
 type Expertise = 'novice' | 'intermediate' | 'advanced'
 
 const normalizeRiskTolerance = (value?: string): RiskTolerance => {
   const v = (value || '').toLowerCase().trim()
-  if (v === 'aggresive' || v === 'aggressive') return 'aggresive'
+  if (v === 'aggresive' || v === 'aggressive') return 'aggressive'
   if (v === 'moderate') return 'moderate'
   if (v === 'conservative' || v === 'passive' || v === 'tolerant') return 'conservative'
   return 'moderate'
@@ -16,9 +16,6 @@ const normalizeRiskTolerance = (value?: string): RiskTolerance => {
 
 export const useUserSettings = () => {
   const { profile, analysis, fetchProfile } = useAuthStore()
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -27,6 +24,16 @@ export const useUserSettings = () => {
     expertise_level: 'intermediate' as Expertise,
     investment_universe: [] as string[],
   })
+
+  // Account section state
+  const [isAccountSaving, setIsAccountSaving] = useState(false)
+  const [accountError, setAccountError] = useState<string | null>(null)
+  const [accountSuccess, setAccountSuccess] = useState<string | null>(null)
+
+  // App settings section state
+  const [isAppSaving, setIsAppSaving] = useState(false)
+  const [appError, setAppError] = useState<string | null>(null)
+  const [appSuccess, setAppSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     const normalizedExpertise =
@@ -58,8 +65,6 @@ export const useUserSettings = () => {
       ...prev,
       [field]: field === 'risk_tolerance' ? normalizeRiskTolerance(value) : value,
     }))
-    setError(null)
-    setSuccessMessage(null)
   }
 
   const toggleUniverse = (item: string) => {
@@ -72,19 +77,15 @@ export const useUserSettings = () => {
           : [...prev.investment_universe, item],
       }
     })
-    setError(null)
-    setSuccessMessage(null)
   }
 
   const availableUniverse = UNIVERSE_OPTIONS.filter((o) => !formData.investment_universe.includes(o))
 
-  const saveChanges = async () => {
+  const saveAccountInfo = async () => {
     if (!profile?.id) return
-
-    setIsSaving(true)
-    setError(null)
-    setSuccessMessage(null)
-
+    setIsAccountSaving(true)
+    setAccountError(null)
+    setAccountSuccess(null)
     try {
       const { error: profileError } = await supabase
         .from('users')
@@ -93,9 +94,32 @@ export const useUserSettings = () => {
           last_name: formData.last_name.trim(),
         })
         .eq('id', profile.id)
-
       if (profileError) throw profileError
+      await fetchProfile(profile.id)
+      setAccountSuccess('Account information saved.')
+    } catch (err: any) {
+      setAccountError(err.message || 'Failed to save account information.')
+    } finally {
+      setIsAccountSaving(false)
+    }
+  }
 
+  const resetAccountInfo = () => {
+    setFormData((prev) => ({
+      ...prev,
+      first_name: profile?.first_name || '',
+      last_name: profile?.last_name || '',
+    }))
+    setAccountError(null)
+    setAccountSuccess(null)
+  }
+
+  const saveInvestmentPrefs = async () => {
+    if (!profile?.id) return
+    setIsAppSaving(true)
+    setAppError(null)
+    setAppSuccess(null)
+    try {
       const { error: analysisError } = await supabase
         .from('user_analysis')
         .upsert(
@@ -109,30 +133,27 @@ export const useUserSettings = () => {
           },
           { onConflict: 'user_id' }
         )
-
       if (analysisError) throw analysisError
-
       await fetchProfile(profile.id)
-      setSuccessMessage('Settings saved successfully.')
+      setAppSuccess('App settings saved.')
     } catch (err: any) {
-      setError(err.message || 'Failed to save changes.')
+      setAppError(err.message || 'Failed to save app settings.')
     } finally {
-      setIsSaving(false)
+      setIsAppSaving(false)
     }
   }
 
-  const resetChanges = () => {
-    setFormData({
-      first_name: profile?.first_name || '',
-      last_name: profile?.last_name || '',
+  const resetInvestmentPrefs = () => {
+    setFormData((prev) => ({
+      ...prev,
       risk_tolerance: normalizeRiskTolerance(analysis?.risk_tolerance),
       expertise_level: (analysis?.ai_derived_expertise || 'intermediate') as Expertise,
       investment_universe: Array.isArray(analysis?.investment_universe)
         ? analysis!.investment_universe
         : [],
-    })
-    setError(null)
-    setSuccessMessage(null)
+    }))
+    setAppError(null)
+    setAppSuccess(null)
   }
 
   return {
@@ -140,11 +161,18 @@ export const useUserSettings = () => {
     updateFormField,
     toggleUniverse,
     availableUniverse,
-    saveChanges,
-    resetChanges,
-    isSaving,
-    error,
-    successMessage,
+    // Account Management
+    saveAccountInfo,
+    resetAccountInfo,
+    isAccountSaving,
+    accountError,
+    accountSuccess,
+    // App Settings
+    saveInvestmentPrefs,
+    resetInvestmentPrefs,
+    isAppSaving,
+    appError,
+    appSuccess,
     email: profile?.email || '',
   }
 }

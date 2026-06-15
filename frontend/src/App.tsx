@@ -21,6 +21,7 @@ import WatchlistPage from './pages/Watchlist'
 import PortfolioPage from './pages/Portfolio'
 import AssetDetailsPage from './pages/AssetDetailsPage'
 import SettingsPage from './pages/Settings'
+import ResetPassword from './pages/ResetPassword'
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +53,7 @@ export default function App() {
           <Signup />
         </PublicRoute>
       } />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Authenticated Routes */}
       <Route element={<ProtectedRoute />}>
