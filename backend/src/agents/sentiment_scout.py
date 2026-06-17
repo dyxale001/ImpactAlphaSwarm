@@ -1,7 +1,7 @@
 """Sentiment Scout Worker Module
 
-Purpose: Collect social mentions from StockTwits, score them with VADER
-and optional Transformers, and produce a unified Raw Sentiment Score (0-100).
+Purpose: Collect social mentions from StockTwits, score them with VADER,
+and produce a unified Raw Sentiment Score (0-100).
 
 The worker is designed to run safely when API credentials or optional libraries are
 not available. In that case, it returns neutral scores with no collected posts.
@@ -20,13 +20,8 @@ warnings.filterwarnings("ignore")
 
 try:
 	from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-except ImportError: 
-	SentimentIntensityAnalyzer = None
-
-try:
-	from transformers import pipeline as hf_pipeline
 except ImportError:
-	hf_pipeline = None
+	SentimentIntensityAnalyzer = None
 
 try:
 	import cloudscraper
@@ -68,18 +63,6 @@ def _get_vader_analyzer():
 	return SentimentIntensityAnalyzer()
 
 
-@lru_cache(maxsize=1)
-def _get_transformer_pipeline():
-	if hf_pipeline is None:
-		return None
-
-	model_name = os.getenv("SENTIMENT_TRANSFORMER_MODEL", "distilbert-base-uncased-finetuned-sst-2-english")
-	try:
-		return hf_pipeline("sentiment-analysis", model=model_name)
-	except Exception:
-		return None
-
-
 def _score_with_vader(text: str) -> float:
 	analyzer = _get_vader_analyzer()
 	if analyzer is None:
@@ -87,36 +70,14 @@ def _score_with_vader(text: str) -> float:
 	return float(analyzer.polarity_scores(text)["compound"])
 
 
-def _score_with_transformer(text: str) -> float | None:
-	classifier = _get_transformer_pipeline()
-	if classifier is None:
-		return None
-
-	try:
-		result = classifier(text[:512])
-		if not result:
-			return None
-
-		top = result[0]
-		label = str(top.get("label", "")).upper()
-		score = float(top.get("score", 0.0))
-		signed = score if "POS" in label else -score if "NEG" in label else 0.0
-		return max(-1.0, min(1.0, signed))
-	except Exception:
-		return None
-
-
-def _combine_scores(vader_score: float, transformer_score: float | None) -> float:
-	if transformer_score is None:
-		return vader_score
-	return (0.60 * vader_score) + (0.40 * transformer_score)
+def _combine_scores(vader_score: float) -> float:
+	return vader_score
 
 
 def _mention_sentiment(text: str) -> float:
 	cleaned = _clean_text(text)
 	vader_score = _score_with_vader(cleaned)
-	transformer_score = _score_with_transformer(cleaned)
-	return _combine_scores(vader_score, transformer_score)
+	return _combine_scores(vader_score)
 
 
 def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:

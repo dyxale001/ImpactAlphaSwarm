@@ -1,0 +1,20 @@
+# Keep the Cloud Run build context small — never ship the local venv or secrets.
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local secrets (set these as Cloud Run env vars / secrets instead).
+.env
+
+# Local run artifacts and caches.
+data/runs/
+.cache/
+*.trace.json
+
+# Git / editor noise.
+.git/
+.gitignore
+.mypy_cache/
+.pytest_cache/

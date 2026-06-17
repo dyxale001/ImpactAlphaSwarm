@@ -59,8 +59,6 @@ class SocialMention:
 	author: Optional[str] = None
 	engagement_count: int = 0
 	vader_score: Optional[float] = None
-	transformer_label: Optional[str] = None
-	transformer_confidence: Optional[float] = None
 
 
 @dataclass
