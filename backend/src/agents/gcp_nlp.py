@@ -104,8 +104,10 @@ def _get_adc_token() -> str | None:
 	installed or no credentials are available.
 	"""
 	try:
-		import google.auth
-		from google.auth.transport.requests import Request
+		# Optional dependency: only needed for the Cloud Run service-account
+		# (ADC) auth path. Not installed by default since the API key is used.
+		import google.auth  # type: ignore[import-not-found]
+		from google.auth.transport.requests import Request  # type: ignore[import-not-found]
 
 		creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 		creds.refresh(Request())

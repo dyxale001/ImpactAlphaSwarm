@@ -33,6 +33,13 @@ try:
 except ImportError:
 	requests = None
 
+from .gcp_nlp import score_with_gcp
+
+
+# Number of most-engaged posts per ticker that also get a GCP NLP signal.
+# The rest are VADER-only to stay within the GCP monthly unit budget.
+GCP_TOP_N = int(os.getenv("GCP_SENTIMENT_TOP_N", "5"))
+
 
 @dataclass(frozen=True)
 class SocialMention:
@@ -70,14 +77,19 @@ def _score_with_vader(text: str) -> float:
 	return float(analyzer.polarity_scores(text)["compound"])
 
 
-def _combine_scores(vader_score: float) -> float:
-	return vader_score
+def _combine_scores(vader_score: float, gcp_score: float | None) -> float:
+	"""Dual-signal blend: average VADER and GCP NLP when both are available,
+	otherwise fall back to VADER alone."""
+	if gcp_score is None:
+		return vader_score
+	return 0.5 * vader_score + 0.5 * gcp_score
 
 
-def _mention_sentiment(text: str) -> float:
+def _mention_sentiment(text: str, use_gcp: bool = False) -> float:
 	cleaned = _clean_text(text)
 	vader_score = _score_with_vader(cleaned)
-	return _combine_scores(vader_score)
+	gcp_score = score_with_gcp(cleaned) if use_gcp else None
+	return _combine_scores(vader_score, gcp_score)
 
 
 def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:
@@ -94,8 +106,17 @@ def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:
 	bullish_posts = 0
 	bearish_posts = 0
 
-	for mention in mentions:
-		signed_score = _mention_sentiment(mention.text)
+	# Only the most-engaged posts get the (metered) GCP NLP signal; the rest
+	# are scored with VADER alone to respect the GCP monthly unit budget.
+	gcp_indices = {
+		idx
+		for idx, _ in sorted(
+			enumerate(mentions), key=lambda pair: pair[1].engagement, reverse=True
+		)[:GCP_TOP_N]
+	}
+
+	for index, mention in enumerate(mentions):
+		signed_score = _mention_sentiment(mention.text, use_gcp=index in gcp_indices)
 		if signed_score >= 0.05:
 			bullish_posts += 1
 		elif signed_score <= -0.05:
