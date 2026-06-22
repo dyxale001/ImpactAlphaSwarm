@@ -44,7 +44,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     groq_llm = ChatGroq(
         api_key=GROQ_API_KEY,
-        model="llama-3.3-70b-versatile",
+        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         temperature=0.3,
         max_tokens=300,
     )
@@ -254,15 +254,6 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         unified_score = quant_score * 0.5 + sentiment_score * 0.5 + hype_penalty + risk_penalty
         unified_score = max(0, min(100, unified_score))
 
-        reasoning = generate_reasoning_trace(
-            ticker=ticker,
-            quant_data=quant,
-            sentiment_data=sentiment,
-            adjustments={"hype_penalty": hype_penalty, "risk_penalty": risk_penalty},
-            risk_tolerance=state["risk_tolerance"],
-            expertise_level=state["expertise_level"],
-        )
-
         unified_scores[ticker] = {
             "ticker": ticker,
             "quant_score": quant_score,
@@ -273,10 +264,23 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
             },
             "unified_score": unified_score,
             "beta": beta,
-            "reasoning": reasoning,
+            "reasoning": None,
         }
 
     top_5 = sorted(unified_scores.values(), key=lambda x: x["unified_score"], reverse=True)[:5]
+
+    # Generate the LLM reasoning trace only for the final top 5. Doing it for
+    # every ticker (then discarding all but 5) wasted ~25 calls per run.
+    for asset in top_5:
+        asset_ticker = asset["ticker"]
+        asset["reasoning"] = generate_reasoning_trace(
+            ticker=asset_ticker,
+            quant_data=state["quant_results"].get(asset_ticker, {}),
+            sentiment_data=state["sentiment_results"].get(asset_ticker, {}),
+            adjustments=asset["adjustments"],
+            risk_tolerance=state["risk_tolerance"],
+            expertise_level=state["expertise_level"],
+        )
 
     print("Generated Top 5 rankings")
     for i, asset in enumerate(top_5, 1):
