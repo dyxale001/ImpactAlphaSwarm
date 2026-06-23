@@ -20,8 +20,10 @@ import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 
-import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
-import { pollUntilComplete } from "../services/api/poll";
+import { useAnalysisRefresh } from "../hooks/useAnalysisRefresh";
+import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
+import { isRunStale } from "../utils/staleness";
+import StaleDataBanner from "../components/dashboard/StaleDataBanner";
 
 export default function DashboardPage() {
   const {
@@ -78,10 +80,11 @@ export default function DashboardPage() {
 
   const topPickPreview = getTopPickPreview(topPickTab);
 
-  const { profile, analysis, isLoading, isProfileLoading, setSession, fetchProfile } = useAuthStore();
+  const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
   const navigate = useNavigate();
 
-  const [isRunning, setIsRunning] = useState(false);
+  const { isRunning, refresh } = useAnalysisRefresh();
+  const isStale = isRunStale(latestRunCreatedAt);
 
   const handleSignOut = async () => {
     try {
@@ -93,31 +96,6 @@ export default function DashboardPage() {
     navigate('/', { replace: true })
   }
 
-  const handleRefresh = async () => {
-  if (!profile?.id) return;
-
-  setIsRunning(true);
-  try {
-    const universes = Array.isArray(analysis?.investment_universe)
-      ? analysis.investment_universe
-      : [];
-
-    const { run_id } = await startAnalysis({
-      universes,
-      watchlist: [],
-      risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
-      expertise_level: analysis?.ai_derived_expertise ?? "novice",
-    });
-
-    await pollUntilComplete(run_id, getStatus, getResult);
-    await fetchProfile(profile.id);
-  } catch (e) {
-    console.error("Refresh analysis failed:", e);
-  } finally {
-    setIsRunning(false);
-  }
-};
-
   const currentlyLoading =
     isProfileLoading !== undefined ? isProfileLoading : isLoading;
 
@@ -126,6 +104,14 @@ export default function DashboardPage() {
       navigate("/admin", { replace: true });
     }
   }, [profile, currentlyLoading, navigate]);
+
+  // Self-heal returning users whose data predates the last nightly run.
+  useStaleAutoRefresh({
+    isStale,
+    isRunning,
+    ready: !currentlyLoading && Boolean(profile?.id),
+    refresh,
+  });
 
   if (currentlyLoading) {
     return (
@@ -166,7 +152,7 @@ export default function DashboardPage() {
             Sign out
           </button>
           <button
-            onClick={handleRefresh}
+            onClick={refresh}
             disabled={isRunning}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -196,6 +182,14 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Staleness notice for returning users (auto-refresh runs alongside it) */}
+      {isStale && latestRunCreatedAt && (
+        <StaleDataBanner
+          latestRunCreatedAt={latestRunCreatedAt}
+          isRefreshing={isRunning}
+        />
+      )}
 
       {/* Top Pick */}
       <div className="bg-accent/90 backdrop-blur-xl rounded-lg p-6 relative z-50 overflow-visible transition-colors glass-card">

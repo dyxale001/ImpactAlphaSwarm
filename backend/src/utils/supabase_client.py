@@ -114,6 +114,33 @@ def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def get_active_user_ids(within_days: int = 7) -> List[str]:
+    """Return user_ids whose latest ai_run is within `within_days` days.
+
+    Each user has at most one ai_runs row (unique constraint on user_id), so its
+    created_at is effectively their last-run time. The daily scheduled job only
+    refreshes these "active" users, skipping accounts that ran once and never
+    returned, to avoid burning the full pipeline on dormant users every night.
+    A returning user re-enters this set the moment they trigger a refresh.
+    """
+    try:
+        cutoff = (
+            datetime.datetime.utcnow() - datetime.timedelta(days=within_days)
+        ).isoformat()
+        resp = (
+            supabase.table("ai_runs")
+            .select("user_id, created_at")
+            .gte("created_at", cutoff)
+            .execute()
+        )
+        data = resp.data or []
+        # Dedupe defensively even though user_id is unique on ai_runs.
+        return list({row["user_id"] for row in data if row.get("user_id")})
+    except Exception as e:
+        print(f"Error fetching active users: {e}")
+        return []
+
+
 def get_assets_by_universes(universes: List[str]) -> List[str]:
     """Fetch tickers for assets matching user's investment universes."""
     try:

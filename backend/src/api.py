@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import secrets
 from typing import List, Optional
 
 import httpx
@@ -8,11 +9,16 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
+
 from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
+
+# Shared secret that Cloud Scheduler presents to trigger the nightly run. Unset
+DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
+# Only refresh users whose last run is within this many days.
+DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
@@ -127,6 +133,68 @@ async def analysis_result(run_id: str):
             "current_price": price_at_run,
         })
     return {"top_5": top_5}
+
+@app.post("/api/analysis/run-daily")
+async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
+    """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
+    (just after the NYSE close). Re-runs the analysis pipeline for every active
+    user using their own saved preferences, so they see fresh insights without
+    pressing refresh. Guarded by a shared secret rather than a user JWT.
+
+    Runs synchronously and isolates failures per user so one bad run does not
+    abort the batch; returns a summary of the outcome.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Daily run not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    from src.utils.supabase_client import get_active_user_ids, get_user_preferences
+    from src.orchestration.langgraph_orchestrator import run_analysis
+
+    user_ids = get_active_user_ids(DAILY_ACTIVE_DAYS)
+    logger.info("Daily run starting for %d active users", len(user_ids))
+
+    loop = asyncio.get_running_loop()
+    summary = {
+        "active_days": DAILY_ACTIVE_DAYS,
+        "total": len(user_ids),
+        "succeeded": 0,
+        "failed": 0,
+        "skipped": 0,
+    }
+
+    for user_id in user_ids:
+        prefs = get_user_preferences(user_id)
+        if not prefs or not prefs.get("universes"):
+            logger.info("Daily run skipping user %s (no preferences/universes)", user_id)
+            summary["skipped"] += 1
+            continue
+
+        run_id = create_ai_run(user_id=user_id, status="running")
+        try:
+            await loop.run_in_executor(
+                None,
+                run_analysis,
+                user_id,
+                prefs["risk_tolerance"],
+                prefs["universes"],
+                [],  # watchlist not stored in preferences; matches main()/demo behaviour
+                run_id,
+                prefs["expertise_level"],
+            )
+            update_ai_run_status(run_id, "complete")
+            summary["succeeded"] += 1
+        except Exception as e:
+            logger.exception("Daily run failed for user %s: %s", user_id, e)
+            update_ai_run_status(run_id, "failed")
+            summary["failed"] += 1
+
+    logger.info("Daily run finished: %s", summary)
+    return summary
+
 
 class DeleteUserRequest(BaseModel):
     user_id: str
