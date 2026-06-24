@@ -115,27 +115,42 @@ def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_active_user_ids(within_days: int = 7) -> List[str]:
-    """Return user_ids whose latest ai_run is within `within_days` days.
+    """Return ids of users who have signed in within `within_days` days.
 
-    Each user has at most one ai_runs row (unique constraint on user_id), so its
-    created_at is effectively their last-run time. The daily scheduled job only
-    refreshes these "active" users, skipping accounts that ran once and never
-    returned, to avoid burning the full pipeline on dormant users every night.
-    A returning user re-enters this set the moment they trigger a refresh.
+    Activity is based on Supabase auth's ``last_sign_in_at``, deliberately NOT on
+    ai_runs: the nightly scheduled run rewrites ai_runs.created_at, so using that
+    as the activity signal would keep dormant accounts "active" forever (every
+    nightly refresh resets their clock). Sign-in time is only advanced by the
+    user, so the automation can't perpetuate itself.
+
+    Users without saved preferences are skipped later by the daily job itself.
+
+    Caveat: ``last_sign_in_at`` advances only on an explicit sign-in, not on
+    silent token refresh — a user who stays logged in for weeks can look inactive
+    and drop out of the nightly run. The frontend staleness auto-refresh is the
+    backstop: their data self-heals the next time they open the app.
     """
     try:
-        cutoff = (
-            datetime.datetime.utcnow() - datetime.timedelta(days=within_days)
-        ).isoformat()
-        resp = (
-            supabase.table("ai_runs")
-            .select("user_id, created_at")
-            .gte("created_at", cutoff)
-            .execute()
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=within_days
         )
-        data = resp.data or []
-        # Dedupe defensively even though user_id is unique on ai_runs.
-        return list({row["user_id"] for row in data if row.get("user_id")})
+        active: List[str] = []
+        page = 1
+        per_page = 200
+        while True:
+            users = supabase.auth.admin.list_users(page=page, per_page=per_page)
+            if not users:
+                break
+            for user in users:
+                last_sign_in = getattr(user, "last_sign_in_at", None)
+                if last_sign_in is None:
+                    continue
+                if last_sign_in.tzinfo is None:
+                    last_sign_in = last_sign_in.replace(tzinfo=datetime.timezone.utc)
+                if last_sign_in >= cutoff:
+                    active.append(user.id)
+            page += 1
+        return active
     except Exception as e:
         print(f"Error fetching active users: {e}")
         return []
