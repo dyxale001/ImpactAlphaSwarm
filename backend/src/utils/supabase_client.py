@@ -247,6 +247,7 @@ def save_top_assets(
     top_5: List[Dict[str, Any]],
     quant_results: Dict[str, Dict[str, Any]],
     sentiment_results: Dict[str, Dict[str, Any]],
+    price_cache: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     rows = []
     now = datetime.datetime.utcnow().isoformat()
@@ -269,7 +270,12 @@ def save_top_assets(
         else:
             normalized_sources = raw_sources if raw_sources not in ("", []) else None
 
-        price_at_run = fetch_price_at_run_in_zar(ticker)
+        if price_cache is not None and ticker in price_cache:
+            price_at_run = price_cache[ticker]
+        else:
+            price_at_run = fetch_price_at_run_in_zar(ticker)
+            if price_cache is not None:
+                price_cache[ticker] = price_at_run
 
         row = {
             "asset_id": asset_id,

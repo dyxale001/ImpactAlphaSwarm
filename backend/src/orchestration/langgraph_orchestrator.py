@@ -140,15 +140,20 @@ class AnalysisState(TypedDict):
     status: str
 
 
+def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> list[str]:
+    """Resolve a user's investment universes (+ watchlist) to a capped, deduped
+    ticker list. Shared by the per-user graph and the batched daily run."""
+    from ..utils.supabase_client import get_assets_by_universes
+
+    tickers = get_assets_by_universes(universes)
+    tickers.extend(watchlist or [])
+    return list(set(tickers))[:30]
+
+
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 1: Initializing session and scoping data...")
 
-    from ..utils.supabase_client import get_assets_by_universes
-
-    # Fetch tickers from Supabase by universe
-    tickers = get_assets_by_universes(state["universes"])
-    tickers.extend(state["watchlist"])
-    tickers = list(set(tickers))[:30]
+    tickers = scope_tickers(state["universes"], state["watchlist"])
 
     print(f"Curated {len(tickers)} tickers for analysis")
     tracer = get_tracer()
@@ -224,14 +229,22 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     return {"sentiment_results": sentiment_results}
 
 
-def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 3: Synthesizing results and applying business logic...")
-
+def synthesize_rankings(
+    tickers: list[str],
+    quant_results: dict[str, dict],
+    sentiment_results: dict[str, dict],
+    risk_tolerance: str,
+    expertise_level: str,
+) -> tuple[list[dict], dict[str, dict]]:
+    """Apply per-user business logic (hype/risk penalties, ranking, and the LLM
+    reasoning trace for the top 5) on top of already-gathered quant + sentiment
+    signals. Shared by the per-user graph (phase 3) and the batched daily run, so
+    the raw signals can be gathered once and personalized many times."""
     unified_scores = {}
 
-    for ticker in state["tickers"]:
-        quant = state["quant_results"].get(ticker, {})
-        sentiment = state["sentiment_results"].get(ticker, {})
+    for ticker in tickers:
+        quant = quant_results.get(ticker, {})
+        sentiment = sentiment_results.get(ticker, {})
 
         quant_score = quant.get("raw_quant_score", 50)
         sentiment_score = sentiment.get("sentiment_score", 50)
@@ -244,10 +257,10 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         risk_penalty = 0
         beta = quant.get("beta", 1.0)
 
-        if state["risk_tolerance"] == "Conservative":
+        if risk_tolerance == "Conservative":
             if beta > 1.2:
                 risk_penalty = -15
-        elif state["risk_tolerance"] == "Aggressive":
+        elif risk_tolerance == "Aggressive":
             if sentiment_score > 70 and quant_score > 60:
                 risk_penalty = +5
 
@@ -275,12 +288,26 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         asset_ticker = asset["ticker"]
         asset["reasoning"] = generate_reasoning_trace(
             ticker=asset_ticker,
-            quant_data=state["quant_results"].get(asset_ticker, {}),
-            sentiment_data=state["sentiment_results"].get(asset_ticker, {}),
+            quant_data=quant_results.get(asset_ticker, {}),
+            sentiment_data=sentiment_results.get(asset_ticker, {}),
             adjustments=asset["adjustments"],
-            risk_tolerance=state["risk_tolerance"],
-            expertise_level=state["expertise_level"],
+            risk_tolerance=risk_tolerance,
+            expertise_level=expertise_level,
         )
+
+    return top_5, unified_scores
+
+
+def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
+    print("- Phase 3: Synthesizing results and applying business logic...")
+
+    top_5, unified_scores = synthesize_rankings(
+        state["tickers"],
+        state["quant_results"],
+        state["sentiment_results"],
+        state["risk_tolerance"],
+        state["expertise_level"],
+    )
 
     print("Generated Top 5 rankings")
     for i, asset in enumerate(top_5, 1):
@@ -435,6 +462,73 @@ def run_analysis(
 
     finally:
         set_tracer(None)
+
+
+def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
+    """Resource-efficient nightly run.
+
+    Gathers raw quant + sentiment signals ONCE for the union of every active
+    user's tickers, then applies each user's personalization (risk scoring,
+    ranking, reasoning) and persists their top 5. This avoids re-fetching the
+    same ticker's market data and social posts once per user — the expensive
+    raw gathering is shared, only the cheap per-user layer repeats.
+
+    Each user dict must contain: user_id, run_id, universes, risk_tolerance,
+    expertise_level (and optionally watchlist). Failures are isolated per user.
+    """
+    from ..utils.supabase_client import update_ai_run_status
+
+    if not users:
+        return {"total": 0, "succeeded": 0, "failed": 0, "tickers": 0}
+
+    # 1. Scope each user's tickers, then take the union to gather once.
+    for user in users:
+        user["tickers"] = scope_tickers(user["universes"], user.get("watchlist", []))
+    union = sorted({ticker for user in users for ticker in user["tickers"]})
+    logger.info("Daily batch: %d users, %d unique tickers", len(users), len(union))
+
+    # 2. Gather raw signals ONCE for the union (degrade gracefully on failure).
+    try:
+        quant_results = analyze_quant_tickers(union)
+    except Exception as e:
+        logger.warning("Batch quant gather failed: %s", e)
+        quant_results = {}
+    try:
+        sentiment_results = analyze_sentiment_tickers(union)
+    except Exception as e:
+        logger.warning("Batch sentiment gather failed: %s", e)
+        sentiment_results = {}
+
+    # 3. Personalize + persist per user, reusing the shared signals. The price
+    #    cache dedupes yfinance price lookups across users' overlapping top-5s.
+    price_cache: dict[str, Any] = {}
+    summary = {"total": len(users), "succeeded": 0, "failed": 0, "tickers": len(union)}
+    for user in users:
+        try:
+            top_5, _ = synthesize_rankings(
+                user["tickers"],
+                quant_results,
+                sentiment_results,
+                user["risk_tolerance"],
+                user["expertise_level"],
+            )
+            save_top_assets(
+                run_id=user["run_id"],
+                user_id=user["user_id"],
+                top_5=top_5,
+                quant_results=quant_results,
+                sentiment_results=sentiment_results,
+                price_cache=price_cache,
+            )
+            update_ai_run_status(user["run_id"], "complete")
+            summary["succeeded"] += 1
+        except Exception as e:
+            logger.exception("Daily batch failed for user %s: %s", user["user_id"], e)
+            update_ai_run_status(user["run_id"], "failed")
+            summary["failed"] += 1
+
+    logger.info("Daily batch finished: %s", summary)
+    return summary
 
 
 def main() -> None:
