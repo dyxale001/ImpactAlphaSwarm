@@ -9,6 +9,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
+import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 
 function formatMetric(value: unknown, digits = 2) {
@@ -71,11 +72,7 @@ export default function AssetDetailsPage() {
   const [previewTab] = useState<"overview">("overview");
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center text-brand-fg">
-        Loading asset data...
-      </div>
-    );
+    return <AssetDetailsSkeleton />;
   }
 
   if (!asset) {

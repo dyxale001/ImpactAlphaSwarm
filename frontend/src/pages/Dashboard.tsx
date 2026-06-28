@@ -19,6 +19,7 @@ import { supabase } from "../lib/supabase";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
+import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 
 import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
 import { pollUntilComplete } from "../services/api/poll";
@@ -29,8 +30,11 @@ export default function DashboardPage() {
     setSearch,
     topPick,
     filteredRecs,
+    isLoadingRecs,
+    isRunInProgress,
     recommendationError,
     latestRunCreatedAt,
+    refreshRecommendations,
   } = useDashboardStats();
 
   type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
@@ -109,8 +113,11 @@ export default function DashboardPage() {
       expertise_level: analysis?.ai_derived_expertise ?? "novice",
     });
 
+    await refreshRecommendations();
+
     await pollUntilComplete(run_id, getStatus, getResult);
     await fetchProfile(profile.id);
+    await refreshRecommendations();
   } catch (e) {
     console.error("Refresh analysis failed:", e);
   } finally {
@@ -136,6 +143,12 @@ export default function DashboardPage() {
   }
 
   if (profile?.role === "admin") return null;
+
+  const showDashboardSkeleton = isRunning || isRunInProgress || isLoadingRecs;
+
+  if (showDashboardSkeleton) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto">
@@ -168,7 +181,7 @@ export default function DashboardPage() {
           <button
             onClick={handleRefresh}
             disabled={isRunning}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className="w-4 h-4 text-brand-fg" />
             {isRunning ? "Running..." : "Refresh"}

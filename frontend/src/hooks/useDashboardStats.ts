@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 
@@ -24,10 +24,10 @@ export function useDashboardStats() {
     null,
   );
   const [latestRunCreatedAt, setLatestRunCreatedAt] = useState<string | null>(null);
+  const [isRunInProgress, setIsRunInProgress] = useState(false);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    async function fetchRecommendations() {
+  const fetchRecommendations = useCallback(async () => {
       try {
         setIsLoadingRecs(true);
         setRecommendationError(null);
@@ -44,7 +44,7 @@ export function useDashboardStats() {
         // 1. Get the latest AI run for this user only.
         const { data: userLatestRun, error: userRunError } = await supabase
           .from("ai_runs")
-          .select("id, created_at")
+          .select("id, created_at, status")
           .eq("user_id", profile.id)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -56,6 +56,12 @@ export function useDashboardStats() {
 
         const latestRunId = userLatestRun?.id ?? null;
         setLatestRunCreatedAt(userLatestRun?.created_at ?? null);
+        setIsRunInProgress(userLatestRun?.status === "running");
+
+        if (userLatestRun?.status === "running") {
+          setRecommendationError(null);
+          return;
+        }
 
         if (!latestRunId) {
           setRecs([]);
@@ -147,10 +153,21 @@ export function useDashboardStats() {
       } finally {
         setIsLoadingRecs(false);
       }
-    }
+    }, [profile?.id]);
 
+  useEffect(() => {
     fetchRecommendations();
-  }, [profile]);
+  }, [fetchRecommendations]);
+
+  useEffect(() => {
+    if (!profile?.id || !isRunInProgress) return;
+
+    const interval = window.setInterval(() => {
+      void fetchRecommendations();
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [profile?.id, isRunInProgress, fetchRecommendations]);
 
   // Derived State
   const searchedRecs = recs.filter(
@@ -199,7 +216,9 @@ export function useDashboardStats() {
     pct,
     sparkPoints,
     isLoadingRecs,
+    isRunInProgress,
     recommendationError,
     latestRunCreatedAt,
+    refreshRecommendations: fetchRecommendations,
   };
 }
