@@ -203,6 +203,7 @@ def _score_mentions(
 			"bullish_posts": 0,
 			"bearish_posts": 0,
 			"top_posts": [],
+			"scored": [],
 			"mention_count": 0,
 		}
 
@@ -502,7 +503,7 @@ def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_men
 		# Article count per reliability tier (1 = highest), for transparency.
 		"news_tier_counts": _tier_counts(news_mentions),
 		# Per-article transparency list (publisher, tier, date, headline, link).
-		"news_articles": _news_articles_payload(news["scored"]),
+		"news_articles": _news_articles_payload(news.get("scored", [])),
 		"sources": {
 			"stocktwits": sum(1 for m in social_mentions if m.source.startswith("stocktwits:")),
 			"finnhub": sum(1 for m in news_mentions if m.source.startswith("finnhub:")),
