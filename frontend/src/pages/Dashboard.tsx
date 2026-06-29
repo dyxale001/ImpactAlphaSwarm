@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
@@ -21,7 +21,12 @@ import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 
-import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
+import {
+  startAnalysis,
+  getStatus,
+  getResult,
+  getUsdZarExchangeRate,
+} from "../services/api/analysis";
 import { pollUntilComplete } from "../services/api/poll";
 
 export default function DashboardPage() {
@@ -82,48 +87,72 @@ export default function DashboardPage() {
 
   const topPickPreview = getTopPickPreview(topPickTab);
 
-  const { profile, analysis, isLoading, isProfileLoading, setSession, fetchProfile } = useAuthStore();
+  const {
+    profile,
+    analysis,
+    isLoading,
+    isProfileLoading,
+    setSession,
+    fetchProfile,
+  } = useAuthStore();
   const navigate = useNavigate();
 
   const [isRunning, setIsRunning] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [exchangeRateSource, setExchangeRateSource] =
+    useState<string>("Yahoo Finance");
+
+  const loadExchangeRate = useCallback(async () => {
+    try {
+      const rateData = await getUsdZarExchangeRate();
+      setExchangeRate(rateData.rate);
+      setExchangeRateSource(rateData.source);
+    } catch (error) {
+      console.error("Failed to load USD/ZAR exchange rate:", error);
+      setExchangeRate(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadExchangeRate();
+  }, [loadExchangeRate]);
 
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
-    } catch (err) {
-
-    }
-    setSession(null)
-    navigate('/', { replace: true })
-  }
+    } catch (err) {}
+    setSession(null);
+    navigate("/", { replace: true });
+  };
 
   const handleRefresh = async () => {
-  if (!profile?.id) return;
+    if (!profile?.id) return;
 
-  setIsRunning(true);
-  try {
-    const universes = Array.isArray(analysis?.investment_universe)
-      ? analysis.investment_universe
-      : [];
+    setIsRunning(true);
+    try {
+      const universes = Array.isArray(analysis?.investment_universe)
+        ? analysis.investment_universe
+        : [];
 
-    const { run_id } = await startAnalysis({
-      universes,
-      watchlist: [],
-      risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
-      expertise_level: analysis?.ai_derived_expertise ?? "novice",
-    });
+      const { run_id } = await startAnalysis({
+        universes,
+        watchlist: [],
+        risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
+        expertise_level: analysis?.ai_derived_expertise ?? "novice",
+      });
 
-    await refreshRecommendations();
+      await refreshRecommendations();
 
-    await pollUntilComplete(run_id, getStatus, getResult);
-    await fetchProfile(profile.id);
-    await refreshRecommendations();
-  } catch (e) {
-    console.error("Refresh analysis failed:", e);
-  } finally {
-    setIsRunning(false);
-  }
-};
+      await pollUntilComplete(run_id, getStatus, getResult);
+      await fetchProfile(profile.id);
+      await refreshRecommendations();
+      await loadExchangeRate();
+    } catch (e) {
+      console.error("Refresh analysis failed:", e);
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   const currentlyLoading =
     isProfileLoading !== undefined ? isProfileLoading : isLoading;
@@ -208,6 +237,20 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+      </div>
+      <div className="inline-flex w-fit items-center rounded-lg border border-brand-border/50 bg-brand-bg/60 backdrop-blur-xl px-4 py-2 text-xs text-brand-muted-fg">
+        {exchangeRate !== null ? (
+          <>
+            US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
+            <span className="font-medium text-brand-fg">
+              1 USD = R{exchangeRate.toFixed(2)}
+            </span>
+          </>
+        ) : (
+          <span className="animate-pulse">
+            US Stock Exchanges • Fetching USD/ZAR rate...
+          </span>
+        )}
       </div>
 
       {/* Top Pick */}
