@@ -1,7 +1,15 @@
 """Sentiment Scout Worker Module
 
-Purpose: Collect social mentions from StockTwits, score them with VADER,
-and produce a unified Raw Sentiment Score (0-100).
+Purpose: Collect sentiment signals for each ticker from two sources and blend them
+into a unified Raw Sentiment Score (0-100):
+
+- News sentiment from trusted financial publishers (via Finnhub company-news).
+- Social sentiment from StockTwits.
+
+Both signals are scored with the same VADER + GCP NLP pipeline. News is weighted
+higher than social (default 70/30) because trusted financial reporting is a more
+reliable signal than retail chatter; when only one source has data the score falls
+back to that source alone.
 
 The worker is designed to run safely when API credentials or optional libraries are
 not available. In that case, it returns neutral scores with no collected posts.
@@ -13,6 +21,7 @@ import os
 import re
 import warnings
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -34,11 +43,88 @@ except ImportError:
 	requests = None
 
 from .gcp_nlp import score_with_gcp
+from ..utils.schemas import parse_finnhub_article, parse_stocktwits_message
 
 
-# Number of most-engaged posts per ticker that also get a GCP NLP signal.
-# The rest are VADER-only to stay within the GCP monthly unit budget.
+# Number of most-prioritized posts per ticker (per source) that also get a GCP
+# NLP signal. The rest are VADER-only to stay within the GCP monthly unit budget.
 GCP_TOP_N = int(os.getenv("GCP_SENTIMENT_TOP_N", "5"))
+
+# Blend weight for the news signal; the social signal gets the remainder. News is
+# weighted higher because trusted financial reporting is a more reliable signal
+# than retail social chatter. Clamped to [0, 1].
+NEWS_WEIGHT = min(1.0, max(0.0, float(os.getenv("NEWS_SENTIMENT_WEIGHT", "0.7"))))
+SOCIAL_WEIGHT = 1.0 - NEWS_WEIGHT
+
+# Finnhub company-news lookback window and endpoint.
+FINNHUB_NEWS_URL = "https://finnhub.io/api/v1/company-news"
+NEWS_LOOKBACK_DAYS = int(os.getenv("NEWS_LOOKBACK_DAYS", "7"))
+
+# Trusted publishers, split into reliability tiers. Each tier carries a weight so
+# that, within the news signal, a tier-1 wire counts for more than a tier-2/3
+# article. Sources are matched case-insensitively against Finnhub's ``source``
+# field (substring match, so "yahoo" matches "Yahoo Finance"). A source not listed
+# in any tier is not trusted and is dropped before scoring. Each tier's source
+# list and weight is overridable via env (e.g. NEWS_TIER2_SOURCES, NEWS_TIER2_WEIGHT).
+_DEFAULT_TIER_SOURCES: dict[int, tuple[str, ...]] = {
+    # Tier 1: established financial wires / newspapers of record.
+    1: (
+        "reuters",
+        "bloomberg",
+        "cnbc",
+        "wall street journal",
+        "wsj",
+        "financial times",
+        "associated press",
+        "ap news",
+        "marketwatch",
+        "barron",
+        "the economist",
+        "morningstar",
+    ),
+    # Tier 2: reputable but more aggregator / secondary outlets.
+    2: (
+        "yahoo",
+        "forbes",
+        "investor's business daily",
+        "investors business daily",
+        "business insider",
+    ),
+    # Tier 3: crowd-sourced / contributor analysis.
+    3: (
+        "seekingalpha",
+        "seeking alpha",
+        "the motley fool",
+        "motley fool",
+    ),
+}
+
+_DEFAULT_TIER_WEIGHTS: dict[int, float] = {1: 1.0, 2: 0.6, 3: 0.3}
+
+
+def _tier_sources(tier: int) -> tuple[str, ...]:
+    override = os.getenv(f"NEWS_TIER{tier}_SOURCES", "").strip()
+    if not override:
+        return _DEFAULT_TIER_SOURCES[tier]
+    return tuple(s.strip().lower() for s in override.split(",") if s.strip())
+
+
+def _tier_weight(tier: int) -> float:
+    try:
+        return float(os.getenv(f"NEWS_TIER{tier}_WEIGHT", str(_DEFAULT_TIER_WEIGHTS[tier])))
+    except ValueError:
+        return _DEFAULT_TIER_WEIGHTS[tier]
+
+
+def _source_tier(source: str) -> int | None:
+    """Return 1/2/3 for a recognized trusted publisher, else ``None``."""
+    name = (source or "").lower()
+    for tier in (1, 2, 3):
+        if any(s in name for s in _tier_sources(tier)):
+            return tier
+    return None
+
+
 
 
 @dataclass(frozen=True)
@@ -49,6 +135,9 @@ class SocialMention:
 	url: str | None = None
 	engagement: int = 0
 	created_at: str | None = None
+	# Reliability weight for the source-tier-weighted average. 1.0 for social
+	# posts; for news it is the publisher's tier weight (tier-1 highest).
+	weight: float = 1.0
 
 
 def _normalize_tickers(tickers: list[str]) -> list[str]:
@@ -92,7 +181,22 @@ def _mention_sentiment(text: str, use_gcp: bool = False) -> float:
 	return _combine_scores(vader_score, gcp_score)
 
 
-def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:
+def _engagement_priority(mention: SocialMention) -> Any:
+	"""GCP prioritization for social posts: most-engaged first."""
+	return mention.engagement
+
+
+def _recency_priority(mention: SocialMention) -> Any:
+	"""GCP prioritization for news articles: spend the metered GCP budget on the
+	most reliable sources first (higher tier weight), then most-recent. ISO-8601
+	timestamps sort lexicographically in chronological order."""
+	return (mention.weight, mention.created_at or "")
+
+
+def _score_mentions(
+	mentions: list[SocialMention],
+	gcp_priority=_engagement_priority,
+) -> dict[str, Any]:
 	if not mentions:
 		return {
 			"sentiment_score": 50,
@@ -106,12 +210,12 @@ def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:
 	bullish_posts = 0
 	bearish_posts = 0
 
-	# Only the most-engaged posts get the (metered) GCP NLP signal; the rest
+	# Only the highest-priority posts get the (metered) GCP NLP signal; the rest
 	# are scored with VADER alone to respect the GCP monthly unit budget.
 	gcp_indices = {
 		idx
 		for idx, _ in sorted(
-			enumerate(mentions), key=lambda pair: pair[1].engagement, reverse=True
+			enumerate(mentions), key=lambda pair: gcp_priority(pair[1]), reverse=True
 		)[:GCP_TOP_N]
 	}
 
@@ -128,15 +232,29 @@ def _score_mentions(mentions: list[SocialMention]) -> dict[str, Any]:
 				"source": mention.source,
 				"url": mention.url,
 				"engagement": mention.engagement,
+				"weight": mention.weight,
 				"sentiment_raw": round(signed_score, 4),
 				"sentiment_contribution": round((signed_score + 1) * 50, 2),
 			}
 		)
 
-	average_signed = sum(item["sentiment_raw"] for item in scored_mentions) / len(scored_mentions)
+	# Source-tier-weighted mean: a tier-1 article pulls the score more than a
+	# tier-2/3 one. With all weights equal (e.g. social posts) this reduces to a
+	# plain average.
+	total_weight = sum(max(0.0, item["weight"]) for item in scored_mentions)
+	if total_weight > 0:
+		average_signed = sum(item["sentiment_raw"] * max(0.0, item["weight"]) for item in scored_mentions) / total_weight
+	else:
+		average_signed = sum(item["sentiment_raw"] for item in scored_mentions) / len(scored_mentions)
 	sentiment_score = int(round(max(0.0, min(1.0, (average_signed + 1.0) / 2.0)) * 100))
 
-	top_posts = sorted(scored_mentions, key=lambda item: abs(item["sentiment_raw"]), reverse=True)[:3]
+	# Surface the most decisive posts, favoring stronger sentiment from more
+	# reliable sources.
+	top_posts = sorted(
+		scored_mentions,
+		key=lambda item: abs(item["sentiment_raw"]) * max(0.0, item["weight"]),
+		reverse=True,
+	)[:3]
 
 	return {
 		"sentiment_score": sentiment_score,
@@ -182,23 +300,24 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 			payload = resp.json()
 			messages = payload.get("messages", [])[:limit] if isinstance(payload, dict) else []
 			for msg in messages:
-				body = msg.get("body", "") or ""
-				symbols = [s.get("symbol", "").upper() for s in msg.get("symbols", []) if s.get("symbol")]
-				if symbols and sym not in symbols and sym not in body.upper() and f"${sym}" not in body.upper():
+				# Validate at the ingestion boundary: malformed messages are
+				# rejected (dropped), anomalous ones are kept but flagged.
+				validated = parse_stocktwits_message(msg)
+				if validated is None:
 					continue
-				url_link = msg.get("url") or None
-				user = (msg.get("user") or {}).get("username", "")
-				likes = (msg.get("likes") or {}).get("total", 0) or 0
-				retweets = (msg.get("retweets") or {}).get("total", 0) or 0
-				engagement = int(likes) + int(retweets)
+
+				body_upper = validated.body.upper()
+				if validated.symbols and sym not in validated.symbols and sym not in body_upper and f"${sym}" not in body_upper:
+					continue
+
 				results[sym].append(
 					SocialMention(
 						ticker=sym,
-						text=body,
-						source=f"stocktwits:{user}",
-						url=url_link,
-						engagement=engagement,
-						created_at=msg.get("created_at"),
+						text=validated.body,
+						source=f"stocktwits:{validated.username or ''}",
+						url=validated.url,
+						engagement=validated.likes + validated.retweets,
+						created_at=validated.created_at.isoformat() if validated.created_at else None,
 					)
 				)
 		except Exception:
@@ -222,27 +341,161 @@ def collect_mentions(tickers: list[str]) -> dict[str, list[SocialMention]]:
 	return combined
 
 
-def analyze_ticker(ticker: str) -> dict[str, Any]:
-	mentions = collect_mentions([ticker]).get(ticker.upper(), [])
-	scored = _score_mentions(mentions)
-	scored["ticker"] = ticker.upper()
-	scored["sources"] = {
-		"stocktwits",
+def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list[SocialMention]]:
+	"""Collect recent company news from trusted financial publishers via Finnhub.
+
+	Returns articles as ``SocialMention`` (the shared scoring unit): ``text`` is
+	headline + summary, ``source`` is ``finnhub:<publisher>``. Non-trusted
+	publishers are dropped so only reputable financial reporting feeds the score.
+	Returns empty lists if ``requests`` or ``FINNHUB_API_KEY`` are unavailable.
+	"""
+	results: dict[str, list[SocialMention]] = {ticker: [] for ticker in tickers}
+	if requests is None:
+		return results
+
+	api_key = os.getenv("FINNHUB_API_KEY", "").strip()
+	if not api_key:
+		return results
+
+	headers = {"Accept": "application/json"}
+	today = datetime.now(timezone.utc).date()
+	date_from = (today - timedelta(days=max(1, NEWS_LOOKBACK_DAYS))).isoformat()
+	date_to = today.isoformat()
+
+	for ticker in tickers:
+		sym = ticker.upper()
+		params = {"symbol": sym, "from": date_from, "to": date_to, "token": api_key}
+
+		try:
+			resp = requests.get(FINNHUB_NEWS_URL, params=params, headers=headers, timeout=10)
+			if resp.status_code != 200:
+				continue
+			payload = resp.json()
+			if not isinstance(payload, list):
+				continue
+
+			for raw in payload:
+				# Validate at the ingestion boundary: malformed articles are
+				# rejected (dropped), anomalous ones are kept but flagged.
+				article = parse_finnhub_article(raw)
+				if article is None:
+					continue
+				tier = _source_tier(article.source)
+				if tier is None:  # not a trusted publisher
+					continue
+
+				text = f"{article.headline}. {article.summary}".strip(". ").strip()
+				if not text:
+					continue
+
+				results[sym].append(
+					SocialMention(
+						ticker=sym,
+						text=text,
+						source=f"finnhub:{article.source}",
+						url=article.url,
+						engagement=0,
+						created_at=article.created_at.isoformat() if article.created_at else None,
+						weight=_tier_weight(tier),
+					)
+				)
+				if len(results[sym]) >= limit:
+					break
+		except Exception:
+			continue
+
+	return results
+
+
+def collect_news(tickers: list[str]) -> dict[str, list[SocialMention]]:
+	normalized_tickers = _normalize_tickers(tickers)
+	try:
+		return _collect_finnhub_news(normalized_tickers)
+	except NameError:
+		return {ticker: [] for ticker in normalized_tickers}
+
+
+def _blend_sentiment(news: dict[str, Any], social: dict[str, Any]) -> int:
+	"""Weighted blend of the news and social sub-scores (news weighted higher).
+
+	Falls back to whichever source has data when the other is empty, and to a
+	neutral 50 when neither source produced any items.
+	"""
+	news_count = news["mention_count"]
+	social_count = social["mention_count"]
+
+	if news_count == 0 and social_count == 0:
+		return 50
+	if news_count == 0:
+		return social["sentiment_score"]
+	if social_count == 0:
+		return news["sentiment_score"]
+
+	blended = NEWS_WEIGHT * news["sentiment_score"] + SOCIAL_WEIGHT * social["sentiment_score"]
+	return int(round(blended))
+
+
+def _tier_counts(news_mentions: list[SocialMention]) -> dict[str, int]:
+	"""Count news articles per reliability tier, keyed ``tier1``/``tier2``/``tier3``."""
+	counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+	for mention in news_mentions:
+		tier = _source_tier(mention.source)
+		if tier is not None:
+			counts[f"tier{tier}"] += 1
+	return counts
+
+
+def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_mentions: list[SocialMention]) -> dict[str, Any]:
+	"""Score the news and social signals separately and blend them into the
+	unified sentiment payload for one ticker."""
+	social = _score_mentions(social_mentions, gcp_priority=_engagement_priority)
+	news = _score_mentions(news_mentions, gcp_priority=_recency_priority)
+
+	return {
+		"ticker": ticker,
+		# Unified, news-weighted score consumed downstream.
+		"sentiment_score": _blend_sentiment(news, social),
+		"news_weight": round(NEWS_WEIGHT, 2),
+		"social_weight": round(SOCIAL_WEIGHT, 2),
+		# Social sub-signal (kept under the original keys for backward compat).
+		"social_sentiment_score": social["sentiment_score"],
+		"bullish_posts": social["bullish_posts"],
+		"bearish_posts": social["bearish_posts"],
+		"top_posts": social["top_posts"],
+		"mention_count": social["mention_count"],
+		# News sub-signal.
+		"news_sentiment_score": news["sentiment_score"],
+		"news_bullish": news["bullish_posts"],
+		"news_bearish": news["bearish_posts"],
+		"top_news": news["top_posts"],
+		"news_count": news["mention_count"],
+		# Article count per reliability tier (1 = highest), for transparency.
+		"news_tier_counts": _tier_counts(news_mentions),
+		"sources": {
+			"stocktwits": sum(1 for m in social_mentions if m.source.startswith("stocktwits:")),
+			"finnhub": sum(1 for m in news_mentions if m.source.startswith("finnhub:")),
+		},
 	}
-	return scored
+
+
+def analyze_ticker(ticker: str) -> dict[str, Any]:
+	sym = ticker.upper()
+	social_mentions = collect_mentions([sym]).get(sym, [])
+	news_mentions = collect_news([sym]).get(sym, [])
+	return _combine_signals(sym, social_mentions, news_mentions)
 
 
 def analyze_tickers(tickers: list[str]) -> dict[str, dict[str, Any]]:
 	normalized_tickers = _normalize_tickers(tickers)
 	mentions_by_ticker = collect_mentions(normalized_tickers)
+	news_by_ticker = collect_news(normalized_tickers)
 
 	results: dict[str, dict[str, Any]] = {}
 	for ticker in normalized_tickers:
-		scored = _score_mentions(mentions_by_ticker.get(ticker, []))
-		scored["ticker"] = ticker
-		scored["sources"] = {
-			"stocktwits": sum(1 for mention in mentions_by_ticker.get(ticker, []) if mention.source.startswith("stocktwits:")),
-		}
-		results[ticker] = scored
+		results[ticker] = _combine_signals(
+			ticker,
+			mentions_by_ticker.get(ticker, []),
+			news_by_ticker.get(ticker, []),
+		)
 
 	return results

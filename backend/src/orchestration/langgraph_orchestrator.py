@@ -97,10 +97,10 @@ Technical Signals:
 - Sharpe Ratio: {quant_data.get('sharpe_ratio', 'N/A')}
 - Beta: {quant_data.get('beta', 'N/A'):.2f}
 
-Market Sentiment:
+Market Sentiment (news weighted higher than social):
 - Sentiment Score: {sentiment_data.get('sentiment_score', 'N/A')}/100
-- Bullish Posts: {sentiment_data.get('bullish_posts', 0)}
-- Bearish Posts: {sentiment_data.get('bearish_posts', 0)}
+- News Sentiment: {sentiment_data.get('news_sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted-source articles ({sentiment_data.get('news_bullish', 0)} positive, {sentiment_data.get('news_bearish', 0)} negative)
+- Social Sentiment: {sentiment_data.get('social_sentiment_score', 'N/A')}/100 from {sentiment_data.get('mention_count', 0)} posts ({sentiment_data.get('bullish_posts', 0)} bullish, {sentiment_data.get('bearish_posts', 0)} bearish)
 
 Risk Adjustments:
 - Hype Penalty: {adjustments.get('hype_penalty', 0)}
