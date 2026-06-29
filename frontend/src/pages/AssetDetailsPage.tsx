@@ -196,14 +196,14 @@ export default function AssetDetailsPage() {
         <>
           <SectionCard
             title="Sentiment Data"
-            description="Social sentiment for this asset."
+            description="Blended news & social sentiment — trusted financial news is weighted higher than social posts."
             icon={MessageSquare}
           >
             <div className="mb-3">
               <div className="flex justify-between">
                 <span className="relative group inline-block">
                   <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-                    Confidence
+                    Blended Score
                   </span>
                 </span>
                 <span className="text-foreground font-mono font-semibold">
@@ -218,20 +218,65 @@ export default function AssetDetailsPage() {
                 </div>
               </div>
             </div>
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <MetricPill
-                    label="Bullish posts"
-                    value={formatMetric(recommendation.bullish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Bearish posts"
-                    value={formatMetric(recommendation.bearish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Sources"
-                    value={recommendation.sources ? String(recommendation.sources) : "—"}
-                  />
-                </div>
+
+            {/* News sub-signal (weighted higher in the blended score). */}
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                  News
+                </span>
+                <span className="text-foreground font-mono font-semibold text-sm">
+                  {recommendation.news_count
+                    ? `${formatMetric(recommendation.news_sentiment_score, 0)}/100`
+                    : "No recent news"}
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MetricPill
+                  label="Articles"
+                  value={formatMetric(recommendation.news_count, 0)}
+                />
+                <MetricPill
+                  label="Positive"
+                  value={formatMetric(recommendation.news_bullish, 0)}
+                />
+                <MetricPill
+                  label="Negative"
+                  value={formatMetric(recommendation.news_bearish, 0)}
+                />
+              </div>
+            </div>
+
+            {/* Social sub-signal. */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                  Social
+                </span>
+                <span className="text-foreground font-mono font-semibold text-sm">
+                  {formatMetric(
+                    recommendation.social_sentiment_score ??
+                      recommendation.sentiment_score,
+                    0
+                  )}
+                  /100
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MetricPill
+                  label="Bullish posts"
+                  value={formatMetric(recommendation.bullish_posts, 0)}
+                />
+                <MetricPill
+                  label="Bearish posts"
+                  value={formatMetric(recommendation.bearish_posts, 0)}
+                />
+                <MetricPill
+                  label="Sources"
+                  value={recommendation.sources ? String(recommendation.sources) : "—"}
+                />
+              </div>
+            </div>
           </SectionCard>
 
           <SectionCard

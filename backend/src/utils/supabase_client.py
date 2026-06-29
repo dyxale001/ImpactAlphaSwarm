@@ -260,13 +260,21 @@ def save_top_assets(
         raw_sources = sentiment.get("sources")
         normalized_sources = None
         if isinstance(raw_sources, dict):
-            # prefer stocktwits when present and non-zero
-            if raw_sources.get("stocktwits"):
-                normalized_sources = "Stocktwits"
-            else:
-                # fallback: join any other present sources, capitalized
-                present = [k.capitalize() for k, v in raw_sources.items() if v]
-                normalized_sources = ", ".join(present) if present else None
+            # Display names for each signal source; news is listed first since it
+            # is weighted higher in the blended score.
+            source_labels = {"finnhub": "News", "stocktwits": "Stocktwits"}
+            present = [
+                source_labels[key]
+                for key in ("finnhub", "stocktwits")
+                if raw_sources.get(key)
+            ]
+            # Include any other present sources not in the ordered list above.
+            present.extend(
+                key.capitalize()
+                for key, value in raw_sources.items()
+                if value and key not in source_labels
+            )
+            normalized_sources = ", ".join(present) if present else None
         else:
             normalized_sources = raw_sources if raw_sources not in ("", []) else None
 
@@ -298,6 +306,21 @@ def save_top_assets(
             "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
+            # News sub-signal (blended into sentiment_score, weighted higher than
+            # social). Defaults to the blended score / 0 when no news was found.
+            "news_sentiment_score": int(
+                sentiment.get("news_sentiment_score")
+                or sentiment.get("sentiment_score")
+                or 0
+            ),
+            "social_sentiment_score": int(
+                sentiment.get("social_sentiment_score")
+                or sentiment.get("sentiment_score")
+                or 0
+            ),
+            "news_count": int(sentiment.get("news_count") or 0),
+            "news_bullish": int(sentiment.get("news_bullish") or 0),
+            "news_bearish": int(sentiment.get("news_bearish") or 0),
         }
         rows.append(row)
 
