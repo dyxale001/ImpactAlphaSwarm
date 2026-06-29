@@ -144,6 +144,15 @@ def _normalize_tickers(tickers: list[str]) -> list[str]:
 	return sorted({ticker.upper().strip() for ticker in tickers if ticker and ticker.strip()})
 
 
+def _api_symbol(ticker: str) -> str:
+	"""Map a yfinance/DB-style ticker to the form StockTwits and Finnhub expect.
+
+	Share classes use a hyphen in yfinance (e.g. ``BRK-B``, ``BF-B``) but a dot on
+	those APIs (``BRK.B``). Results stay keyed by the original DB ticker so the
+	rest of the pipeline (quant, persistence) matches up."""
+	return ticker.upper().replace("-", ".")
+
+
 def _clean_text(text: str) -> str:
 	text = re.sub(r"https?://\S+", " ", text)
 	text = re.sub(r"\$[A-Za-z][A-Za-z0-9_.-]*", " ", text)
@@ -292,7 +301,8 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 
 	for ticker in tickers:
 		sym = ticker.upper()
-		url = f"https://api.stocktwits.com/api/2/streams/symbol/{sym}.json"
+		api_sym = _api_symbol(sym)
+		url = f"https://api.stocktwits.com/api/2/streams/symbol/{api_sym}.json"
 		params = {"limit": limit}
 		if client_id:
 			params["client_id"] = client_id
@@ -311,7 +321,7 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 					continue
 
 				body_upper = validated.body.upper()
-				if validated.symbols and sym not in validated.symbols and sym not in body_upper and f"${sym}" not in body_upper:
+				if validated.symbols and api_sym not in validated.symbols and api_sym not in body_upper and f"${api_sym}" not in body_upper:
 					continue
 
 				results[sym].append(
@@ -368,7 +378,7 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 
 	for ticker in tickers:
 		sym = ticker.upper()
-		params = {"symbol": sym, "from": date_from, "to": date_to, "token": api_key}
+		params = {"symbol": _api_symbol(sym), "from": date_from, "to": date_to, "token": api_key}
 
 		try:
 			resp = requests.get(FINNHUB_NEWS_URL, params=params, headers=headers, timeout=10)
