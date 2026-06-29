@@ -321,6 +321,8 @@ def save_top_assets(
             "news_count": int(sentiment.get("news_count") or 0),
             "news_bullish": int(sentiment.get("news_bullish") or 0),
             "news_bearish": int(sentiment.get("news_bearish") or 0),
+            # Per-article transparency list: publisher, tier, date, headline, link.
+            "news_articles": sentiment.get("news_articles") or [],
         }
         rows.append(row)
 

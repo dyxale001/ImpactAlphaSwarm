@@ -233,6 +233,8 @@ def _score_mentions(
 				"url": mention.url,
 				"engagement": mention.engagement,
 				"weight": mention.weight,
+				"created_at": mention.created_at,
+				"tier": _source_tier(mention.source),
 				"sentiment_raw": round(signed_score, 4),
 				"sentiment_contribution": round((signed_score + 1) * 50, 2),
 			}
@@ -261,6 +263,7 @@ def _score_mentions(
 		"bullish_posts": bullish_posts,
 		"bearish_posts": bearish_posts,
 		"top_posts": top_posts,
+		"scored": scored_mentions,
 		"mention_count": len(scored_mentions),
 	}
 
@@ -445,6 +448,33 @@ def _tier_counts(news_mentions: list[SocialMention]) -> dict[str, int]:
 	return counts
 
 
+def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""Build a compact, per-article transparency list from the scored news items:
+	publisher, reliability tier, publish date, headline, link, and the article's
+	own sentiment. Ordered most-recent first so the user can see when each is from."""
+	articles: list[dict[str, Any]] = []
+	for item in sorted(scored_news, key=lambda it: it.get("created_at") or "", reverse=True):
+		raw = item["sentiment_raw"]
+		label = "Positive" if raw >= 0.05 else "Negative" if raw <= -0.05 else "Neutral"
+		# News text is "headline. summary"; show the headline only, trimmed.
+		headline = item["text"].split(". ", 1)[0].strip()
+		if len(headline) > 160:
+			headline = headline[:157].rstrip() + "…"
+		articles.append(
+			{
+				# Strip the "finnhub:" prefix to show the publisher name.
+				"source": item["source"].split(":", 1)[-1],
+				"tier": item.get("tier"),
+				"date": (item.get("created_at") or "")[:10],  # YYYY-MM-DD
+				"headline": headline,
+				"url": item.get("url"),
+				"sentiment": label,
+				"sentiment_score": item["sentiment_contribution"],  # 0-100
+			}
+		)
+	return articles
+
+
 def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_mentions: list[SocialMention]) -> dict[str, Any]:
 	"""Score the news and social signals separately and blend them into the
 	unified sentiment payload for one ticker."""
@@ -471,6 +501,8 @@ def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_men
 		"news_count": news["mention_count"],
 		# Article count per reliability tier (1 = highest), for transparency.
 		"news_tier_counts": _tier_counts(news_mentions),
+		# Per-article transparency list (publisher, tier, date, headline, link).
+		"news_articles": _news_articles_payload(news["scored"]),
 		"sources": {
 			"stocktwits": sum(1 for m in social_mentions if m.source.startswith("stocktwits:")),
 			"finnhub": sum(1 for m in news_mentions if m.source.startswith("finnhub:")),
