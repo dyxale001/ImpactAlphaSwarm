@@ -44,7 +44,7 @@ except ImportError:
 	requests = None
 
 from .gcp_nlp import score_with_gcp
-from ..utils.schemas import parse_finnhub_article, parse_stocktwits_message
+from ..utils.schemas import parse_finnhub_article, parse_marketaux_article, parse_stocktwits_message
 
 
 # Number of most-prioritized posts per ticker (per source) that also get a GCP
@@ -60,6 +60,17 @@ SOCIAL_WEIGHT = 1.0 - NEWS_WEIGHT
 # Finnhub company-news lookback window and endpoint.
 FINNHUB_NEWS_URL = "https://finnhub.io/api/v1/company-news"
 NEWS_LOOKBACK_DAYS = int(os.getenv("NEWS_LOOKBACK_DAYS", "7"))
+
+# Marketaux supplemental news endpoint. Used only as a tier-1-only top-up, gated
+# behind ``MARKETAUX_API_KEY`` and called at most once per run (all tickers in a
+# single batched request) to respect the free plan's tight monthly call budget.
+MARKETAUX_NEWS_URL = "https://api.marketaux.com/v1/news/all"
+# Cap on articles kept per ticker from a Marketaux run.
+MARKETAUX_LIMIT_PER_TICKER = int(os.getenv("MARKETAUX_LIMIT_PER_TICKER", "10"))
+# The free plan returns only ~3 articles per request, so we page through results to
+# pull a useful tier-1 volume. Each page is one API call; with a ~100/day budget and
+# a single nightly run, a handful of pages is comfortably within budget.
+MARKETAUX_MAX_PAGES = int(os.getenv("MARKETAUX_MAX_PAGES", "5"))
 
 # Trusted publishers, split into reliability tiers. Each tier carries a weight so
 # that, within the news signal, a tier-1 wire counts for more than a tier-2/3
@@ -102,6 +113,21 @@ _DEFAULT_TIER_SOURCES: dict[int, tuple[str, ...]] = {
 
 _DEFAULT_TIER_WEIGHTS: dict[int, float] = {1: 1.0, 2: 0.6, 3: 0.3}
 
+# Tier-group shares for the two-level news blend: the news score is a weighted
+# combination of each reliability tier's OWN average, with these shares, rather
+# than a per-article weighted mean. This makes a tier's influence independent of
+# how many articles it has, so a few tier-1 wires are not swamped by a flood of
+# tier-2/3 articles. Shares are renormalized over the tiers actually present, so
+# they need not sum to 1. Overridable via NEWS_TIER{n}_SHARE.
+_DEFAULT_TIER_SHARES: dict[int, float] = {1: 0.6, 2: 0.3, 3: 0.1}
+
+
+def _tier_share(tier: int) -> float:
+    try:
+        return float(os.getenv(f"NEWS_TIER{tier}_SHARE", str(_DEFAULT_TIER_SHARES[tier])))
+    except ValueError:
+        return _DEFAULT_TIER_SHARES[tier]
+
 
 def _tier_sources(tier: int) -> tuple[str, ...]:
     override = os.getenv(f"NEWS_TIER{tier}_SOURCES", "").strip()
@@ -136,13 +162,17 @@ def _source_tier(source: str) -> int | None:
 # only known tier-1 wires are recovered, and datelines are honored only near the
 # start of the text so an article that merely *mentions* a wire isn't upgraded.
 # Returned names substring-match the tier-1 source lists in ``_DEFAULT_TIER_SOURCES``.
-_WIRE_DOMAINS: tuple[tuple[str, str], ...] = (
+# Single source of truth for tier-1 publisher domains -> display name, shared by
+# the Finnhub syndication recovery (URL-domain path, below) and the Marketaux
+# domain whitelist (server-side tier-1-only filter, see ``_collect_marketaux_news``).
+_TIER1_DOMAINS: tuple[tuple[str, str], ...] = (
     ("reuters.com", "Reuters"),
     ("bloomberg.com", "Bloomberg"),
     ("wsj.com", "Wall Street Journal"),
     ("ft.com", "Financial Times"),
     ("apnews.com", "Associated Press"),
     ("cnbc.com", "CNBC"),
+    ("marketwatch.com", "MarketWatch"),
     ("barrons.com", "Barron's"),
     ("economist.com", "The Economist"),
     ("morningstar.com", "Morningstar"),
@@ -169,7 +199,7 @@ def _effective_source(headline: str, summary: str, url: str | None, source: str)
     Finnhub reported in ``source``."""
     if url:
         host = urllib.parse.urlparse(url).netloc.lower()
-        for domain, name in _WIRE_DOMAINS:
+        for domain, name in _TIER1_DOMAINS:
             if host == domain or host.endswith("." + domain):
                 return name
 
@@ -179,6 +209,21 @@ def _effective_source(headline: str, summary: str, url: str | None, source: str)
         return _DATELINE_NAMES[match.group(1).lower()]
 
     return source
+
+
+def _tier1_publisher(source: str) -> str | None:
+    """Resolve a Marketaux ``source`` (a domain like ``reuters.com`` or a name
+    like ``Reuters``) to a tier-1 publisher display name, or ``None`` if it is
+    not tier 1. This is the client-side verification layer behind the Marketaux
+    domain whitelist: only genuine tier-1 sources pass."""
+    name = (source or "").lower()
+    for domain, display in _TIER1_DOMAINS:
+        if domain in name:
+            return display
+    # ``source`` may be a publisher name rather than a domain.
+    if _source_tier(source) == 1:
+        return source
+    return None
 
 
 
@@ -258,6 +303,42 @@ def _recency_priority(mention: SocialMention) -> Any:
 	return (mention.weight, mention.created_at or "")
 
 
+def _aggregate_signed(scored_mentions: list[dict[str, Any]]) -> float:
+	"""Aggregate per-article signed sentiment into one signed score in [-1, 1].
+
+	For news this is a TIER-GROUPED blend: average the sentiment WITHIN each
+	reliability tier, then combine the tier averages with fixed shares (tier-1
+	highest), renormalized over the tiers actually present. Because each tier
+	contributes its own average -- not its article count -- a handful of tier-1
+	wires carry their full share even against a flood of tier-2/3 articles. Items
+	with no tier (social posts) fall back to a plain average of all items."""
+	by_tier: dict[int, list[float]] = {1: [], 2: [], 3: []}
+	untiered: list[float] = []
+	for item in scored_mentions:
+		tier = item.get("tier")
+		if tier in (1, 2, 3):
+			by_tier[tier].append(item["sentiment_raw"])
+		else:
+			untiered.append(item["sentiment_raw"])
+
+	numerator = 0.0
+	denominator = 0.0
+	for tier in (1, 2, 3):
+		group = by_tier[tier]
+		if group:
+			tier_average = sum(group) / len(group)
+			share = _tier_share(tier)
+			numerator += share * tier_average
+			denominator += share
+
+	if denominator > 0:
+		return numerator / denominator
+	# No tiered items (e.g. social posts): plain average.
+	if untiered:
+		return sum(untiered) / len(untiered)
+	return 0.0
+
+
 def _score_mentions(
 	mentions: list[SocialMention],
 	gcp_priority=_engagement_priority,
@@ -306,14 +387,11 @@ def _score_mentions(
 			}
 		)
 
-	# Source-tier-weighted mean: a tier-1 article pulls the score more than a
-	# tier-2/3 one. With all weights equal (e.g. social posts) this reduces to a
-	# plain average.
-	total_weight = sum(max(0.0, item["weight"]) for item in scored_mentions)
-	if total_weight > 0:
-		average_signed = sum(item["sentiment_raw"] * max(0.0, item["weight"]) for item in scored_mentions) / total_weight
-	else:
-		average_signed = sum(item["sentiment_raw"] for item in scored_mentions) / len(scored_mentions)
+	# Tier-grouped blend: each reliability tier contributes its OWN average at a
+	# fixed share (tier-1 highest), so a tier's influence is independent of its
+	# article count and a few tier-1 wires aren't swamped by many tier-2/3 ones.
+	# For social posts (no tier) this reduces to a plain average. See _aggregate_signed.
+	average_signed = _aggregate_signed(scored_mentions)
 	sentiment_score = int(round(max(0.0, min(1.0, (average_signed + 1.0) / 2.0)) * 100))
 
 	# Surface the most decisive posts, favoring stronger sentiment from more
@@ -482,12 +560,137 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 	return results
 
 
-def collect_news(tickers: list[str]) -> dict[str, list[SocialMention]]:
+def _news_dedup_key(text: str) -> str:
+	"""Normalized key to detect the same story across news sources (e.g. a CNBC
+	article carried by both Finnhub and Marketaux). Keys on the headline only --
+	the text before the first ``". "`` -- because that is the stable, publisher-set
+	string that matches across sources, whereas the two sources format the trailing
+	summary differently and would otherwise produce diverging keys."""
+	headline = text.split(". ", 1)[0]
+	return re.sub(r"[^a-z0-9]+", " ", headline.lower()).strip()[:80]
+
+
+def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]]:
+	"""Collect tier-1-only company news from Marketaux in one batched query.
+
+	All tickers are queried at once (``symbols=AAPL,MSFT,...``) and the response is
+	fanned back out per ticker via each article's tagged entities. Restricted to
+	tier-1 publishers server-side via the ``domains`` whitelist, then verified
+	client-side with ``_tier1_publisher``. Because the free plan returns only ~3
+	articles per request, results are paginated up to ``MARKETAUX_MAX_PAGES`` (one
+	API call each), stopping early once the source is exhausted or every ticker has
+	hit its cap. Returns empty lists if ``requests`` or ``MARKETAUX_API_KEY`` are
+	unavailable, or on any error (degrade gracefully)."""
+	results: dict[str, list[SocialMention]] = {ticker: [] for ticker in tickers}
+	if requests is None or not tickers:
+		return results
+
+	api_key = os.getenv("MARKETAUX_API_KEY", "").strip()
+	if not api_key:
+		return results
+
+	# Map the API-form symbol back to the original DB ticker so results stay keyed
+	# the way the rest of the pipeline expects.
+	sym_to_ticker = {_api_symbol(ticker): ticker for ticker in tickers}
+	today = datetime.now(timezone.utc).date()
+	published_after = (today - timedelta(days=max(1, NEWS_LOOKBACK_DAYS))).isoformat() + "T00:00"
+	params = {
+		"symbols": ",".join(sym_to_ticker.keys()),
+		# Server-side tier-1-only filter: the API cannot return anything else.
+		"domains": ",".join(domain for domain, _ in _TIER1_DOMAINS),
+		"filter_entities": "true",
+		"language": "en",
+		"published_after": published_after,
+		"api_token": api_key,
+	}
+
+	for page in range(1, max(1, MARKETAUX_MAX_PAGES) + 1):
+		try:
+			resp = requests.get(MARKETAUX_NEWS_URL, params={**params, "page": page}, timeout=15)
+			if resp.status_code != 200:
+				break
+			payload = resp.json()
+		except Exception:
+			break
+
+		data = payload.get("data", []) if isinstance(payload, dict) else []
+		if not data:
+			break
+
+		for raw in data:
+			article = parse_marketaux_article(raw)
+			if article is None:
+				continue
+			# Client-side verification of the server-side whitelist: drop anything
+			# that is not a recognized tier-1 publisher.
+			publisher = _tier1_publisher(article.source)
+			if publisher is None:
+				continue
+
+			text = f"{article.title}. {article.description}".strip(". ").strip()
+			if not text:
+				continue
+
+			created_at = article.created_at.isoformat() if article.created_at else None
+			for entity_symbol in article.symbols:
+				ticker = sym_to_ticker.get(entity_symbol.upper())
+				if ticker is None:
+					continue
+				if len(results[ticker]) >= MARKETAUX_LIMIT_PER_TICKER:
+					continue
+				results[ticker].append(
+					SocialMention(
+						ticker=ticker,
+						text=text,
+						source=f"marketaux:{publisher}",
+						url=article.url,
+						engagement=0,
+						created_at=created_at,
+						weight=_tier_weight(1),
+					)
+				)
+
+		# Stop early to avoid spending calls we don't need: a short page means the
+		# source is exhausted, or every ticker may already be full.
+		meta = payload.get("meta", {}) if isinstance(payload, dict) else {}
+		page_limit = meta.get("limit") or len(data)
+		if len(data) < page_limit:
+			break
+		if all(len(mentions) >= MARKETAUX_LIMIT_PER_TICKER for mentions in results.values()):
+			break
+
+	return results
+
+
+def collect_news(tickers: list[str], include_marketaux: bool = False) -> dict[str, list[SocialMention]]:
+	"""Collect trusted-source news for the tickers.
+
+	Finnhub is always queried. Marketaux is an optional tier-1-only top-up, off by
+	default and enabled (``include_marketaux=True``) ONLY for the nightly batch run
+	so on-demand user refreshes never spend the tight Marketaux call budget. When
+	both sources carry the same wire story it is de-duplicated (Finnhub copy kept).
+	"""
 	normalized_tickers = _normalize_tickers(tickers)
 	try:
-		return _collect_finnhub_news(normalized_tickers)
+		finnhub_news = _collect_finnhub_news(normalized_tickers)
 	except NameError:
-		return {ticker: [] for ticker in normalized_tickers}
+		finnhub_news = {ticker: [] for ticker in normalized_tickers}
+
+	if not include_marketaux:
+		return finnhub_news
+
+	marketaux_news = _collect_marketaux_news(normalized_tickers)
+	merged: dict[str, list[SocialMention]] = {}
+	for ticker in normalized_tickers:
+		existing = finnhub_news.get(ticker, [])
+		seen = {_news_dedup_key(mention.text) for mention in existing}
+		extra = [
+			mention
+			for mention in marketaux_news.get(ticker, [])
+			if _news_dedup_key(mention.text) not in seen
+		]
+		merged[ticker] = existing + extra
+	return merged
 
 
 def _blend_sentiment(news: dict[str, Any], social: dict[str, Any]) -> int:
@@ -578,21 +781,22 @@ def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_men
 		"sources": {
 			"stocktwits": sum(1 for m in social_mentions if m.source.startswith("stocktwits:")),
 			"finnhub": sum(1 for m in news_mentions if m.source.startswith("finnhub:")),
+			"marketaux": sum(1 for m in news_mentions if m.source.startswith("marketaux:")),
 		},
 	}
 
 
-def analyze_ticker(ticker: str) -> dict[str, Any]:
+def analyze_ticker(ticker: str, include_marketaux: bool = False) -> dict[str, Any]:
 	sym = ticker.upper()
 	social_mentions = collect_mentions([sym]).get(sym, [])
-	news_mentions = collect_news([sym]).get(sym, [])
+	news_mentions = collect_news([sym], include_marketaux=include_marketaux).get(sym, [])
 	return _combine_signals(sym, social_mentions, news_mentions)
 
 
-def analyze_tickers(tickers: list[str]) -> dict[str, dict[str, Any]]:
+def analyze_tickers(tickers: list[str], include_marketaux: bool = False) -> dict[str, dict[str, Any]]:
 	normalized_tickers = _normalize_tickers(tickers)
 	mentions_by_ticker = collect_mentions(normalized_tickers)
-	news_by_ticker = collect_news(normalized_tickers)
+	news_by_ticker = collect_news(normalized_tickers, include_marketaux=include_marketaux)
 
 	results: dict[str, dict[str, Any]] = {}
 	for ticker in normalized_tickers:

@@ -182,3 +182,80 @@ def parse_finnhub_article(raw: dict[str, Any]) -> FinnhubArticle | None:
     except ValidationError as exc:
         logger.warning("Rejected malformed Finnhub article %s: %s", raw.get("id", "<no-id>"), exc.errors())
         return None
+
+
+# ---------------------------------------------------------------------------
+# Marketaux news (tier-1-only supplemental news source)
+# ---------------------------------------------------------------------------
+
+
+class MarketauxArticle(BaseModel):
+    """A validated Marketaux ``/v1/news/all`` article ready for sentiment scoring.
+
+    Built from a raw item in the ``data`` array via ``from_raw``. The text used
+    downstream is ``title`` + ``description``; ``source`` is the publisher
+    (domain or name) used to enforce the tier-1 whitelist before scoring;
+    ``symbols`` is the list of tickers Marketaux tagged on the article (from its
+    ``entities`` array), used to fan a single batched response out per ticker.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    uuid: str = ""
+    title: str = ""
+    description: str = ""
+    source: str = ""
+    url: str | None = None
+    created_at: datetime | None = None
+    symbols: list[str] = Field(default_factory=list)
+
+    is_anomalous: bool = False
+    anomaly_reasons: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def from_raw(cls, msg: dict[str, Any]) -> "MarketauxArticle":
+        """Flatten a raw Marketaux news item into the validation schema."""
+        symbols: list[str] = []
+        for entity in msg.get("entities") or []:
+            symbol = (entity.get("symbol") or "").upper().strip()
+            if symbol and symbol not in symbols:
+                symbols.append(symbol)
+        return cls(
+            uuid=msg.get("uuid") or "",
+            title=msg.get("title") or "",
+            # Prefer the fuller description; fall back to the snippet.
+            description=msg.get("description") or msg.get("snippet") or "",
+            source=msg.get("source") or "",
+            url=msg.get("url"),
+            created_at=msg.get("published_at"),
+            symbols=symbols,
+        )
+
+    @model_validator(mode="after")
+    def _flag_anomalies(self) -> "MarketauxArticle":
+        reasons: list[str] = []
+
+        if not (self.title + " " + self.description).strip():
+            reasons.append("article has no usable text")
+        if self.created_at is not None:
+            created = self.created_at
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created > datetime.now(timezone.utc):
+                reasons.append("published_at is in the future")
+        if len(self.description) > MAX_BODY_LEN:
+            reasons.append("description exceeds maximum length")
+
+        self.is_anomalous = bool(reasons)
+        self.anomaly_reasons = reasons
+        return self
+
+
+def parse_marketaux_article(raw: dict[str, Any]) -> MarketauxArticle | None:
+    """Validate a raw Marketaux news item. Returns a MarketauxArticle (possibly
+    flagged) or ``None`` if structurally invalid (rejected + logged)."""
+    try:
+        return MarketauxArticle.from_raw(raw)
+    except ValidationError as exc:
+        logger.warning("Rejected malformed Marketaux article %s: %s", raw.get("uuid", "<no-id>"), exc.errors())
+        return None
