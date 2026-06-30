@@ -208,10 +208,8 @@ export default function DashboardPage() {
   useEffect(() => {
     void loadExchangeRate();
   }, [loadExchangeRate]);
-  const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
-  const navigate = useNavigate();
 
-  const { isRunning, refresh } = useAnalysisRefresh();
+  const { refresh } = useAnalysisRefresh();
   const isStale = isRunStale(latestRunCreatedAt);
 
   const handleSignOut = async () => {
