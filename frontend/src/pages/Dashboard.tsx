@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
@@ -19,7 +19,15 @@ import { supabase } from "../lib/supabase";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
+import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 
+import {
+  startAnalysis,
+  getStatus,
+  getResult,
+  getUsdZarExchangeRate,
+} from "../services/api/analysis";
+import { pollUntilComplete } from "../services/api/poll";
 import { useAnalysisRefresh } from "../hooks/useAnalysisRefresh";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
@@ -29,10 +37,14 @@ export default function DashboardPage() {
   const {
     search,
     setSearch,
+    recommendations,
     topPick,
     filteredRecs,
+    isLoadingRecs,
+    isRunInProgress,
     recommendationError,
     latestRunCreatedAt,
+    refreshRecommendations,
   } = useDashboardStats();
 
   type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
@@ -80,6 +92,122 @@ export default function DashboardPage() {
 
   const topPickPreview = getTopPickPreview(topPickTab);
 
+  const {
+    profile,
+    analysis,
+    isLoading,
+    isProfileLoading,
+    setSession,
+    fetchProfile,
+  } = useAuthStore();
+  const navigate = useNavigate();
+
+  const [isRunning, setIsRunning] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [exchangeRateSource, setExchangeRateSource] =
+    useState<string>("Yahoo Finance");
+
+  const escapeCsvValue = (value: unknown) => {
+    const text = value === null || value === undefined ? "" : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const handleExport = () => {
+    if (!recommendations.length) return;
+
+    const sortedRecommendations = [...recommendations].sort(
+      (a, b) => a.rank - b.rank,
+    );
+
+    const metadataRows = [
+      ["AlphaSwarm Dashboard Export"],
+      [""],
+      ["Generated At", new Date().toISOString()],
+      ["Latest AI Run", latestRunCreatedAt ?? "—"],
+      [
+        "FX Rate (USD/ZAR)",
+        exchangeRate !== null
+          ? `1 USD = R${exchangeRate.toFixed(2)}`
+          : "Unavailable",
+      ],
+      ["Recommendation Count", String(sortedRecommendations.length)],
+      ["Portfolio Currency", "ZAR (South African Rand)"],
+      [""],
+    ];
+
+    const headerRow = [
+      "Rank",
+      "Ticker",
+      "Company",
+      "Price (ZAR)",
+      "Confidence Score",
+      "Quantitative Score",
+      "Sentiment Score",
+      "Hype Penalty",
+      "Hype Flag",
+      "Top Pick",
+    ];
+
+    const dataRows = sortedRecommendations.map((asset) => [
+      asset.rank,
+      asset.ticker,
+      asset.name,
+      asset.currentPrice.toFixed(2),
+      asset.confidenceScore,
+      asset.fundamentalsScore,
+      asset.sentimentScore,
+      asset.hypePenalty,
+      asset.isHype ? "Yes" : "No",
+      asset.rank === 1 ? "Yes" : "No",
+    ]);
+
+    const csvLines = [
+      // Metadata block
+      ...metadataRows.map((row) => row.map(escapeCsvValue).join(",")),
+
+      // Spacer row
+      "",
+
+      // Header row
+      headerRow.map(escapeCsvValue).join(","),
+
+      // Data rows
+      ...dataRows.map((row) => row.map(escapeCsvValue).join(",")),
+    ];
+
+    const blob = new Blob([csvLines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = `alphaswarm-dashboard-export-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const loadExchangeRate = useCallback(async () => {
+    try {
+      const rateData = await getUsdZarExchangeRate();
+      setExchangeRate(rateData.rate);
+      setExchangeRateSource(rateData.source);
+    } catch (error) {
+      console.error("Failed to load USD/ZAR exchange rate:", error);
+      setExchangeRate(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadExchangeRate();
+  }, [loadExchangeRate]);
   const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
   const navigate = useNavigate();
 
@@ -89,12 +217,39 @@ export default function DashboardPage() {
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
-    } catch (err) {
+    } catch (err) {}
+    setSession(null);
+    navigate("/", { replace: true });
+  };
 
+  const handleRefresh = async () => {
+    if (!profile?.id) return;
+
+    setIsRunning(true);
+    try {
+      const universes = Array.isArray(analysis?.investment_universe)
+        ? analysis.investment_universe
+        : [];
+
+      const { run_id } = await startAnalysis({
+        universes,
+        watchlist: [],
+        risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
+        expertise_level: analysis?.ai_derived_expertise ?? "novice",
+      });
+
+      await refreshRecommendations();
+
+      await pollUntilComplete(run_id, getStatus, getResult);
+      await fetchProfile(profile.id);
+      await refreshRecommendations();
+      await loadExchangeRate();
+    } catch (e) {
+      console.error("Refresh analysis failed:", e);
+    } finally {
+      setIsRunning(false);
     }
-    setSession(null)
-    navigate('/', { replace: true })
-  }
+  };
 
   const currentlyLoading =
     isProfileLoading !== undefined ? isProfileLoading : isLoading;
@@ -122,6 +277,12 @@ export default function DashboardPage() {
   }
 
   if (profile?.role === "admin") return null;
+
+  const showDashboardSkeleton = isRunning || isRunInProgress || isLoadingRecs;
+
+  if (showDashboardSkeleton) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto">
@@ -152,9 +313,16 @@ export default function DashboardPage() {
             Sign out
           </button>
           <button
-            onClick={refresh}
+            onClick={handleExport}
+            disabled={!recommendations.length}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold hover:opacity-90 shadow-lg shadow-brand-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" /> Export
+          </button>
+          <button
+            onClick={handleRefresh}
             disabled={isRunning}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 text-brand-fg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className="w-4 h-4 text-brand-fg" />
             {isRunning ? "Running..." : "Refresh"}
@@ -176,11 +344,22 @@ export default function DashboardPage() {
                 className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
               />
             </div>
-            <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold hover:opacity-90 shadow-lg shadow-brand-primary/20">
-              <Download className="w-4 h-4" /> Export
-            </button>
           </div>
         </div>
+      </div>
+      <div className="inline-flex w-fit items-center rounded-lg border border-brand-border/50 bg-brand-bg/60 backdrop-blur-xl px-4 py-2 text-xs text-brand-muted-fg">
+        {exchangeRate !== null ? (
+          <>
+            US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
+            <span className="font-medium text-brand-fg">
+              1 USD = R{exchangeRate.toFixed(2)}
+            </span>
+          </>
+        ) : (
+          <span className="animate-pulse">
+            US Stock Exchanges • Fetching USD/ZAR rate...
+          </span>
+        )}
       </div>
 
       {/* Staleness notice for returning users (auto-refresh runs alongside it) */}

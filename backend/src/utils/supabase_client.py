@@ -65,6 +65,10 @@ def _fx_rate_to_zar(currency: str) -> float | None:
     return None
 
 
+def fetch_fx_rate_to_zar(currency: str) -> float | None:
+    return _fx_rate_to_zar(currency)
+
+
 def fetch_price_at_run_in_zar(ticker: str) -> float | None:
     try:
         ticker_obj = yf.Ticker(ticker)

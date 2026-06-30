@@ -9,8 +9,15 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-
-from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status
+# REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
+from src.utils.supabase_client import (
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    supabase,
+    create_ai_run,
+    update_ai_run_status,
+    fetch_fx_rate_to_zar,
+)
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
@@ -37,6 +44,20 @@ class StartAnalysisRequest(BaseModel):
     watchlist: Optional[List[str]] = []
     risk_tolerance: Optional[str] = "Moderate"
     expertise_level: Optional[str] = "novice"
+
+
+@app.get("/api/analysis/fx-rate/usd-zar")
+async def usd_zar_fx_rate():
+    rate = fetch_fx_rate_to_zar("USD")
+    if rate is None:
+        raise HTTPException(status_code=503, detail="Unable to load live USD/ZAR exchange rate")
+
+    return {
+        "base_currency": "USD",
+        "quote_currency": "ZAR",
+        "rate": rate,
+        "source": "Yahoo Finance",
+    }
 
 
 @app.post("/api/analysis/start")

@@ -15,7 +15,7 @@ export async function startAnalysis(payload: {
 }) {
   const token = await getToken();
   console.log("Token from session:", token ? "✓ exists" : "✗ null");
-  
+
   if (!token) {
     throw new Error("No auth token — user may not be logged in");
   }
@@ -42,6 +42,17 @@ export async function getResult(runId: string) {
   const res = await fetch(`${BASE}/api/analysis/result/${runId}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function getUsdZarExchangeRate() {
+  const res = await fetch(`${BASE}/api/analysis/fx-rate/usd-zar`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    base_currency: string;
+    quote_currency: string;
+    rate: number;
+    source: string;
+  }>;
 }
 
 export async function adminDeleteUser(userId: string) {
