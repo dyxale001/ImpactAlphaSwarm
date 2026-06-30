@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+import urllib.parse
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -123,6 +124,61 @@ def _source_tier(source: str) -> int | None:
         if any(s in name for s in _tier_sources(tier)):
             return tier
     return None
+
+
+# --- Syndicated wire recovery ------------------------------------------------
+# Aggregators (Yahoo, MarketWatch, …) routinely republish wire-service stories.
+# Finnhub credits the aggregator in ``source``, which down-tiers a genuine
+# tier-1 wire. We recover the originating wire from (a) the article URL's domain
+# and (b) a leading dateline in the text ("WASHINGTON (Reuters) - …") and tier on
+# that instead, so a Reuters story republished by an aggregator is credited as
+# Reuters (tier 1) rather than the aggregator (tier 2/3). Conservative by design:
+# only known tier-1 wires are recovered, and datelines are honored only near the
+# start of the text so an article that merely *mentions* a wire isn't upgraded.
+# Returned names substring-match the tier-1 source lists in ``_DEFAULT_TIER_SOURCES``.
+_WIRE_DOMAINS: tuple[tuple[str, str], ...] = (
+    ("reuters.com", "Reuters"),
+    ("bloomberg.com", "Bloomberg"),
+    ("wsj.com", "Wall Street Journal"),
+    ("ft.com", "Financial Times"),
+    ("apnews.com", "Associated Press"),
+    ("cnbc.com", "CNBC"),
+    ("barrons.com", "Barron's"),
+    ("economist.com", "The Economist"),
+    ("morningstar.com", "Morningstar"),
+)
+
+_DATELINE_RE = re.compile(r"\((reuters|bloomberg|ap|associated press|dow jones)\)", re.IGNORECASE)
+_DATELINE_NAMES: dict[str, str] = {
+    "reuters": "Reuters",
+    "bloomberg": "Bloomberg",
+    "ap": "Associated Press",
+    "associated press": "Associated Press",
+    "dow jones": "Dow Jones",
+}
+
+# Only trust a wire dateline that appears near the start of the article text.
+_DATELINE_SCAN_CHARS = 200
+
+
+def _effective_source(headline: str, summary: str, url: str | None, source: str) -> str:
+    """Resolve the *originating* publisher for tiering.
+
+    Returns the wire service when the article is a syndicated wire story
+    (detected via URL domain or a leading dateline), otherwise the publisher
+    Finnhub reported in ``source``."""
+    if url:
+        host = urllib.parse.urlparse(url).netloc.lower()
+        for domain, name in _WIRE_DOMAINS:
+            if host == domain or host.endswith("." + domain):
+                return name
+
+    lead = f"{headline} {summary}"[:_DATELINE_SCAN_CHARS]
+    match = _DATELINE_RE.search(lead)
+    if match:
+        return _DATELINE_NAMES[match.group(1).lower()]
+
+    return source
 
 
 
@@ -394,7 +450,12 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 				article = parse_finnhub_article(raw)
 				if article is None:
 					continue
-				tier = _source_tier(article.source)
+				# Recover syndicated wire stories (e.g. Reuters via Yahoo) so they
+				# are tiered by the originating wire, not the reposting aggregator.
+				effective_source = _effective_source(
+					article.headline, article.summary, article.url, article.source
+				)
+				tier = _source_tier(effective_source)
 				if tier is None:  # not a trusted publisher
 					continue
 
@@ -406,7 +467,7 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 					SocialMention(
 						ticker=sym,
 						text=text,
-						source=f"finnhub:{article.source}",
+						source=f"finnhub:{effective_source}",
 						url=article.url,
 						engagement=0,
 						created_at=article.created_at.isoformat() if article.created_at else None,
