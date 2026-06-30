@@ -28,6 +28,10 @@ import {
   getUsdZarExchangeRate,
 } from "../services/api/analysis";
 import { pollUntilComplete } from "../services/api/poll";
+import { useAnalysisRefresh } from "../hooks/useAnalysisRefresh";
+import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
+import { isRunStale } from "../utils/staleness";
+import StaleDataBanner from "../components/dashboard/StaleDataBanner";
 
 export default function DashboardPage() {
   const {
@@ -204,6 +208,11 @@ export default function DashboardPage() {
   useEffect(() => {
     void loadExchangeRate();
   }, [loadExchangeRate]);
+  const { profile, isLoading, isProfileLoading, setSession } = useAuthStore();
+  const navigate = useNavigate();
+
+  const { isRunning, refresh } = useAnalysisRefresh();
+  const isStale = isRunStale(latestRunCreatedAt);
 
   const handleSignOut = async () => {
     try {
@@ -250,6 +259,14 @@ export default function DashboardPage() {
       navigate("/admin", { replace: true });
     }
   }, [profile, currentlyLoading, navigate]);
+
+  // Self-heal returning users whose data predates the last nightly run.
+  useStaleAutoRefresh({
+    isStale,
+    isRunning,
+    ready: !currentlyLoading && Boolean(profile?.id),
+    refresh,
+  });
 
   if (currentlyLoading) {
     return (
@@ -344,6 +361,14 @@ export default function DashboardPage() {
           </span>
         )}
       </div>
+
+      {/* Staleness notice for returning users (auto-refresh runs alongside it) */}
+      {isStale && latestRunCreatedAt && (
+        <StaleDataBanner
+          latestRunCreatedAt={latestRunCreatedAt}
+          isRefreshing={isRunning}
+        />
+      )}
 
       {/* Top Pick */}
       <div className="bg-accent/90 backdrop-blur-xl rounded-lg p-6 relative z-50 overflow-visible transition-colors glass-card">

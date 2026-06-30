@@ -40,8 +40,6 @@ numpy==2.2.6
 scipy>=1.13.1
 pandas-ta-classic==0.5.44
 vaderSentiment==3.3.2
-transformers==4.48.3
-torch>=2.5.1
 groq>=0.4.1
 python-dotenv>=1.0.0
 supabase

@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import secrets
 from typing import List, Optional
 
 import httpx
@@ -20,6 +21,11 @@ from src.utils.supabase_client import (
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
+
+# Shared secret that Cloud Scheduler presents to trigger the nightly run. Unset
+DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
+# Only refresh users whose last run is within this many days.
+DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
@@ -148,6 +154,66 @@ async def analysis_result(run_id: str):
             "current_price": price_at_run,
         })
     return {"top_5": top_5}
+
+@app.post("/api/analysis/run-daily")
+async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
+    """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
+    (just after the NYSE close). Refreshes every active user's insights so they
+    see fresh data without pressing refresh. Guarded by a shared secret.
+
+    For resource efficiency the raw quant + sentiment signals are gathered ONCE
+    for the union of all users' tickers (see run_daily_batch), then personalized
+    per user. Runs synchronously; failures are isolated per user.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Daily run not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    from src.utils.supabase_client import get_active_user_ids, get_user_preferences
+    from src.orchestration.langgraph_orchestrator import run_daily_batch
+
+    user_ids = get_active_user_ids(DAILY_ACTIVE_DAYS)
+    logger.info("Daily run starting for %d active users", len(user_ids))
+
+    # Build the batch: one fresh run row per user with their saved preferences.
+    users = []
+    skipped = 0
+    for user_id in user_ids:
+        prefs = get_user_preferences(user_id)
+        if not prefs or not prefs.get("universes"):
+            logger.info("Daily run skipping user %s (no preferences/universes)", user_id)
+            skipped += 1
+            continue
+        run_id = create_ai_run(user_id=user_id, status="running")
+        users.append(
+            {
+                "user_id": user_id,
+                "run_id": run_id,
+                "universes": prefs["universes"],
+                "risk_tolerance": prefs["risk_tolerance"],
+                "expertise_level": prefs["expertise_level"],
+            }
+        )
+
+    # Gather raw signals once for the union of tickers, then personalize per user.
+    # Offloaded to a thread so the event loop stays responsive during the batch.
+    loop = asyncio.get_running_loop()
+    batch = await loop.run_in_executor(None, run_daily_batch, users)
+
+    summary = {
+        "active_days": DAILY_ACTIVE_DAYS,
+        "total": len(user_ids),
+        "skipped": skipped,
+        "succeeded": batch.get("succeeded", 0),
+        "failed": batch.get("failed", 0),
+        "unique_tickers": batch.get("tickers", 0),
+    }
+    logger.info("Daily run finished: %s", summary)
+    return summary
+
 
 class DeleteUserRequest(BaseModel):
     user_id: str
