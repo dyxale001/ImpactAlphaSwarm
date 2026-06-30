@@ -114,6 +114,48 @@ def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def get_active_user_ids(within_days: int = 7) -> List[str]:
+    """Return ids of users who have signed in within `within_days` days.
+
+    Activity is based on Supabase auth's ``last_sign_in_at``, deliberately NOT on
+    ai_runs: the nightly scheduled run rewrites ai_runs.created_at, so using that
+    as the activity signal would keep dormant accounts "active" forever (every
+    nightly refresh resets their clock). Sign-in time is only advanced by the
+    user, so the automation can't perpetuate itself.
+
+    Users without saved preferences are skipped later by the daily job itself.
+
+    Caveat: ``last_sign_in_at`` advances only on an explicit sign-in, not on
+    silent token refresh — a user who stays logged in for weeks can look inactive
+    and drop out of the nightly run. The frontend staleness auto-refresh is the
+    backstop: their data self-heals the next time they open the app.
+    """
+    try:
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=within_days
+        )
+        active: List[str] = []
+        page = 1
+        per_page = 200
+        while True:
+            users = supabase.auth.admin.list_users(page=page, per_page=per_page)
+            if not users:
+                break
+            for user in users:
+                last_sign_in = getattr(user, "last_sign_in_at", None)
+                if last_sign_in is None:
+                    continue
+                if last_sign_in.tzinfo is None:
+                    last_sign_in = last_sign_in.replace(tzinfo=datetime.timezone.utc)
+                if last_sign_in >= cutoff:
+                    active.append(user.id)
+            page += 1
+        return active
+    except Exception as e:
+        print(f"Error fetching active users: {e}")
+        return []
+
+
 def get_assets_by_universes(universes: List[str]) -> List[str]:
     """Fetch tickers for assets matching user's investment universes."""
     try:
@@ -205,6 +247,7 @@ def save_top_assets(
     top_5: List[Dict[str, Any]],
     quant_results: Dict[str, Dict[str, Any]],
     sentiment_results: Dict[str, Dict[str, Any]],
+    price_cache: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     rows = []
     now = datetime.datetime.utcnow().isoformat()
@@ -217,17 +260,30 @@ def save_top_assets(
         raw_sources = sentiment.get("sources")
         normalized_sources = None
         if isinstance(raw_sources, dict):
-            # prefer stocktwits when present and non-zero
-            if raw_sources.get("stocktwits"):
-                normalized_sources = "Stocktwits"
-            else:
-                # fallback: join any other present sources, capitalized
-                present = [k.capitalize() for k, v in raw_sources.items() if v]
-                normalized_sources = ", ".join(present) if present else None
+            # Display names for each signal source; news is listed first since it
+            # is weighted higher in the blended score.
+            source_labels = {"finnhub": "News", "stocktwits": "Stocktwits"}
+            present = [
+                source_labels[key]
+                for key in ("finnhub", "stocktwits")
+                if raw_sources.get(key)
+            ]
+            # Include any other present sources not in the ordered list above.
+            present.extend(
+                key.capitalize()
+                for key, value in raw_sources.items()
+                if value and key not in source_labels
+            )
+            normalized_sources = ", ".join(present) if present else None
         else:
             normalized_sources = raw_sources if raw_sources not in ("", []) else None
 
-        price_at_run = fetch_price_at_run_in_zar(ticker)
+        if price_cache is not None and ticker in price_cache:
+            price_at_run = price_cache[ticker]
+        else:
+            price_at_run = fetch_price_at_run_in_zar(ticker)
+            if price_cache is not None:
+                price_cache[ticker] = price_at_run
 
         row = {
             "asset_id": asset_id,
@@ -250,6 +306,23 @@ def save_top_assets(
             "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
+            # News sub-signal (blended into sentiment_score, weighted higher than
+            # social). Defaults to the blended score / 0 when no news was found.
+            "news_sentiment_score": int(
+                sentiment.get("news_sentiment_score")
+                or sentiment.get("sentiment_score")
+                or 0
+            ),
+            "social_sentiment_score": int(
+                sentiment.get("social_sentiment_score")
+                or sentiment.get("sentiment_score")
+                or 0
+            ),
+            "news_count": int(sentiment.get("news_count") or 0),
+            "news_bullish": int(sentiment.get("news_bullish") or 0),
+            "news_bearish": int(sentiment.get("news_bearish") or 0),
+            # Per-article transparency list: publisher, tier, date, headline, link.
+            "news_articles": sentiment.get("news_articles") or [],
         }
         rows.append(row)
 
