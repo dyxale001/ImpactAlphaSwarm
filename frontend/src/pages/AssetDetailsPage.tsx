@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -63,12 +62,83 @@ function MetricPill({
   );
 }
 
+type SentimentPost = {
+  platform?: string;
+  author?: string;
+  sentiment?: string;
+  content?: string;
+  url?: string;
+  engagement?: number;
+};
+
+type NewsArticle = {
+  source?: string;
+  title?: string;
+  url?: string;
+  published_at?: string;
+};
+
+type WhaleActivity = {
+  institution?: string;
+  action?: string;
+  value_usd?: number;
+  shares?: number;
+  filing_date?: string;
+  url?: string;
+};
+
+function ListItemCard({
+  title,
+  subtitle,
+  description,
+  href,
+  meta,
+}: {
+  title: string;
+  subtitle?: string;
+  description?: string;
+  href?: string;
+  meta?: React.ReactNode;
+}) {
+  const card = (
+    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3 hover:border-brand-primary/30 transition-colors">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-brand-fg truncate">
+            {title}
+          </div>
+          {subtitle ? (
+            <div className="text-xs text-brand-muted-fg mt-1">{subtitle}</div>
+          ) : null}
+        </div>
+        {meta ? (
+          <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold shrink-0">
+            {meta}
+          </div>
+        ) : null}
+      </div>
+      {description ? (
+        <p className="text-sm text-brand-fg/90 leading-relaxed">
+          {description}
+        </p>
+      ) : null}
+    </div>
+  );
+
+  if (!href) return card;
+
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="block">
+      {card}
+    </a>
+  );
+}
+
 export default function AssetDetailsPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
-  const [previewTab] = useState<"overview">("overview");
 
   if (isLoading) {
     return (
@@ -95,6 +165,32 @@ export default function AssetDetailsPage() {
   const reasoningTrace = recommendation?.reasoning_trace ?? "";
   const hypePenalty = recommendation?.hype_penalty ?? 0;
   const riskPenalty = recommendation?.risk_penalty ?? 0;
+  const sentimentPosts = (
+    (recommendation?.sentiment_articles as SentimentPost[]) ?? []
+  )
+    .slice()
+    .sort(
+      (left, right) =>
+        Number(right.engagement ?? 0) - Number(left.engagement ?? 0),
+    )
+    .slice(0, 3);
+  const newsArticles = ((recommendation?.news_articles as NewsArticle[]) ?? [])
+    .slice()
+    .sort((left, right) => {
+      const leftTime = new Date(left.published_at ?? 0).getTime();
+      const rightTime = new Date(right.published_at ?? 0).getTime();
+      return rightTime - leftTime;
+    })
+    .slice(0, 3);
+  const whaleActivity = (
+    (recommendation?.whale_activity as WhaleActivity[]) ?? []
+  )
+    .slice()
+    .sort(
+      (left, right) =>
+        Number(right.value_usd ?? 0) - Number(left.value_usd ?? 0),
+    )
+    .slice(0, 3);
 
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
@@ -114,7 +210,7 @@ export default function AssetDetailsPage() {
             </span>
           </div>
           <p className="text-3xl font-mono text-brand-fg">
-            R {recommendation.price_at_run.toFixed(2)}
+            R {recommendation?.price_at_run?.toFixed(2) ?? "—"}
           </p>
         </div>
 
@@ -159,14 +255,14 @@ export default function AssetDetailsPage() {
                     </div>
 
                     <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-brand-muted-fg">Hype penalty</span>
+                      <span className="text-brand-muted-fg">Hype Penalty</span>
                       <span className="font-semibold text-brand-fg">
                         {formatMetric(hypePenalty)}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-brand-muted-fg">Risk penalty</span>
+                      <span className="text-brand-muted-fg">Risk Penalty</span>
                       <span className="font-semibold text-brand-fg">
                         {formatMetric(riskPenalty)}
                       </span>
@@ -195,46 +291,6 @@ export default function AssetDetailsPage() {
       {recommendation && (
         <>
           <SectionCard
-            title="Sentiment Data"
-            description="Social sentiment for this asset."
-            icon={MessageSquare}
-          >
-            <div className="mb-3">
-              <div className="flex justify-between">
-                <span className="relative group inline-block">
-                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-                    Confidence
-                  </span>
-                </span>
-                <span className="text-foreground font-mono font-semibold">
-                  {formatMetric(recommendation.sentiment_score, 0)}%
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full bg-primary flex items-center justify-end pr-2"
-                  style={{ width: `${recommendation.sentiment_score ?? 0}%` }}
-                >
-                </div>
-              </div>
-            </div>
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <MetricPill
-                    label="Bullish posts"
-                    value={formatMetric(recommendation.bullish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Bearish posts"
-                    value={formatMetric(recommendation.bearish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Sources"
-                    value={recommendation.sources ? String(recommendation.sources) : "—"}
-                  />
-                </div>
-          </SectionCard>
-
-          <SectionCard
             title="Quantitative Data"
             description="Technical and risk metrics used by the model."
             icon={BarChart3}
@@ -254,36 +310,172 @@ export default function AssetDetailsPage() {
                 <div
                   className="h-full bg-primary flex items-center justify-end pr-2"
                   style={{ width: `${recommendation.quant_score ?? 0}%` }}
-                >
-                </div>
+                ></div>
               </div>
             </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <MetricPill
-                    label="Beta"
-                    value={formatMetric(recommendation.beta)}
-                  />
-                  <MetricPill
-                    label="MACD"
-                    value={formatMetric(recommendation.macd)}
-                  />
-                  <MetricPill
-                    label="MACD histogram"
-                    value={formatMetric(recommendation.macd_histogram)}
-                  />
-                  <MetricPill
-                    label="RSI"
-                    value={formatMetric(recommendation.rsi)}
-                  />
-                  <MetricPill
-                    label="Sharpe ratio"
-                    value={formatMetric(recommendation.sharpe_ratio)}
-                  />
-                  <MetricPill
-                    label="Volatility"
-                    value={formatMetric(recommendation.volatility)}
-                  />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <MetricPill
+                label="Beta"
+                value={formatMetric(recommendation.beta)}
+              />
+              <MetricPill
+                label="MACD"
+                value={formatMetric(recommendation.macd)}
+              />
+              <MetricPill
+                label="MACD histogram"
+                value={formatMetric(recommendation.macd_histogram)}
+              />
+              <MetricPill
+                label="RSI"
+                value={formatMetric(recommendation.rsi)}
+              />
+              <MetricPill
+                label="Sharpe ratio"
+                value={formatMetric(recommendation.sharpe_ratio)}
+              />
+              <MetricPill
+                label="Volatility"
+                value={formatMetric(recommendation.volatility)}
+              />
+            </div>
+          </SectionCard>
+          <SectionCard
+            title="Sentiment Data"
+            description="Social sentiment for this asset."
+            icon={MessageSquare}
+          >
+            <div className="mb-3">
+              <div className="flex justify-between">
+                <span className="relative group inline-block">
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                    Confidence
+                  </span>
+                </span>
+                <span className="text-foreground font-mono font-semibold">
+                  {formatMetric(recommendation.sentiment_score, 0)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
+                <div
+                  className="h-full bg-primary flex items-center justify-end pr-2"
+                  style={{ width: `${recommendation.sentiment_score ?? 0}%` }}
+                ></div>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <MetricPill
+                label="Bullish posts"
+                value={formatMetric(recommendation.bullish_posts, 0)}
+              />
+              <MetricPill
+                label="Bearish posts"
+                value={formatMetric(recommendation.bearish_posts, 0)}
+              />
+              <MetricPill
+                label="Sources"
+                value={
+                  recommendation.sources ? String(recommendation.sources) : "—"
+                }
+              />
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
+                    Top Sentiment Posts
+                  </p>
+                  <p className="text-sm text-brand-muted-fg">
+                    The top most engaged social posts currently influencing this
+                    asset.
+                  </p>
                 </div>
+              </div>
+
+              {sentimentPosts.length > 0 ? (
+                <div className="grid gap-3">
+                  {sentimentPosts.map((post, index) => (
+                    <ListItemCard
+                      key={`${post.platform ?? "post"}-${post.author ?? index}-${index}`}
+                      title={`${post.platform ?? "Social"} • ${post.author ?? "Unknown author"}`}
+                      subtitle={`${post.sentiment ?? "Neutral"} • Engagement ${Number(post.engagement ?? 0).toLocaleString()}`}
+                      description={post.content ?? "No post content available."}
+                      href={post.url}
+                      meta={`#${index + 1}`}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-brand-muted-fg">
+                  No sentiment posts were stored for this run.
+                </p>
+              )}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Top News Articles"
+            description="The most relevant news items captured for this asset."
+            icon={BarChart3}
+          >
+            {newsArticles.length > 0 ? (
+              <div className="grid gap-3">
+                {newsArticles.map((article, index) => (
+                  <ListItemCard
+                    key={`${article.source ?? "news"}-${article.title ?? index}-${index}`}
+                    title={article.title ?? "Untitled article"}
+                    subtitle={article.source ?? "Unknown source"}
+                    description={
+                      article.published_at
+                        ? `Published ${new Date(article.published_at).toLocaleString()}`
+                        : "Publication time unavailable."
+                    }
+                    href={article.url}
+                    meta={`#${index + 1}`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-brand-muted-fg">
+                No news articles were stored for this run.
+              </p>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="Whale Watching"
+            description="Large institutional moves and filings that may matter for this asset."
+            icon={Flame}
+          >
+            {whaleActivity.length > 0 ? (
+              <div className="grid gap-3">
+                {whaleActivity.map((entry, index) => (
+                  <ListItemCard
+                    key={`${entry.institution ?? "whale"}-${entry.filing_date ?? index}-${index}`}
+                    title={`${entry.institution ?? "Institution"} • ${entry.action ?? "Activity"}`}
+                    subtitle={`Value ${Number(
+                      entry.value_usd ?? 0,
+                    ).toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    })} • Shares ${Number(entry.shares ?? 0).toLocaleString()}`}
+                    description={
+                      entry.filing_date
+                        ? `Filing date: ${entry.filing_date}`
+                        : "Filing date unavailable."
+                    }
+                    href={entry.url}
+                    meta={`#${index + 1}`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-brand-muted-fg">
+                No whale watching notifications were stored for this run.
+              </p>
+            )}
           </SectionCard>
         </>
       )}
