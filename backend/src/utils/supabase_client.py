@@ -335,3 +335,49 @@ def save_top_assets(
 
     resp = supabase.table("ai_recommendation").insert(rows).execute()
     return {"status": "inserted", "response": resp.data}
+
+
+# ---------------------------------------------------------------------------
+# Marketaux tier-1 news cache (see migrations/003)
+# ---------------------------------------------------------------------------
+# The nightly batch pulls tier-1 news from Marketaux (deep pagination, against the
+# tight call budget) and writes it here per ticker; user refreshes read it back
+# instead of re-hitting the API, so tier-1 stays visible without spending calls.
+
+
+def save_marketaux_news_cache(ticker_to_articles: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Upsert each ticker's tier-1 Marketaux articles into the cache (keyed by
+    ticker). Tickers are written even with an empty list so a ticker that lost its
+    tier-1 coverage this run doesn't keep serving stale articles."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    rows = [
+        {"ticker": ticker, "articles": articles or [], "fetched_at": now}
+        for ticker, articles in ticker_to_articles.items()
+    ]
+    if not rows:
+        return
+    supabase.table("marketaux_news_cache").upsert(rows, on_conflict="ticker").execute()
+
+
+def load_marketaux_news_cache(
+    tickers: List[str], max_age_hours: int = 48
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Return cached Marketaux articles per ticker, fresher than ``max_age_hours``.
+    Tickers with no fresh cache entry are omitted."""
+    if not tickers:
+        return {}
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(hours=max_age_hours)
+    ).isoformat()
+    resp = (
+        supabase.table("marketaux_news_cache")
+        .select("ticker,articles,fetched_at")
+        .in_("ticker", tickers)
+        .gte("fetched_at", cutoff)
+        .execute()
+    )
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for row in resp.data or []:
+        out[row["ticker"]] = row.get("articles") or []
+    return out

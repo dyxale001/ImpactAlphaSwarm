@@ -17,6 +17,7 @@ not available. In that case, it returns neutral scores with no collected posts.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import urllib.parse
@@ -46,6 +47,8 @@ except ImportError:
 from .gcp_nlp import score_with_gcp
 from ..utils.schemas import parse_finnhub_article, parse_marketaux_article, parse_stocktwits_message
 
+logger = logging.getLogger("sentiment-scout")
+
 
 # Number of most-prioritized posts per ticker (per source) that also get a GCP
 # NLP signal. The rest are VADER-only to stay within the GCP monthly unit budget.
@@ -68,9 +71,14 @@ MARKETAUX_NEWS_URL = "https://api.marketaux.com/v1/news/all"
 # Cap on articles kept per ticker from a Marketaux run.
 MARKETAUX_LIMIT_PER_TICKER = int(os.getenv("MARKETAUX_LIMIT_PER_TICKER", "10"))
 # The free plan returns only ~3 articles per request, so we page through results to
-# pull a useful tier-1 volume. Each page is one API call; with a ~100/day budget and
-# a single nightly run, a handful of pages is comfortably within budget.
-MARKETAUX_MAX_PAGES = int(os.getenv("MARKETAUX_MAX_PAGES", "5"))
+# pull a useful tier-1 volume across the whole ticker union. Each page is one API
+# call. Marketaux runs ONLY in the nightly batch (once/day), so we can page deep --
+# 25 pages ~= 75 articles for ~25 of the ~100 daily calls. Override via env.
+MARKETAUX_MAX_PAGES = int(os.getenv("MARKETAUX_MAX_PAGES", "25"))
+# Cached Marketaux articles are considered usable on refresh for this many hours
+# after the nightly fetch (covers a missed/late nightly run without serving stale
+# week-old news).
+MARKETAUX_CACHE_MAX_AGE_HOURS = int(os.getenv("MARKETAUX_CACHE_MAX_AGE_HOURS", "48"))
 
 # Trusted publishers, split into reliability tiers. Each tier carries a weight so
 # that, within the news signal, a tier-1 wire counts for more than a tier-2/3
@@ -662,13 +670,76 @@ def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]
 	return results
 
 
-def collect_news(tickers: list[str], include_marketaux: bool = False) -> dict[str, list[SocialMention]]:
+def _mention_to_cache(mention: SocialMention) -> dict[str, Any]:
+	"""Serialize a Marketaux SocialMention to the cache JSON shape."""
+	return {
+		"text": mention.text,
+		"source": mention.source,
+		"url": mention.url,
+		"created_at": mention.created_at,
+		"weight": mention.weight,
+	}
+
+
+def _cache_to_mention(ticker: str, data: dict[str, Any]) -> SocialMention:
+	"""Rebuild a SocialMention from a cached Marketaux article."""
+	return SocialMention(
+		ticker=ticker,
+		text=data.get("text", ""),
+		source=data.get("source", ""),
+		url=data.get("url"),
+		engagement=0,
+		created_at=data.get("created_at"),
+		weight=float(data.get("weight", 1.0)),
+	)
+
+
+def _save_marketaux_cache(results: dict[str, list[SocialMention]]) -> None:
+	"""Persist the nightly Marketaux pull so refreshes can reuse it. Best-effort:
+	a cache write must never break the run."""
+	try:
+		from ..utils.supabase_client import save_marketaux_news_cache
+
+		payload = {
+			ticker: [_mention_to_cache(m) for m in mentions]
+			for ticker, mentions in results.items()
+		}
+		save_marketaux_news_cache(payload)
+	except Exception as exc:
+		logger.warning("Failed to write Marketaux cache: %s", exc)
+
+
+def _load_marketaux_cache(tickers: list[str]) -> dict[str, list[SocialMention]]:
+	"""Load cached Marketaux articles per ticker. Best-effort: on any failure,
+	return empty so news simply falls back to Finnhub-only."""
+	try:
+		from ..utils.supabase_client import load_marketaux_news_cache
+
+		cached = load_marketaux_news_cache(tickers, MARKETAUX_CACHE_MAX_AGE_HOURS)
+	except Exception as exc:
+		logger.warning("Failed to read Marketaux cache: %s", exc)
+		return {ticker: [] for ticker in tickers}
+
+	return {
+		ticker: [_cache_to_mention(ticker, item) for item in cached.get(ticker, [])]
+		for ticker in tickers
+	}
+
+
+def collect_news(tickers: list[str], marketaux: str = "off") -> dict[str, list[SocialMention]]:
 	"""Collect trusted-source news for the tickers.
 
-	Finnhub is always queried. Marketaux is an optional tier-1-only top-up, off by
-	default and enabled (``include_marketaux=True``) ONLY for the nightly batch run
-	so on-demand user refreshes never spend the tight Marketaux call budget. When
-	both sources carry the same wire story it is de-duplicated (Finnhub copy kept).
+	Finnhub is always queried live. The Marketaux tier-1 top-up is controlled by
+	``marketaux``:
+
+	- ``"off"``   (default): Finnhub only.
+	- ``"fetch"`` (nightly batch): call the Marketaux API (deep pagination) and
+	  write the results to the per-ticker cache for refreshes to reuse.
+	- ``"cache"`` (user refresh): read the last nightly pull from the cache -- no
+	  API call -- so tier-1 stays visible without spending the call budget.
+
+	Marketaux articles are merged into the Finnhub list, de-duplicated by headline
+	(the Finnhub copy is kept when both carry the same story).
 	"""
 	normalized_tickers = _normalize_tickers(tickers)
 	try:
@@ -676,10 +747,14 @@ def collect_news(tickers: list[str], include_marketaux: bool = False) -> dict[st
 	except NameError:
 		finnhub_news = {ticker: [] for ticker in normalized_tickers}
 
-	if not include_marketaux:
+	if marketaux == "fetch":
+		marketaux_news = _collect_marketaux_news(normalized_tickers)
+		_save_marketaux_cache(marketaux_news)
+	elif marketaux == "cache":
+		marketaux_news = _load_marketaux_cache(normalized_tickers)
+	else:
 		return finnhub_news
 
-	marketaux_news = _collect_marketaux_news(normalized_tickers)
 	merged: dict[str, list[SocialMention]] = {}
 	for ticker in normalized_tickers:
 		existing = finnhub_news.get(ticker, [])
@@ -786,17 +861,17 @@ def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_men
 	}
 
 
-def analyze_ticker(ticker: str, include_marketaux: bool = False) -> dict[str, Any]:
+def analyze_ticker(ticker: str, marketaux: str = "off") -> dict[str, Any]:
 	sym = ticker.upper()
 	social_mentions = collect_mentions([sym]).get(sym, [])
-	news_mentions = collect_news([sym], include_marketaux=include_marketaux).get(sym, [])
+	news_mentions = collect_news([sym], marketaux=marketaux).get(sym, [])
 	return _combine_signals(sym, social_mentions, news_mentions)
 
 
-def analyze_tickers(tickers: list[str], include_marketaux: bool = False) -> dict[str, dict[str, Any]]:
+def analyze_tickers(tickers: list[str], marketaux: str = "off") -> dict[str, dict[str, Any]]:
 	normalized_tickers = _normalize_tickers(tickers)
 	mentions_by_ticker = collect_mentions(normalized_tickers)
-	news_by_ticker = collect_news(normalized_tickers, include_marketaux=include_marketaux)
+	news_by_ticker = collect_news(normalized_tickers, marketaux=marketaux)
 
 	results: dict[str, dict[str, Any]] = {}
 	for ticker in normalized_tickers:

@@ -208,11 +208,10 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 2B: Sentiment Scout scraping social signals...")
     tracer = get_tracer()
     try:
-        # Include the Marketaux tier-1 top-up on user-initiated refreshes too. The
-        # ~100 calls/day budget is comfortable for this; each refresh is one batched,
-        # paginated query (MARKETAUX_MAX_PAGES). (Revisit if refresh volume grows --
-        # e.g. cache per day or lower the page count.)
-        sentiment_results = analyze_sentiment_tickers(state["tickers"], include_marketaux=True)
+        # User refresh: read tier-1 from the nightly Marketaux cache (no API call),
+        # so tier-1 articles remain visible without spending the call budget. The
+        # API is only hit by the nightly batch (run_daily_batch, marketaux="fetch").
+        sentiment_results = analyze_sentiment_tickers(state["tickers"], marketaux="cache")
     except Exception as e:
         logger.warning("Sentiment scout failed: %s", e)
         print("Sentiment scout failed; no sentiment results available")
@@ -498,10 +497,10 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
         logger.warning("Batch quant gather failed: %s", e)
         quant_results = {}
     try:
-        # Enable the Marketaux tier-1 top-up here too -- one batched, paginated
-        # query for the whole union of tickers (cheaper than per-user refreshes,
-        # which also include it via phase_2_sentiment_scout).
-        sentiment_results = analyze_sentiment_tickers(union, include_marketaux=True)
+        # Nightly is the ONLY place the Marketaux API is called: one batched, deeply
+        # paginated query for the whole union of tickers, whose tier-1 results are
+        # cached per ticker so user refreshes can reuse them (see collect_news).
+        sentiment_results = analyze_sentiment_tickers(union, marketaux="fetch")
     except Exception as e:
         logger.warning("Batch sentiment gather failed: %s", e)
         sentiment_results = {}
