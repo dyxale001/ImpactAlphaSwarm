@@ -137,6 +137,14 @@ def _tier_share(tier: int) -> float:
         return _DEFAULT_TIER_SHARES[tier]
 
 
+# Half-life (in days) for the recency time-decay applied WITHIN each tier's
+# average: a newer article outweighs an older one of the SAME tier. This does NOT
+# touch the cross-tier shares, so tier-1 keeps its share regardless of how old its
+# articles are. Default 2 days (a today article ~= 2x a 2-day-old one, ~= 4x a
+# 4-day-old one). Set very high to effectively disable decay.
+NEWS_RECENCY_HALFLIFE_DAYS = float(os.getenv("NEWS_RECENCY_HALFLIFE_DAYS", "2"))
+
+
 def _tier_sources(tier: int) -> tuple[str, ...]:
     override = os.getenv(f"NEWS_TIER{tier}_SOURCES", "").strip()
     if not override:
@@ -311,39 +319,72 @@ def _recency_priority(mention: SocialMention) -> Any:
 	return (mention.weight, mention.created_at or "")
 
 
+def _recency_weight(created_at: str | None) -> float:
+	"""Exponential time-decay weight for an article by age: a newer article counts
+	more than an older one of the SAME tier. Half-life is NEWS_RECENCY_HALFLIFE_DAYS.
+	Articles with a missing/unparseable timestamp (or dated now/future) get 1.0."""
+	if not created_at:
+		return 1.0
+	try:
+		published = datetime.fromisoformat(created_at)
+	except (TypeError, ValueError):
+		return 1.0
+	if published.tzinfo is None:
+		published = published.replace(tzinfo=timezone.utc)
+	age_days = (datetime.now(timezone.utc) - published).total_seconds() / 86400.0
+	if age_days <= 0:
+		return 1.0
+	half_life = max(0.1, NEWS_RECENCY_HALFLIFE_DAYS)
+	return 0.5 ** (age_days / half_life)
+
+
+def _recency_weighted_avg(pairs: list[tuple[float, float]]) -> float:
+	"""Recency-weighted mean of (sentiment, recency_weight) pairs. Falls back to a
+	plain mean if the weights underflow to zero (all articles extremely old)."""
+	total_weight = sum(weight for _, weight in pairs)
+	if total_weight > 0:
+		return sum(sentiment * weight for sentiment, weight in pairs) / total_weight
+	return sum(sentiment for sentiment, _ in pairs) / len(pairs)
+
+
 def _aggregate_signed(scored_mentions: list[dict[str, Any]]) -> float:
 	"""Aggregate per-article signed sentiment into one signed score in [-1, 1].
 
-	For news this is a TIER-GROUPED blend: average the sentiment WITHIN each
-	reliability tier, then combine the tier averages with fixed shares (tier-1
-	highest), renormalized over the tiers actually present. Because each tier
-	contributes its own average -- not its article count -- a handful of tier-1
-	wires carry their full share even against a flood of tier-2/3 articles. Items
-	with no tier (social posts) fall back to a plain average of all items."""
-	by_tier: dict[int, list[float]] = {1: [], 2: [], 3: []}
-	untiered: list[float] = []
+	Two independent dimensions:
+	  * Reliability (tier) -- the CROSS-tier structure: each tier contributes its
+	    own average at a fixed share (tier-1 highest), renormalized over the tiers
+	    present. A tier's influence is independent of its article COUNT, so a few
+	    tier-1 wires carry their full share against a flood of tier-2/3 articles.
+	  * Recency -- ordering WITHIN a tier: each tier's average is recency-weighted
+	    (newer articles of the same tier count more, NEWS_RECENCY_HALFLIFE_DAYS).
+
+	Because recency lives inside the tier average and never across tiers, older
+	tier-1 wires still outweigh newer, more numerous tier-3 articles. Items with no
+	tier (social posts) fall back to a recency-weighted average of all items."""
+	by_tier: dict[int, list[tuple[float, float]]] = {1: [], 2: [], 3: []}
+	untiered: list[tuple[float, float]] = []
 	for item in scored_mentions:
+		pair = (item["sentiment_raw"], _recency_weight(item.get("created_at")))
 		tier = item.get("tier")
 		if tier in (1, 2, 3):
-			by_tier[tier].append(item["sentiment_raw"])
+			by_tier[tier].append(pair)
 		else:
-			untiered.append(item["sentiment_raw"])
+			untiered.append(pair)
 
 	numerator = 0.0
 	denominator = 0.0
 	for tier in (1, 2, 3):
 		group = by_tier[tier]
 		if group:
-			tier_average = sum(group) / len(group)
 			share = _tier_share(tier)
-			numerator += share * tier_average
+			numerator += share * _recency_weighted_avg(group)
 			denominator += share
 
 	if denominator > 0:
 		return numerator / denominator
-	# No tiered items (e.g. social posts): plain average.
+	# No tiered items (e.g. social posts): recency-weighted average.
 	if untiered:
-		return sum(untiered) / len(untiered)
+		return _recency_weighted_avg(untiered)
 	return 0.0
 
 
