@@ -252,6 +252,10 @@ class SocialMention:
 	url: str | None = None
 	engagement: int = 0
 	created_at: str | None = None
+	# Original article headline (news only), kept separate from the combined
+	# "headline. summary" ``text`` so display and dedup use the real headline
+	# instead of re-splitting on ". " (which breaks on abbreviations like "Sen.").
+	headline: str | None = None
 	# Reliability weight for the source-tier-weighted average. 1.0 for social
 	# posts; for news it is the publisher's tier weight (tier-1 highest).
 	weight: float = 1.0
@@ -425,6 +429,7 @@ def _score_mentions(
 		scored_mentions.append(
 			{
 				"text": mention.text,
+				"headline": mention.headline,
 				"source": mention.source,
 				"url": mention.url,
 				"engagement": mention.engagement,
@@ -594,6 +599,7 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 					SocialMention(
 						ticker=sym,
 						text=text,
+						headline=article.headline,
 						source=f"finnhub:{effective_source}",
 						url=article.url,
 						engagement=0,
@@ -609,14 +615,13 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 	return results
 
 
-def _news_dedup_key(text: str) -> str:
+def _news_dedup_key(headline: str) -> str:
 	"""Normalized key to detect the same story across news sources (e.g. a CNBC
-	article carried by both Finnhub and Marketaux). Keys on the headline only --
-	the text before the first ``". "`` -- because that is the stable, publisher-set
-	string that matches across sources, whereas the two sources format the trailing
-	summary differently and would otherwise produce diverging keys."""
-	headline = text.split(". ", 1)[0]
-	return re.sub(r"[^a-z0-9]+", " ", headline.lower()).strip()[:80]
+	article carried by both Finnhub and Marketaux). Keys on the article HEADLINE --
+	the stable, publisher-set string that matches across sources -- since the two
+	sources format the trailing summary differently. Pass the real headline; do not
+	pass the combined text (splitting it on ". " breaks on abbreviations)."""
+	return re.sub(r"[^a-z0-9]+", " ", (headline or "").lower()).strip()[:80]
 
 
 def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]]:
@@ -691,6 +696,7 @@ def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]
 					SocialMention(
 						ticker=ticker,
 						text=text,
+						headline=article.title,
 						source=f"marketaux:{publisher}",
 						url=article.url,
 						engagement=0,
@@ -715,6 +721,7 @@ def _mention_to_cache(mention: SocialMention) -> dict[str, Any]:
 	"""Serialize a Marketaux SocialMention to the cache JSON shape."""
 	return {
 		"text": mention.text,
+		"headline": mention.headline,
 		"source": mention.source,
 		"url": mention.url,
 		"created_at": mention.created_at,
@@ -727,6 +734,7 @@ def _cache_to_mention(ticker: str, data: dict[str, Any]) -> SocialMention:
 	return SocialMention(
 		ticker=ticker,
 		text=data.get("text", ""),
+		headline=data.get("headline"),
 		source=data.get("source", ""),
 		url=data.get("url"),
 		engagement=0,
@@ -799,11 +807,11 @@ def collect_news(tickers: list[str], marketaux: str = "off") -> dict[str, list[S
 	merged: dict[str, list[SocialMention]] = {}
 	for ticker in normalized_tickers:
 		existing = finnhub_news.get(ticker, [])
-		seen = {_news_dedup_key(mention.text) for mention in existing}
+		seen = {_news_dedup_key(mention.headline or mention.text) for mention in existing}
 		extra = [
 			mention
 			for mention in marketaux_news.get(ticker, [])
-			if _news_dedup_key(mention.text) not in seen
+			if _news_dedup_key(mention.headline or mention.text) not in seen
 		]
 		merged[ticker] = existing + extra
 	return merged
@@ -847,8 +855,9 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 	for item in sorted(scored_news, key=lambda it: it.get("created_at") or "", reverse=True):
 		raw = item["sentiment_raw"]
 		label = "Positive" if raw >= 0.05 else "Negative" if raw <= -0.05 else "Neutral"
-		# News text is "headline. summary"; show the headline only, trimmed.
-		headline = item["text"].split(". ", 1)[0].strip()
+		# Prefer the real stored headline; fall back to the pre-". " slice of the
+		# combined text only for older/cached items that predate the headline field.
+		headline = (item.get("headline") or item["text"].split(". ", 1)[0]).strip()
 		if len(headline) > 160:
 			headline = headline[:157].rstrip() + "…"
 		articles.append(
