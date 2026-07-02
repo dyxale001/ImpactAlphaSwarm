@@ -15,7 +15,7 @@ export async function startAnalysis(payload: {
 }) {
   const token = await getToken();
   console.log("Token from session:", token ? "✓ exists" : "✗ null");
-
+  
   if (!token) {
     throw new Error("No auth token — user may not be logged in");
   }
@@ -44,17 +44,6 @@ export async function getResult(runId: string) {
   return res.json();
 }
 
-export async function getUsdZarExchangeRate() {
-  const res = await fetch(`${BASE}/api/analysis/fx-rate/usd-zar`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<{
-    base_currency: string;
-    quote_currency: string;
-    rate: number;
-    source: string;
-  }>;
-}
-
 export async function adminDeleteUser(userId: string) {
   const token = await getToken();
   if (!token) throw new Error("No auth token");
@@ -66,6 +55,57 @@ export async function adminDeleteUser(userId: string) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminResetPassword(userId: string, email: string) {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/admin/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ user_id: userId, email }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminToggleUserStatus(userId: string, isActive: boolean) {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/admin/toggle-user-status`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ user_id: userId, is_active: isActive }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminSetUserRole(userId: string, role: 'admin' | 'user') {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/admin/set-user-role`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ user_id: userId, role }),
   });
 
   if (!res.ok) throw new Error(await res.text());

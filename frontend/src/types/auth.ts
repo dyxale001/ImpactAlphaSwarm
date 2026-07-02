@@ -4,6 +4,7 @@ export interface UserProfile {
   last_name: string
   email: string
   role: 'user' | 'admin'
+  is_active: boolean
   created_at: string
 }
 

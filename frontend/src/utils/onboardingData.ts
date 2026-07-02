@@ -4,6 +4,97 @@ export const UNIVERSE_OPTIONS = [
   "AI & Robotics", "Healthcare"
 ]
 
+// ─── Investor paths ────────────────────────────────────────────────────────
+export interface InvestorPath {
+  id: string
+  label: string
+  icon: string
+  tagline: string
+  desc: string
+}
+
+export const INVESTOR_PATHS: InvestorPath[] = [
+  {
+    id: 'steady_builder',
+    label: 'Steady Builder',
+    icon: '🌳',
+    tagline: 'Long-term, low drama',
+    desc: 'Consistent compounding over years, not overnight wins. Blue chips, dividends, patience.',
+  },
+  {
+    id: 'growth_seeker',
+    label: 'Growth Seeker',
+    icon: '🚀',
+    tagline: 'High conviction, high upside',
+    desc: 'Back disruptive companies early and stomach volatility for outsized returns.',
+  },
+  {
+    id: 'trend_rider',
+    label: 'Trend Rider',
+    icon: '📈',
+    tagline: 'Momentum-driven, stay current',
+    desc: "Follow strong signals, rotate into what's moving, act on market momentum.",
+  },
+  {
+    id: 'value_hunter',
+    label: 'Value Hunter',
+    icon: '💎',
+    tagline: 'Contrarian, patient, fundamental',
+    desc: "Spot undervalued companies the market has overlooked and hold until they're recognised.",
+  },
+]
+
+// ─── Familiar assets for the picker ───────────────────────────────────────
+export interface FamiliarAsset {
+  ticker: string
+  name: string
+  sector: string   // matches UNIVERSE_OPTIONS
+  emoji: string
+  description: string
+}
+
+export const FAMILIAR_ASSETS: FamiliarAsset[] = [
+  // Technology
+  { ticker: 'AAPL',  name: 'Apple',          sector: 'Technology',    emoji: '🍎', description: 'iPhone, Mac, wearables' },
+  { ticker: 'MSFT',  name: 'Microsoft',      sector: 'Technology',    emoji: '🪟', description: 'Windows, Office, Azure' },
+  { ticker: 'GOOGL', name: 'Google',         sector: 'Technology',    emoji: '🔍', description: 'Search, YouTube, ads' },
+  { ticker: 'META',  name: 'Meta',           sector: 'Technology',    emoji: '👓', description: 'Facebook, Instagram, VR' },
+  { ticker: 'AMZN',  name: 'Amazon',         sector: 'Technology',    emoji: '📦', description: 'E-commerce & AWS cloud' },
+  { ticker: 'NFLX',  name: 'Netflix',        sector: 'Technology',    emoji: '🎬', description: 'Streaming & content' },
+  // AI & Robotics
+  { ticker: 'NVDA',  name: 'NVIDIA',         sector: 'AI & Robotics', emoji: '🤖', description: 'AI chips & data centres' },
+  { ticker: 'TSLA',  name: 'Tesla',          sector: 'AI & Robotics', emoji: '⚡', description: 'EVs, FSD & robotics' },
+  { ticker: 'PLTR',  name: 'Palantir',       sector: 'AI & Robotics', emoji: '🔮', description: 'AI analytics & defence' },
+  { ticker: 'ARM',   name: 'Arm Holdings',   sector: 'AI & Robotics', emoji: '💡', description: 'Chip architecture & AI' },
+  // Green Energy
+  { ticker: 'ENPH',  name: 'Enphase',        sector: 'Green Energy',  emoji: '☀️', description: 'Home solar microinverters' },
+  { ticker: 'FSLR',  name: 'First Solar',    sector: 'Green Energy',  emoji: '🌞', description: 'Utility-scale solar panels' },
+  { ticker: 'NEE',   name: 'NextEra Energy', sector: 'Green Energy',  emoji: '💨', description: 'Wind & solar utilities' },
+  { ticker: 'PLUG',  name: 'Plug Power',     sector: 'Green Energy',  emoji: '🔋', description: 'Green hydrogen fuel cells' },
+  // Finance
+  { ticker: 'JPM',   name: 'JPMorgan',       sector: 'Finance',       emoji: '🏦', description: 'Largest US bank' },
+  { ticker: 'V',     name: 'Visa',           sector: 'Finance',       emoji: '💳', description: 'Global payments network' },
+  { ticker: 'PYPL',  name: 'PayPal',         sector: 'Finance',       emoji: '💸', description: 'Digital payments & Venmo' },
+  { ticker: 'GS',    name: 'Goldman Sachs',  sector: 'Finance',       emoji: '⚜️', description: 'Investment banking' },
+  // Healthcare
+  { ticker: 'MRNA',  name: 'Moderna',        sector: 'Healthcare',    emoji: '💉', description: 'mRNA vaccines & therapies' },
+  { ticker: 'JNJ',   name: 'J&J',            sector: 'Healthcare',    emoji: '🩺', description: 'Pharma, medtech, consumer' },
+  { ticker: 'UNH',   name: 'UnitedHealth',   sector: 'Healthcare',    emoji: '🏥', description: 'Health insurance & care' },
+  { ticker: 'ABBV',  name: 'AbbVie',         sector: 'Healthcare',    emoji: '🧬', description: 'Biopharmaceuticals' },
+]
+
+// Infer investment universe from familiar asset picks
+export function inferUniverseFromAssets(tickers: string[]): string[] {
+  const counts: Record<string, number> = {}
+  tickers.forEach(ticker => {
+    const asset = FAMILIAR_ASSETS.find(a => a.ticker === ticker)
+    if (asset) counts[asset.sector] = (counts[asset.sector] || 0) + 1
+  })
+  return Object.entries(counts)
+    .sort(([, a], [, b]) => b - a)
+    .map(([sector]) => sector)
+}
+
 // --- PHASE 2: FULL RISK & DEMOGRAPHIC SURVEY ---
 export const SURVEY_QUESTIONS = [
   // --- RISK TOLERANCE ---
