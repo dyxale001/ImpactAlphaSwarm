@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -8,6 +8,7 @@ import {
   MessageSquare,
   TriangleAlert,
   ExternalLink,
+  HelpCircle,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
@@ -70,11 +71,13 @@ function SectionCard({
   title,
   description,
   icon: Icon,
+  action,
   children,
 }: {
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -87,6 +90,7 @@ function SectionCard({
           </p>
           <p className="text-sm text-brand-muted-fg">{description}</p>
         </div>
+        {action}
       </div>
       {children}
     </div>
@@ -357,6 +361,15 @@ export default function AssetDetailsPage() {
             title="Sentiment Data"
             description="A blend of trusted financial news and social posts. News is weighted higher, so it moves the score more than social."
             icon={MessageSquare}
+            action={
+              <Link
+                to={`/asset/${asset.ticker}/how-it-works`}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                How is this calculated?
+              </Link>
+            }
           >
             {/* Headline: the blended, news-weighted score. */}
             <SignalBar
