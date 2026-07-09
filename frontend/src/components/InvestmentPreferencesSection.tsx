@@ -1,100 +1,62 @@
-import { Check } from 'lucide-react'
+import { Check, Cpu, Zap, TrendingUp, Bot, Heart, Shield, Activity, Flame, BookOpen, BarChart2, Brain } from 'lucide-react'
 
 // ─── Data ──────────────────────────────────────────────────────────────────
 
 const UNIVERSE_TILES = [
-  { id: 'Technology',   icon: '💻', desc: 'Software, hardware & chips' },
-  { id: 'Green Energy', icon: '⚡', desc: 'Solar, wind & clean infra' },
-  { id: 'Finance',      icon: '📈', desc: 'Banks, fintech & asset mgmt' },
-  { id: 'AI & Robotics',icon: '🤖', desc: 'Machine learning & automation' },
-  { id: 'Healthcare',   icon: '🧬', desc: 'Biotech, pharma & medtech' },
+  { id: 'Technology',    Icon: Cpu,         desc: 'Software, hardware & semiconductors' },
+  { id: 'Green Energy',  Icon: Zap,         desc: 'Solar, wind & clean infrastructure' },
+  { id: 'Finance',       Icon: TrendingUp,  desc: 'Banks, fintech & asset management' },
+  { id: 'AI & Robotics', Icon: Bot,         desc: 'Machine learning & automation' },
+  { id: 'Healthcare',    Icon: Heart,       desc: 'Biotech, pharma & medical devices' },
 ]
 
 const RISK_TILES = [
-  {
-    value: 'conservative',
-    label: 'Conservative',
-    icon: '🛡️',
-    tagline: 'Protect first, grow second',
-    bars: 1,
-    barColor: 'bg-blue-400',
-  },
-  {
-    value: 'moderate',
-    label: 'Moderate',
-    icon: '⚖️',
-    tagline: 'Balanced growth & stability',
-    bars: 2,
-    barColor: 'bg-brand-primary',
-  },
-  {
-    value: 'aggressive',
-    label: 'Aggressive',
-    icon: '🚀',
-    tagline: 'Max upside, accept swings',
-    bars: 3,
-    barColor: 'bg-semantic-danger',
-  },
+  { value: 'conservative', label: 'Conservative', Icon: Shield,   tagline: 'Protect first, grow second',   bars: 1 },
+  { value: 'moderate',     label: 'Moderate',     Icon: Activity, tagline: 'Balanced growth & stability',  bars: 2 },
+  { value: 'aggressive',   label: 'Aggressive',   Icon: Flame,    tagline: 'Maximum upside, accept swings', bars: 3 },
 ]
 
 const EXPERTISE_TILES = [
-  {
-    value: 'novice',
-    label: 'Novice',
-    icon: '🌱',
-    desc: 'AI explains in plain language, no jargon.',
-  },
-  {
-    value: 'intermediate',
-    label: 'Intermediate',
-    icon: '📊',
-    desc: 'Balanced analysis with key metrics.',
-  },
-  {
-    value: 'advanced',
-    label: 'Advanced',
-    icon: '💎',
-    desc: 'Full quant detail, technical breakdowns.',
-  },
+  { value: 'novice',        label: 'Novice',        Icon: BookOpen,  numeral: 'I',   desc: 'Plain-language explanations, no jargon.' },
+  { value: 'intermediate',  label: 'Intermediate',  Icon: BarChart2, numeral: 'II',  desc: 'Balanced analysis with key metrics.' },
+  { value: 'advanced',      label: 'Advanced',      Icon: Brain,     numeral: 'III', desc: 'Full technical and quantitative detail.' },
 ]
 
-// ─── Sub-components ────────────────────────────────────────────────────────
+// ─── Shared primitives ──────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function Label({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-bold tracking-widest uppercase text-brand-muted-fg mb-3">
+    <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-brand-muted-fg mb-2.5">
       {children}
     </p>
   )
 }
 
-// Animated checkmark badge that appears on selected tiles
-function SelectedBadge() {
+function SelectionRing() {
   return (
-    <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-brand-primary flex items-center justify-center shadow-[0_0_8px_rgba(194,102,84,0.6)] animate-in zoom-in-75 duration-200">
-      <Check size={11} strokeWidth={3} className="text-white" />
+    <span className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full bg-brand-primary flex items-center justify-center animate-in zoom-in-75 duration-150">
+      <Check size={9} strokeWidth={3.5} className="text-white" />
     </span>
   )
 }
 
-// Volatility bars (1–3 filled)
-function VolatilityBars({ filled, color }: { filled: number; color: string }) {
+// Stacked bars showing volatility — height grows left to right
+function VolBars({ filled }: { filled: number }) {
+  const colors = ['bg-blue-400', 'bg-brand-primary', 'bg-semantic-danger']
   return (
-    <div className="flex items-end gap-1 h-5">
+    <div className="flex items-end gap-[3px] h-4">
       {[1, 2, 3].map((n) => (
         <div
           key={n}
-          className={`w-1.5 rounded-sm transition-all duration-300 ${
-            n <= filled ? color : 'bg-brand-border/40'
-          }`}
-          style={{ height: `${n * 33}%` }}
+          className={`w-1 rounded-[2px] transition-all duration-200 ${n <= filled ? colors[filled - 1] : 'bg-brand-border/30'}`}
+          style={{ height: `${28 + n * 24}%` }}
         />
       ))}
     </div>
   )
 }
 
-// ─── Main component ────────────────────────────────────────────────────────
+// ─── Props ──────────────────────────────────────────────────────────────────
 
 interface Props {
   formData: {
@@ -111,6 +73,8 @@ interface Props {
   onReset: () => void
 }
 
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export default function InvestmentPreferencesSection({
   formData,
   updateFormField,
@@ -122,136 +86,163 @@ export default function InvestmentPreferencesSection({
   onReset,
 }: Props) {
   return (
-    <section className="space-y-8">
-      <div>
-        <h2 className="text-base font-semibold text-brand-fg">Investment Preferences</h2>
+    <section className="space-y-7">
+
+      <div className="pb-4 border-b border-brand-border/40">
+        <h2 className="text-sm font-semibold text-brand-fg tracking-tight">Investment Preferences</h2>
         <p className="text-xs text-brand-muted-fg mt-0.5">
-          Tap to select. These shape your AI recommendations.
+          Changes apply on your next analysis run.
         </p>
       </div>
 
-      {/* ── Universe ─────────────────────────────────── */}
+      {/* ── Target Sectors ─────────────────────────────── */}
       <div>
-        <SectionLabel>Target Sectors</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {UNIVERSE_TILES.map((tile) => {
-            const selected = formData.investment_universe.includes(tile.id)
+        <Label>Target Sectors</Label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {UNIVERSE_TILES.map(({ id, Icon, desc }) => {
+            const on = formData.investment_universe.includes(id)
             return (
               <button
-                key={tile.id}
+                key={id}
                 type="button"
-                onClick={() => toggleUniverse(tile.id)}
-                aria-pressed={selected}
-                className={`relative text-left p-4 rounded-2xl border transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 ${
-                  selected
-                    ? 'border-brand-primary/60 bg-brand-primary/8 shadow-[0_0_20px_rgba(194,102,84,0.15)]'
-                    : 'border-brand-border/50 bg-brand-surface/30 hover:border-brand-border hover:bg-brand-surface/60'
+                onClick={() => toggleUniverse(id)}
+                aria-pressed={on}
+                className={`relative group text-left px-3.5 py-3 rounded-xl border transition-all duration-150 active:scale-[0.97] focus:outline-none ${
+                  on
+                    ? 'border-brand-primary/50 bg-brand-primary/5'
+                    : 'border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/40'
                 }`}
               >
-                {selected && <SelectedBadge />}
-                <span className="text-2xl mb-2 block">{tile.icon}</span>
-                <p className={`text-sm font-semibold leading-tight ${selected ? 'text-brand-fg' : 'text-brand-fg'}`}>
-                  {tile.id}
+                {on && <SelectionRing />}
+
+                {/* Icon container */}
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center mb-2.5 transition-colors ${
+                  on ? 'bg-brand-primary/15' : 'bg-brand-border/20 group-hover:bg-brand-border/30'
+                }`}>
+                  <Icon size={13} className={on ? 'text-brand-primary' : 'text-brand-muted-fg'} strokeWidth={1.75} />
+                </div>
+
+                <p className={`text-xs font-semibold leading-tight ${on ? 'text-brand-fg' : 'text-brand-fg'}`}>
+                  {id}
                 </p>
-                <p className="text-[11px] text-brand-muted-fg mt-0.5 leading-snug">{tile.desc}</p>
+                <p className="text-[10px] text-brand-muted-fg mt-0.5 leading-snug">{desc}</p>
               </button>
             )
           })}
         </div>
         {formData.investment_universe.length === 0 && (
-          <p className="text-xs text-semantic-warning mt-2">Select at least one sector to enable analysis.</p>
+          <p className="text-[11px] text-semantic-warning mt-2">Select at least one sector.</p>
         )}
       </div>
 
-      {/* ── Risk Tolerance ───────────────────────────── */}
+      {/* ── Risk Tolerance ─────────────────────────────── */}
       <div>
-        <SectionLabel>Risk Tolerance</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {RISK_TILES.map((tile) => {
-            const selected = formData.risk_tolerance === tile.value
+        <Label>Risk Tolerance</Label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {RISK_TILES.map(({ value, label, Icon, tagline, bars }) => {
+            const on = formData.risk_tolerance === value
             return (
               <button
-                key={tile.value}
+                key={value}
                 type="button"
-                onClick={() => updateFormField('risk_tolerance', tile.value)}
-                aria-pressed={selected}
-                className={`relative text-left p-4 rounded-2xl border transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 ${
-                  selected
-                    ? 'border-brand-primary/60 bg-brand-primary/8 shadow-[0_0_20px_rgba(194,102,84,0.15)]'
-                    : 'border-brand-border/50 bg-brand-surface/30 hover:border-brand-border hover:bg-brand-surface/60'
+                onClick={() => updateFormField('risk_tolerance', value)}
+                aria-pressed={on}
+                className={`relative group text-left px-3.5 py-3 rounded-xl border transition-all duration-150 active:scale-[0.97] focus:outline-none ${
+                  on
+                    ? 'border-brand-primary/50 bg-brand-primary/5'
+                    : 'border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/40'
                 }`}
               >
-                {selected && <SelectedBadge />}
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-2xl">{tile.icon}</span>
-                  <VolatilityBars filled={tile.bars} color={tile.barColor} />
+                {on && <SelectionRing />}
+
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    on ? 'bg-brand-primary/15' : 'bg-brand-border/20'
+                  }`}>
+                    <Icon size={13} className={on ? 'text-brand-primary' : 'text-brand-muted-fg'} strokeWidth={1.75} />
+                  </div>
+                  <VolBars filled={bars} />
                 </div>
-                <p className="text-sm font-semibold text-brand-fg">{tile.label}</p>
-                <p className="text-[11px] text-brand-muted-fg mt-0.5 leading-snug">{tile.tagline}</p>
+
+                <p className="text-xs font-semibold text-brand-fg">{label}</p>
+                <p className="text-[10px] text-brand-muted-fg mt-0.5 leading-snug">{tagline}</p>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* ── Expertise Level ──────────────────────────── */}
+      {/* ── Expertise Level ────────────────────────────── */}
       <div>
-        <SectionLabel>Expertise Level</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {EXPERTISE_TILES.map((tile) => {
-            const selected = formData.expertise_level === tile.value
+        <Label>Expertise Level</Label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {EXPERTISE_TILES.map(({ value, label, Icon, numeral, desc }) => {
+            const on = formData.expertise_level === value
             return (
               <button
-                key={tile.value}
+                key={value}
                 type="button"
-                onClick={() => updateFormField('expertise_level', tile.value)}
-                aria-pressed={selected}
-                className={`relative text-left p-4 rounded-2xl border transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 ${
-                  selected
-                    ? 'border-brand-primary/60 bg-brand-primary/8 shadow-[0_0_20px_rgba(194,102,84,0.15)]'
-                    : 'border-brand-border/50 bg-brand-surface/30 hover:border-brand-border hover:bg-brand-surface/60'
+                onClick={() => updateFormField('expertise_level', value)}
+                aria-pressed={on}
+                className={`relative group text-left px-3.5 py-3 rounded-xl border transition-all duration-150 active:scale-[0.97] focus:outline-none ${
+                  on
+                    ? 'border-brand-primary/50 bg-brand-primary/5'
+                    : 'border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/40'
                 }`}
               >
-                {selected && <SelectedBadge />}
-                <span className="text-2xl mb-2 block">{tile.icon}</span>
-                <p className="text-sm font-semibold text-brand-fg">{tile.label}</p>
-                <p className="text-[11px] text-brand-muted-fg mt-0.5 leading-snug">{tile.desc}</p>
+                {on && <SelectionRing />}
+
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    on ? 'bg-brand-primary/15' : 'bg-brand-border/20'
+                  }`}>
+                    <Icon size={13} className={on ? 'text-brand-primary' : 'text-brand-muted-fg'} strokeWidth={1.75} />
+                  </div>
+                  <span className={`text-[10px] font-mono font-bold tracking-wider ${on ? 'text-brand-primary' : 'text-brand-muted-fg/50'}`}>
+                    {numeral}
+                  </span>
+                </div>
+
+                <p className="text-xs font-semibold text-brand-fg">{label}</p>
+                <p className="text-[10px] text-brand-muted-fg mt-0.5 leading-snug">{desc}</p>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* ── Feedback & Save ──────────────────────────── */}
+      {/* ── Feedback ───────────────────────────────────── */}
       {appError && (
-        <div role="alert" className="p-4 rounded-lg bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger text-sm">
+        <p role="alert" className="text-xs text-semantic-danger bg-semantic-danger/8 border border-semantic-danger/20 px-3 py-2.5 rounded-lg">
           {appError}
-        </div>
+        </p>
       )}
       {appSuccess && (
-        <div role="status" className="p-4 rounded-lg bg-semantic-success/10 border border-semantic-success/20 text-semantic-success text-sm">
+        <p role="status" className="text-xs text-semantic-success bg-semantic-success/8 border border-semantic-success/20 px-3 py-2.5 rounded-lg">
           {appSuccess}
-        </div>
+        </p>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+      {/* ── Actions ────────────────────────────────────── */}
+      <div className="flex gap-2 pt-1">
         <button
           type="button"
           onClick={onSave}
           disabled={isAppSaving}
-          className="flex-1 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg font-medium hover:bg-accent/70 disabled:opacity-50 transition-all"
+          className="flex-1 py-2 rounded-full bg-accent/90 hover:bg-accent/70 hover:shadow-glow-accent text-brand-fg text-sm font-semibold disabled:opacity-40 transition-all duration-200"
         >
-          {isAppSaving ? 'Saving…' : 'Save Preferences'}
+          {isAppSaving ? 'Saving…' : 'Save'}
         </button>
         <button
           type="button"
           onClick={onReset}
           disabled={isAppSaving}
-          className="flex-1 px-4 py-2 rounded-full bg-brand-surface border border-brand-border hover:bg-brand-border/30 disabled:opacity-50 transition-all"
+          className="px-5 py-2 rounded-full border border-brand-border text-brand-muted-fg text-sm hover:text-brand-fg hover:border-brand-border/80 disabled:opacity-40 transition-all duration-200"
         >
           Reset
         </button>
       </div>
+
     </section>
   )
 }
