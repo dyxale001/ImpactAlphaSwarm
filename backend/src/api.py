@@ -1,7 +1,6 @@
 import os
 import asyncio
 import logging
-import secrets
 from typing import List, Optional
 
 import httpx
@@ -10,22 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
-from src.utils.supabase_client import (
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    supabase,
-    create_ai_run,
-    update_ai_run_status,
-    fetch_fx_rate_to_zar,
-)
+from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
-
-# Shared secret that Cloud Scheduler presents to trigger the nightly run. Unset
-DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
-# Only refresh users whose last run is within this many days.
-DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
@@ -44,20 +31,6 @@ class StartAnalysisRequest(BaseModel):
     watchlist: Optional[List[str]] = []
     risk_tolerance: Optional[str] = "Moderate"
     expertise_level: Optional[str] = "novice"
-
-
-@app.get("/api/analysis/fx-rate/usd-zar")
-async def usd_zar_fx_rate():
-    rate = fetch_fx_rate_to_zar("USD")
-    if rate is None:
-        raise HTTPException(status_code=503, detail="Unable to load live USD/ZAR exchange rate")
-
-    return {
-        "base_currency": "USD",
-        "quote_currency": "ZAR",
-        "rate": rate,
-        "source": "Yahoo Finance",
-    }
 
 
 @app.post("/api/analysis/start")
@@ -155,68 +128,20 @@ async def analysis_result(run_id: str):
         })
     return {"top_5": top_5}
 
-@app.post("/api/analysis/run-daily")
-async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
-    """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
-    (just after the NYSE close). Refreshes every active user's insights so they
-    see fresh data without pressing refresh. Guarded by a shared secret.
-
-    For resource efficiency the raw quant + sentiment signals are gathered ONCE
-    for the union of all users' tickers (see run_daily_batch), then personalized
-    per user. Runs synchronously; failures are isolated per user.
-    """
-    if not DAILY_RUN_SECRET:
-        raise HTTPException(status_code=503, detail="Daily run not configured")
-    if not x_daily_run_secret or not secrets.compare_digest(
-        x_daily_run_secret, DAILY_RUN_SECRET
-    ):
-        raise HTTPException(status_code=401, detail="Invalid daily run secret")
-
-    from src.utils.supabase_client import get_active_user_ids, get_user_preferences
-    from src.orchestration.langgraph_orchestrator import run_daily_batch
-
-    user_ids = get_active_user_ids(DAILY_ACTIVE_DAYS)
-    logger.info("Daily run starting for %d active users", len(user_ids))
-
-    # Build the batch: one fresh run row per user with their saved preferences.
-    users = []
-    skipped = 0
-    for user_id in user_ids:
-        prefs = get_user_preferences(user_id)
-        if not prefs or not prefs.get("universes"):
-            logger.info("Daily run skipping user %s (no preferences/universes)", user_id)
-            skipped += 1
-            continue
-        run_id = create_ai_run(user_id=user_id, status="running")
-        users.append(
-            {
-                "user_id": user_id,
-                "run_id": run_id,
-                "universes": prefs["universes"],
-                "risk_tolerance": prefs["risk_tolerance"],
-                "expertise_level": prefs["expertise_level"],
-            }
-        )
-
-    # Gather raw signals once for the union of tickers, then personalize per user.
-    # Offloaded to a thread so the event loop stays responsive during the batch.
-    loop = asyncio.get_running_loop()
-    batch = await loop.run_in_executor(None, run_daily_batch, users)
-
-    summary = {
-        "active_days": DAILY_ACTIVE_DAYS,
-        "total": len(user_ids),
-        "skipped": skipped,
-        "succeeded": batch.get("succeeded", 0),
-        "failed": batch.get("failed", 0),
-        "unique_tickers": batch.get("tickers", 0),
-    }
-    logger.info("Daily run finished: %s", summary)
-    return summary
-
-
 class DeleteUserRequest(BaseModel):
     user_id: str
+
+class ResetPasswordRequest(BaseModel):
+    user_id: str
+    email: str
+
+class ToggleUserStatusRequest(BaseModel):
+    user_id: str
+    is_active: bool
+
+class SetUserRoleRequest(BaseModel):
+    user_id: str
+    role: str  # 'admin' or 'user'
 
 async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
     if not authorization:
@@ -240,6 +165,116 @@ async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
     if not user_id:
         raise HTTPException(status_code=401, detail="Unable to determine user id")
     return user_id
+
+async def _require_admin(requester_id: str):
+    """Raise 403 if the given user is not an admin."""
+    requester = (
+        supabase.table("users")
+        .select("role")
+        .eq("id", requester_id)
+        .maybe_single()
+        .execute()
+    )
+    if (requester.data or {}).get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+@app.post("/api/admin/reset-password")
+async def reset_user_password(
+    req: ResetPasswordRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Trigger a password-reset email for a given user (admin only)."""
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{SUPABASE_URL}/auth/v1/admin/generate_link",
+            headers={
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"type": "recovery", "email": req.email},
+            timeout=10.0,
+        )
+
+    if resp.status_code not in (200, 201):
+        logger.warning("Supabase generate_link failed for %s: %s", req.email, resp.text)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to send reset email: {resp.text}",
+        )
+
+    return {"ok": True, "message": f"Password reset email sent to {req.email}"}
+
+
+@app.post("/api/admin/toggle-user-status")
+async def toggle_user_status(
+    req: ToggleUserStatusRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Activate or deactivate a user account (admin only).
+
+    Requires the `users` table to have an `is_active BOOLEAN DEFAULT TRUE` column.
+    Run migration first: ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    if req.user_id == requester_id:
+        raise HTTPException(status_code=400, detail="Cannot modify your own account status")
+
+    # Ban/unban in Supabase Auth so the user cannot log in when inactive.
+    # ban_duration="none" lifts the ban; a large duration effectively bans permanently.
+    ban_duration = "none" if req.is_active else "876600h"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.put(
+            f"{SUPABASE_URL}/auth/v1/admin/users/{req.user_id}",
+            headers={
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"ban_duration": ban_duration},
+            timeout=10.0,
+        )
+
+    if resp.status_code not in (200, 201):
+        logger.warning("Supabase ban toggle failed for %s: %s", req.user_id, resp.text)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to update auth status: {resp.text}",
+        )
+
+    # Mirror the status in our own users table for easy querying.
+    supabase.table("users").update({"is_active": req.is_active}).eq("id", req.user_id).execute()
+
+    action = "activated" if req.is_active else "deactivated"
+    return {"ok": True, "is_active": req.is_active, "message": f"User {action} successfully"}
+
+
+@app.post("/api/admin/set-user-role")
+async def set_user_role(
+    req: SetUserRoleRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Promote a user to admin or demote an admin back to user (admin only)."""
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    if req.role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
+
+    if req.user_id == requester_id:
+        raise HTTPException(status_code=400, detail="Cannot modify your own role")
+
+    supabase.table("users").update({"role": req.role}).eq("id", req.user_id).execute()
+
+    action = "promoted to admin" if req.role == "admin" else "demoted to user"
+    return {"ok": True, "role": req.role, "message": f"User {action} successfully"}
+
 
 @app.post("/api/admin/delete-user")
 async def delete_user_admin(
