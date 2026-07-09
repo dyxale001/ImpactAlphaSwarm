@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
+import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 
 function formatMetric(value: unknown, digits = 2) {
@@ -446,54 +447,10 @@ export default function AssetDetailsPage() {
 
           <SectionCard
             title="Quantitative Data"
-            description="Technical and risk metrics used by the model."
+            description="What the price history shows — measurements and peer context, not a recommendation."
             icon={BarChart3}
           >
-            <div className="mb-3">
-              <div className="flex justify-between">
-                <span className="relative group inline-block">
-                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-                    Confidence
-                  </span>
-                </span>
-                <span className="text-foreground font-mono font-semibold">
-                  {formatMetric(recommendation.quant_score, 0)}%
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full bg-primary flex items-center justify-end pr-2"
-                  style={{ width: `${recommendation.quant_score ?? 0}%` }}
-                >
-                </div>
-              </div>
-            </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <MetricPill
-                    label="Beta"
-                    value={formatMetric(recommendation.beta)}
-                  />
-                  <MetricPill
-                    label="MACD"
-                    value={formatMetric(recommendation.macd)}
-                  />
-                  <MetricPill
-                    label="MACD histogram"
-                    value={formatMetric(recommendation.macd_histogram)}
-                  />
-                  <MetricPill
-                    label="RSI"
-                    value={formatMetric(recommendation.rsi)}
-                  />
-                  <MetricPill
-                    label="Sharpe ratio"
-                    value={formatMetric(recommendation.sharpe_ratio)}
-                  />
-                  <MetricPill
-                    label="Volatility"
-                    value={formatMetric(recommendation.volatility)}
-                  />
-                </div>
+            <QuantMetricsPanel recommendation={recommendation} />
           </SectionCard>
         </>
       )}
