@@ -191,12 +191,6 @@ def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
                     beta=metrics.get("beta"),
                     volatility=metrics.get("volatility"),
                     raw_quant_score=metrics.get("raw_quant_score"),
-                    trailing_return=metrics.get("trailing_return"),
-                    data_points=metrics.get("data_points"),
-                    sub_dimensions=metrics.get("sub_dimensions"),
-                    bands=metrics.get("bands"),
-                    percentiles=metrics.get("percentiles"),
-                    quant_normalisation=metrics.get("quant_normalisation"),
                 )
                 tracer.add_quant_metrics(ticker, quant_metrics)
             tracer.log_step("phase_2_quant", {"count": len(quant_results), "tickers": list(quant_results.keys())})
