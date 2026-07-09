@@ -20,6 +20,7 @@ import ResearchPage from './pages/Research'
 import WatchlistPage from './pages/Watchlist'
 import PortfolioPage from './pages/Portfolio'
 import AssetDetailsPage from './pages/AssetDetailsPage'
+import HowItWorks from './pages/HowItWorks'
 import SettingsPage from './pages/Settings'
 import ResetPassword from './pages/ResetPassword'
 
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/asset/:ticker" element={<AssetDetailsPage />} />
+          <Route path="/asset/:ticker/how-it-works" element={<HowItWorks />} />
         </Route>
         
         {/* Admin Routes */}
