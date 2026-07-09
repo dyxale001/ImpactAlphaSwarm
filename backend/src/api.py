@@ -17,9 +17,13 @@ app = FastAPI(title="AlphaSwarm API")
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
 
+# Local dev: the Vite host (localhost vs 127.0.0.1) and port (5173 -> 5174 when
+# a port is taken) both vary, so match any localhost/127.0.0.1 origin in addition
+# to the explicit production list from API_CORS_ORIGINS.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
