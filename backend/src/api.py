@@ -1,5 +1,6 @@
 import os
 import asyncio
+import datetime
 import logging
 from typing import List, Optional
 
@@ -49,6 +50,187 @@ async def usd_zar_fx_rate():
         "rate": rate,
         "source": "Yahoo Finance",
     }
+
+
+# Whale watching — large insider (director/exec) dealings for a ticker. This is
+# purely informational reference data for the user and is intentionally NOT part
+# of the analysis pipeline: it never feeds the Unified Confidence Score.
+FINNHUB_INSIDER_URL = "https://finnhub.io/api/v1/stock/insider-transactions"
+
+
+def _normalize_name_key(name: str) -> str:
+    """Match key for an insider name: SURNAME + given name, upper-cased with
+    punctuation/hyphens stripped. Finnhub and yfinance both use LAST-FIRST order
+    but disagree on middle initials, so keying on the first two tokens matches most."""
+    cleaned = name.upper().replace("-", " ").replace(".", " ").replace(",", " ")
+    tokens = [tok for tok in cleaned.split() if tok]
+    return " ".join(tokens[:2])
+
+
+def _fetch_insider_roles(symbol: str) -> dict:
+    """Return {normalized_name_key: job title} from the yfinance insider roster.
+    Finnhub's transaction feed carries names only, so we enrich with roles here.
+    Best-effort and blocking (call via run_in_executor); returns {} on any failure."""
+    try:
+        import yfinance as yf
+        df = yf.Ticker(symbol).insider_roster_holders
+    except Exception as e:
+        logger.info("Insider roster lookup failed for %s: %s", symbol, e)
+        return {}
+    if df is None or getattr(df, "empty", True):
+        return {}
+    if "Name" not in df.columns or "Position" not in df.columns:
+        return {}
+    roles: dict[str, str] = {}
+    for _, row in df.iterrows():
+        name = row.get("Name")
+        position = row.get("Position")
+        if name and position:
+            roles[_normalize_name_key(str(name))] = str(position)
+    return roles
+
+
+# Insider data (SEC Form 4) lands within ~2 business days of a trade and is
+# sporadic per ticker, so we serve from a Supabase cache and only refetch when a
+# ticker's row is older than this. Bump to hours=72 for a 3-day window.
+INSIDER_CACHE_TTL = datetime.timedelta(hours=48)
+
+
+def _read_insider_cache(symbol: str) -> Optional[dict]:
+    """Return the cached row for a ticker, or None if absent / on read error."""
+    try:
+        res = (
+            supabase.table("insider_transactions_cache")
+            .select("ticker, transactions, source, fetched_at")
+            .eq("ticker", symbol)
+            .maybe_single()
+            .execute()
+        )
+        return res.data
+    except Exception as e:
+        logger.info("Insider cache read failed for %s: %s", symbol, e)
+        return None
+
+
+def _cache_is_fresh(row: dict) -> bool:
+    ts = row.get("fetched_at")
+    if not ts:
+        return False
+    try:
+        fetched = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return datetime.datetime.now(datetime.timezone.utc) - fetched < INSIDER_CACHE_TTL
+
+
+def _cache_payload(symbol: str, row: dict) -> dict:
+    return {
+        "ticker": symbol,
+        "transactions": row.get("transactions") or [],
+        "source": row.get("source"),
+        "cached": True,
+        "fetched_at": row.get("fetched_at"),
+    }
+
+
+def _write_insider_cache(symbol: str, transactions: list, source: Optional[str]) -> str:
+    fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        supabase.table("insider_transactions_cache").upsert({
+            "ticker": symbol,
+            "transactions": transactions,
+            "source": source,
+            "fetched_at": fetched_at,
+        }).execute()
+    except Exception as e:
+        logger.warning("Insider cache write failed for %s: %s", symbol, e)
+    return fetched_at
+
+
+async def _fetch_fresh_insider(symbol: str, api_key: str) -> tuple[list, Optional[str]]:
+    """Fetch + normalize insider dealings from Finnhub, enriched with yfinance roles.
+
+    Returns ``([], None)`` for uncovered symbols (e.g. JSE tickers, which Finnhub
+    403s). Raises on genuine network / server errors so the caller can fall back
+    to stale cache instead of caching a failure.
+    """
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            FINNHUB_INSIDER_URL,
+            params={"symbol": symbol, "token": api_key},
+            timeout=10.0,
+        )
+
+    # Free-tier / uncovered symbols return 401/403/404 — "no coverage", not an error.
+    if resp.status_code in (401, 403, 404):
+        logger.info("Finnhub has no insider coverage for %s (HTTP %s)", symbol, resp.status_code)
+        return [], None
+    resp.raise_for_status()
+
+    payload = resp.json() or {}
+    transactions = []
+    for row in payload.get("data") or []:
+        change = row.get("change") or 0
+        if change == 0:  # rows that net to zero (paired same-day entries)
+            continue
+        shares = abs(change)
+        price = row.get("transactionPrice")
+        transactions.append({
+            "name": row.get("name") or "Unknown insider",
+            "type": "buy" if change > 0 else "sell",
+            "shares": shares,
+            "price": price,
+            "value": round(shares * price, 2) if price else None,
+            "transaction_date": row.get("transactionDate"),
+            "filing_date": row.get("filingDate"),
+            "transaction_code": row.get("transactionCode"),
+            "role": None,
+        })
+
+    transactions.sort(key=lambda t: t.get("filing_date") or "", reverse=True)
+    transactions = transactions[:25]
+
+    # Enrich names with job titles from the yfinance insider roster (Finnhub's feed
+    # has names only). Best-effort; run off the event loop since yfinance blocks.
+    loop = asyncio.get_running_loop()
+    roles = await loop.run_in_executor(None, _fetch_insider_roles, symbol)
+    if roles:
+        for txn in transactions:
+            txn["role"] = roles.get(_normalize_name_key(txn["name"]))
+
+    return transactions, "Finnhub"
+
+
+@app.get("/api/whales/{ticker}")
+async def whale_activity(ticker: str):
+    """Recent insider dealings for a ticker, via Finnhub (US-listed only).
+
+    Read-through cache: serves the Supabase-cached rows while fresh (< TTL) and
+    only refetches when stale. Returns an empty ``transactions`` list (not an
+    error) when no API key is configured or the ticker has no coverage.
+    """
+    symbol = ticker.upper()
+
+    cached = _read_insider_cache(symbol)
+    if cached and _cache_is_fresh(cached):
+        return _cache_payload(symbol, cached)
+
+    api_key = os.getenv("FINNHUB_API_KEY", "").strip()
+    if not api_key:
+        # No key: serve whatever we cached before, else an honest empty state.
+        return _cache_payload(symbol, cached) if cached else {"ticker": symbol, "transactions": [], "source": None}
+
+    try:
+        transactions, source = await _fetch_fresh_insider(symbol, api_key)
+    except Exception as e:
+        # Network / server error: prefer stale cache over failing the request.
+        logger.warning("Finnhub insider fetch failed for %s: %s", symbol, e)
+        if cached:
+            return _cache_payload(symbol, cached)
+        raise HTTPException(status_code=502, detail="Unable to load insider transactions")
+
+    fetched_at = _write_insider_cache(symbol, transactions, source)
+    return {"ticker": symbol, "transactions": transactions, "source": source, "cached": False, "fetched_at": fetched_at}
 
 
 @app.post("/api/analysis/start")

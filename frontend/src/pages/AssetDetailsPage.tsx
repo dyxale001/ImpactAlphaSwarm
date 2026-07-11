@@ -14,6 +14,7 @@ import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
+import WhaleWatching from "../components/research/WhaleWatching";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 
 function formatMetric(value: unknown, digits = 2) {
@@ -340,6 +341,9 @@ export default function AssetDetailsPage() {
           </SectionCard>
         </>
       )}
+
+      {/* Informational only — deliberately independent of the AI run and score. */}
+      <WhaleWatching ticker={asset.ticker} />
     </div>
   );
 }

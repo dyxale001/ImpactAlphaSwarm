@@ -55,6 +55,34 @@ export async function getUsdZarExchangeRate() {
   }>;
 }
 
+export interface WhaleTransactionDTO {
+  name: string;
+  role?: string | null;
+  type: "buy" | "sell";
+  shares: number;
+  price: number | null;
+  value: number | null;
+  transaction_date: string | null;
+  filing_date: string | null;
+  transaction_code?: string | null;
+}
+
+export interface WhaleActivityResponse {
+  ticker: string;
+  transactions: WhaleTransactionDTO[];
+  source: string | null;
+  cached?: boolean;
+  fetched_at?: string | null;
+}
+
+// Informational insider-dealings feed. Not tied to the recommendation, so it
+// needs no auth token — it's public reference data.
+export async function getWhaleActivity(ticker: string) {
+  const res = await fetch(`${BASE}/api/whales/${encodeURIComponent(ticker)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<WhaleActivityResponse>;
+}
+
 export async function adminDeleteUser(userId: string) {
   const token = await getToken();
   if (!token) throw new Error("No auth token");
