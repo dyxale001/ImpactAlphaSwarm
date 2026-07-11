@@ -232,6 +232,67 @@ def _effective_source(headline: str, summary: str, url: str | None, source: str)
     return source
 
 
+# Friendly display names for common publisher domains, so a URL like
+# ``www.gurufocus.com`` shows as "GuruFocus" rather than "Gurufocus". Anything not
+# listed falls back to the capitalized second-level domain label.
+_DOMAIN_DISPLAY_NAMES: dict[str, str] = {
+    "gurufocus": "GuruFocus",
+    "seekingalpha": "Seeking Alpha",
+    "fool": "Motley Fool",
+    "benzinga": "Benzinga",
+    "zacks": "Zacks",
+    "investorplace": "InvestorPlace",
+    "thestreet": "TheStreet",
+    "businesswire": "Business Wire",
+    "globenewswire": "GlobeNewswire",
+    "prnewswire": "PR Newswire",
+    "investing": "Investing.com",
+    "tipranks": "TipRanks",
+    "marketbeat": "MarketBeat",
+    "yahoo": "Yahoo",
+    "marketwatch": "MarketWatch",
+    "cnbc": "CNBC",
+    "reuters": "Reuters",
+    "bloomberg": "Bloomberg",
+    "barrons": "Barron's",
+    "wsj": "Wall Street Journal",
+    "ft": "Financial Times",
+    "apnews": "Associated Press",
+    "morningstar": "Morningstar",
+}
+
+
+def _publisher_from_url(url: str | None) -> str | None:
+    """Derive the originating publisher's display name from an article URL's
+    domain (e.g. ``https://www.gurufocus.com/news/…`` -> "GuruFocus"). Used to
+    reveal the real publisher behind an aggregator that merely syndicated the
+    story. Returns None when there is no usable host."""
+    if not url:
+        return None
+    host = urllib.parse.urlparse(url).netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    labels = [part for part in host.split(".") if part]
+    if len(labels) < 2:
+        return None
+    # Second-to-last label is the registrable name (e.g. "gurufocus" in
+    # "finance.gurufocus.com"); good enough for the well-known news domains.
+    label = labels[-2]
+    return _DOMAIN_DISPLAY_NAMES.get(label, label.capitalize())
+
+
+def _display_source(stored_source: str, url: str | None) -> str:
+    """Compose the per-article source label shown in the UI. When an aggregator
+    (the name Finnhub credited, e.g. "Yahoo") merely republished a story whose
+    URL points to the real publisher, show both as "Aggregator-Publisher" (e.g.
+    "Yahoo-GuruFocus"). Otherwise show the single publisher name."""
+    base = stored_source.split(":", 1)[-1]  # strip "finnhub:"/"marketaux:" prefix
+    url_publisher = _publisher_from_url(url)
+    if url_publisher and url_publisher.lower() != base.lower():
+        return f"{base}-{url_publisher}"
+    return base
+
+
 def _tier1_publisher(source: str) -> str | None:
     """Resolve a Marketaux ``source`` (a domain like ``reuters.com`` or a name
     like ``Reuters``) to a tier-1 publisher display name, or ``None`` if it is
@@ -905,8 +966,9 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 			headline = headline[:157].rstrip() + "…"
 		articles.append(
 			{
-				# Strip the "finnhub:" prefix to show the publisher name.
-				"source": item["source"].split(":", 1)[-1],
+				# Show the aggregator plus the real publisher when the story was
+				# syndicated (e.g. "Yahoo-GuruFocus"); otherwise a single name.
+				"source": _display_source(item["source"], item.get("url")),
 				"tier": item.get("tier"),
 				"date": (item.get("created_at") or "")[:10],  # YYYY-MM-DD
 				"headline": headline,
