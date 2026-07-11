@@ -54,6 +54,11 @@ logger = logging.getLogger("sentiment-scout")
 # NLP signal. The rest are VADER-only to stay within the GCP monthly unit budget.
 GCP_TOP_N = int(os.getenv("GCP_SENTIMENT_TOP_N", "5"))
 
+# Signed sentiment [-1, 1] assigned to a post the author explicitly tagged
+# Bullish/Bearish on StockTwits. Decisive but not maxed out (maps to 80 / 20 on
+# the 0-100 contribution scale), since a self-tag is a strong but not absolute cue.
+DECLARED_SENTIMENT_SIGNED = 0.6
+
 # Blend weight for the news signal; the social signal gets the remainder. News is
 # weighted higher because trusted financial reporting is a more reliable signal
 # than retail social chatter. Clamped to [0, 1].
@@ -251,7 +256,15 @@ class SocialMention:
 	source: str
 	url: str | None = None
 	engagement: int = 0
+	# Engagement counts for display (social posts only). ``engagement`` stays the
+	# combined total used for GCP prioritization; these are just the numbers shown.
+	likes: int = 0
+	reshares: int = 0
+	replies: int = 0
 	created_at: str | None = None
+	# Author-declared Bullish/Bearish tag (social posts only). Preferred over
+	# VADER when set; None means fall back to the model.
+	declared_sentiment: str | None = None
 	# Original article headline (news only), kept separate from the combined
 	# "headline. summary" ``text`` so display and dedup use the real headline
 	# instead of re-splitting on ". " (which breaks on abbreviations like "Sen.").
@@ -420,7 +433,15 @@ def _score_mentions(
 	}
 
 	for index, mention in enumerate(mentions):
-		signed_score = _mention_sentiment(mention.text, use_gcp=index in gcp_indices)
+		# Prefer the author's own Bullish/Bearish tag (StockTwits) — a declared
+		# label reads slang/sarcasm/emoji better than a lexicon. VADER/GCP is the
+		# fallback for untagged posts (and all news, which is never tagged).
+		if mention.declared_sentiment == "Bullish":
+			signed_score = DECLARED_SENTIMENT_SIGNED
+		elif mention.declared_sentiment == "Bearish":
+			signed_score = -DECLARED_SENTIMENT_SIGNED
+		else:
+			signed_score = _mention_sentiment(mention.text, use_gcp=index in gcp_indices)
 		if signed_score >= 0.05:
 			bullish_posts += 1
 		elif signed_score <= -0.05:
@@ -433,6 +454,9 @@ def _score_mentions(
 				"source": mention.source,
 				"url": mention.url,
 				"engagement": mention.engagement,
+				"likes": mention.likes,
+				"reshares": mention.reshares,
+				"replies": mention.replies,
 				"weight": mention.weight,
 				"created_at": mention.created_at,
 				"tier": _source_tier(mention.source),
@@ -501,6 +525,9 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 				continue
 			payload = resp.json()
 			messages = payload.get("messages", [])[:limit] if isinstance(payload, dict) else []
+			# Collapse near-duplicate posts from the same author (spammers repost
+			# the same take) so one person can't stack the sentiment vote.
+			seen_author_posts: set[tuple[str, str]] = set()
 			for msg in messages:
 				# Validate at the ingestion boundary: malformed messages are
 				# rejected (dropped), anomalous ones are kept but flagged.
@@ -508,18 +535,34 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 				if validated is None:
 					continue
 
+				# Quality gate: drop bare cashtags, watchlist lists and promos —
+				# posts with no usable, ticker-specific opinion.
+				if not validated.passes_quality:
+					continue
+
 				body_upper = validated.body.upper()
 				if validated.symbols and api_sym not in validated.symbols and api_sym not in body_upper and f"${api_sym}" not in body_upper:
 					continue
 
+				author = (validated.username or "").lower()
+				dedup_key = (author, re.sub(r"\W+", "", validated.display_body.lower())[:100])
+				if author and dedup_key in seen_author_posts:
+					continue
+				seen_author_posts.add(dedup_key)
+
 				results[sym].append(
 					SocialMention(
 						ticker=sym,
-						text=validated.body,
+						# Cleaned, professional text — used for both scoring and display.
+						text=validated.display_body,
 						source=f"stocktwits:{validated.username or ''}",
 						url=validated.url,
-						engagement=validated.likes + validated.retweets,
+						engagement=validated.likes + validated.reshares + validated.replies,
+						likes=validated.likes,
+						reshares=validated.reshares,
+						replies=validated.replies,
 						created_at=validated.created_at.isoformat() if validated.created_at else None,
+						declared_sentiment=validated.declared_sentiment,
 					)
 				)
 		except Exception:
@@ -875,6 +918,38 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 	return articles
 
 
+def _social_posts_payload(scored_social: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""Build a compact, per-post transparency list from the scored social items:
+	author, post date, text, link and the post's own sentiment. Ordered most-recent
+	first so the user can see which StockTwits posts fed the social signal, mirroring
+	``_news_articles_payload`` for news."""
+	posts: list[dict[str, Any]] = []
+	for item in sorted(scored_social, key=lambda it: it.get("created_at") or "", reverse=True):
+		raw = item["sentiment_raw"]
+		label = "Positive" if raw >= 0.05 else "Negative" if raw <= -0.05 else "Neutral"
+		# source is "stocktwits:<username>"; split into platform + author.
+		platform, _, author = item["source"].partition(":")
+		text = (item.get("text") or "").strip()
+		if len(text) > 240:
+			text = text[:237].rstrip() + "…"
+		posts.append(
+			{
+				"platform": platform or "stocktwits",
+				"author": author or None,
+				"date": (item.get("created_at") or "")[:10],  # YYYY-MM-DD
+				"text": text,
+				"url": item.get("url"),
+				# Engagement counts shown next to each post.
+				"likes": item.get("likes") or 0,
+				"reshares": item.get("reshares") or 0,
+				"replies": item.get("replies") or 0,
+				"sentiment": label,
+				"sentiment_score": item["sentiment_contribution"],  # 0-100
+			}
+		)
+	return posts
+
+
 def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_mentions: list[SocialMention]) -> dict[str, Any]:
 	"""Score the news and social signals separately and blend them into the
 	unified sentiment payload for one ticker."""
@@ -893,6 +968,8 @@ def _combine_signals(ticker: str, social_mentions: list[SocialMention], news_men
 		"bearish_posts": social["bearish_posts"],
 		"top_posts": social["top_posts"],
 		"mention_count": social["mention_count"],
+		# Per-post transparency list (author, date, text, link, sentiment).
+		"social_posts": _social_posts_payload(social.get("scored", [])),
 		# News sub-signal.
 		"news_sentiment_score": news["sentiment_score"],
 		"news_bullish": news["bullish_posts"],
