@@ -83,6 +83,35 @@ export async function getWhaleActivity(ticker: string) {
   return res.json() as Promise<WhaleActivityResponse>;
 }
 
+export interface InstitutionalHolderDTO {
+  holder: string;
+  pct_held: number | null;
+  shares: number | null;
+  value: number | null;
+  pct_change: number | null;
+  date_reported: string | null;
+}
+
+export interface InstitutionalOwnershipResponse {
+  ticker: string;
+  institutions_pct: number | null;
+  insiders_pct: number | null;
+  institutions_count: number | null;
+  holders: InstitutionalHolderDTO[];
+  source: string | null;
+  cached?: boolean;
+  fetched_at?: string | null;
+}
+
+// Institutional ownership (13F). Informational reference data, no auth needed.
+export async function getInstitutionalHolders(ticker: string) {
+  const res = await fetch(
+    `${BASE}/api/institutions/${encodeURIComponent(ticker)}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<InstitutionalOwnershipResponse>;
+}
+
 export async function adminDeleteUser(userId: string) {
   const token = await getToken();
   if (!token) throw new Error("No auth token");
