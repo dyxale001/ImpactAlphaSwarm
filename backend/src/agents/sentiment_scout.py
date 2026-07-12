@@ -213,11 +213,6 @@ _DATELINE_SCAN_CHARS = 200
 
 
 def _effective_source(headline: str, summary: str, url: str | None, source: str) -> str:
-    """Resolve the *originating* publisher for tiering.
-
-    Returns the wire service when the article is a syndicated wire story
-    (detected via URL domain or a leading dateline), otherwise the publisher
-    Finnhub reported in ``source``."""
     if url:
         host = urllib.parse.urlparse(url).netloc.lower()
         for domain, name in _TIER1_DOMAINS:
@@ -233,10 +228,6 @@ def _effective_source(headline: str, summary: str, url: str | None, source: str)
 
 
 def _tier1_publisher(source: str) -> str | None:
-    """Resolve a Marketaux ``source`` (a domain like ``reuters.com`` or a name
-    like ``Reuters``) to a tier-1 publisher display name, or ``None`` if it is
-    not tier 1. This is the client-side verification layer behind the Marketaux
-    domain whitelist: only genuine tier-1 sources pass."""
     name = (source or "").lower()
     for domain, display in _TIER1_DOMAINS:
         if domain in name:
@@ -279,11 +270,6 @@ def _normalize_tickers(tickers: list[str]) -> list[str]:
 
 
 def _api_symbol(ticker: str) -> str:
-	"""Map a yfinance/DB-style ticker to the form StockTwits and Finnhub expect.
-
-	Share classes use a hyphen in yfinance (e.g. ``BRK-B``, ``BF-B``) but a dot on
-	those APIs (``BRK.B``). Results stay keyed by the original DB ticker so the
-	rest of the pipeline (quant, persistence) matches up."""
 	return ticker.upper().replace("-", ".")
 
 
@@ -310,8 +296,6 @@ def _score_with_vader(text: str) -> float:
 
 
 def _combine_scores(vader_score: float, gcp_score: float | None) -> float:
-	"""Dual-signal blend: average VADER and GCP NLP when both are available,
-	otherwise fall back to VADER alone."""
 	if gcp_score is None:
 		return vader_score
 	return 0.5 * vader_score + 0.5 * gcp_score
@@ -325,14 +309,10 @@ def _mention_sentiment(text: str, use_gcp: bool = False) -> float:
 
 
 def _engagement_priority(mention: SocialMention) -> Any:
-	"""GCP prioritization for social posts: most-engaged first."""
 	return mention.engagement
 
 
 def _recency_priority(mention: SocialMention) -> Any:
-	"""GCP prioritization for news articles: spend the metered GCP budget on the
-	most reliable sources first (higher tier weight), then most-recent. ISO-8601
-	timestamps sort lexicographically in chronological order."""
 	return (mention.weight, mention.created_at or "")
 
 
@@ -587,13 +567,7 @@ def collect_mentions(tickers: list[str]) -> dict[str, list[SocialMention]]:
 
 
 def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list[SocialMention]]:
-	"""Collect recent company news from trusted financial publishers via Finnhub.
-
-	Returns articles as ``SocialMention`` (the shared scoring unit): ``text`` is
-	headline + summary, ``source`` is ``finnhub:<publisher>``. Non-trusted
-	publishers are dropped so only reputable financial reporting feeds the score.
-	Returns empty lists if ``requests`` or ``FINNHUB_API_KEY`` are unavailable.
-	"""
+	"""Collect recent company news from trusted financial publishers via Finnhub."""
 	results: dict[str, list[SocialMention]] = {ticker: [] for ticker in tickers}
 	if requests is None:
 		return results
@@ -659,25 +633,11 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 
 
 def _news_dedup_key(headline: str) -> str:
-	"""Normalized key to detect the same story across news sources (e.g. a CNBC
-	article carried by both Finnhub and Marketaux). Keys on the article HEADLINE --
-	the stable, publisher-set string that matches across sources -- since the two
-	sources format the trailing summary differently. Pass the real headline; do not
-	pass the combined text (splitting it on ". " breaks on abbreviations)."""
 	return re.sub(r"[^a-z0-9]+", " ", (headline or "").lower()).strip()[:80]
 
 
 def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]]:
-	"""Collect tier-1-only company news from Marketaux in one batched query.
-
-	All tickers are queried at once (``symbols=AAPL,MSFT,...``) and the response is
-	fanned back out per ticker via each article's tagged entities. Restricted to
-	tier-1 publishers server-side via the ``domains`` whitelist, then verified
-	client-side with ``_tier1_publisher``. Because the free plan returns only ~3
-	articles per request, results are paginated up to ``MARKETAUX_MAX_PAGES`` (one
-	API call each), stopping early once the source is exhausted or every ticker has
-	hit its cap. Returns empty lists if ``requests`` or ``MARKETAUX_API_KEY`` are
-	unavailable, or on any error (degrade gracefully)."""
+	"""Collect tier-1-only company news from Marketaux in one batched query."""
 	results: dict[str, list[SocialMention]] = {ticker: [] for ticker in tickers}
 	if requests is None or not tickers:
 		return results
@@ -891,9 +851,6 @@ def _tier_counts(news_mentions: list[SocialMention]) -> dict[str, int]:
 
 
 def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, Any]]:
-	"""Build a compact, per-article transparency list from the scored news items:
-	publisher, reliability tier, publish date, headline, link, and the article's
-	own sentiment. Ordered most-recent first so the user can see when each is from."""
 	articles: list[dict[str, Any]] = []
 	for item in sorted(scored_news, key=lambda it: it.get("created_at") or "", reverse=True):
 		raw = item["sentiment_raw"]
@@ -905,7 +862,6 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 			headline = headline[:157].rstrip() + "…"
 		articles.append(
 			{
-				# Strip the "finnhub:"/"marketaux:" prefix to show the source name.
 				"source": item["source"].split(":", 1)[-1],
 				"tier": item.get("tier"),
 				"date": (item.get("created_at") or "")[:10],  # YYYY-MM-DD
@@ -919,10 +875,6 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _social_posts_payload(scored_social: list[dict[str, Any]]) -> list[dict[str, Any]]:
-	"""Build a compact, per-post transparency list from the scored social items:
-	author, post date, text, link and the post's own sentiment. Ordered most-recent
-	first so the user can see which StockTwits posts fed the social signal, mirroring
-	``_news_articles_payload`` for news."""
 	posts: list[dict[str, Any]] = []
 	for item in sorted(scored_social, key=lambda it: it.get("created_at") or "", reverse=True):
 		raw = item["sentiment_raw"]
