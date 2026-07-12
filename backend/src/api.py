@@ -31,6 +31,55 @@ app.add_middleware(
 )
 
 
+# --- Orphaned-run guard -------------------------------------------------------
+# An interactive analysis runs as a fire-and-forget background task after the API
+# has already returned its run_id. If the container is replaced (deploy, scale-
+# down, crash) before that task finishes, the ai_runs row is left at 'running'
+# forever and the dashboard — which reads ai_runs.status straight from Supabase —
+# polls it indefinitely. These helpers heal such orphans by failing any run that
+# has been 'running' past the timeout.
+STALE_RUN_MINUTES = 15
+
+
+def _is_run_stale(created_at) -> bool:
+    if not created_at:
+        return False
+    try:
+        started = datetime.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return datetime.datetime.now(datetime.timezone.utc) - started > datetime.timedelta(minutes=STALE_RUN_MINUTES)
+
+
+def _fail_stale_running_runs() -> int:
+    """Mark every ai_run stuck in 'running' past the timeout as 'failed'. Returns
+    how many were healed. Best-effort — a DB error is logged, never raised."""
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(minutes=STALE_RUN_MINUTES)
+    ).isoformat()
+    try:
+        res = (
+            supabase.table("ai_runs")
+            .update({"status": "failed"})
+            .eq("status", "running")
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        healed = len(res.data or [])
+        if healed:
+            logger.warning("Startup sweep: marked %d stale 'running' run(s) as failed", healed)
+        return healed
+    except Exception as e:
+        logger.warning("Stale-run sweep failed: %s", e)
+        return 0
+
+
+@app.on_event("startup")
+async def _sweep_stale_runs_on_startup() -> None:
+    _fail_stale_running_runs()
+
+
 class StartAnalysisRequest(BaseModel):
     universes: List[str]
     watchlist: Optional[List[str]] = []
@@ -299,7 +348,13 @@ async def analysis_status(run_id: str):
     data = resp.data or []
     if not data:
         raise HTTPException(status_code=404, detail="run not found")
-    return data[0]
+    row = data[0]
+    # Heal an orphaned run this poll happens to catch: a run still 'running' past
+    # the timeout was abandoned, so report (and persist) it as failed.
+    if row.get("status") == "running" and _is_run_stale(row.get("created_at")):
+        update_ai_run_status(run_id, "failed")
+        row["status"] = "failed"
+    return row
 
 
 @app.get("/api/analysis/result/{run_id}")
