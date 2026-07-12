@@ -19,6 +19,7 @@ import DashboardPage from './pages/Dashboard'
 import ResearchPage from './pages/Research'
 import WatchlistPage from './pages/Watchlist'
 import PortfolioPage from './pages/Portfolio'
+import LearningPage from './pages/Learning'
 import AssetDetailsPage from './pages/AssetDetailsPage'
 import HowItWorks from './pages/HowItWorks'
 import SettingsPage from './pages/Settings'
@@ -62,6 +63,7 @@ export default function App() {
 
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} /> {/* Changed from "/" to "/dashboard" */}
+          <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />

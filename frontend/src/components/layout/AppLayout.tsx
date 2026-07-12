@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
+  BookOpen,
   Search,
   Eye,
   LineChart,
@@ -11,14 +12,17 @@ import {
 export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
-  // Show only Dashboard and Settings for now
-  const visibleNavItems = navItems.filter((i) => i.name === "Dashboard" || i.name === "Settings");
+  // Show only the currently enabled sections in navigation.
+  const visibleNavItems = navItems.filter(
+    (i) => i.name === "Dashboard" || i.name === "Learning" || i.name === "Settings",
+  );
 
   return (
     <div className="flex h-screen bg-brand-bg text-brand-fg overflow-hidden">
