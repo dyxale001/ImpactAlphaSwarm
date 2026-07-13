@@ -170,6 +170,22 @@ async def institutional_ownership(ticker: str):
     return {"ticker": symbol, **payload, "cached": False, "fetched_at": fetched_at}
 
 
+@app.get("/api/funds")
+async def top_funds():
+    """Institutional data inverted to per-fund holdings across all tracked assets
+    (for the Top Funds / Notable Investors views). Weekly read-through cache; the
+    first build after expiry aggregates every tracked ticker, so it can be slow."""
+    cached = ww.read_funds_cache()
+    if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
+        return {"funds": cached.get("payload") or [], "cached": True, "fetched_at": cached.get("fetched_at")}
+
+    assets = supabase.table("assets").select("ticker, universe").execute().data or []
+    loop = asyncio.get_running_loop()
+    funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
+    fetched_at = ww.write_funds_cache(funds)
+    return {"funds": funds, "cached": False, "fetched_at": fetched_at}
+
+
 @app.post("/api/analysis/start")
 async def start_analysis(
     req: StartAnalysisRequest,

@@ -9,10 +9,12 @@ import {
   ArrowLeft,
   ChevronRight,
   Building2,
+  Layers,
 } from "lucide-react";
 import { useUniverseAssets } from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
+import FundHoldingsView from "../components/research/FundHoldingsView";
 
 // Mirrors the universe tiles used in Settings' Investment Preferences.
 const UNIVERSE_TILES = [
@@ -25,6 +27,7 @@ const UNIVERSE_TILES = [
 
 export default function WhaleWatchingPage() {
   const { byUniverse, isLoading, error } = useUniverseAssets();
+  const [section, setSection] = useState<"universes" | "funds">("universes");
   const [universe, setUniverse] = useState<string | null>(null);
   const [ticker, setTicker] = useState<string | null>(null);
   const [tickerTab, setTickerTab] = useState<"insiders" | "institutions">(
@@ -53,39 +56,80 @@ export default function WhaleWatchingPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-brand-muted-fg flex-wrap">
-        <button
-          onClick={goToUniverses}
-          className="inline-flex items-center gap-2 font-semibold text-brand-fg hover:text-brand-primary transition-colors"
-        >
-          <Waves className="w-4 h-4 text-brand-primary" />
+    <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
+      {/* Page header */}
+      <div>
+        <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
+          <Waves className="w-7 h-7 text-brand-primary" />
           Whale Watching
-        </button>
-        {universe && (
-          <>
-            <ChevronRight className="w-4 h-4 shrink-0" />
-            <button
-              onClick={() => goToUniverse(universe)}
-              className={`transition-colors hover:text-brand-fg ${
-                ticker ? "" : "text-brand-fg font-semibold"
-              }`}
-            >
-              {universe}
-            </button>
-          </>
-        )}
-        {ticker && (
-          <>
-            <ChevronRight className="w-4 h-4 shrink-0" />
-            <span className="text-brand-fg font-semibold">{ticker}</span>
-          </>
-        )}
-      </nav>
+        </h1>
+        <p className="text-sm text-brand-muted-fg mt-1 max-w-2xl">
+          Follow the big money — insider dealings, the institutions and funds
+          that own each stock, and what famous investors are buying.
+          Informational only; this never affects your recommendations.
+        </p>
+      </div>
 
-      {/* ── Level 3: ticker whale panel ─────────────────────────── */}
-      {ticker && universe ? (
+      {/* Top-level tabs */}
+      <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
+        {(
+          [
+            { id: "universes", label: "Universes", Icon: Layers },
+            { id: "funds", label: "Top Funds", Icon: Building2 },
+          ] as const
+        ).map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              section === s.id
+                ? "bg-brand-primary text-brand-bg"
+                : "text-brand-muted-fg hover:text-brand-fg"
+            }`}
+          >
+            <s.Icon className="w-3.5 h-3.5" />
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "funds" ? (
+        <FundHoldingsView />
+      ) : (
+        <div className="space-y-6">
+          {/* Breadcrumb (only when drilled into a universe/ticker) */}
+          {(universe || ticker) && (
+            <nav className="flex items-center gap-2 text-sm text-brand-muted-fg flex-wrap">
+              <button
+                onClick={goToUniverses}
+                className="font-semibold text-brand-fg hover:text-brand-primary transition-colors"
+              >
+                Universes
+              </button>
+              {universe && (
+                <>
+                  <ChevronRight className="w-4 h-4 shrink-0" />
+                  <button
+                    onClick={() => goToUniverse(universe)}
+                    className={`transition-colors hover:text-brand-fg ${
+                      ticker ? "" : "text-brand-fg font-semibold"
+                    }`}
+                  >
+                    {universe}
+                  </button>
+                </>
+              )}
+              {ticker && (
+                <>
+                  <ChevronRight className="w-4 h-4 shrink-0" />
+                  <span className="text-brand-fg font-semibold">{ticker}</span>
+                </>
+              )}
+            </nav>
+          )}
+
+          {/* ── Level 3: ticker whale panel ─────────────────────────── */}
+          {ticker && universe ? (
         <div className="space-y-6">
           <button
             onClick={() => goToUniverse(universe)}
@@ -168,18 +212,6 @@ export default function WhaleWatchingPage() {
       ) : (
         /* ── Level 1: universes ────────────────────────────────── */
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
-              <Waves className="w-7 h-7 text-brand-primary" />
-              Whale Watching
-            </h1>
-            <p className="text-sm text-brand-muted-fg mt-1 max-w-2xl">
-              Track large insider dealings — directors and executives trading
-              their own company's stock. Pick a universe, then a company.
-              Informational only; this never affects your recommendations.
-            </p>
-          </div>
-
           {error ? (
             <p className="text-sm text-brand-muted-fg italic">{error}</p>
           ) : (
@@ -209,6 +241,8 @@ export default function WhaleWatchingPage() {
               })}
             </div>
           )}
+        </div>
+      )}
         </div>
       )}
     </div>

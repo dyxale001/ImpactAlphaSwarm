@@ -26,6 +26,9 @@ FINNHUB_INSIDER_URL = "https://finnhub.io/api/v1/stock/insider-transactions"
 INSIDER_CACHE_TTL = datetime.timedelta(hours=48)
 # 13F institutional ownership updates only quarterly — cache it for far longer.
 INSTITUTIONS_CACHE_TTL = datetime.timedelta(days=7)
+# The fund-holdings aggregation (inverted institutional data across all tracked
+# assets) is expensive to build, so cache the whole thing for a week.
+FUNDS_CACHE_TTL = datetime.timedelta(days=7)
 
 
 def cache_is_fresh(row: dict, ttl: datetime.timedelta = INSIDER_CACHE_TTL) -> bool:
@@ -263,4 +266,90 @@ def write_institutions_cache(symbol: str, payload: dict) -> str:
         }).execute()
     except Exception as e:
         logger.warning("Institutions cache write failed for %s: %s", symbol, e)
+    return fetched_at
+
+
+# ── Fund holdings (institutional data inverted: fund → its positions) ──────────
+
+def build_fund_holdings(assets: list[dict]) -> list[dict]:
+    """Invert per-ticker institutional data into per-fund holdings across the given
+    tracked assets ([{ticker, universe}, ...]).
+
+    Scoped to the companies we cover — a fund's positions here are only in our
+    tracked assets, not its whole portfolio. Reuses the per-ticker institutional
+    cache in bulk and only fetches tickers that aren't already cached fresh.
+    Returns funds sorted by total value held across the universe, each with its
+    positions (biggest first). Blocking — call via run_in_executor.
+    """
+    # Bulk-read fresh per-ticker caches so we refetch as little as possible.
+    fresh_cache: dict[str, dict] = {}
+    try:
+        res = (
+            supabase.table("institutional_holders_cache")
+            .select("ticker, payload, fetched_at")
+            .execute()
+        )
+        for row in res.data or []:
+            if cache_is_fresh(row, INSTITUTIONS_CACHE_TTL):
+                fresh_cache[row["ticker"]] = row.get("payload") or {}
+    except Exception as e:
+        logger.info("Bulk institutions cache read failed: %s", e)
+
+    funds: dict[str, dict] = {}
+    for asset in assets:
+        ticker = (asset.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        payload = fresh_cache.get(ticker)
+        if payload is None:
+            payload = fetch_institutional(ticker)
+            write_institutions_cache(ticker, payload)
+        for holder in payload.get("holders") or []:
+            name = holder.get("holder")
+            if not name:
+                continue
+            entry = funds.setdefault(
+                name, {"fund": name, "total_value": 0.0, "positions": []}
+            )
+            entry["total_value"] += holder.get("value") or 0
+            entry["positions"].append({
+                "ticker": ticker,
+                "universe": asset.get("universe"),
+                "pct_held": holder.get("pct_held"),
+                "value": holder.get("value"),
+                "pct_change": holder.get("pct_change"),
+            })
+
+    result = list(funds.values())
+    for entry in result:
+        entry["positions"].sort(key=lambda p: p.get("value") or 0, reverse=True)
+    result.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
+    return result
+
+
+def read_funds_cache() -> Optional[dict]:
+    try:
+        res = (
+            supabase.table("fund_holdings_cache")
+            .select("id, payload, fetched_at")
+            .eq("id", "ALL")
+            .maybe_single()
+            .execute()
+        )
+        return res.data
+    except Exception as e:
+        logger.info("Funds cache read failed: %s", e)
+        return None
+
+
+def write_funds_cache(funds: list) -> str:
+    fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        supabase.table("fund_holdings_cache").upsert({
+            "id": "ALL",
+            "payload": funds,
+            "fetched_at": fetched_at,
+        }).execute()
+    except Exception as e:
+        logger.warning("Funds cache write failed: %s", e)
     return fetched_at

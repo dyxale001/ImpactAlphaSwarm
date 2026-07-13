@@ -112,6 +112,33 @@ export async function getInstitutionalHolders(ticker: string) {
   return res.json() as Promise<InstitutionalOwnershipResponse>;
 }
 
+export interface FundPosition {
+  ticker: string;
+  universe: string | null;
+  pct_held: number | null;
+  value: number | null;
+  pct_change: number | null;
+}
+
+export interface FundHolding {
+  fund: string;
+  total_value: number;
+  positions: FundPosition[];
+}
+
+export interface TopFundsResponse {
+  funds: FundHolding[];
+  cached?: boolean;
+  fetched_at?: string | null;
+}
+
+// Institutional data inverted to per-fund holdings across all tracked assets.
+export async function getTopFunds() {
+  const res = await fetch(`${BASE}/api/funds`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<TopFundsResponse>;
+}
+
 export async function adminDeleteUser(userId: string) {
   const token = await getToken();
   if (!token) throw new Error("No auth token");
