@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ChevronDown,
   ChevronUp,
+  Users,
 } from "lucide-react";
 import { useWhaleData } from "../../hooks/useWhaleData";
 
@@ -73,11 +74,11 @@ function txnNature(code?: string | null): string | null {
 // Plain-language definitions surfaced on hover so a non-expert user understands
 // what each transaction type means — and why only some carry a dollar value.
 const NATURE_DEFS: Record<string, string> = {
-  "Open market": "A trade on the public market at the going price — the insider chose to buy or sell with their own money. The clearest read on conviction.",
-  Grant: "Shares awarded as compensation (e.g. RSUs), not bought on the market — so there is no purchase price.",
+  "Open market": "A trade on the public market at the going price, where the insider chose to buy or sell with their own money. The clearest read on conviction.",
+  Grant: "Shares awarded as compensation (e.g. RSUs), not bought on the market, so there is no purchase price.",
   Options: "Shares acquired by exercising stock options, or the related settlement. Not an open-market purchase.",
   "Tax withholding": "Shares the company held back to cover taxes owed when equity awards vested. Routine, not a sell decision.",
-  Gift: "Shares given away or received as a gift — no money changes hands.",
+  Gift: "Shares given away or received as a gift, so no money changes hands.",
   "Sale to issuer": "Shares sold back directly to the company rather than on the open market.",
   Conversion: "Shares obtained by converting another security (e.g. a derivative) into common stock.",
 };
@@ -102,6 +103,23 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
         .filter((n): n is string => Boolean(n)),
     ),
   );
+
+  // Cluster buying: several different insiders buying on the open market (SEC
+  // code P) inside a short window is historically a stronger signal than any
+  // single trade.
+  const omBuys = transactions.filter(
+    (t) => (t.transaction_code || "").trim().toUpperCase() === "P",
+  );
+  const DAY_MS = 86_400_000;
+  const now = Date.now();
+  const within30Days = (t: (typeof transactions)[number]) => {
+    const d = new Date(t.transaction_date || t.filing_date || "");
+    return !Number.isNaN(d.getTime()) && now - d.getTime() <= 30 * DAY_MS;
+  };
+  const recentBuyers = new Set(
+    omBuys.filter(within30Days).map((t) => t.name.trim().toUpperCase()),
+  );
+  const clusterCount = recentBuyers.size;
 
   return (
     <section className="soft-card w-full p-5 space-y-4">
@@ -137,6 +155,18 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
         </p>
       ) : (
         <div className="space-y-3">
+          {clusterCount >= 2 && (
+            <div className="flex items-start gap-2 rounded-2xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3">
+              <Users className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
+              <p className="text-xs text-brand-fg leading-snug">
+                <span className="font-semibold">Cluster buying:</span>{" "}
+                {clusterCount} different insiders bought on the open market in the
+                last 30 days. Several insiders buying at once is historically a
+                stronger signal than a single trade.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             {visibleTransactions.map((t, i) => {
             const isBuy = t.type === "buy";

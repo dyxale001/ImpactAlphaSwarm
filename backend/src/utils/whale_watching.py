@@ -271,6 +271,76 @@ def write_institutions_cache(symbol: str, payload: dict) -> str:
 
 # ── Fund holdings (institutional data inverted: fund → its positions) ──────────
 
+# Plain-English descriptions for the funds people are most likely to see, matched
+# on a normalised substring of the fund name. Edit these freely; they ship in the
+# /api/funds payload so no frontend redeploy is needed to change the wording.
+FUND_BLURBS: list[tuple[str, str]] = [
+    ("blackrock", "The biggest investment manager in the world. It runs the iShares range of ETFs and looks after money for pension funds, governments and ordinary savers."),
+    ("vanguard", "Owned by its own funds rather than outside shareholders, and famous for making cheap index funds popular. One of the largest investment managers around."),
+    ("state street", "It launched the first American ETF, the SPDR fund known as SPY, and is a big index manager and custodian bank."),
+    ("geode", "A quiet index manager that runs many of Fidelity's index funds behind the scenes."),
+    ("fmr", "The parent company of Fidelity, a large privately owned manager of mutual funds, share dealing and pensions."),
+    ("fidelity", "A large privately owned investment manager offering mutual funds, share dealing and pensions."),
+    ("morgan stanley", "A global investment bank. Its fund management arm invests for big institutions and wealthy clients."),
+    ("jpmorgan", "The fund management side of America's biggest bank."),
+    ("jp morgan", "The fund management side of America's biggest bank."),
+    ("goldman", "The fund management side of the Wall Street bank Goldman Sachs."),
+    ("berkshire", "Warren Buffett's holding company, known for backing a small number of companies and holding them for many years."),
+    ("norges", "Norway's sovereign wealth fund. It is one of the largest investors in the world, built from the country's oil money."),
+    ("t. rowe", "A long established manager of actively run mutual funds and pension products."),
+    ("capital", "One of the oldest and biggest active managers, home to the American Funds range."),
+    ("wellington", "A large privately owned firm that manages money for institutions and other fund companies."),
+    ("invesco", "A global manager best known for its QQQ fund, which tracks the Nasdaq 100 index."),
+    ("northern trust", "A custody bank and investment manager serving institutions and wealthy families."),
+    ("schwab", "A big broker whose fund arm runs cheap index funds and ETFs."),
+    ("dimensional", "A manager known as DFA that builds its funds around academic research on how markets behave."),
+    ("mellon", "BNY Mellon, one of the largest custodian banks and investment managers in the world."),
+    ("franklin", "Franklin Templeton, a global manager of mutual funds and ETFs across many markets."),
+    ("ubs", "A Swiss bank and one of the biggest wealth managers in the world, looking after money for rich individuals and institutions."),
+    ("deutsche", "The fund arm of Deutsche Bank, known as DWS, managing money across shares, bonds and property."),
+    ("pimco", "A specialist in bonds and one of the largest fixed income managers anywhere."),
+    ("allianz", "A giant German insurer whose fund arm invests the premiums it collects, and the parent of PIMCO."),
+    ("wells fargo", "The fund arm of Wells Fargo, one of America's largest high street banks."),
+    ("bank of america", "The fund and wealth arm of Bank of America, which also owns the Merrill brand."),
+    ("merrill", "The wealth and investment side of Bank of America, a long established American broker."),
+    ("legal & general", "A large British insurer and one of the biggest managers of pension money in the UK, known as LGIM."),
+    ("legal and general", "A large British insurer and one of the biggest managers of pension money in the UK, known as LGIM."),
+    ("schroders", "One of Britain's oldest and largest investment managers, running funds for institutions and savers."),
+    ("aberdeen", "A British manager, now called abrdn, offering funds across shares, bonds and property."),
+    ("abrdn", "A British manager offering funds across shares, bonds and property, formerly Aberdeen."),
+    ("nuveen", "The fund arm of American pensions giant TIAA, with a strong focus on income and real assets."),
+    ("bridgewater", "The world's largest hedge fund, famous for trading on big economic trends."),
+    ("citadel", "A large American hedge fund and market maker known for fast, computer driven trading."),
+    ("renaissance", "A secretive hedge fund that trades using heavy maths and statistics, run by former scientists."),
+    ("royal bank of canada", "The fund arm of Canada's largest bank, known as RBC."),
+    ("bank of montreal", "The fund arm of one of Canada's oldest banks, known as BMO."),
+    ("macquarie", "An Australian bank and one of the world's biggest investors in infrastructure like roads and airports."),
+]
+
+_FUND_BLURB_FALLBACK = (
+    "An institutional investment firm that buys and holds shares in companies on "
+    "behalf of its clients."
+)
+
+
+def fund_description(name: str) -> str:
+    """Return a plain-English blurb for a fund, matched on its name."""
+    lowered = (name or "").lower()
+    for match, text in FUND_BLURBS:
+        if match in lowered:
+            return text
+    return _FUND_BLURB_FALLBACK
+
+
+def with_descriptions(funds: list[dict]) -> list[dict]:
+    """Attach a fresh `description` to each fund. Applied at serve time so edits to
+    FUND_BLURBS take effect immediately, even for funds cached before this field
+    existed. Mutates and returns the list."""
+    for f in funds:
+        f["description"] = fund_description(f.get("fund", ""))
+    return funds
+
+
 def build_fund_holdings(assets: list[dict]) -> list[dict]:
     """Invert per-ticker institutional data into per-fund holdings across the given
     tracked assets ([{ticker, universe}, ...]).
@@ -323,6 +393,7 @@ def build_fund_holdings(assets: list[dict]) -> list[dict]:
     result = list(funds.values())
     for entry in result:
         entry["positions"].sort(key=lambda p: p.get("value") or 0, reverse=True)
+        entry["description"] = fund_description(entry["fund"])
     result.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
     return result
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
-import { tierMeta } from "./sentimentDisplay";
+import { tierMeta, scoreMeta } from "./sentimentDisplay";
 import SentimentIndicator from "./SentimentIndicator";
 
 export type NewsArticle = {
@@ -10,6 +10,7 @@ export type NewsArticle = {
   headline?: string;
   url?: string | null;
   sentiment?: string;
+  sentiment_score?: number; // 0-100, this article's own contribution
 };
 
 // Per-article transparency list: each article's date, reliability tier,
@@ -59,6 +60,14 @@ export default function NewsArticles({ articles }: { articles: NewsArticle[] }) 
                   >
                     {t.label}
                   </span>
+                  {a.sentiment_score != null && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full font-mono font-medium ${scoreMeta(a.sentiment_score).cls}`}
+                      title="Sentiment score for this article (0 to 100)"
+                    >
+                      {Math.round(a.sentiment_score)}
+                    </span>
+                  )}
                   <span className="truncate">{a.source || "—"}</span>
                 </div>
               </div>

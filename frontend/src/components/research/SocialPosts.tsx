@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ExternalLink, Heart, MessageSquare, Repeat2 } from "lucide-react";
 import SentimentIndicator from "./SentimentIndicator";
+import { scoreMeta } from "./sentimentDisplay";
 
 export type SocialPost = {
   platform?: string;
@@ -12,6 +13,7 @@ export type SocialPost = {
   reshares?: number;
   replies?: number;
   sentiment?: string;
+  sentiment_score?: number; // 0-100, this post's own contribution
 };
 
 // A single engagement count with its icon; hidden when the count is zero.
@@ -66,6 +68,14 @@ export default function SocialPosts({ posts }: { posts: SocialPost[] }) {
                   <span className="truncate">
                     {p.author ? `@${p.author}` : "StockTwits"}
                   </span>
+                  {p.sentiment_score != null && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full font-mono font-medium ${scoreMeta(p.sentiment_score).cls}`}
+                      title="Sentiment score for this post (0 to 100)"
+                    >
+                      {Math.round(p.sentiment_score)}
+                    </span>
+                  )}
                   <EngagementStat icon={Heart} count={p.likes} label="likes" />
                   <EngagementStat
                     icon={MessageSquare}

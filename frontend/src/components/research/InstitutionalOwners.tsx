@@ -1,4 +1,4 @@
-import { Building2, TrendingUp, TrendingDown } from "lucide-react";
+import { Building2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { useInstitutionalData } from "../../hooks/useInstitutionalData";
 
 // Institutional (13F) ownership for a ticker — the "big funds" behind a stock.
@@ -69,6 +69,12 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
   const hasData =
     !!data && (holders.length > 0 || data.institutions_pct != null);
 
+  // Direction of travel from the latest 13F: how many holders grew vs trimmed
+  // their stake. yfinance only lists current holders, so fully-exited positions
+  // can't appear — we report Added / Reduced, not New / Exited, to stay honest.
+  const addedCount = holders.filter((h) => (h.pct_change ?? 0) > 0).length;
+  const reducedCount = holders.filter((h) => (h.pct_change ?? 0) < 0).length;
+
   return (
     <section className="soft-card w-full p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -125,9 +131,24 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
           {/* Top holders */}
           {holders.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-                Top holders
-              </p>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                  Top holders
+                </p>
+                {(addedCount > 0 || reducedCount > 0) && (
+                  <p className="text-[11px] text-brand-muted-fg flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-brand-primary font-medium">
+                      <TrendingUp className="w-3 h-3" />
+                      {addedCount} added
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-semantic-danger font-medium">
+                      <TrendingDown className="w-3 h-3" />
+                      {reducedCount} trimmed
+                    </span>
+                    <span className="text-brand-muted-fg">this filing</span>
+                  </p>
+                )}
+              </div>
               {holders.map((h, i) => (
                 <div
                   key={`${h.holder}-${i}`}
@@ -167,6 +188,18 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
               ))}
             </div>
           )}
+
+          {/* Lagging-signal caveat — 13F filings arrive quarterly and up to 45
+              days after quarter-end, so this is a snapshot of the past. */}
+          <div className="flex items-start gap-2 rounded-2xl border border-brand-border/60 bg-brand-bg/40 px-4 py-3">
+            <Info className="w-3.5 h-3.5 text-brand-muted-fg shrink-0 mt-0.5" />
+            <p className="text-[11px] text-brand-muted-fg leading-snug">
+              13F filings are a lagging signal: funds report only once a quarter,
+              up to 45 days after it ends, so they may have traded since. Treat
+              this as a snapshot of the last filing{asOf ? ` (${fmtDate(asOf)})` : ""},
+              not today's positions.
+            </p>
+          </div>
 
           {/* Source */}
           <div className="pt-3 border-t border-brand-border/50 flex items-center justify-between gap-3">

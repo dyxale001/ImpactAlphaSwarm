@@ -177,13 +177,14 @@ async def top_funds():
     first build after expiry aggregates every tracked ticker, so it can be slow."""
     cached = ww.read_funds_cache()
     if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
-        return {"funds": cached.get("payload") or [], "cached": True, "fetched_at": cached.get("fetched_at")}
+        funds = ww.with_descriptions(cached.get("payload") or [])
+        return {"funds": funds, "cached": True, "fetched_at": cached.get("fetched_at")}
 
     assets = supabase.table("assets").select("ticker, universe").execute().data or []
     loop = asyncio.get_running_loop()
     funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
     fetched_at = ww.write_funds_cache(funds)
-    return {"funds": funds, "cached": False, "fetched_at": fetched_at}
+    return {"funds": ww.with_descriptions(funds), "cached": False, "fetched_at": fetched_at}
 
 
 @app.post("/api/analysis/start")

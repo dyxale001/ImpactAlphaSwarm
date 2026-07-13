@@ -123,6 +123,10 @@ export interface FundPosition {
 export interface FundHolding {
   fund: string;
   total_value: number;
+  // Plain-English blurb of who the fund is. Sourced from the backend so the
+  // wording is editable without a frontend redeploy. May be absent on older
+  // cached payloads.
+  description?: string | null;
   positions: FundPosition[];
 }
 

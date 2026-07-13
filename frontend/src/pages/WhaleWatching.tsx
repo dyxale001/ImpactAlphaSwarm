@@ -14,7 +14,10 @@ import {
 import { useUniverseAssets } from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
-import FundHoldingsView from "../components/research/FundHoldingsView";
+import FundHoldingsView, {
+  FundHoldingsDetail,
+} from "../components/research/FundHoldingsView";
+import type { FundHolding } from "../services/api/analysis";
 
 // Mirrors the universe tiles used in Settings' Investment Preferences.
 const UNIVERSE_TILES = [
@@ -28,6 +31,7 @@ const UNIVERSE_TILES = [
 export default function WhaleWatchingPage() {
   const { byUniverse, isLoading, error } = useUniverseAssets();
   const [section, setSection] = useState<"universes" | "funds">("universes");
+  const [openFund, setOpenFund] = useState<FundHolding | null>(null);
   const [universe, setUniverse] = useState<string | null>(null);
   const [ticker, setTicker] = useState<string | null>(null);
   const [tickerTab, setTickerTab] = useState<"insiders" | "institutions">(
@@ -80,7 +84,10 @@ export default function WhaleWatchingPage() {
         ).map((s) => (
           <button
             key={s.id}
-            onClick={() => setSection(s.id)}
+            onClick={() => {
+              setSection(s.id);
+              setOpenFund(null);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               section === s.id
                 ? "bg-brand-primary text-brand-bg"
@@ -94,7 +101,11 @@ export default function WhaleWatchingPage() {
       </div>
 
       {section === "funds" ? (
-        <FundHoldingsView />
+        openFund ? (
+          <FundHoldingsDetail fund={openFund} onBack={() => setOpenFund(null)} />
+        ) : (
+          <FundHoldingsView onOpenFund={setOpenFund} />
+        )
       ) : (
         <div className="space-y-6">
           {/* Breadcrumb (only when drilled into a universe/ticker) */}

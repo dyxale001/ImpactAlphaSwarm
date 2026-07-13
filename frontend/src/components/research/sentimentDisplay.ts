@@ -16,3 +16,14 @@ export function tierMeta(tier: number | null | undefined): {
       return { label: "Other", cls: "bg-slate-400/15 text-slate-500" };
   }
 }
+
+// Styling for a per-item sentiment score badge (0-100). Colour tracks the same
+// positive / neutral / negative thresholds used to label each article or post.
+export function scoreMeta(score: number | null | undefined): {
+  cls: string;
+} {
+  if (score == null) return { cls: "bg-slate-400/15 text-slate-500" };
+  if (score >= 55) return { cls: "bg-emerald-500/10 text-emerald-600" };
+  if (score <= 45) return { cls: "bg-rose-500/10 text-rose-600" };
+  return { cls: "bg-slate-400/15 text-slate-500" };
+}
