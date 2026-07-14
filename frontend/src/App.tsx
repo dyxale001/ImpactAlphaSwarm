@@ -19,6 +19,7 @@ import DashboardPage from './pages/Dashboard'
 import ResearchPage from './pages/Research'
 import WatchlistPage from './pages/Watchlist'
 import PortfolioPage from './pages/Portfolio'
+import WhaleWatchingPage from './pages/WhaleWatching'
 import AssetDetailsPage from './pages/AssetDetailsPage'
 import HowItWorks from './pages/HowItWorks'
 import SettingsPage from './pages/Settings'
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/whale-watching" element={<WhaleWatchingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/asset/:ticker" element={<AssetDetailsPage />} />
           <Route path="/asset/:ticker/how-it-works" element={<HowItWorks />} />
