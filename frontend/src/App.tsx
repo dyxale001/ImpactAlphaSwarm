@@ -26,6 +26,7 @@ import AssetDetailsPage from "./pages/AssetDetailsPage";
 import HowItWorks from "./pages/HowItWorks";
 import SettingsPage from "./pages/Settings";
 import ResetPassword from "./pages/ResetPassword";
+import WhaleWatchingPage from "./pages/WhaleWatching";
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
