@@ -851,11 +851,6 @@ def _tier_counts(news_mentions: list[SocialMention]) -> dict[str, int]:
 
 
 def _influence_weights(scored: list[dict[str, Any]]) -> dict[int, float]:
-	"""Fraction (0-1) of the aggregate sentiment score each item is responsible
-	for, mirroring the tier/recency weighting in _aggregate_signed. Sums to ~1
-	across the tiered set (or across all items when none carry a tier, e.g. social
-	posts). Distinct from an item's own raw text sentiment: this is its PULL on the
-	rolled-up score, driven by tier reliability and recency, not by the text."""
 	by_tier: dict[int, list[tuple[int, float]]] = {1: [], 2: [], 3: []}
 	untiered: list[tuple[int, float]] = []
 	for item in scored:
