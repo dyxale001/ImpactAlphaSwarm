@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import datetime
 from typing import List, Optional
 
 import httpx
@@ -8,8 +9,10 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
-from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status
+from src.utils.supabase_client import (
+    SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase,
+    create_ai_run, update_ai_run_status, fetch_price_at_run_in_zar,
+)
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
@@ -128,6 +131,134 @@ async def analysis_result(run_id: str):
         })
     return {"top_5": top_5}
 
+
+STALE_DAYS = 4  # matches the 4-day staleness window in the design notes
+
+@app.get("/api/assets/{ticker}/refresh")
+async def refresh_asset_cache(ticker: str):
+    """Refresh the cached price for a single asset.
+
+    Called when a user views an asset's details page. Respects a 4-day
+    staleness window — yfinance is only called when the cache is actually old,
+    so frequent page views don't hammer the external API.
+    """
+    ticker = ticker.upper()
+
+    # 1. Look up current cache state
+    result = supabase.table("assets").select("id, ticker, name, current_price, last_updated, universe") \
+        .eq("ticker", ticker).maybe_single().execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail=f"Asset {ticker} not found in database")
+
+    asset = result.data
+    last_updated_raw = asset.get("last_updated")
+
+    # 2. Check staleness
+    is_stale = True
+    age_days = None
+    if last_updated_raw:
+        try:
+            lu = datetime.datetime.fromisoformat(last_updated_raw.replace("Z", "+00:00"))
+            age_days = (datetime.datetime.now(datetime.timezone.utc) - lu).days
+            is_stale = age_days >= STALE_DAYS
+        except ValueError:
+            pass  # treat as stale if timestamp is unparseable
+
+    if not is_stale:
+        return {
+            "ticker": ticker,
+            "current_price": asset.get("current_price"),
+            "last_updated": last_updated_raw,
+            "age_days": age_days,
+            "refreshed": False,
+            "message": f"Cache is fresh ({age_days}d old)",
+        }
+
+    # 3. Fetch fresh price via yfinance (ZAR-converted)
+    try:
+        fresh_price = fetch_price_at_run_in_zar(ticker)
+    except Exception as exc:
+        logger.warning("yfinance price fetch failed for %s: %s", ticker, exc)
+        fresh_price = None
+
+    if fresh_price is None:
+        return {
+            "ticker": ticker,
+            "current_price": asset.get("current_price"),
+            "last_updated": last_updated_raw,
+            "refreshed": False,
+            "message": "Could not fetch fresh price from market data",
+        }
+
+    # 4. Persist updated price
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000000+00:00")
+    supabase.table("assets").update({
+        "current_price": round(fresh_price, 4),
+        "last_updated": now,
+    }).eq("ticker", ticker).execute()
+
+    logger.info("Refreshed cache for %s: R%.2f (was %dd old)", ticker, fresh_price, age_days or 0)
+
+    return {
+        "ticker": ticker,
+        "current_price": round(fresh_price, 4),
+        "last_updated": now,
+        "age_days": age_days,
+        "refreshed": True,
+        "message": f"Price refreshed from market data",
+    }
+
+
+@app.get("/api/assets/{ticker}/history")
+async def get_price_history(ticker: str):
+    """Return up to 14 days of daily closing prices in ZAR for sparkline display."""
+    import yfinance as yf
+
+    try:
+        t = yf.Ticker(ticker.upper())
+        hist = t.history(period="14d", interval="1d", auto_adjust=False)
+
+        if hist.empty:
+            return {"ticker": ticker.upper(), "closes": [], "dates": []}
+
+        closes = hist["Close"].dropna().tolist()
+        dates  = [str(d.date()) for d in hist.index]
+
+        # Detect currency and convert to ZAR
+        currency = ""
+        try:
+            currency = str(t.fast_info.currency or "").upper()
+        except Exception:
+            pass
+
+        multiplier = 1.0
+        if currency and currency not in ("ZAR", ""):
+            if currency in ("ZAC", "ZA CENT", "ZACP"):
+                multiplier = 0.01
+            else:
+                try:
+                    fx = yf.Ticker(f"{currency}ZAR=X")
+                    rate = fx.fast_info.last_price
+                    if rate:
+                        multiplier = float(rate)
+                except Exception:
+                    pass  # leave multiplier as 1.0
+
+        zar_closes = [round(c * multiplier, 2) for c in closes]
+
+        return {
+            "ticker":  ticker.upper(),
+            "closes":  zar_closes,
+            "dates":   dates,
+            "currency": "ZAR",
+        }
+
+    except Exception as exc:
+        logger.warning("Price history fetch failed for %s: %s", ticker, exc)
+        return {"ticker": ticker.upper(), "closes": [], "dates": []}
+
+
 class DeleteUserRequest(BaseModel):
     user_id: str
 
@@ -138,10 +269,6 @@ class ResetPasswordRequest(BaseModel):
 class ToggleUserStatusRequest(BaseModel):
     user_id: str
     is_active: bool
-
-class SetUserRoleRequest(BaseModel):
-    user_id: str
-    role: str  # 'admin' or 'user'
 
 async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
     if not authorization:
@@ -253,27 +380,6 @@ async def toggle_user_status(
 
     action = "activated" if req.is_active else "deactivated"
     return {"ok": True, "is_active": req.is_active, "message": f"User {action} successfully"}
-
-
-@app.post("/api/admin/set-user-role")
-async def set_user_role(
-    req: SetUserRoleRequest,
-    authorization: Optional[str] = Header(None),
-):
-    """Promote a user to admin or demote an admin back to user (admin only)."""
-    requester_id = await _get_user_id_from_bearer(authorization)
-    await _require_admin(requester_id)
-
-    if req.role not in ("admin", "user"):
-        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
-
-    if req.user_id == requester_id:
-        raise HTTPException(status_code=400, detail="Cannot modify your own role")
-
-    supabase.table("users").update({"role": req.role}).eq("id", req.user_id).execute()
-
-    action = "promoted to admin" if req.role == "admin" else "demoted to user"
-    return {"ok": True, "role": req.role, "message": f"User {action} successfully"}
 
 
 @app.post("/api/admin/delete-user")

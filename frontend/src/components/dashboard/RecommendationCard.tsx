@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, MessageSquare, BarChart3, Flame, Eye } from "lucide-react";
 import { type AssetRecommendation } from "../../hooks/useDashboardStats";
 import DualBar from "./DualBar";
+import AddToWatchlistButton from "./Addtowatchlistbutton";
 
 type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
 
@@ -170,6 +171,7 @@ export default function RecommendationCard({
         >
           Full analysis <ArrowRight className="w-3 h-3" />
         </Link>
+        <AddToWatchlistButton ticker={asset.ticker} />
       </div>
     </div>
   );

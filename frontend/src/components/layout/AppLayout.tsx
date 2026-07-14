@@ -17,8 +17,7 @@ export default function AppLayout() {
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
-  // Show only Dashboard and Settings for now
-  const visibleNavItems = navItems.filter((i) => i.name === "Dashboard" || i.name === "Settings");
+const visibleNavItems = navItems;
 
   return (
     <div className="flex h-screen bg-brand-bg text-brand-fg overflow-hidden">

@@ -1,49 +1,314 @@
-import { Link } from "react-router-dom";
-import { TrendingUp, TrendingDown, X } from "lucide-react";
-import { type AssetRecommendation } from "../../data/mockData";
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, MessageSquare, BarChart3, Eye, Flame, X, Sparkles,
+         TrendingUp, TrendingDown } from 'lucide-react'
+import { type WatchlistAsset, type ScoreDelta } from '../../hooks/useWatchlistData'
 
-interface Props {
-  asset: AssetRecommendation;
-  onRemove: (ticker: string) => void;
+// ─── Sector styles ─────────────────────────────────────────────────────────
+const SECTOR_STYLE: Record<string, { border: string; text: string; dot: string }> = {
+  'Technology':    { border: 'border-l-blue-400',   text: 'text-blue-400',   dot: 'bg-blue-400' },
+  'Green Energy':  { border: 'border-l-green-400',  text: 'text-green-400',  dot: 'bg-green-400' },
+  'Finance':       { border: 'border-l-amber-400',  text: 'text-amber-400',  dot: 'bg-amber-400' },
+  'AI & Robotics': { border: 'border-l-purple-400', text: 'text-purple-400', dot: 'bg-purple-400' },
+  'Healthcare':    { border: 'border-l-pink-400',   text: 'text-pink-400',   dot: 'bg-pink-400' },
+}
+const DEFAULT_SECTOR = { border: 'border-l-brand-border', text: 'text-brand-muted-fg', dot: 'bg-brand-border' }
+
+function scoreColor(score: number) {
+  if (score >= 70) return 'text-brand-accent'
+  if (score >= 50) return 'text-semantic-warning'
+  return 'text-brand-primary'
 }
 
-export default function WatchedAssetCard({ asset, onRemove }: Props) {
+function daysSince(isoString?: string) {
+  if (!isoString) return null
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60 * 60 * 24))
+  if (diff === 0) return 'Today'
+  if (diff === 1) return '1d ago'
+  return `${diff}d ago`
+}
+
+function MiniSparkline({ ticker }: { ticker: string }) {
+  const [prices, setPrices]   = useState<number[]>([])
+  const [fetching, setFetching] = useState(true)
+
+  useEffect(() => {
+    const BASE = (import.meta as any).env?.VITE_API_BASE ?? ''
+    fetch(`${BASE}/api/assets/${ticker.toUpperCase()}/history`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setPrices(data?.closes ?? []); setFetching(false) })
+      .catch(() => setFetching(false))
+  }, [ticker])
+
+  // Fallback: seeded fake line while loading or if no data
+  if (fetching || prices.length < 2) {
+    const seed = ticker.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+    const pts  = Array.from({ length: 14 }, (_, i) => {
+      const v = Math.sin((seed + i) * 1.7) * 8 + Math.cos((seed + i) * 0.9) * 6
+      return `${i * 8},${20 - v}`
+    }).join(' ')
+    return (
+      <svg viewBox="0 0 112 40" className={`w-full h-10 ${fetching ? 'opacity-20 animate-pulse' : 'opacity-30'}`}>
+        <polyline points={pts} fill="none" stroke="var(--color-brand-accent)"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+
+  // Scale real prices into the SVG viewBox
+  const W = 112, H = 36, PAD = 3
+  const min   = Math.min(...prices)
+  const max   = Math.max(...prices)
+  const range = max - min || 1
+
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * W
+    const y = H - PAD - ((p - min) / range) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+
+  const isUp   = prices[prices.length - 1] >= prices[0]
+  const stroke = isUp ? '#22c55e' : '#ef4444'
+
   return (
-    <div className="soft-card p-4 flex items-center gap-3">
-      <div className="w-11 h-11 rounded-full bg-brand-bg/70 border border-brand-border/60 flex items-center justify-center text-[11px] font-bold font-mono shrink-0 text-brand-fg">
-        {asset.ticker.slice(0, 3)}
+    <svg viewBox="0 0 112 40" className="w-full h-10">
+      <polyline points={pts} fill="none" stroke={stroke}
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function SignalBar({ label, score, emphasis = false, direction }: {
+  label: string; score: number; emphasis?: boolean; direction?: ScoreDelta
+}) {
+  const pct = Math.max(0, Math.min(100, score))
+  const barColor = direction === 'up'   ? 'bg-semantic-success'
+    : direction === 'down' ? 'bg-semantic-danger'
+    : emphasis             ? 'bg-brand-primary'
+    :                        'bg-brand-primary/80'
+  const arrow = direction === 'up'
+    ? <TrendingUp   className="w-3.5 h-3.5 text-semantic-success" />
+    : direction === 'down'
+    ? <TrendingDown className="w-3.5 h-3.5 text-semantic-danger" />
+    : null
+  const scoreColor = direction === 'up' ? 'text-semantic-success'
+    : direction === 'down' ? 'text-semantic-danger'
+    : 'text-brand-fg'
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center">
+        <span className="text-xs uppercase tracking-widest text-brand-muted-fg font-bold flex items-center gap-1.5">
+          {label} {arrow}
+        </span>
+        <span className={`font-mono font-bold text-lg ${scoreColor}`}>
+          {score}<span className="text-brand-muted-fg text-xs font-normal"> /100</span>
+        </span>
       </div>
-      
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <Link to={`/asset/${asset.ticker}`} className="text-sm font-semibold hover:underline truncate text-brand-fg">
-            {asset.name}
-          </Link>
-        </div>
-        
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className="text-xs font-mono font-semibold text-brand-fg">R {asset.price.toFixed(2)}</span>
-          <span className={`chip ${asset.change >= 0 ? "bg-brand-accent/15 text-brand-accent" : "bg-brand-primary/15 text-brand-primary"}`}>
-            {asset.change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {asset.change >= 0 ? "+" : ""}{asset.change}%
-          </span>
-          <span className={`chip ${
-            asset.confidenceScore >= 70 ? "bg-brand-primary/15 text-brand-primary" :
-            asset.confidenceScore >= 50 ? "bg-semantic-warning/15 text-semantic-warning" :
-            "bg-brand-muted-fg/20 text-brand-muted-fg"
-          }`}>
-            Score {asset.confidenceScore}
-          </span>
-        </div>
-      </div>
-      
-      <button
-        onClick={() => onRemove(asset.ticker)}
-        className="p-2 rounded-full hover:bg-brand-bg/60 text-brand-muted-fg hover:text-brand-fg transition-colors shrink-0"
-        title="Remove from watchlist"
-      >
-        <X className="w-4 h-4" />
-      </button>
+<div className="h-1.5 w-full bg-brand-border/25 rounded-full overflow-hidden">
+  <div
+    className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+    style={{ width: `${pct}%` }}
+  />
+</div>
     </div>
-  );
+  )
+}
+
+type Tab = 'overview' | 'sentiment' | 'numbers'
+
+function getPreview(asset: WatchlistAsset, tab: Tab) {
+  if (!asset.confidenceScore) return {
+    title: 'No AI Data',
+    body: "This asset hasn't appeared in any of your analysis runs yet. Run a new analysis from the dashboard — watchlist assets are included automatically.",
+  }
+  switch (tab) {
+    case 'sentiment':
+      return {
+        title: 'Market Vibe',
+        body: (asset.sentimentScore ?? 0) >= 70
+          ? `Strong social momentum. A score of ${asset.sentimentScore}/100 indicates the market is highly bullish on ${asset.ticker}.`
+          : `Neutral chatter. A score of ${asset.sentimentScore}/100 indicates balanced or quiet discussion online.`,
+      }
+    case 'numbers':
+      return {
+        title: 'Hard Numbers',
+        body: `Quantitative Score: ${asset.quantScore}/100. Higher quant scores indicate stronger technical signals and healthier fundamentals backing the AI's decision.`,
+      }
+    default:
+      return { title: 'Quick Take', body: asset.reasoning || 'No reasoning trace available.' }
+  }
+}
+
+interface Props {
+  asset: WatchlistAsset
+  onRemove: (watchlistId: string) => void
+  isRemoving?: boolean
+  isComparing?: boolean
+  onToggleCompare?: (ticker: string) => void
+  compareDisabled?: boolean   // true when 3 assets already selected and this isn't one
+}
+
+export default function WatchedAssetCard({
+  asset, onRemove, isRemoving,
+  isComparing, onToggleCompare, compareDisabled
+}: Props) {
+  const [tab, setTab] = useState<Tab>('overview')
+
+  const preview    = getPreview(asset, tab)
+  const hasAI      = asset.confidenceScore !== undefined
+  const sc         = SECTOR_STYLE[asset.universe] ?? DEFAULT_SECTOR
+  const displayPrice = hasAI && (asset.priceAtRun ?? 0) > 0 ? asset.priceAtRun! : asset.current_price
+  const analysedLabel = daysSince(asset.analysedAt)
+
+  // Per-asset price staleness (4-day window matching backend)
+  const priceDaysOld = asset.lastUpdated
+    ? Math.floor((Date.now() - new Date(asset.lastUpdated).getTime()) / (1000 * 60 * 60 * 24))
+    : null
+  const isPriceStale = priceDaysOld !== null && priceDaysOld >= 4
+
+  const tabs = [
+    { id: 'overview'  as Tab, label: 'Overview', icon: Eye },
+    { id: 'sentiment' as Tab, label: 'Vibe',     icon: MessageSquare },
+    { id: 'numbers'   as Tab, label: 'Numbers',  icon: BarChart3 },
+  ]
+
+  return (
+    <div
+      className={`soft-card border-l-4 ${sc.border} p-5 space-y-4 transition-all flex flex-col
+        ${isComparing ? 'ring-2 ring-brand-primary/40' : 'hover:border-brand-primary/30'}
+        ${isRemoving  ? 'opacity-40 pointer-events-none' : ''}
+        ${compareDisabled ? 'opacity-50' : ''}`}
+      style={{ animation: 'slide-up 0.4s ease-out forwards' }}
+    >
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Compare checkbox */}
+          {onToggleCompare && (
+            <button
+              onClick={() => onToggleCompare(asset.ticker)}
+              disabled={compareDisabled}
+              title={isComparing ? 'Remove from comparison' : 'Add to comparison'}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                isComparing
+                  ? 'bg-brand-primary border-brand-primary'
+                  : 'border-brand-border/60 hover:border-brand-primary/60'
+              } disabled:opacity-30`}
+            >
+              {isComparing && <span className="text-white text-[10px] font-bold">✓</span>}
+            </button>
+          )}
+
+          <div className="w-9 h-9 rounded-full bg-brand-bg/70 border border-brand-border/60 flex items-center justify-center text-[10px] font-bold font-mono shrink-0">
+            {asset.ticker.slice(0, 4)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-base font-semibold truncate text-primary">{asset.ticker}</p>
+            <p className="text-[12px] text-primary/80 truncate">{asset.name}</p>
+            {displayPrice > 0 && (
+              <p className="text-sm font-mono text-primary">R {displayPrice.toFixed(2)}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {asset.universe && (
+            <div className={`flex items-center gap-1 chip bg-brand-border/20 ${sc.text} text-[10px]`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+              {asset.universe}
+            </div>
+          )}
+          {hasAI && analysedLabel && (
+            <div className="chip bg-brand-border/20 text-brand-muted-fg text-[10px]">
+              {analysedLabel}
+            </div>
+          )}
+          {isPriceStale && (
+            <div className="chip bg-semantic-warning/15 text-semantic-warning text-[10px]" title="Price data may be outdated — visit the asset page to refresh">
+              Price {priceDaysOld}d old
+            </div>
+          )}
+          <button onClick={() => onRemove(asset.id)} disabled={isRemoving}
+            className="p-1.5 rounded-full hover:bg-semantic-danger/10 text-brand-muted-fg hover:text-semantic-danger transition-colors"
+            title="Remove">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Sparkline ──────────────────────────────────────────────────── */}
+      <MiniSparkline ticker={asset.ticker} />
+
+      {/* ── AI scores ──────────────────────────────────────────────────── */}
+      {hasAI ? (
+        <>
+          <div className="flex items-end gap-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-0.5">Confidence</p>
+              <p className={`text-2xl font-bold font-mono leading-none ${scoreColor(asset.confidenceScore!)}`}>
+                {asset.confidenceScore}
+                <span className="text-sm text-brand-muted-fg font-normal">/100</span>
+              </p>
+            </div>
+            <div className="flex gap-3 mb-0.5">
+              <div>
+                <p className="text-[10px] text-brand-muted-fg uppercase tracking-wider">Sentiment</p>
+                <p className={`text-base font-bold font-mono ${scoreColor(asset.sentimentScore ?? 0)}`}>{asset.sentimentScore}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-brand-muted-fg uppercase tracking-wider">Quant</p>
+                <p className={`text-base font-bold font-mono ${scoreColor(asset.quantScore ?? 0)}`}>{asset.quantScore}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <SignalBar label="Sentiment" score={asset.sentimentScore ?? 0} direction={asset.sentimentDelta} />
+            <SignalBar label="Quant"     score={asset.quantScore     ?? 0} direction={asset.quantDelta} />
+          </div>
+
+          {asset.isHype && (
+            <span className="chip bg-semantic-warning/15 text-semantic-warning w-fit">
+              <Flame className="w-3 h-3" /> Hype flagged — penalty applied
+            </span>
+          )}
+
+          <div className="flex items-center gap-1 bg-brand-bg/60 border border-brand-border/60 rounded-full p-1">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded-full transition-colors ${
+                  tab === t.id ? 'bg-brand-primary text-brand-bg' : 'text-brand-muted-fg hover:text-brand-fg'
+                }`}>
+                <t.icon className="w-3 h-3" />
+                <span className="hidden sm:inline">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50">
+            <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold">{preview.title}</p>
+            <p className="text-xs text-brand-fg/85 leading-relaxed">{preview.body}</p>
+          </div>
+        </>
+      ) : (
+        <div className="bg-brand-bg/40 rounded-2xl p-4 border border-brand-border/40 flex items-center gap-3">
+          <Sparkles className="w-4 h-4 text-brand-muted-fg shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-brand-fg">No AI analysis yet</p>
+            <p className="text-[11px] text-brand-muted-fg mt-0.5">
+              This asset hasn't appeared in any analysis run. Watchlist assets are automatically included when you reanalyse.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <div className="mt-auto pt-1">
+        <Link to={`/asset/${asset.ticker}`}
+          className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold">
+          Full analysis <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+    </div>
+  )
 }
