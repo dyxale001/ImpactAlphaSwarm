@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ExternalLink, Heart, MessageSquare, Repeat2 } from "lucide-react";
 import SentimentIndicator from "./SentimentIndicator";
-import { scoreMeta } from "./sentimentDisplay";
+import SentimentSignals from "./SentimentSignals";
 
 export type SocialPost = {
   platform?: string;
@@ -13,7 +13,8 @@ export type SocialPost = {
   reshares?: number;
   replies?: number;
   sentiment?: string;
-  sentiment_score?: number; // 0-100, this post's own contribution
+  sentiment_score?: number; // 0-100, this post's own text sentiment
+  influence?: number; // % of the social score this post drives (recency)
 };
 
 // A single engagement count with its icon; hidden when the count is zero.
@@ -63,19 +64,15 @@ export default function SocialPosts({ posts }: { posts: SocialPost[] }) {
                 <p className="text-sm text-brand-fg line-clamp-3">
                   {p.text || "—"}
                 </p>
-                <div className="mt-1 flex items-center gap-2 text-[11px] text-brand-muted-fg">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-brand-muted-fg">
                   <span className="font-mono">{p.date || "—"}</span>
                   <span className="truncate">
                     {p.author ? `@${p.author}` : "StockTwits"}
                   </span>
-                  {p.sentiment_score != null && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full font-mono font-medium ${scoreMeta(p.sentiment_score).cls}`}
-                      title="Sentiment score for this post (0 to 100)"
-                    >
-                      {Math.round(p.sentiment_score)}
-                    </span>
-                  )}
+                  <SentimentSignals
+                    score={p.sentiment_score}
+                    influence={p.influence}
+                  />
                   <EngagementStat icon={Heart} count={p.likes} label="likes" />
                   <EngagementStat
                     icon={MessageSquare}

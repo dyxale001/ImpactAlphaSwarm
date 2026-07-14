@@ -850,8 +850,44 @@ def _tier_counts(news_mentions: list[SocialMention]) -> dict[str, int]:
 	return counts
 
 
+def _influence_weights(scored: list[dict[str, Any]]) -> dict[int, float]:
+	"""Fraction (0-1) of the aggregate sentiment score each item is responsible
+	for, mirroring the tier/recency weighting in _aggregate_signed. Sums to ~1
+	across the tiered set (or across all items when none carry a tier, e.g. social
+	posts). Distinct from an item's own raw text sentiment: this is its PULL on the
+	rolled-up score, driven by tier reliability and recency, not by the text."""
+	by_tier: dict[int, list[tuple[int, float]]] = {1: [], 2: [], 3: []}
+	untiered: list[tuple[int, float]] = []
+	for item in scored:
+		pair = (id(item), _recency_weight(item.get("created_at")))
+		tier = item.get("tier")
+		if tier in (1, 2, 3):
+			by_tier[tier].append(pair)
+		else:
+			untiered.append(pair)
+
+	weights: dict[int, float] = {}
+	denominator = sum(_tier_share(t) for t in (1, 2, 3) if by_tier[t])
+	if denominator > 0:
+		for tier in (1, 2, 3):
+			group = by_tier[tier]
+			if not group:
+				continue
+			total_rw = sum(rw for _, rw in group)
+			share = _tier_share(tier) / denominator
+			for key, rw in group:
+				frac = (rw / total_rw) if total_rw > 0 else (1.0 / len(group))
+				weights[key] = share * frac
+	elif untiered:
+		total_rw = sum(rw for _, rw in untiered)
+		for key, rw in untiered:
+			weights[key] = (rw / total_rw) if total_rw > 0 else (1.0 / len(untiered))
+	return weights
+
+
 def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	articles: list[dict[str, Any]] = []
+	weights = _influence_weights(scored_news)
 	for item in sorted(scored_news, key=lambda it: it.get("created_at") or "", reverse=True):
 		raw = item["sentiment_raw"]
 		label = "Positive" if raw >= 0.05 else "Negative" if raw <= -0.05 else "Neutral"
@@ -869,6 +905,7 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 				"url": item.get("url"),
 				"sentiment": label,
 				"sentiment_score": item["sentiment_contribution"],  # 0-100
+				"influence": round(weights.get(id(item), 0.0) * 100, 1),  # % of the news score
 			}
 		)
 	return articles
@@ -876,6 +913,7 @@ def _news_articles_payload(scored_news: list[dict[str, Any]]) -> list[dict[str, 
 
 def _social_posts_payload(scored_social: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	posts: list[dict[str, Any]] = []
+	weights = _influence_weights(scored_social)
 	for item in sorted(scored_social, key=lambda it: it.get("created_at") or "", reverse=True):
 		raw = item["sentiment_raw"]
 		label = "Positive" if raw >= 0.05 else "Negative" if raw <= -0.05 else "Neutral"
@@ -897,6 +935,7 @@ def _social_posts_payload(scored_social: list[dict[str, Any]]) -> list[dict[str,
 				"replies": item.get("replies") or 0,
 				"sentiment": label,
 				"sentiment_score": item["sentiment_contribution"],  # 0-100
+				"influence": round(weights.get(id(item), 0.0) * 100, 1),  # % of the social score
 			}
 		)
 	return posts

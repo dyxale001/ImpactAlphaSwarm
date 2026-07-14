@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
-import { tierMeta, scoreMeta } from "./sentimentDisplay";
+import { tierMeta } from "./sentimentDisplay";
 import SentimentIndicator from "./SentimentIndicator";
+import SentimentSignals from "./SentimentSignals";
 
 export type NewsArticle = {
   source?: string;
@@ -10,7 +11,8 @@ export type NewsArticle = {
   headline?: string;
   url?: string | null;
   sentiment?: string;
-  sentiment_score?: number; // 0-100, this article's own contribution
+  sentiment_score?: number; // 0-100, this article's own text sentiment
+  influence?: number; // % of the news score this article drives (tier + recency)
 };
 
 // Per-article transparency list: each article's date, reliability tier,
@@ -53,21 +55,17 @@ export default function NewsArticles({ articles }: { articles: NewsArticle[] }) 
                 <p className="text-sm text-brand-fg line-clamp-2">
                   {a.headline || "—"}
                 </p>
-                <div className="mt-1 flex items-center gap-2 text-[11px] text-brand-muted-fg">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-brand-muted-fg">
                   <span className="font-mono">{a.date || "—"}</span>
                   <span
                     className={`px-1.5 py-0.5 rounded-full font-medium ${t.cls}`}
                   >
                     {t.label}
                   </span>
-                  {a.sentiment_score != null && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full font-mono font-medium ${scoreMeta(a.sentiment_score).cls}`}
-                      title="Sentiment score for this article (0 to 100)"
-                    >
-                      {Math.round(a.sentiment_score)}
-                    </span>
-                  )}
+                  <SentimentSignals
+                    score={a.sentiment_score}
+                    influence={a.influence}
+                  />
                   <span className="truncate">{a.source || "—"}</span>
                 </div>
               </div>
