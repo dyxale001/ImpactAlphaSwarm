@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -32,6 +32,7 @@ export default function AdminLearningCategories() {
     values: emptyFormValues,
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const isEditing = Boolean(editingCategory.id);
@@ -53,16 +54,44 @@ export default function AdminLearningCategories() {
     setFormError(null);
   };
 
+  useEffect(() => {
+    if (!successMessage) return;
+
+    const timeout = window.setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timeout);
+  }, [successMessage]);
+
+  const hasDuplicateDisplayOrder = (displayOrder: number) =>
+    categories.some(
+      (category) =>
+        category.display_order === displayOrder &&
+        category.id !== editingCategory.id,
+    );
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSaving(true);
     setFormError(null);
+    setSuccessMessage(null);
+
+    if (hasDuplicateDisplayOrder(editingCategory.values.display_order)) {
+      setFormError(
+        `Display order ${editingCategory.values.display_order} already exists. Choose a unique number.`,
+      );
+      return;
+    }
+
+    setSaving(true);
 
     try {
       if (editingCategory.id) {
         await updateCategory(editingCategory.id, editingCategory.values);
+        setSuccessMessage("Category updated successfully.");
       } else {
         await createCategory(editingCategory.values);
+        setSuccessMessage("Category created successfully.");
       }
 
       resetForm();
@@ -108,12 +137,14 @@ export default function AdminLearningCategories() {
       return;
 
     setFormError(null);
+    setSuccessMessage(null);
 
     try {
       await deleteCategory(id);
       if (editingCategory.id === id) {
         resetForm();
       }
+      setSuccessMessage(`Category \"${name}\" deleted successfully.`);
     } catch (deleteError) {
       setFormError(
         deleteError instanceof Error
@@ -185,6 +216,15 @@ export default function AdminLearningCategories() {
         {error && (
           <div className="p-4 bg-semantic-danger/10 border border-semantic-danger/30 text-semantic-danger rounded-brand flex items-center gap-3">
             <span className="text-xl"></span> {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="p-4 bg-semantic-success/5 border border-semantic-success/20 text-semantic-success rounded-brand flex items-center gap-3">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-semantic-success/10 text-semantic-success text-sm">
+              ✓
+            </span>
+            <span>{successMessage}</span>
           </div>
         )}
 
