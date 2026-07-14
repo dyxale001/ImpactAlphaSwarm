@@ -63,7 +63,11 @@ class SocialMention:
 
 @dataclass
 class QuantMetrics:
-	"""Representation of quantitative metrics for a ticker."""
+	"""Representation of quantitative metrics for a ticker.
+
+	The flat metrics + raw_quant_score are the legacy fields; the sub-dimension,
+	band and percentile fields are the additive objective outputs of the
+	cross-sectional Stage B normalisation (see quant_analyst.score_universe)."""
 
 	ticker: str
 	rsi: Optional[float] = None
@@ -72,6 +76,12 @@ class QuantMetrics:
 	beta: Optional[float] = None
 	volatility: Optional[float] = None
 	raw_quant_score: Optional[float] = None
+	trailing_return: Optional[float] = None
+	data_points: Optional[int] = None
+	sub_dimensions: Optional[Dict[str, Any]] = None
+	bands: Optional[Dict[str, Any]] = None
+	percentiles: Optional[Dict[str, Any]] = None
+	quant_normalisation: Optional[str] = None
 
 
 class Tracer:

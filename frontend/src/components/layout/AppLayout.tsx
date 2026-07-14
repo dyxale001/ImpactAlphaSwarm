@@ -7,6 +7,7 @@ import {
   LineChart,
   Terminal,
   Settings,
+  Waves,
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -16,12 +17,17 @@ export default function AppLayout() {
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
+    { name: "Whale Watching", path: "/whale-watching", icon: Waves },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
-  // Show only the currently enabled sections in navigation.
+  // Show Dashboard, Whale Watching and Settings for now
   const visibleNavItems = navItems.filter(
-    (i) => i.name === "Dashboard" || i.name === "Learning" || i.name === "Settings",
+    (i) =>
+      i.name === "Dashboard" ||
+      i.name === "Learning" ||
+      i.name === "Whale Watching" ||
+      i.name === "Settings"
   );
 
   return (

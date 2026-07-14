@@ -79,6 +79,7 @@ export default function App() {
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/whale-watching" element={<WhaleWatchingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/asset/:ticker" element={<AssetDetailsPage />} />
           <Route path="/asset/:ticker/how-it-works" element={<HowItWorks />} />
