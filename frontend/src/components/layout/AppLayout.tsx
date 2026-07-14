@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
+  BookOpen,
   Search,
   Eye,
   LineChart,
@@ -12,6 +13,7 @@ import {
 export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
@@ -23,8 +25,9 @@ export default function AppLayout() {
   const visibleNavItems = navItems.filter(
     (i) =>
       i.name === "Dashboard" ||
+      i.name === "Learning" ||
       i.name === "Whale Watching" ||
-      i.name === "Settings",
+      i.name === "Settings"
   );
 
   return (
