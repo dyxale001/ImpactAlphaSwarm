@@ -1,49 +1,83 @@
-
-
-import { useAdminUsers } from '../hooks/useAdminUsers';
-import { formatDbString, formatNumberWithSpaces } from '../utils/stringFormatters';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { supabase } from '../lib/supabase';
+import { useAdminUsers } from "../hooks/useAdminUsers";
+import {
+  formatDbString,
+  formatNumberWithSpaces,
+} from "../utils/stringFormatters";
+import { Link, useNavigate } from "react-router-dom";
+import { Trash2 } from "lucide-react";
+import { useAuthStore } from "../store/authStore";
+import { supabase } from "../lib/supabase";
 
 export default function AdminDashboard() {
-
   const { users, loading, error, deleteUser } = useAdminUsers();
 
-  const {setSession} = useAuthStore();
-    const navigate = useNavigate();
-
-
+  const { setSession } = useAuthStore();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
-    } catch (err) {
+    } catch (err) {}
+    setSession(null);
+    navigate("/", { replace: true });
+  };
 
-    }
-    setSession(null)
-    navigate('/', { replace: true })
-  }
-
-  if (loading) return <div className="p-10 text-brand-fg flex justify-center">Loading platform users...</div>;
+  if (loading)
+    return (
+      <div className="p-10 text-brand-fg flex justify-center">
+        Loading platform users...
+      </div>
+    );
 
   return (
     <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Platform Users</h1>
-            <p className="text-sm text-brand-muted-fg mt-2">Manage user accounts and view investor profiles.</p>
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
+              Admin
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Platform Users
+            </h1>
+            <p className="text-sm text-brand-muted-fg max-w-3xl">
+              Manage user accounts and view investor profiles from the shared
+              admin workspace.
+            </p>
           </div>
-          <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
-            Total Users: {users.length}
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
+              Total Users: {users.length}
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger"
+            >
+              Sign out
+            </button>
           </div>
-          <button
-          onClick={handleSignOut}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger"
-        >
-          Sign out
-        </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            to="/admin"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
+          >
+            Users
+          </Link>
+          <Link
+            to="/admin/learning-categories"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Categories
+          </Link>
+          <Link
+            to="/admin/learning-articles"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Articles
+          </Link>
         </div>
 
         {error && (
@@ -57,28 +91,41 @@ export default function AdminDashboard() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-brand-border/50 bg-brand-bg/50">
-                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">Investor</th>
-                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">Classification</th>
-                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">Strategy Profile</th>
-                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider text-right">Actions</th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Investor
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Classification
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Strategy Profile
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-border/50">
-                {users.map(user => (
-                  <tr key={user.id} className="hover:bg-brand-bg/30 transition-colors group">
+                {users.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="hover:bg-brand-bg/30 transition-colors group"
+                  >
                     <td className="p-5">
                       <div className="font-semibold text-brand-fg text-base">
                         {user.first_name} {user.last_name}
                       </div>
                       <div className="text-brand-muted-fg text-sm flex items-center gap-2 mt-1">
-                         {user.email}
+                        {user.email}
                       </div>
                     </td>
-                    
+
                     <td className="p-5">
                       {user.user_preferences?.ai_derived_expertise ? (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-accent/10 border border-primary/20 text-primary">
-                          {formatDbString(user.user_preferences.ai_derived_expertise)}
+                          {formatDbString(
+                            user.user_preferences.ai_derived_expertise,
+                          )}
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-border text-brand-muted-fg">
@@ -86,51 +133,66 @@ export default function AdminDashboard() {
                         </span>
                       )}
                     </td>
-                    
+
                     <td className="p-5">
                       <div className="grid grid-cols-1 gap-1.5 text-sm">
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-24">Universe:</span>
+                          <span className="text-brand-muted-fg w-24">
+                            Universe:
+                          </span>
                           <span className="font-medium text-brand-fg">
                             {user.user_preferences?.investment_universe?.length
-                              ? user.user_preferences.investment_universe.join(', ')
-                              : 'N/A'}
+                              ? user.user_preferences.investment_universe.join(
+                                  ", ",
+                                )
+                              : "N/A"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-24">Risk:</span>
+                          <span className="text-brand-muted-fg w-24">
+                            Risk:
+                          </span>
                           <span className="font-medium text-brand-fg">
                             {user.user_preferences?.risk_tolerance
-                              ? formatDbString(user.user_preferences.risk_tolerance)
-                              : 'N/A'}
+                              ? formatDbString(
+                                  user.user_preferences.risk_tolerance,
+                                )
+                              : "N/A"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-brand-muted-fg w-24">Capital:</span>
+                          <span className="text-brand-muted-fg w-24">
+                            Capital:
+                          </span>
                           <span className="font-medium text-brand-fg">
                             {user.user_preferences?.capital != null
                               ? `R ${formatNumberWithSpaces(user.user_preferences.capital as string | number)}`
-                              : 'N/A'}
+                              : "N/A"}
                           </span>
                         </div>
                       </div>
                     </td>
-                    
+
                     <td className="p-5 text-right space-x-4">
-                      <Link 
+                      <Link
                         to={`/admin/edit/${user.id}`}
                         className="text-brand-primary hover:text-brand-primary-glow font-semibold text-sm transition-colors"
                       >
                         Edit
                       </Link>
-                      <button 
+                      <button
                         onClick={async () => {
-                          if (window.confirm("Are you sure you want to permanently delete this user?")) {
+                          if (
+                            window.confirm(
+                              "Are you sure you want to permanently delete this user?",
+                            )
+                          ) {
                             await deleteUser(user.id);
                           }
                         }}
-                        className="text-semantic-danger hover:text-red-400 font-semibold text-sm transition-colors"
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-semantic-danger transition-colors hover:text-red-400"
                       >
+                        <Trash2 className="w-4 h-4" />
                         Delete
                       </button>
                     </td>
@@ -139,12 +201,16 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
-          
+
           {users.length === 0 && (
             <div className="p-12 text-center flex flex-col items-center justify-center">
               <span className="text-4xl mb-3"></span>
-              <h3 className="text-lg font-medium text-brand-fg">No users found</h3>
-              <p className="text-brand-muted-fg mt-1">Platform is currently empty.</p>
+              <h3 className="text-lg font-medium text-brand-fg">
+                No users found
+              </h3>
+              <p className="text-brand-muted-fg mt-1">
+                Platform is currently empty.
+              </p>
             </div>
           )}
         </div>

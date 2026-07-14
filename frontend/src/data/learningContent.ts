@@ -6,7 +6,6 @@ export type LearningArticle = {
   summary: string;
   content: string;
   created_at: string;
-  updated_at: string;
 };
 
 export type LearningCategory = {
