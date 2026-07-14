@@ -8,6 +8,7 @@ import {
   useAdminLearningCategories,
 } from "../hooks/useAdminLearningCategories";
 import LearningCategoryForm from "../components/admin/LearningCategoryForm";
+import AdminLearningCategoriesSkeleton from "../components/admin/AdminLearningCategoriesSkeleton";
 
 type EditingCategoryState = {
   id: string | null;
@@ -155,11 +156,7 @@ export default function AdminLearningCategories() {
   };
 
   if (loading) {
-    return (
-      <div className="p-10 text-brand-fg flex justify-center">
-        Loading learning categories...
-      </div>
-    );
+    return <AdminLearningCategoriesSkeleton />;
   }
 
   return (

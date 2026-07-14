@@ -17,6 +17,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { supabase } from "../lib/supabase";
+import AdminDashboardSkeleton from "../components/admin/AdminDashboardSkeleton";
 
 export default function AdminDashboard() {
   const {
@@ -141,11 +142,7 @@ export default function AdminDashboard() {
   };
 
   if (loading) {
-    return (
-      <div className="p-10 text-brand-fg flex justify-center">
-        Loading platform users...
-      </div>
-    );
+    return <AdminDashboardSkeleton />;
   }
 
   return (

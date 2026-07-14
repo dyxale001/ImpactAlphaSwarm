@@ -8,6 +8,7 @@ import {
   useAdminLearningArticles,
 } from "../hooks/useAdminLearningArticles";
 import LearningArticleForm from "../components/admin/LearningArticleForm";
+import AdminLearningArticlesSkeleton from "../components/admin/AdminLearningArticlesSkeleton";
 
 type EditingArticleState = {
   id: string | null;
@@ -153,11 +154,7 @@ export default function AdminLearningArticles() {
   };
 
   if (loading) {
-    return (
-      <div className="p-10 text-brand-fg flex justify-center">
-        Loading learning articles...
-      </div>
-    );
+    return <AdminLearningArticlesSkeleton />;
   }
 
   return (
