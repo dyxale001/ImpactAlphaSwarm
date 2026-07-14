@@ -172,7 +172,7 @@ export default function AdminLearningCategories() {
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
               Create and manage the Learning Centre category structure shown on
-              the public site.
+              the website.
             </p>
           </div>
 

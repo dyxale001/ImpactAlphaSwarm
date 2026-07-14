@@ -1,19 +1,19 @@
-import { type FormEvent } from 'react'
-import { BookOpen, RotateCcw, Save } from 'lucide-react'
-import type { LearningCategoryFormValues } from '../../hooks/useAdminLearningCategories'
+import { type FormEvent } from "react";
+import { BookOpen, RotateCcw, Save } from "lucide-react";
+import type { LearningCategoryFormValues } from "../../hooks/useAdminLearningCategories";
 
 type LearningCategoryFormProps = {
-  values: LearningCategoryFormValues
-  isEditing: boolean
-  isSaving: boolean
-  formError: string | null
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-  onReset: () => void
+  values: LearningCategoryFormValues;
+  isEditing: boolean;
+  isSaving: boolean;
+  formError: string | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onReset: () => void;
   onChange: <K extends keyof LearningCategoryFormValues>(
     field: K,
     value: LearningCategoryFormValues[K],
-  ) => void
-}
+  ) => void;
+};
 
 export default function LearningCategoryForm({
   values,
@@ -32,7 +32,7 @@ export default function LearningCategoryForm({
       <div className="border-b border-brand-border/50 bg-brand-bg/50 px-6 py-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-brand-fg">
-            {isEditing ? 'Edit Category' : 'Create Category'}
+            {isEditing ? "Edit Category" : "Create Category"}
           </h2>
           <p className="text-sm text-brand-muted-fg mt-1">
             Manage the category name, slug, description and display order.
@@ -51,7 +51,7 @@ export default function LearningCategoryForm({
             </label>
             <input
               value={values.name}
-              onChange={(event) => onChange('name', event.target.value)}
+              onChange={(event) => onChange("name", event.target.value)}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
               placeholder="Investing Basics"
@@ -64,7 +64,7 @@ export default function LearningCategoryForm({
             </label>
             <input
               value={values.slug}
-              onChange={(event) => onChange('slug', event.target.value)}
+              onChange={(event) => onChange("slug", event.target.value)}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
               placeholder="investing-basics"
@@ -77,11 +77,11 @@ export default function LearningCategoryForm({
             </label>
             <textarea
               value={values.description}
-              onChange={(event) => onChange('description', event.target.value)}
+              onChange={(event) => onChange("description", event.target.value)}
               rows={4}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
-              placeholder="Short summary shown in the Learning Centre."
+              placeholder="Short summary..."
             />
           </div>
 
@@ -93,7 +93,7 @@ export default function LearningCategoryForm({
               type="number"
               value={values.display_order}
               onChange={(event) =>
-                onChange('display_order', Number(event.target.value))
+                onChange("display_order", Number(event.target.value))
               }
               required
               min={0}
@@ -116,10 +116,10 @@ export default function LearningCategoryForm({
           >
             <Save className="w-4 h-4" />
             {isSaving
-              ? 'Saving...'
+              ? "Saving..."
               : isEditing
-                ? 'Update Category'
-                : 'Create Category'}
+                ? "Update Category"
+                : "Create Category"}
           </button>
           <button
             type="button"
@@ -133,5 +133,5 @@ export default function LearningCategoryForm({
         </div>
       </div>
     </form>
-  )
+  );
 }

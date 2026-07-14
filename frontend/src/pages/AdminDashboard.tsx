@@ -158,8 +158,7 @@ export default function AdminDashboard() {
               Platform Users
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
-              Manage user accounts and view investor profiles from the shared
-              admin workspace.
+              Manage user accounts and view investor profiles.
             </p>
           </div>
 

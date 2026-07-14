@@ -169,8 +169,7 @@ export default function AdminLearningArticles() {
               Learning Articles
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
-              Create, edit and publish markdown articles for the Learning
-              Centre.
+              Create, edit and publish articles for the Learning Centre.
             </p>
           </div>
 

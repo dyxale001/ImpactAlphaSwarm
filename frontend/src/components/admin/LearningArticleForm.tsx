@@ -117,7 +117,7 @@ export default function LearningArticleForm({
               rows={3}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
-              placeholder="Short summary shown on the Learning Centre cards."
+              placeholder="Short summary..."
             />
           </div>
 

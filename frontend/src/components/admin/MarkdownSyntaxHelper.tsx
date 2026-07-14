@@ -5,27 +5,23 @@ type MarkdownSyntaxHelperProps = {
 const examples = [
   {
     label: "Heading 1",
-    code: "# Market overview",
+    code: "# Article title",
   },
   {
     label: "Heading 2",
-    code: "## Key takeaways",
+    code: "## Section heading",
   },
   {
     label: "Heading 3",
-    code: "### Supporting detail",
+    code: "### Subsection heading",
   },
   {
-    label: "Heading 4",
-    code: "#### Signal watch",
-  },
-  {
-    label: "Bold / italic",
-    code: "**Important insight** or *subtle note*",
+    label: "Bold",
+    code: "**Important insight**",
   },
   {
     label: "Inline code",
-    code: "Use the `revenueGrowth` field in the report.",
+    code: "'code'",
   },
   {
     label: "Bullet list",
