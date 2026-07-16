@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -121,7 +120,6 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
-  const [previewTab] = useState<"overview">("overview");
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -147,12 +145,12 @@ export default function AssetDetailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
-      <button
-        onClick={() => navigate(-1)}
+      <Link
+        to="/dashboard"
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-      </button>
+      </Link>
 
       <div className="flex flex-col gap-6">
         <div>
@@ -293,7 +291,10 @@ export default function AssetDetailsPage() {
                     value={formatMetric(recommendation.news_bearish, 0)}
                   />
                 </div>
-                <NewsArticles articles={recommendation.news_articles ?? []} />
+                <NewsArticles
+                  articles={recommendation.news_articles ?? []}
+                  ticker={asset.ticker}
+                />
               </div>
 
               {/* Social sub-signal. */}
@@ -316,7 +317,10 @@ export default function AssetDetailsPage() {
                     value={formatMetric(recommendation.bearish_posts, 0)}
                   />
                 </div>
-                <SocialPosts posts={recommendation.social_posts ?? []} />
+                <SocialPosts
+                  posts={recommendation.social_posts ?? []}
+                  ticker={asset.ticker}
+                />
               </div>
             </div>
 

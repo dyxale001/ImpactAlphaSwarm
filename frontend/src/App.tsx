@@ -23,6 +23,8 @@ import WatchlistPage from "./pages/Watchlist";
 import PortfolioPage from "./pages/Portfolio";
 import LearningPage from "./pages/Learning";
 import AssetDetailsPage from "./pages/AssetDetailsPage";
+import NewsSentimentPage from "./pages/NewsSentimentPage";
+import SocialSentimentPage from "./pages/SocialSentimentPage";
 import HowItWorks from "./pages/HowItWorks";
 import SettingsPage from "./pages/Settings";
 import ResetPassword from "./pages/ResetPassword";
@@ -84,6 +86,11 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/asset/:ticker" element={<AssetDetailsPage />} />
           <Route path="/asset/:ticker/how-it-works" element={<HowItWorks />} />
+          <Route path="/asset/:ticker/news" element={<NewsSentimentPage />} />
+          <Route
+            path="/asset/:ticker/social"
+            element={<SocialSentimentPage />}
+          />
         </Route>
 
         {/* Admin Routes */}
