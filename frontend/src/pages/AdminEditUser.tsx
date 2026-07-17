@@ -1,19 +1,24 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useEditUser } from '../hooks/useEditUser';
+import { useParams, useNavigate } from "react-router-dom";
+import { useEditUser } from "../hooks/useEditUser";
+import AdminEditUserSkeleton from "../components/admin/AdminEditUserSkeleton";
 
 export default function AdminEditUser() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { loading, saving, error, formData, setFormData, handleSubmit } = useEditUser(id);
+  const { loading, saving, error, formData, setFormData, handleSubmit } =
+    useEditUser(id);
 
-  if (loading) return <div className="p-10 text-brand-fg flex justify-center">Loading user details...</div>;
+  if (loading) return <AdminEditUserSkeleton />;
 
   return (
     <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Edit User Detail</h1>
-          <button onClick={() => navigate('/admin')} className="text-brand-muted-fg hover:text-brand-fg">
+          <button
+            onClick={() => navigate("/admin")}
+            className="text-brand-muted-fg hover:text-brand-fg"
+          >
             Cancel
           </button>
         </div>
@@ -24,35 +29,46 @@ export default function AdminEditUser() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-background border border-brand-border rounded-lg p-6 shadow-card flex flex-col gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-background border border-brand-border rounded-lg p-6 shadow-card flex flex-col gap-4"
+        >
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-brand-muted-fg font-medium uppercase tracking-wide">First Name</label>
-            <input 
-              type="text" 
-              value={formData.first_name} 
-              onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+            <label className="text-xs text-brand-muted-fg font-medium uppercase tracking-wide">
+              First Name
+            </label>
+            <input
+              type="text"
+              value={formData.first_name}
+              onChange={(e) =>
+                setFormData({ ...formData, first_name: e.target.value })
+              }
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              required 
+              required
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-brand-muted-fg font-medium uppercase tracking-wide">Last Name</label>
-            <input 
-              type="text" 
-              value={formData.last_name} 
-              onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+            <label className="text-xs text-brand-muted-fg font-medium uppercase tracking-wide">
+              Last Name
+            </label>
+            <input
+              type="text"
+              value={formData.last_name}
+              onChange={(e) =>
+                setFormData({ ...formData, last_name: e.target.value })
+              }
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              required 
+              required
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={saving}
             className="mt-4 bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm hover:bg-accent/70 font-medium p-3 rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? 'Saving changes...' : 'Save User Details'}
+            {saving ? "Saving changes..." : "Save User Details"}
           </button>
         </form>
       </div>

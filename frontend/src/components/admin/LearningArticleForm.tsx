@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Eye, FileText, PencilLine, Save, RotateCcw } from "lucide-react";
 import MarkdownRenderer from "../learning/MarkdownRenderer";
+import MarkdownSyntaxHelper from "./MarkdownSyntaxHelper";
 import type { LearningCategory } from "../../data/learningContent";
 import type { LearningArticleFormValues } from "../../hooks/useAdminLearningArticles";
 
@@ -29,17 +30,14 @@ export default function LearningArticleForm({
   onChange,
 }: LearningArticleFormProps) {
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
-
-  const selectedCategory = categories.find(
-    (category) => category.id === values.category_id,
-  );
+  const [showMarkdownGuide, setShowMarkdownGuide] = useState(false);
 
   return (
     <form
       onSubmit={onSubmit}
       className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card"
     >
-      <div className="border-b border-brand-border/50 bg-brand-bg/50 px-6 py-4 flex items-center justify-between gap-3">
+      <div className="border-b border-brand-border/50 bg-brand-bg/50 px-5 lg:px-6 py-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-brand-fg">
             {isEditing ? "Edit Article" : "Create Article"}
@@ -54,7 +52,7 @@ export default function LearningArticleForm({
         </div>
       </div>
 
-      <div className="p-6 space-y-5">
+      <div className="p-5 lg:p-6 space-y-5">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -119,7 +117,7 @@ export default function LearningArticleForm({
               rows={3}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
-              placeholder="Short summary shown on the Learning Centre cards."
+              placeholder="Short summary..."
             />
           </div>
 
@@ -144,9 +142,18 @@ export default function LearningArticleForm({
 
           {viewMode === "edit" ? (
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
-                Markdown Content
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+                  Markdown Content
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowMarkdownGuide((current) => !current)}
+                  className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-card px-3 py-1.5 text-xs font-semibold text-brand-muted-fg transition-colors hover:text-brand-fg"
+                >
+                  {showMarkdownGuide ? "Hide guide" : "Show guide"}
+                </button>
+              </div>
               <textarea
                 value={values.content}
                 onChange={(event) => onChange("content", event.target.value)}
@@ -155,6 +162,8 @@ export default function LearningArticleForm({
                 className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y font-mono text-sm leading-7"
                 placeholder="Write the article in markdown..."
               />
+
+              {showMarkdownGuide && <MarkdownSyntaxHelper className="mt-3" />}
             </div>
           ) : (
             <div className="rounded-2xl border border-brand-border/60 bg-brand-card overflow-hidden">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -8,6 +8,7 @@ import {
   useAdminLearningArticles,
 } from "../hooks/useAdminLearningArticles";
 import LearningArticleForm from "../components/admin/LearningArticleForm";
+import AdminLearningArticlesSkeleton from "../components/admin/AdminLearningArticlesSkeleton";
 
 type EditingArticleState = {
   id: string | null;
@@ -34,6 +35,7 @@ export default function AdminLearningArticles() {
     values: emptyFormValues,
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -64,16 +66,29 @@ export default function AdminLearningArticles() {
     setFormError(null);
   };
 
+  useEffect(() => {
+    if (!successMessage) return;
+
+    const timeout = window.setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timeout);
+  }, [successMessage]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     setFormError(null);
+    setSuccessMessage(null);
 
     try {
       if (editingArticle.id) {
         await updateArticle(editingArticle.id, editingArticle.values);
+        setSuccessMessage("Article updated successfully.");
       } else {
         await createArticle(editingArticle.values);
+        setSuccessMessage("Article created successfully.");
       }
 
       resetForm();
@@ -121,12 +136,14 @@ export default function AdminLearningArticles() {
     }
 
     setFormError(null);
+    setSuccessMessage(null);
 
     try {
       await deleteArticle(id);
       if (editingArticle.id === id) {
         resetForm();
       }
+      setSuccessMessage(`Article \"${title}\" deleted successfully.`);
     } catch (deleteError) {
       setFormError(
         deleteError instanceof Error
@@ -137,11 +154,7 @@ export default function AdminLearningArticles() {
   };
 
   if (loading) {
-    return (
-      <div className="p-10 text-brand-fg flex justify-center">
-        Loading learning articles...
-      </div>
-    );
+    return <AdminLearningArticlesSkeleton />;
   }
 
   return (
@@ -156,8 +169,7 @@ export default function AdminLearningArticles() {
               Learning Articles
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
-              Create, edit and publish markdown articles for the Learning
-              Centre.
+              Create, edit and publish articles for the Learning Centre.
             </p>
           </div>
 
@@ -198,6 +210,15 @@ export default function AdminLearningArticles() {
         {error && (
           <div className="p-4 bg-semantic-danger/10 border border-semantic-danger/30 text-semantic-danger rounded-brand flex items-center gap-3">
             <span className="text-xl"></span> {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="p-4 bg-semantic-success/5 border border-semantic-success/20 text-semantic-success rounded-brand flex items-center gap-3">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-semantic-success/10 text-semantic-success text-sm">
+              ✓
+            </span>
+            <span>{successMessage}</span>
           </div>
         )}
 

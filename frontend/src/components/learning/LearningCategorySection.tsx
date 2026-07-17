@@ -1,9 +1,12 @@
-import type { LearningCategory } from "../../data/learningContent";
+import type {
+  LearningArticle,
+  LearningCategory,
+} from "../../data/learningContent";
 import LearningCard from "./LearningCard";
 
 type Props = {
   category: LearningCategory;
-  onOpenArticle: (article: any) => void;
+  onOpenArticle: (article: LearningArticle) => void;
 };
 
 export default function LearningCategorySection({
