@@ -14,6 +14,11 @@ import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
 import { useAssetDetails } from "../hooks/useAssetDetails";
+import {
+  NEWS_LOOKBACK_DAYS,
+  NEWS_WEIGHT_PCT,
+  SOCIAL_WEIGHT_PCT,
+} from "../data/sentimentMethodology";
 
 function formatMetric(value: unknown, digits = 2) {
   if (value === null || value === undefined || value === "") return "—";
@@ -22,11 +27,6 @@ function formatMetric(value: unknown, digits = 2) {
   }
   return String(value);
 }
-
-// Blend weights, mirroring NEWS_SENTIMENT_WEIGHT in the backend sentiment scout
-// (default 0.7). Shown as badges so the blended score is self-explanatory.
-const NEWS_WEIGHT_PCT = 70;
-const SOCIAL_WEIGHT_PCT = 100 - NEWS_WEIGHT_PCT;
 
 function SignalBar({
   label,
@@ -72,12 +72,16 @@ function SectionCard({
   title,
   description,
   icon: Icon,
+  badge,
   action,
   children,
 }: {
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
+  // Optional qualifier shown beside the title, for context that applies to the
+  // whole card (e.g. the time window a score covers).
+  badge?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -88,6 +92,7 @@ function SectionCard({
           <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
             <Icon className="w-3 h-3 text-brand-primary" />
             {title}
+            {badge}
           </p>
           <p className="text-sm text-brand-muted-fg">{description}</p>
         </div>
@@ -243,8 +248,16 @@ export default function AssetDetailsPage() {
         <>
           <SectionCard
             title="Sentiment Data"
-            description="A blend of trusted financial news and social posts. News is weighted higher, so it moves the score more than social."
+            description={`A blend of trusted financial news and social posts from the past ${NEWS_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
             icon={MessageSquare}
+            badge={
+              <span
+                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium"
+                title={`Every score in this card is calculated from news and posts published in the last ${NEWS_LOOKBACK_DAYS} days. Older items are not counted.`}
+              >
+                Last {NEWS_LOOKBACK_DAYS} days
+              </span>
+            }
             action={
               <Link
                 to={`/asset/${asset.ticker}/how-it-works`}

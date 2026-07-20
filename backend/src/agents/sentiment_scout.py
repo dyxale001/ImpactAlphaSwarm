@@ -593,6 +593,7 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 			if not isinstance(payload, list):
 				continue
 
+			collected: list[SocialMention] = []
 			for raw in payload:
 				# Validate at the ingestion boundary: malformed articles are
 				# rejected (dropped), anomalous ones are kept but flagged.
@@ -612,7 +613,7 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 				if not text:
 					continue
 
-				results[sym].append(
+				collected.append(
 					SocialMention(
 						ticker=sym,
 						text=text,
@@ -624,8 +625,19 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 						weight=_tier_weight(tier),
 					)
 				)
-				if len(results[sym]) >= limit:
-					break
+
+			# Rank before truncating. Finnhub has no tier parameter and does not
+			# document its ordering, so the cap must not be applied in arrival
+			# order: a run of tier-2/3 items at the head of the response would
+			# push genuine tier-1 wires past the limit and drop them, even though
+			# tier-1 carries the largest share of the news score. The whole window
+			# is already downloaded by this point, so ranking it costs nothing.
+			#
+			# Two stable passes give tier ascending with recency preserved inside
+			# each tier: tier-1 newest first, then tier-2, then tier-3.
+			collected.sort(key=lambda mention: mention.created_at or "", reverse=True)
+			collected.sort(key=lambda mention: _source_tier(mention.source) or 9)
+			results[sym] = collected[:limit]
 		except Exception:
 			continue
 
