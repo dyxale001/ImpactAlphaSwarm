@@ -79,12 +79,17 @@ def _aggregate_signed(scored_mentions: list[dict[str, Any]]) -> float:
 	by_tier: dict[int, list[tuple[float, float]]] = {1: [], 2: [], 3: []}
 	untiered: list[tuple[float, float]] = []
 	for item in scored_mentions:
-		pair = (item["sentiment_raw"], _recency_weight(item.get("created_at")))
+		recency = _recency_weight(item.get("created_at"))
 		tier = item.get("tier")
 		if tier in (1, 2, 3):
-			by_tier[tier].append(pair)
+			# Tiered (news): reliability is handled by the cross-tier shares, so the
+			# per-item weight is recency only.
+			by_tier[tier].append((item["sentiment_raw"], recency))
 		else:
-			untiered.append(pair)
+			# Untiered (social): fold the post's engagement weight into recency, so a
+			# liked/reshared take pulls the average harder than an ignored one.
+			engagement = max(0.0, item.get("weight", 1.0))
+			untiered.append((item["sentiment_raw"], recency * engagement))
 
 	numerator = 0.0
 	denominator = 0.0
@@ -107,12 +112,14 @@ def _influence_weights(scored: list[dict[str, Any]]) -> dict[int, float]:
 	by_tier: dict[int, list[tuple[int, float]]] = {1: [], 2: [], 3: []}
 	untiered: list[tuple[int, float]] = []
 	for item in scored:
-		pair = (id(item), _recency_weight(item.get("created_at")))
+		recency = _recency_weight(item.get("created_at"))
 		tier = item.get("tier")
 		if tier in (1, 2, 3):
-			by_tier[tier].append(pair)
+			by_tier[tier].append((id(item), recency))
 		else:
-			untiered.append(pair)
+			# Match _aggregate_signed: social influence is recency x engagement.
+			engagement = max(0.0, item.get("weight", 1.0))
+			untiered.append((id(item), recency * engagement))
 
 	weights: dict[int, float] = {}
 	denominator = sum(_tier_share(t) for t in (1, 2, 3) if by_tier[t])

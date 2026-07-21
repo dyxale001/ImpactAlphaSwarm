@@ -13,6 +13,7 @@ import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
+import SentimentCalculation from "../components/research/SentimentCalculation";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 import {
   NEWS_LOOKBACK_DAYS,
@@ -273,6 +274,19 @@ export default function AssetDetailsPage() {
               label="Blended Score"
               score={recommendation.sentiment_score}
               emphasis
+            />
+
+            {/* Collapsible "show your working": the full per-asset derivation,
+                reconstructed from the same per-item numbers listed below. */}
+            <SentimentCalculation
+              newsArticles={recommendation.news_articles ?? []}
+              socialPosts={recommendation.social_posts ?? []}
+              newsScore={recommendation.news_sentiment_score}
+              socialScore={
+                recommendation.social_sentiment_score ??
+                recommendation.sentiment_score
+              }
+              blendedScore={recommendation.sentiment_score}
             />
 
             <div className="mt-5 space-y-5">

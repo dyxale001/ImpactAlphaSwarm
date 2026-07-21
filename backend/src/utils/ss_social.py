@@ -8,6 +8,7 @@ same take cannot stack the sentiment score.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 
@@ -25,7 +26,22 @@ except ImportError:
 	requests = None
 
 
-def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[str, list[SocialMention]]:
+STOCKTWITS_MAX_PAGES = int(os.getenv("STOCKTWITS_MAX_PAGES", "2"))
+# The engagment cap is not let over liked or shared post dominate
+STOCKTWITS_ENGAGEMENT_CAP = float(os.getenv("STOCKTWITS_ENGAGEMENT_CAP", "8"))
+
+
+def _engagement_weight(likes: int, reshares: int, replies: int) -> float:
+	"""Log-dampened, capped weight in [1.0, cap] from a post's engagement. A post
+	with no engagement weighs 1.0; a heavily engaged one weighs more but with sharply
+	diminishing returns, so a single viral post cannot dominate the average."""
+	raw = max(0, likes) + 2 * max(0, reshares) + max(0, replies)
+	return min(STOCKTWITS_ENGAGEMENT_CAP, 1.0 + math.log1p(raw))
+
+
+def _collect_stocktwits_mentions(
+	tickers: list[str], limit: int = 30, max_pages: int = STOCKTWITS_MAX_PAGES
+) -> dict[str, list[SocialMention]]:
 	results = {ticker: [] for ticker in tickers}
 	if requests is None and cloudscraper is None:
 		return results
@@ -50,19 +66,34 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 		sym = ticker.upper()
 		api_sym = _api_symbol(sym)
 		url = f"https://api.stocktwits.com/api/2/streams/symbol/{api_sym}.json"
-		params = {"limit": limit}
-		if client_id:
-			params["client_id"] = client_id
 
-		try:
-			resp = session.get(url, params=params, headers=headers, timeout=10)
-			if resp.status_code != 200:
-				continue
-			payload = resp.json()
-			messages = payload.get("messages", [])[:limit] if isinstance(payload, dict) else []
-			# Collapse near-duplicate posts from the same author (spammers repost
-			# the same take) so one person can't stack the sentiment vote.
-			seen_author_posts: set[tuple[str, str]] = set()
+		# Collapse near-duplicate posts from the same author (spammers repost the
+		# same take) so one person can't stack the sentiment vote. Kept across pages
+		# so a repost on an older page is caught too.
+		seen_author_posts: set[tuple[str, str]] = set()
+		# ``max`` is StockTwits' backward cursor: each page returns messages older
+		# than this id. None on the first page (newest messages).
+		max_id: int | None = None
+
+		for _ in range(max(1, max_pages)):
+			params = {"limit": limit}
+			if client_id:
+				params["client_id"] = client_id
+			if max_id is not None:
+				params["max"] = max_id
+
+			try:
+				resp = session.get(url, params=params, headers=headers, timeout=10)
+				if resp.status_code != 200:
+					break
+				payload = resp.json()
+			except Exception:
+				break
+
+			messages = payload.get("messages", []) if isinstance(payload, dict) else []
+			if not messages:
+				break
+
 			for msg in messages:
 				# Validate at the ingestion boundary: malformed messages are
 				# rejected (dropped), anomalous ones are kept but flagged.
@@ -98,10 +129,24 @@ def _collect_stocktwits_mentions(tickers: list[str], limit: int = 30) -> dict[st
 						replies=validated.replies,
 						created_at=validated.created_at.isoformat() if validated.created_at else None,
 						declared_sentiment=validated.declared_sentiment,
+						# Engagement-weighted pull on the social average: liked and
+						# reshared takes count for more than ignored ones.
+						weight=_engagement_weight(validated.likes, validated.reshares, validated.replies),
 					)
 				)
-		except Exception:
-			continue
+
+			# Advance the cursor to the next (older) page. Stop when StockTwits says
+			# there is no more, or we can't derive a next cursor.
+			cursor = payload.get("cursor", {}) if isinstance(payload, dict) else {}
+			if not cursor.get("more"):
+				break
+			next_max = cursor.get("max")
+			if next_max is None:
+				ids = [m.get("id") for m in messages if isinstance(m.get("id"), int)]
+				if not ids:
+					break
+				next_max = min(ids) - 1
+			max_id = next_max
 
 	return results
 
