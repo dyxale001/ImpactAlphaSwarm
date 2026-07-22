@@ -20,6 +20,7 @@ import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
+import WatchlistSearch from "../components/watchlist/WatchlistSearch";
 
 import {
   startAnalysis,
@@ -106,6 +107,34 @@ export default function DashboardPage() {
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [exchangeRateSource, setExchangeRateSource] =
     useState<string>("Yahoo Finance");
+
+  // ── Watchlist search (inline — no separate hook needed) ────────────────
+  const [wlSearch, setWlSearch]   = useState("");
+  const [wlResults, setWlResults] = useState<any[]>([]);
+  const [wlLoading, setWlLoading] = useState(false);
+
+  useEffect(() => {
+    if (!wlSearch.trim()) { setWlResults([]); return; }
+    const timer = setTimeout(async () => {
+      setWlLoading(true);
+      const { data } = await supabase
+        .from("assets")
+        .select("id, ticker, name, current_price, universe")
+        .or(`ticker.ilike.%${wlSearch}%,name.ilike.%${wlSearch}%`)
+        .limit(6);
+      setWlResults(data || []);
+      setWlLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [wlSearch]);
+
+  const handleAddToWatchlist = async (assetId: string) => {
+    if (!profile?.id) return;
+    await supabase
+      .from("user_watchlist_assets")
+      .insert({ user_id: profile.id, asset_id: assetId });
+    setWlSearch("");
+  };
 
   const escapeCsvValue = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);
@@ -456,6 +485,20 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Watchlist Search */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted-fg mb-2">
+          Add to Watchlist
+        </p>
+        <WatchlistSearch
+          search={wlSearch}
+          setSearch={setWlSearch}
+          searchResults={wlResults}
+          searchLoading={wlLoading}
+          onAdd={handleAddToWatchlist}
+        />
       </div>
 
       {/* Grid */}
