@@ -3,7 +3,6 @@ import asyncio
 import datetime
 import logging
 import secrets
->>>>>>> upstream/main
 from typing import List, Optional
 
 import httpx
