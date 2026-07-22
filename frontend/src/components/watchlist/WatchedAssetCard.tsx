@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, MessageSquare, BarChart3, Eye, Flame, X, Sparkles,
-         TrendingUp, TrendingDown } from 'lucide-react'
+         TriangleAlert, TrendingUp, TrendingDown } from 'lucide-react'
 import { type WatchlistAsset, type ScoreDelta } from '../../hooks/useWatchlistData'
 
 // ─── Sector styles ─────────────────────────────────────────────────────────
@@ -28,34 +28,16 @@ function daysSince(isoString?: string) {
   return `${diff}d ago`
 }
 
-function MiniSparkline({ ticker }: { ticker: string }) {
-  const [prices, setPrices]   = useState<number[]>([])
-  const [fetching, setFetching] = useState(true)
-
-  useEffect(() => {
-    const BASE = (import.meta as any).env?.VITE_API_BASE ?? ''
-    fetch(`${BASE}/api/assets/${ticker.toUpperCase()}/history`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { setPrices(data?.closes ?? []); setFetching(false) })
-      .catch(() => setFetching(false))
-  }, [ticker])
-
-  // Fallback: seeded fake line while loading or if no data
+function MiniSparkline({ prices, fetching }: { prices: number[]; fetching: boolean }) {
   if (fetching || prices.length < 2) {
-    const seed = ticker.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-    const pts  = Array.from({ length: 14 }, (_, i) => {
-      const v = Math.sin((seed + i) * 1.7) * 8 + Math.cos((seed + i) * 0.9) * 6
-      return `${i * 8},${20 - v}`
-    }).join(' ')
     return (
       <svg viewBox="0 0 112 40" className={`w-full h-10 ${fetching ? 'opacity-20 animate-pulse' : 'opacity-30'}`}>
-        <polyline points={pts} fill="none" stroke="var(--color-brand-accent)"
-          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points="0,20 8,18 16,22 24,17 32,21 40,16 48,20 56,18 64,22 72,17 80,21 88,16 96,20 104,18"
+          fill="none" stroke="var(--color-brand-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
   }
 
-  // Scale real prices into the SVG viewBox
   const W = 112, H = 36, PAD = 3
   const min   = Math.min(...prices)
   const max   = Math.max(...prices)
@@ -104,12 +86,9 @@ function SignalBar({ label, score, emphasis = false, direction }: {
           {score}<span className="text-brand-muted-fg text-xs font-normal"> /100</span>
         </span>
       </div>
-<div className="h-1.5 w-full bg-brand-border/25 rounded-full overflow-hidden">
-  <div
-    className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-    style={{ width: `${pct}%` }}
-  />
-</div>
+      <div className="h-2 w-full bg-brand-border/15 rounded-lg overflow-hidden">
+        <div className={`h-full rounded-lg transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   )
 }
@@ -154,10 +133,25 @@ export default function WatchedAssetCard({
 }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
 
+  // Fetch live price history — used for both sparkline and displayed price
+  const [livePrices, setLivePrices]   = useState<number[]>([])
+  const [priceFetching, setPriceFetching] = useState(true)
+
+  useEffect(() => {
+    const BASE = (import.meta as any).env?.VITE_API_BASE ?? ''
+    fetch(`${BASE}/api/assets/${asset.ticker.toUpperCase()}/history`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setLivePrices(data?.closes ?? []); setPriceFetching(false) })
+      .catch(() => setPriceFetching(false))
+  }, [asset.ticker])
+
   const preview    = getPreview(asset, tab)
   const hasAI      = asset.confidenceScore !== undefined
   const sc         = SECTOR_STYLE[asset.universe] ?? DEFAULT_SECTOR
-  const displayPrice = hasAI && (asset.priceAtRun ?? 0) > 0 ? asset.priceAtRun! : asset.current_price
+
+  // Use the most recent yfinance closing price; fall back to DB price while loading
+  const livePrice    = livePrices.length > 0 ? livePrices[livePrices.length - 1] : null
+  const displayPrice = livePrice ?? (hasAI && (asset.priceAtRun ?? 0) > 0 ? asset.priceAtRun! : asset.current_price)
   const analysedLabel = daysSince(asset.analysedAt)
 
   // Per-asset price staleness (4-day window matching backend)
@@ -223,11 +217,6 @@ export default function WatchedAssetCard({
               {analysedLabel}
             </div>
           )}
-          {isPriceStale && (
-            <div className="chip bg-semantic-warning/15 text-semantic-warning text-[10px]" title="Price data may be outdated — visit the asset page to refresh">
-              Price {priceDaysOld}d old
-            </div>
-          )}
           <button onClick={() => onRemove(asset.id)} disabled={isRemoving}
             className="p-1.5 rounded-full hover:bg-semantic-danger/10 text-brand-muted-fg hover:text-semantic-danger transition-colors"
             title="Remove">
@@ -237,7 +226,7 @@ export default function WatchedAssetCard({
       </div>
 
       {/* ── Sparkline ──────────────────────────────────────────────────── */}
-      <MiniSparkline ticker={asset.ticker} />
+      <MiniSparkline prices={livePrices} fetching={priceFetching} />
 
       {/* ── AI scores ──────────────────────────────────────────────────── */}
       {hasAI ? (
