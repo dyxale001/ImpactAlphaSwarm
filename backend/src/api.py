@@ -1,7 +1,9 @@
 import os
 import asyncio
-import logging
 import datetime
+import logging
+import secrets
+>>>>>>> upstream/main
 from typing import List, Optional
 
 import httpx
@@ -11,11 +13,18 @@ from pydantic import BaseModel
 
 from src.utils.supabase_client import (
     SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase,
-    create_ai_run, update_ai_run_status, fetch_price_at_run_in_zar,
+    create_ai_run, update_ai_run_status, fetch_price_at_run_in_zar, fetch_fx_rate_to_zar,
 )
+from src.utils import whale_watching as ww
 
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
+
+# Shared secret that Cloud Scheduler presents to trigger the nightly run. Unset
+# in local dev; the endpoint 503s until it's configured on Cloud Run.
+DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
+# Only refresh users whose last run is within this many days.
+DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
@@ -29,11 +38,152 @@ app.add_middleware(
 )
 
 
+# --- Orphaned-run guard -------------------------------------------------------
+# An interactive analysis runs as a fire-and-forget background task after the API
+# has already returned its run_id. If the container is replaced (deploy, scale-
+# down, crash) before that task finishes, the ai_runs row is left at 'running'
+# forever and the dashboard — which reads ai_runs.status straight from Supabase —
+# polls it indefinitely. These helpers heal such orphans by failing any run that
+# has been 'running' past the timeout.
+STALE_RUN_MINUTES = 15
+
+
+def _is_run_stale(created_at) -> bool:
+    if not created_at:
+        return False
+    try:
+        started = datetime.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return datetime.datetime.now(datetime.timezone.utc) - started > datetime.timedelta(minutes=STALE_RUN_MINUTES)
+
+
+def _fail_stale_running_runs() -> int:
+    """Mark every ai_run stuck in 'running' past the timeout as 'failed'. Returns
+    how many were healed. Best-effort — a DB error is logged, never raised."""
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(minutes=STALE_RUN_MINUTES)
+    ).isoformat()
+    try:
+        res = (
+            supabase.table("ai_runs")
+            .update({"status": "failed"})
+            .eq("status", "running")
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        healed = len(res.data or [])
+        if healed:
+            logger.warning("Startup sweep: marked %d stale 'running' run(s) as failed", healed)
+        return healed
+    except Exception as e:
+        logger.warning("Stale-run sweep failed: %s", e)
+        return 0
+
+
+@app.on_event("startup")
+async def _sweep_stale_runs_on_startup() -> None:
+    _fail_stale_running_runs()
+
+
 class StartAnalysisRequest(BaseModel):
     universes: List[str]
     watchlist: Optional[List[str]] = []
     risk_tolerance: Optional[str] = "Moderate"
     expertise_level: Optional[str] = "novice"
+
+
+@app.get("/api/analysis/fx-rate/usd-zar")
+async def usd_zar_fx_rate():
+    rate = fetch_fx_rate_to_zar("USD")
+    if rate is None:
+        raise HTTPException(status_code=503, detail="Unable to load live USD/ZAR exchange rate")
+
+    return {
+        "base_currency": "USD",
+        "quote_currency": "ZAR",
+        "rate": rate,
+        "source": "Yahoo Finance",
+    }
+
+
+# Whale watching — insider dealings + institutional ownership. Purely
+# informational: never part of the analysis pipeline / Unified Confidence Score.
+# All data access and caching lives in utils/whale_watching.py; these handlers
+# stay thin (read cache → fetch if stale → shape response).
+
+
+@app.get("/api/whales/{ticker}")
+async def whale_activity(ticker: str):
+    """Recent insider dealings for a ticker, via Finnhub (US-listed only).
+
+    Read-through cache: serves the Supabase-cached rows while fresh (< TTL) and
+    only refetches when stale. Returns an empty ``transactions`` list (not an
+    error) when no API key is configured or the ticker has no coverage.
+    """
+    symbol = ticker.upper()
+
+    cached = ww.read_insider_cache(symbol)
+    if cached and ww.cache_is_fresh(cached):
+        return ww.insider_cache_payload(symbol, cached)
+
+    api_key = os.getenv("FINNHUB_API_KEY", "").strip()
+    if not api_key:
+        # No key: serve whatever we cached before, else an honest empty state.
+        return ww.insider_cache_payload(symbol, cached) if cached else {"ticker": symbol, "transactions": [], "source": None}
+
+    try:
+        transactions, source = await ww.fetch_fresh_insider(symbol, api_key)
+    except Exception as e:
+        # Network / server error: prefer stale cache over failing the request.
+        logger.warning("Finnhub insider fetch failed for %s: %s", symbol, e)
+        if cached:
+            return ww.insider_cache_payload(symbol, cached)
+        raise HTTPException(status_code=502, detail="Unable to load insider transactions")
+
+    fetched_at = ww.write_insider_cache(symbol, transactions, source)
+    return {"ticker": symbol, "transactions": transactions, "source": source, "cached": False, "fetched_at": fetched_at}
+
+
+@app.get("/api/institutions/{ticker}")
+async def institutional_ownership(ticker: str):
+    """Institutional ownership for a ticker, via yfinance. Read-through cache with
+    a 7-day TTL (13F data only changes quarterly)."""
+    symbol = ticker.upper()
+
+    cached = ww.read_institutions_cache(symbol)
+    if cached and ww.cache_is_fresh(cached, ww.INSTITUTIONS_CACHE_TTL):
+        return {"ticker": symbol, **(cached.get("payload") or {}), "cached": True, "fetched_at": cached.get("fetched_at")}
+
+    loop = asyncio.get_running_loop()
+    try:
+        payload = await loop.run_in_executor(None, ww.fetch_institutional, symbol)
+    except Exception as e:
+        logger.warning("Institutional fetch failed for %s: %s", symbol, e)
+        if cached:
+            return {"ticker": symbol, **(cached.get("payload") or {}), "cached": True, "fetched_at": cached.get("fetched_at")}
+        raise HTTPException(status_code=502, detail="Unable to load institutional ownership")
+
+    fetched_at = ww.write_institutions_cache(symbol, payload)
+    return {"ticker": symbol, **payload, "cached": False, "fetched_at": fetched_at}
+
+
+@app.get("/api/funds")
+async def top_funds():
+    """Institutional data inverted to per-fund holdings across all tracked assets
+    (for the Top Funds / Notable Investors views). Weekly read-through cache; the
+    first build after expiry aggregates every tracked ticker, so it can be slow."""
+    cached = ww.read_funds_cache()
+    if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
+        funds = ww.with_descriptions(cached.get("payload") or [])
+        return {"funds": funds, "cached": True, "fetched_at": cached.get("fetched_at")}
+
+    assets = supabase.table("assets").select("ticker, universe").execute().data or []
+    loop = asyncio.get_running_loop()
+    funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
+    fetched_at = ww.write_funds_cache(funds)
+    return {"funds": ww.with_descriptions(funds), "cached": False, "fetched_at": fetched_at}
 
 
 @app.post("/api/analysis/start")
@@ -102,7 +252,13 @@ async def analysis_status(run_id: str):
     data = resp.data or []
     if not data:
         raise HTTPException(status_code=404, detail="run not found")
-    return data[0]
+    row = data[0]
+    # Heal an orphaned run this poll happens to catch: a run still 'running' past
+    # the timeout was abandoned, so report (and persist) it as failed.
+    if row.get("status") == "running" and _is_run_stale(row.get("created_at")):
+        update_ai_run_status(run_id, "failed")
+        row["status"] = "failed"
+    return row
 
 
 @app.get("/api/analysis/result/{run_id}")
@@ -130,6 +286,7 @@ async def analysis_result(run_id: str):
             "current_price": price_at_run,
         })
     return {"top_5": top_5}
+
 
 
 STALE_DAYS = 4  # matches the 4-day staleness window in the design notes
@@ -257,6 +414,64 @@ async def get_price_history(ticker: str):
     except Exception as exc:
         logger.warning("Price history fetch failed for %s: %s", ticker, exc)
         return {"ticker": ticker.upper(), "closes": [], "dates": []}
+@app.post("/api/analysis/run-daily")
+async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
+    """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
+    (just after the NYSE close). Refreshes every active user's insights so they
+    see fresh data without pressing refresh. Guarded by a shared secret.
+
+    For resource efficiency the raw quant + sentiment signals are gathered ONCE
+    for the union of all users' tickers (see run_daily_batch), then personalized
+    per user. Runs synchronously; failures are isolated per user.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Daily run not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    from src.utils.supabase_client import get_active_user_ids, get_user_preferences
+    from src.orchestration.langgraph_orchestrator import run_daily_batch
+
+    user_ids = get_active_user_ids(DAILY_ACTIVE_DAYS)
+    logger.info("Daily run starting for %d active users", len(user_ids))
+
+    # Build the batch: one fresh run row per user with their saved preferences.
+    users = []
+    skipped = 0
+    for user_id in user_ids:
+        prefs = get_user_preferences(user_id)
+        if not prefs or not prefs.get("universes"):
+            logger.info("Daily run skipping user %s (no preferences/universes)", user_id)
+            skipped += 1
+            continue
+        run_id = create_ai_run(user_id=user_id, status="running")
+        users.append(
+            {
+                "user_id": user_id,
+                "run_id": run_id,
+                "universes": prefs["universes"],
+                "risk_tolerance": prefs["risk_tolerance"],
+                "expertise_level": prefs["expertise_level"],
+            }
+        )
+
+    # Gather raw signals once for the union of tickers, then personalize per user.
+    # Offloaded to a thread so the event loop stays responsive during the batch.
+    loop = asyncio.get_running_loop()
+    batch = await loop.run_in_executor(None, run_daily_batch, users)
+
+    summary = {
+        "active_days": DAILY_ACTIVE_DAYS,
+        "total": len(user_ids),
+        "skipped": skipped,
+        "succeeded": batch.get("succeeded", 0),
+        "failed": batch.get("failed", 0),
+        "unique_tickers": batch.get("tickers", 0),
+    }
+    logger.info("Daily run finished: %s", summary)
+    return summary
 
 
 class DeleteUserRequest(BaseModel):

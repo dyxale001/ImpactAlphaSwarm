@@ -55,70 +55,90 @@ export async function getUsdZarExchangeRate() {
   }>;
 }
 
-export async function adminDeleteUser(userId: string) {
-  const token = await getToken();
-  if (!token) throw new Error("No auth token");
-
-  const res = await fetch(`${BASE}/api/admin/delete-user`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ user_id: userId }),
-  });
-
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+export interface WhaleTransactionDTO {
+  name: string;
+  role?: string | null;
+  type: "buy" | "sell";
+  shares: number;
+  price: number | null;
+  value: number | null;
+  transaction_date: string | null;
+  filing_date: string | null;
+  transaction_code?: string | null;
 }
 
-export async function adminResetPassword(userId: string, email: string) {
-  const token = await getToken();
-  if (!token) throw new Error("No auth token");
-
-  const res = await fetch(`${BASE}/api/admin/reset-password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ user_id: userId, email }),
-  });
-
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+export interface WhaleActivityResponse {
+  ticker: string;
+  transactions: WhaleTransactionDTO[];
+  source: string | null;
+  cached?: boolean;
+  fetched_at?: string | null;
 }
 
-export async function adminToggleUserStatus(userId: string, isActive: boolean) {
-  const token = await getToken();
-  if (!token) throw new Error("No auth token");
-
-  const res = await fetch(`${BASE}/api/admin/toggle-user-status`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ user_id: userId, is_active: isActive }),
-  });
-
+// Informational insider-dealings feed. Not tied to the recommendation, so it
+// needs no auth token — it's public reference data.
+export async function getWhaleActivity(ticker: string) {
+  const res = await fetch(`${BASE}/api/whales/${encodeURIComponent(ticker)}`);
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<WhaleActivityResponse>;
 }
 
-export async function adminSetUserRole(userId: string, role: 'admin' | 'user') {
-  const token = await getToken();
-  if (!token) throw new Error("No auth token");
+export interface InstitutionalHolderDTO {
+  holder: string;
+  pct_held: number | null;
+  shares: number | null;
+  value: number | null;
+  pct_change: number | null;
+  date_reported: string | null;
+}
 
-  const res = await fetch(`${BASE}/api/admin/set-user-role`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ user_id: userId, role }),
-  });
+export interface InstitutionalOwnershipResponse {
+  ticker: string;
+  institutions_pct: number | null;
+  insiders_pct: number | null;
+  institutions_count: number | null;
+  holders: InstitutionalHolderDTO[];
+  source: string | null;
+  cached?: boolean;
+  fetched_at?: string | null;
+}
 
+// Institutional ownership (13F). Informational reference data, no auth needed.
+export async function getInstitutionalHolders(ticker: string) {
+  const res = await fetch(
+    `${BASE}/api/institutions/${encodeURIComponent(ticker)}`,
+  );
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<InstitutionalOwnershipResponse>;
+}
+
+export interface FundPosition {
+  ticker: string;
+  universe: string | null;
+  pct_held: number | null;
+  value: number | null;
+  pct_change: number | null;
+}
+
+export interface FundHolding {
+  fund: string;
+  total_value: number;
+  // Plain-English blurb of who the fund is. Sourced from the backend so the
+  // wording is editable without a frontend redeploy. May be absent on older
+  // cached payloads.
+  description?: string | null;
+  positions: FundPosition[];
+}
+
+export interface TopFundsResponse {
+  funds: FundHolding[];
+  cached?: boolean;
+  fetched_at?: string | null;
+}
+
+// Institutional data inverted to per-fund holdings across all tracked assets.
+export async function getTopFunds() {
+  const res = await fetch(`${BASE}/api/funds`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<TopFundsResponse>;
 }

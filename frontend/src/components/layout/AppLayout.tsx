@@ -1,19 +1,23 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
+  BookOpen,
   Search,
   Eye,
   LineChart,
   Terminal,
   Settings,
+  Waves,
 } from "lucide-react";
 
 export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
+    { name: "Whale Watching", path: "/whale-watching", icon: Waves },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
