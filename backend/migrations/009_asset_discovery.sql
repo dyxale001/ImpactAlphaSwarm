@@ -35,6 +35,13 @@ alter table public.assets
 create index if not exists assets_universe_active_idx
   on public.assets (universe, is_active);
 
+-- The discovery agent is the first thing to UPDATE existing `assets` rows
+-- (refresh scores, hysteresis decay, soft-retire, quarantine). The backend's
+-- service_role has historically only needed insert/select on assets, so UPDATE
+-- is not always granted — grant it explicitly, else those writes fail with
+-- "permission denied for table assets" (42501) while inserts still succeed.
+grant select, insert, update on public.assets to service_role;
+
 -- ── discovery_runs: one audit row per nightly discovery pass ─────────────────
 -- summary    = per-universe pool/new/retired counts
 -- rejections = [{ticker, stage, reason}] — the "why the agent rejected X" record
