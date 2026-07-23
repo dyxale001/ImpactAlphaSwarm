@@ -270,6 +270,9 @@ def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
                 "tickers_count": len(tickers),
                 "universes": state["universes"],
                 "watchlist_count": len(state["watchlist"]),
+                # Whether this scope came from the discovered pool or the legacy
+                # seeded path (observability for the shadow/live rollout).
+                "discovery_enabled": DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE,
             },
         )
     return {
@@ -607,6 +610,23 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     except Exception as e:
         logger.warning("Batch quant gather failed: %s", e)
         quant_results = {}
+
+    # Discovery feedback loop: a discovered ticker whose quant fetch came back
+    # empty this run is benched (quarantined) so it stops being selected until it
+    # re-qualifies. Guarded on a non-empty quant_results so a *total* quant outage
+    # can't quarantine the whole pool, and on origin='discovered' inside the helper
+    # so seeds are never benched. Only active when discovery is enabled.
+    if DISCOVERY_ENABLED and quant_results:
+        try:
+            from ..utils.supabase_client import mark_quant_empty
+
+            empty = [ticker for ticker in union if not quant_results.get(ticker)]
+            if empty:
+                mark_quant_empty(empty)
+                logger.info("Discovery: quarantined %d empty-quant tickers", len(empty))
+        except Exception as e:
+            logger.warning("Discovery quant-empty feedback failed: %s", e)
+
     try:
         # Nightly is the ONLY place the Marketaux API is called: one batched, deeply
         # paginated query for the whole union of tickers, whose tier-1 results are
