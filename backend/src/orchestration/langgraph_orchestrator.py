@@ -140,14 +140,30 @@ class AnalysisState(TypedDict):
     status: str
 
 
+# Hard cap on tickers analysed per run. Bounds the manual-run latency budget and
+# the nightly union. Env-tunable to match the rest of the config surface.
+MAX_SCOPED_TICKERS = int(os.getenv("MAX_SCOPED_TICKERS", "30"))
+
+
 def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> list[str]:
     """Resolve a user's investment universes (+ watchlist) to a capped, deduped
-    ticker list. Shared by the per-user graph and the batched daily run."""
+    ticker list. Shared by the per-user graph and the batched daily run.
+
+    Ordering is deterministic and watchlist-first: a user's watchlisted tickers
+    come first (so the cap can never drop them — personalization outranks the
+    universe pool), followed by the universe tickers in a stable sorted order.
+    The previous ``list(set(tickers))[:30]`` left *which* tickers survived the cap
+    to arbitrary set-iteration order, so the same inputs could scope a different
+    set run-to-run; this makes the truncation reproducible.
+    """
     from ..utils.supabase_client import get_assets_by_universes
 
-    tickers = get_assets_by_universes(universes)
-    tickers.extend(watchlist or [])
-    return list(set(tickers))[:30]
+    watchlist = watchlist or []
+    universe_tickers = get_assets_by_universes(universes)
+    # dict.fromkeys dedups while preserving first-seen order: watchlist entries
+    # win their slot, then universe tickers (sorted) fill the remainder.
+    ordered = list(dict.fromkeys([*watchlist, *sorted(universe_tickers)]))
+    return ordered[:MAX_SCOPED_TICKERS]
 
 
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
