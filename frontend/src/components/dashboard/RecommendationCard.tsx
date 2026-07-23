@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageSquare, BarChart3, Flame, Eye } from "lucide-react";
+import { ArrowRight, MessageSquare, BarChart3, Flame, Eye, Sparkles } from "lucide-react";
 import { type AssetRecommendation } from "../../hooks/useDashboardStats";
+import { discoveryProvenance } from "../../utils/discovery";
 import DualBar from "./DualBar";
 
 type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
@@ -134,6 +135,14 @@ export default function RecommendationCard({
       />
 
       <div className="flex flex-wrap gap-2">
+        {asset.isDiscovered ? (
+          <span
+            className="chip bg-brand-accent/15 text-brand-accent"
+            title={discoveryProvenance(asset.discoverySources)}
+          >
+            <Sparkles className="w-3 h-3" /> Discovered
+          </span>
+        ) : null}
         {asset.isHype ? (
           <span className="chip bg-semantic-warning/15 text-semantic-warning">
             <Flame className="w-3 h-3" /> Hype flagged
