@@ -637,6 +637,10 @@ def refresh_discovery(dry_run: bool = False) -> dict[str, Any]:
 def _main() -> None:  # pragma: no cover - CLI
     import argparse
 
+    from dotenv import load_dotenv
+
+    load_dotenv()  # pick up backend/.env when run standalone (dry-run testing)
+
     parser = argparse.ArgumentParser(description="Run the asset-discovery pass.")
     parser.add_argument("--dry-run", action="store_true", help="Compute pools without writing.")
     args = parser.parse_args()
