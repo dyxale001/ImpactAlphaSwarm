@@ -430,6 +430,22 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     ):
         raise HTTPException(status_code=401, detail="Invalid daily run secret")
 
+    # Refresh the discovery pool BEFORE the batch reads it — this is the only
+    # place discovery runs (the manual run never discovers). Guarded by
+    # DISCOVERY_ENABLED so it stays completely inert (module never imported) until
+    # the flag is set; a failure here logs and the batch proceeds on the existing
+    # pool. Offloaded to a thread since it does external network I/O.
+    discovery_summary = None
+    if os.getenv("DISCOVERY_ENABLED", "false").lower() == "true":
+        try:
+            from src.agents.asset_discovery import refresh_discovery
+
+            loop = asyncio.get_running_loop()
+            discovery_summary = await loop.run_in_executor(None, refresh_discovery)
+            logger.info("Discovery refresh complete: %s", discovery_summary.get("universes"))
+        except Exception as e:
+            logger.exception("Discovery refresh failed (continuing on existing pool): %s", e)
+
     from src.utils.supabase_client import get_active_user_ids, get_user_preferences
     from src.orchestration.langgraph_orchestrator import run_daily_batch
 
@@ -468,6 +484,7 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
         "succeeded": batch.get("succeeded", 0),
         "failed": batch.get("failed", 0),
         "unique_tickers": batch.get("tickers", 0),
+        "discovery": discovery_summary,
     }
     logger.info("Daily run finished: %s", summary)
     return summary

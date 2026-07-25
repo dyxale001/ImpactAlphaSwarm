@@ -19,6 +19,7 @@ import { supabase } from "../lib/supabase";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
+import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 import WatchlistSearch from "../components/watchlist/WatchlistSearch";
 
@@ -438,6 +439,14 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
+            {topPick?.isDiscovered ? (
+              <span
+                className="chip bg-brand-accent/15 text-brand-accent w-fit"
+                title={discoveryProvenance(topPick?.discoverySources)}
+              >
+                <Sparkles className="w-3 h-3" /> Discovered via trending
+              </span>
+            ) : null}
             <DualBar
               sentimentScore={topPick?.sentimentScore || 0}
               quantitativeScore={topPick?.fundamentalsScore || 0}
