@@ -12,7 +12,7 @@ interface BrowseAsset {
 
 interface Props {
   watchedAssetIds: string[]
-  onAdd: (assetId: string) => void
+  onAdd: (asset: { id: string; ticker: string; name: string; universe: string }) => void
   onRemove: (watchlistId: string) => void
   watchlistIdByAssetId: Record<string, string>
 }
@@ -57,7 +57,7 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
       const wid = watchlistIdByAssetId[asset.id]
       if (wid) onRemove(wid)
     } else {
-      onAdd(asset.id)
+      onAdd({ id: asset.id, ticker: asset.ticker, name: asset.name, universe: asset.universe })
     }
   }
 

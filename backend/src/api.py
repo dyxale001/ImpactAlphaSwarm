@@ -366,6 +366,102 @@ async def refresh_asset_cache(ticker: str):
     }
 
 
+@app.get("/api/assets/search")
+async def search_assets(q: str = ""):
+    """Fully live asset search via Yahoo Finance search API.
+
+    Accepts any company name or ticker (e.g. 'Apple', 'NVDA', 'Eskom').
+    Not limited to assets already in the database.
+    Prices are fetched live from yfinance and converted to ZAR.
+    """
+    import yfinance as yf
+
+    q = q.strip()
+    if not q:
+        return {"results": []}
+
+    # 1 — Yahoo Finance search: returns matching tickers for any name/symbol
+    quotes: list[dict] = []
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://query2.finance.yahoo.com/v1/finance/search",
+                params={
+                    "q":               q,
+                    "quotesCount":     8,
+                    "newsCount":       0,
+                    "enableFuzzyQuery": False,
+                },
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=6.0,
+            )
+        if resp.status_code == 200:
+            quotes = resp.json().get("quotes", [])
+    except Exception as exc:
+        logger.warning("Yahoo Finance search failed for %s: %s", q, exc)
+
+    # Keep equities and ETFs; drop crypto, futures, indices
+    allowed = {"EQUITY", "ETF"}
+    quotes = [r for r in quotes if r.get("quoteType", "").upper() in allowed][:6]
+
+    if not quotes:
+        return {"results": []}
+
+    # 2 — Fetch live price + ZAR conversion for each result (parallel)
+    loop = asyncio.get_running_loop()
+
+    def _price_zar(ticker: str) -> float:
+        try:
+            fi = yf.Ticker(ticker).fast_info
+            price = getattr(fi, "last_price", None)
+            if not price:
+                return 0.0
+            currency = str(getattr(fi, "currency", "") or "").upper()
+            multiplier = 1.0
+            if currency and currency not in ("ZAR", ""):
+                if currency in ("ZAC", "ZA CENT", "ZACP"):
+                    multiplier = 0.01
+                else:
+                    try:
+                        rate = yf.Ticker(f"{currency}ZAR=X").fast_info.last_price
+                        if rate:
+                            multiplier = float(rate)
+                    except Exception:
+                        pass
+            return round(float(price) * multiplier, 2)
+        except Exception:
+            return 0.0
+
+    prices = await asyncio.gather(*[
+        loop.run_in_executor(None, _price_zar, row.get("symbol", ""))
+        for row in quotes
+    ])
+
+    # 3 — Check assets table for universe/category (best-effort, not required)
+    tickers = [row.get("symbol", "") for row in quotes]
+    db_rows = supabase.table("assets").select("ticker, id, universe") \
+        .in_("ticker", tickers).execute()
+    db_map = {r["ticker"]: r for r in (db_rows.data or [])}
+
+    results = []
+    for row, price in zip(quotes, prices):
+        ticker = row.get("symbol", "")
+        if not ticker:
+            continue
+        db = db_map.get(ticker, {})
+        results.append({
+            "ticker":        ticker,
+            "name":          row.get("longname") or row.get("shortname") or ticker,
+            "current_price": price,
+            "universe":      db.get("universe", ""),
+            "exchange":      row.get("exchange", ""),
+            "asset_id":      db.get("id"),
+            "source":        "live",
+        })
+
+    return {"results": results}
+
+
 @app.get("/api/assets/{ticker}/history")
 async def get_price_history(ticker: str):
     """Return up to 14 days of daily closing prices in ZAR for sparkline display."""

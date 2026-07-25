@@ -15,6 +15,7 @@ import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
 import { type AssetRecommendation } from "../hooks/useDashboardStats";
 import { supabase } from "../lib/supabase";
+import { type AssetSearchResult } from "../hooks/useWatchlistData";
 
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
@@ -114,26 +115,51 @@ export default function DashboardPage() {
   const [wlResults, setWlResults] = useState<any[]>([]);
   const [wlLoading, setWlLoading] = useState(false);
 
+  const BASE = import.meta.env.VITE_API_BASE ?? "";
+
   useEffect(() => {
     if (!wlSearch.trim()) { setWlResults([]); return; }
     const timer = setTimeout(async () => {
       setWlLoading(true);
-      const { data } = await supabase
-        .from("assets")
-        .select("id, ticker, name, current_price, universe")
-        .or(`ticker.ilike.%${wlSearch}%,name.ilike.%${wlSearch}%`)
-        .limit(6);
-      setWlResults(data || []);
+      try {
+        const res  = await fetch(`${BASE}/api/assets/search?q=${encodeURIComponent(wlSearch)}`);
+        const data = res.ok ? await res.json() : { results: [] };
+        setWlResults(data.results || []);
+      } catch { setWlResults([]); }
       setWlLoading(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [wlSearch]);
+  }, [wlSearch, BASE]);
 
-  const handleAddToWatchlist = async (assetId: string) => {
+  const handleAddToWatchlist = async (result: AssetSearchResult) => {
     if (!profile?.id) return;
-    await supabase
+    let assetId = result.asset_id;
+
+    // If live result (not in DB), upsert the asset first
+    if (!assetId && result.source === "live") {
+      const { data: upserted } = await supabase
+        .from("assets")
+        .upsert(
+          { ticker: result.ticker, name: result.name, current_price: result.current_price, universe: result.universe || null, last_updated: new Date().toISOString() },
+          { onConflict: "ticker" }
+        )
+        .select("id").maybeSingle();
+      assetId = upserted?.id || null;
+    }
+    if (!assetId) return;
+
+    // Try inserting with ticker (requires migration). Falls back without it
+    // so the button always works regardless of schema state.
+    const { error } = await supabase
       .from("user_watchlist_assets")
-      .insert({ user_id: profile.id, asset_id: assetId });
+      .insert({ user_id: profile.id, asset_id: assetId, ticker: result.ticker });
+
+    if (error) {
+      // ticker column may not exist yet — retry without it
+      await supabase
+        .from("user_watchlist_assets")
+        .insert({ user_id: profile.id, asset_id: assetId });
+    }
     setWlSearch("");
   };
 
@@ -259,9 +285,18 @@ export default function DashboardPage() {
         ? analysis.investment_universe
         : [];
 
+      // Fetch user's actual watchlist tickers to merge into this run
+      const { data: wlRows } = await supabase
+        .from("user_watchlist_assets")
+        .select("ticker, assets(ticker)")
+        .eq("user_id", profile.id);
+      const watchlistTickers = (wlRows || [])
+        .map((r: any) => r.ticker || r.assets?.ticker)
+        .filter(Boolean) as string[];
+
       const { run_id } = await startAnalysis({
         universes,
-        watchlist: [],
+        watchlist: watchlistTickers,
         risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
         expertise_level: analysis?.ai_derived_expertise ?? "novice",
       });
