@@ -299,6 +299,12 @@ def _rsi_band(rsi: float | None) -> str | None:
 def _beta_band(beta: float | None) -> str | None:
 	if beta is None:
 		return None
+	# A negative beta is not "low market sensitivity" — it means the asset moved
+	# INVERSELY to the market over the window. Folding it into "low" stated
+	# something factually untrue, which breaks the premise of a definitional band.
+	# (Observed live: DUK at beta -0.29 was labelled "low".)
+	if beta < 0:
+		return "inverse"
 	if beta < 0.8:
 		return "low"
 	if beta <= 1.2:

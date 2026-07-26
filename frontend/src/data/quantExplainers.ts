@@ -8,7 +8,7 @@
 
 export type SubDimensionKey = "momentum" | "risk_adjusted_return" | "stability";
 export type RsiBand = "oversold" | "neutral" | "overbought";
-export type BetaBand = "low" | "market" | "high";
+export type BetaBand = "inverse" | "low" | "market" | "high";
 
 export const SUB_DIMENSION_ORDER: SubDimensionKey[] = [
   "momentum",
@@ -71,7 +71,11 @@ export const RSI_BANDS: Record<RsiBand, string> = {
 };
 
 export const BETA_BANDS: Record<BetaBand, string> = {
-  low: "tends to move less than the market (below 0.8)",
+  // A negative beta is genuinely different in kind, not just "low": the asset
+  // moved opposite to the market over the window. Calling that "low" stated
+  // something untrue, so it gets its own band.
+  inverse: "historically moved opposite to the market (below 0)",
+  low: "tends to move less than the market (0–0.8)",
   market: "moves roughly with the market (0.8–1.2)",
   high: "tends to move more sharply than the market (above 1.2)",
 };
