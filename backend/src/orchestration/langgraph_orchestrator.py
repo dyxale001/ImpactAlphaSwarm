@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from dotenv import load_dotenv
@@ -140,14 +141,118 @@ class AnalysisState(TypedDict):
     status: str
 
 
+# Hard cap on tickers analysed per run. Bounds the manual-run latency budget and
+# the nightly union. Env-tunable to match the rest of the config surface.
+MAX_SCOPED_TICKERS = int(os.getenv("MAX_SCOPED_TICKERS", "30"))
+
+# Discovery-agent read switches (see DISCOVERY_AGENT_PLAN.md / D-068). Off by
+# default: scope_tickers behaves exactly as the legacy seeded path until the flag
+# is flipped, and shadow mode lets discovery run + persist without being read.
+DISCOVERY_ENABLED = os.getenv("DISCOVERY_ENABLED", "false").lower() == "true"
+DISCOVERY_SHADOW_MODE = os.getenv("DISCOVERY_SHADOW_MODE", "true").lower() == "true"
+DISCOVERY_POOL_SIZE = int(os.getenv("DISCOVERY_POOL_SIZE", "15"))
+# Fixed score seeds carry in the union ranking; discovered names (score > this)
+# outrank seeds, so seeds fill only the shortfall to DISCOVERY_POOL_SIZE.
+DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE", "0.0"))
+
+
+def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
+    """True if a discovered row is still benched. Unparseable timestamps fail
+    open (treated as not quarantined) so a bad value can't silently shrink the
+    pool below the quant crowd."""
+    if not quarantined_until:
+        return False
+    try:
+        until = datetime.fromisoformat(str(quarantined_until).replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        return until > now
+    except (ValueError, TypeError):
+        return False
+
+
+def _rank_universe(rows: list[dict], now: datetime) -> list[str]:
+    """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
+
+    Seeds are always eligible at the fixed baseline score; discovered rows must
+    be active and not currently quarantined. Ties break on ticker so the order
+    is deterministic run-to-run (keeps the cap and quant crowd stable)."""
+    scored: list[tuple[float, str]] = []
+    for row in rows:
+        ticker = row.get("ticker")
+        if not ticker:
+            continue
+        if row.get("origin") == "seed":
+            score = DISCOVERY_SEED_BASELINE_SCORE
+        else:
+            if not row.get("is_active"):
+                continue
+            if _is_quarantined(row.get("quarantined_until"), now):
+                continue
+            raw = row.get("discovery_score")
+            score = float(raw) if raw is not None else 0.0
+        scored.append((score, ticker))
+    scored.sort(key=lambda pair: (-pair[0], pair[1]))
+    return [ticker for _, ticker in scored[:DISCOVERY_POOL_SIZE]]
+
+
+def _select_from_pool(
+    pool_rows: list[dict],
+    universes: list[str],
+    watchlist: list[str],
+    now: datetime,
+) -> list[str]:
+    """Assemble the scoped list from the discovered pool: watchlist first (kept
+    even if inactive/quarantined — personalization outranks pool hygiene), then a
+    round-robin across the user's universes by rank so each universe is fairly
+    represented under the cap. Deduped, capped at ``MAX_SCOPED_TICKERS``."""
+    by_universe: dict[str, list[dict]] = {u: [] for u in universes}
+    for row in pool_rows:
+        universe = row.get("universe")
+        if universe in by_universe:
+            by_universe[universe].append(row)
+    ranked = {u: _rank_universe(by_universe[u], now) for u in universes}
+
+    ordered = list(watchlist)
+    depth = max((len(names) for names in ranked.values()), default=0)
+    for rank in range(depth):
+        for universe in universes:
+            names = ranked[universe]
+            if rank < len(names):
+                ordered.append(names[rank])
+    return list(dict.fromkeys(ordered))[:MAX_SCOPED_TICKERS]
+
+
 def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> list[str]:
     """Resolve a user's investment universes (+ watchlist) to a capped, deduped
-    ticker list. Shared by the per-user graph and the batched daily run."""
+    ticker list. Shared by the per-user graph and the batched daily run.
+
+    When discovery is enabled and live, the set is drawn from the ranked
+    discovered pool (top ``DISCOVERY_POOL_SIZE`` per universe from discovered ∪
+    seeds); otherwise — and whenever the pool read is empty (migration not
+    applied, discovery never ran, or a read failure) — it falls back to the
+    legacy seeded path. Both paths are deterministic and watchlist-first: a
+    user's watchlisted tickers come first so the cap can never drop them.
+    """
+    watchlist = list(dict.fromkeys(watchlist or []))
+
+    if DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE:
+        from ..utils.supabase_client import get_discovery_pool_rows
+
+        pool_rows = get_discovery_pool_rows(universes)
+        if pool_rows:
+            return _select_from_pool(
+                pool_rows, universes, watchlist, datetime.now(timezone.utc)
+            )
+        # Empty pool → degrade to the seeded path rather than starve the run.
+
     from ..utils.supabase_client import get_assets_by_universes
 
-    tickers = get_assets_by_universes(universes)
-    tickers.extend(watchlist or [])
-    return list(set(tickers))[:30]
+    universe_tickers = get_assets_by_universes(universes)
+    # dict.fromkeys dedups while preserving first-seen order: watchlist entries
+    # win their slot, then universe tickers (sorted) fill the remainder.
+    ordered = list(dict.fromkeys([*watchlist, *sorted(universe_tickers)]))
+    return ordered[:MAX_SCOPED_TICKERS]
 
 
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
@@ -165,6 +270,9 @@ def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
                 "tickers_count": len(tickers),
                 "universes": state["universes"],
                 "watchlist_count": len(state["watchlist"]),
+                # Whether this scope came from the discovered pool or the legacy
+                # seeded path (observability for the shadow/live rollout).
+                "discovery_enabled": DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE,
             },
         )
     return {
@@ -502,6 +610,23 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     except Exception as e:
         logger.warning("Batch quant gather failed: %s", e)
         quant_results = {}
+
+    # Discovery feedback loop: a discovered ticker whose quant fetch came back
+    # empty this run is benched (quarantined) so it stops being selected until it
+    # re-qualifies. Guarded on a non-empty quant_results so a *total* quant outage
+    # can't quarantine the whole pool, and on origin='discovered' inside the helper
+    # so seeds are never benched. Only active when discovery is enabled.
+    if DISCOVERY_ENABLED and quant_results:
+        try:
+            from ..utils.supabase_client import mark_quant_empty
+
+            empty = [ticker for ticker in union if not quant_results.get(ticker)]
+            if empty:
+                mark_quant_empty(empty)
+                logger.info("Discovery: quarantined %d empty-quant tickers", len(empty))
+        except Exception as e:
+            logger.warning("Discovery quant-empty feedback failed: %s", e)
+
     try:
         # Nightly is the ONLY place the Marketaux API is called: one batched, deeply
         # paginated query for the whole union of tickers, whose tier-1 results are

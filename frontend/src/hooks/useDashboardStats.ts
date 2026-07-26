@@ -14,6 +14,8 @@ export interface AssetRecommendation {
   hypePenalty: number;
   isHype: boolean;
   rank: number;
+  isDiscovered: boolean;
+  discoverySources: string[] | null;
 }
 
 export function useDashboardStats() {
@@ -108,7 +110,7 @@ export function useDashboardStats() {
       const { data: assets, error: assetsError } = assetIds.length
         ? await supabase
             .from("assets")
-            .select("id, ticker, name")
+            .select("id, ticker, name, origin, discovery_sources")
             .in("id", assetIds)
         : { data: [], error: null };
 
@@ -141,6 +143,8 @@ export function useDashboardStats() {
             hypePenalty: rec.hype_penalty ?? 0,
             isHype: (rec.hype_penalty ?? 0) > 0,
             rank: rec.rank ?? 0,
+            isDiscovered: asset?.origin === "discovered",
+            discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
           };
         },
       );
