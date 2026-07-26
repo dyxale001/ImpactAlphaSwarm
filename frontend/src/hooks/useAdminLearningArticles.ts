@@ -11,6 +11,7 @@ export type LearningArticleFormValues = {
   summary: string;
   content: string;
   category_id: string;
+  difficulty_level: string;
 };
 
 const emptyFormValues: LearningArticleFormValues = {
@@ -19,6 +20,7 @@ const emptyFormValues: LearningArticleFormValues = {
   summary: "",
   content: "",
   category_id: "",
+  difficulty_level: "",
 };
 
 export function useAdminLearningArticles() {
@@ -44,7 +46,9 @@ export function useAdminLearningArticles() {
         .order("name", { ascending: true }),
       supabase
         .from("learning_articles")
-        .select("id, category_id, title, slug, summary, content, created_at")
+        .select(
+          "id, category_id, title, slug, summary, content, difficulty_level, created_at",
+        )
         .order("created_at", { ascending: false }),
     ]);
 
@@ -78,6 +82,7 @@ export function useAdminLearningArticles() {
         summary: values.summary,
         content: values.content,
         category_id: values.category_id,
+        difficulty_level: values.difficulty_level,
       });
 
     if (createError) {
@@ -99,6 +104,7 @@ export function useAdminLearningArticles() {
         summary: values.summary,
         content: values.content,
         category_id: values.category_id,
+        difficulty_level: values.difficulty_level,
       })
       .eq("id", id);
 
