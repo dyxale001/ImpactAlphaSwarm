@@ -21,8 +21,13 @@ export default function AppLayout() {
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
-const visibleNavItems = navItems;
-
+const visibleNavItems = navItems.filter(i =>
+  i.name === "Dashboard" ||
+  i.name === "Watchlist" ||
+  i.name === "Whale Watching" ||
+  i.name === "Learning" ||
+  i.name === "Settings"
+);
   return (
     <div className="flex h-screen bg-brand-bg text-brand-fg overflow-hidden">
       {/* Sidebar */}

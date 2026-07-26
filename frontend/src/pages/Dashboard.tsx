@@ -131,37 +131,17 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [wlSearch, BASE]);
 
-  const handleAddToWatchlist = async (result: AssetSearchResult) => {
-    if (!profile?.id) return;
-    let assetId = result.asset_id;
-
-    // If live result (not in DB), upsert the asset first
-    if (!assetId && result.source === "live") {
-      const { data: upserted } = await supabase
-        .from("assets")
-        .upsert(
-          { ticker: result.ticker, name: result.name, current_price: result.current_price, universe: result.universe || null, last_updated: new Date().toISOString() },
-          { onConflict: "ticker" }
-        )
-        .select("id").maybeSingle();
-      assetId = upserted?.id || null;
-    }
-    if (!assetId) return;
-
-    // Try inserting with ticker (requires migration). Falls back without it
-    // so the button always works regardless of schema state.
-    const { error } = await supabase
-      .from("user_watchlist_assets")
-      .insert({ user_id: profile.id, asset_id: assetId, ticker: result.ticker });
-
-    if (error) {
-      // ticker column may not exist yet — retry without it
-      await supabase
-        .from("user_watchlist_assets")
-        .insert({ user_id: profile.id, asset_id: assetId });
-    }
-    setWlSearch("");
-  };
+const handleAddToWatchlist = async (result: AssetSearchResult) => {
+  if (!profile?.id) return;
+  const { error } = await supabase
+    .from("user_watchlist_assets")
+    .insert({
+      user_id: profile.id,
+      ticker:  result.ticker,
+      ...(result.asset_id ? { asset_id: result.asset_id } : {}),
+    });
+  if (!error) setWlSearch("");
+};
 
   const escapeCsvValue = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);

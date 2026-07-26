@@ -31,7 +31,7 @@ export function useAssetDetails(ticker: string | undefined) {
           .from("assets")
           .select("*")
           .eq("ticker", ticker.toUpperCase())
-          .single();
+          .maybeSingle();
 
         if (assetError) throw assetError;
         setAsset(assetData);
