@@ -34,23 +34,17 @@ text-sm text-brand-muted-fg
         </p>
       </div>
 
-      <div
-        className="
-grid grid-cols-1
-md:grid-cols-2
-xl:grid-cols-3
-gap-4
-"
-      >
+      <div className="flex gap-4 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {category.articles.map((article) => (
-          <LearningCard
-            key={article.id}
-            article={article}
-            onOpenArticle={onOpenArticle}
-            onTakeQuiz={onTakeQuiz}
-            canTakeQuiz={true}
-            hasPerfectScore={getArticleQuizScore(article.id) === 100}
-          />
+          <div key={article.id} className="w-[20rem] shrink-0 snap-start">
+            <LearningCard
+              article={article}
+              onOpenArticle={onOpenArticle}
+              onTakeQuiz={onTakeQuiz}
+              canTakeQuiz={true}
+              hasPerfectScore={getArticleQuizScore(article.id) === 100}
+            />
+          </div>
         ))}
       </div>
     </section>

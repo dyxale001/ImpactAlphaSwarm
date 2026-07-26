@@ -24,9 +24,9 @@ export default function LearningBadgeGallery({
         </h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {badges.length === 0 ? (
-          <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-6 text-sm text-brand-muted-fg sm:col-span-2 xl:col-span-3">
+          <div className="min-w-[16rem] rounded-2xl border border-brand-border bg-brand-bg/60 p-6 text-sm text-brand-muted-fg">
             {hasUserContext
               ? "No badges are available yet."
               : "Sign in to load your badge progress. If badges are still empty after signing in, check Supabase access policies for the badges table."}
@@ -40,7 +40,7 @@ export default function LearningBadgeGallery({
             <div
               key={badge.id}
               tabIndex={0}
-              className="group relative flex flex-col items-center gap-2.5 rounded-3xl border border-brand-border bg-brand-card p-3.5 text-center shadow-card outline-none transition-all duration-200 focus:border-brand-primary/40 focus:ring-2 focus:ring-brand-primary/20"
+              className="group relative w-[10.5rem] shrink-0 snap-start flex-col items-center gap-2.5 rounded-3xl border border-brand-border bg-brand-card p-3.5 text-center shadow-card outline-none transition-all duration-200 focus:border-brand-primary/40 focus:ring-2 focus:ring-brand-primary/20"
             >
               <div className="relative flex items-center justify-center">
                 <div

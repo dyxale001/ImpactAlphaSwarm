@@ -17,14 +17,7 @@ export default function LearningCard({
   hasPerfectScore,
 }: Props) {
   return (
-    <article
-      className="
-glass-card
-rounded-2xl
-p-5
-relative
-"
-    >
+    <article className="glass-card relative h-full rounded-2xl p-5">
       {hasPerfectScore ? (
         <div className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-primary/20 bg-brand-primary/10 text-brand-primary shadow-sm">
           <Trophy className="h-5 w-5" />
