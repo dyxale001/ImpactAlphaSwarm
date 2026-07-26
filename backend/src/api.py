@@ -10,8 +10,10 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
-from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status, fetch_fx_rate_to_zar
+from src.utils.supabase_client import (
+    SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase,
+    create_ai_run, update_ai_run_status, fetch_price_at_run_in_zar, fetch_fx_rate_to_zar,
+)
 from src.utils import whale_watching as ww
 
 logger = logging.getLogger("alpha-api")
@@ -26,13 +28,9 @@ DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
 
-# Local dev: the Vite host (localhost vs 127.0.0.1) and port (5173 -> 5174 when
-# a port is taken) both vary, so match any localhost/127.0.0.1 origin in addition
-# to the explicit production list from API_CORS_ORIGINS.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -289,6 +287,228 @@ async def analysis_result(run_id: str):
     return {"top_5": top_5}
 
 
+
+STALE_DAYS = 4  # matches the 4-day staleness window in the design notes
+
+@app.get("/api/assets/{ticker}/refresh")
+async def refresh_asset_cache(ticker: str):
+    """Refresh the cached price for a single asset.
+
+    Called when a user views an asset's details page. Respects a 4-day
+    staleness window — yfinance is only called when the cache is actually old,
+    so frequent page views don't hammer the external API.
+    """
+    ticker = ticker.upper()
+
+    # 1. Look up current cache state
+    result = supabase.table("assets").select("id, ticker, name, current_price, last_updated, universe") \
+        .eq("ticker", ticker).maybe_single().execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail=f"Asset {ticker} not found in database")
+
+    asset = result.data
+    last_updated_raw = asset.get("last_updated")
+
+    # 2. Check staleness
+    is_stale = True
+    age_days = None
+    if last_updated_raw:
+        try:
+            lu = datetime.datetime.fromisoformat(last_updated_raw.replace("Z", "+00:00"))
+            age_days = (datetime.datetime.now(datetime.timezone.utc) - lu).days
+            is_stale = age_days >= STALE_DAYS
+        except ValueError:
+            pass  # treat as stale if timestamp is unparseable
+
+    if not is_stale:
+        return {
+            "ticker": ticker,
+            "current_price": asset.get("current_price"),
+            "last_updated": last_updated_raw,
+            "age_days": age_days,
+            "refreshed": False,
+            "message": f"Cache is fresh ({age_days}d old)",
+        }
+
+    # 3. Fetch fresh price via yfinance (ZAR-converted)
+    try:
+        fresh_price = fetch_price_at_run_in_zar(ticker)
+    except Exception as exc:
+        logger.warning("yfinance price fetch failed for %s: %s", ticker, exc)
+        fresh_price = None
+
+    if fresh_price is None:
+        return {
+            "ticker": ticker,
+            "current_price": asset.get("current_price"),
+            "last_updated": last_updated_raw,
+            "refreshed": False,
+            "message": "Could not fetch fresh price from market data",
+        }
+
+    # 4. Persist updated price
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000000+00:00")
+    supabase.table("assets").update({
+        "current_price": round(fresh_price, 4),
+        "last_updated": now,
+    }).eq("ticker", ticker).execute()
+
+    logger.info("Refreshed cache for %s: R%.2f (was %dd old)", ticker, fresh_price, age_days or 0)
+
+    return {
+        "ticker": ticker,
+        "current_price": round(fresh_price, 4),
+        "last_updated": now,
+        "age_days": age_days,
+        "refreshed": True,
+        "message": f"Price refreshed from market data",
+    }
+
+
+@app.get("/api/assets/search")
+async def search_assets(q: str = ""):
+    """Fully live asset search via Yahoo Finance search API.
+
+    Accepts any company name or ticker (e.g. 'Apple', 'NVDA', 'Eskom').
+    Not limited to assets already in the database.
+    Prices are fetched live from yfinance and converted to ZAR.
+    """
+    import yfinance as yf
+
+    q = q.strip()
+    if not q:
+        return {"results": []}
+
+    # 1 — Yahoo Finance search: returns matching tickers for any name/symbol
+    quotes: list[dict] = []
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://query2.finance.yahoo.com/v1/finance/search",
+                params={
+                    "q":               q,
+                    "quotesCount":     8,
+                    "newsCount":       0,
+                    "enableFuzzyQuery": False,
+                },
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=6.0,
+            )
+        if resp.status_code == 200:
+            quotes = resp.json().get("quotes", [])
+    except Exception as exc:
+        logger.warning("Yahoo Finance search failed for %s: %s", q, exc)
+
+    # Keep equities and ETFs; drop crypto, futures, indices
+    allowed = {"EQUITY", "ETF"}
+    quotes = [r for r in quotes if r.get("quoteType", "").upper() in allowed][:6]
+
+    if not quotes:
+        return {"results": []}
+
+    # 2 — Fetch live price + ZAR conversion for each result (parallel)
+    loop = asyncio.get_running_loop()
+
+    def _price_zar(ticker: str) -> float:
+        try:
+            fi = yf.Ticker(ticker).fast_info
+            price = getattr(fi, "last_price", None)
+            if not price:
+                return 0.0
+            currency = str(getattr(fi, "currency", "") or "").upper()
+            multiplier = 1.0
+            if currency and currency not in ("ZAR", ""):
+                if currency in ("ZAC", "ZA CENT", "ZACP"):
+                    multiplier = 0.01
+                else:
+                    try:
+                        rate = yf.Ticker(f"{currency}ZAR=X").fast_info.last_price
+                        if rate:
+                            multiplier = float(rate)
+                    except Exception:
+                        pass
+            return round(float(price) * multiplier, 2)
+        except Exception:
+            return 0.0
+
+    prices = await asyncio.gather(*[
+        loop.run_in_executor(None, _price_zar, row.get("symbol", ""))
+        for row in quotes
+    ])
+
+    # 3 — Check assets table for universe/category (best-effort, not required)
+    tickers = [row.get("symbol", "") for row in quotes]
+    db_rows = supabase.table("assets").select("ticker, id, universe") \
+        .in_("ticker", tickers).execute()
+    db_map = {r["ticker"]: r for r in (db_rows.data or [])}
+
+    results = []
+    for row, price in zip(quotes, prices):
+        ticker = row.get("symbol", "")
+        if not ticker:
+            continue
+        db = db_map.get(ticker, {})
+        results.append({
+            "ticker":        ticker,
+            "name":          row.get("longname") or row.get("shortname") or ticker,
+            "current_price": price,
+            "universe":      db.get("universe", ""),
+            "exchange":      row.get("exchange", ""),
+            "asset_id":      db.get("id"),
+            "source":        "live",
+        })
+
+    return {"results": results}
+
+
+@app.get("/api/assets/{ticker}/history")
+async def get_price_history(ticker: str):
+    """Return up to 14 days of daily closing prices in ZAR for sparkline display."""
+    import yfinance as yf
+
+    try:
+        t = yf.Ticker(ticker.upper())
+        hist = t.history(period="14d", interval="1d", auto_adjust=False)
+
+        if hist.empty:
+            return {"ticker": ticker.upper(), "closes": [], "dates": []}
+
+        closes = hist["Close"].dropna().tolist()
+        dates  = [str(d.date()) for d in hist.index]
+
+        # Detect currency and convert to ZAR
+        currency = ""
+        try:
+            currency = str(t.fast_info.currency or "").upper()
+        except Exception:
+            pass
+
+        multiplier = 1.0
+        if currency and currency not in ("ZAR", ""):
+            if currency in ("ZAC", "ZA CENT", "ZACP"):
+                multiplier = 0.01
+            else:
+                try:
+                    fx = yf.Ticker(f"{currency}ZAR=X")
+                    rate = fx.fast_info.last_price
+                    if rate:
+                        multiplier = float(rate)
+                except Exception:
+                    pass  # leave multiplier as 1.0
+
+        zar_closes = [round(c * multiplier, 2) for c in closes]
+
+        return {
+            "ticker":  ticker.upper(),
+            "closes":  zar_closes,
+            "dates":   dates,
+            "currency": "ZAR",
+        }
+
+    except Exception as exc:
+        logger.warning("Price history fetch failed for %s: %s", ticker, exc)
+        return {"ticker": ticker.upper(), "closes": [], "dates": []}
 @app.post("/api/analysis/run-daily")
 async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
@@ -376,10 +596,6 @@ class ResetPasswordRequest(BaseModel):
 class ToggleUserStatusRequest(BaseModel):
     user_id: str
     is_active: bool
-
-class SetUserRoleRequest(BaseModel):
-    user_id: str
-    role: str  # 'admin' or 'user'
 
 async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
     if not authorization:
@@ -491,27 +707,6 @@ async def toggle_user_status(
 
     action = "activated" if req.is_active else "deactivated"
     return {"ok": True, "is_active": req.is_active, "message": f"User {action} successfully"}
-
-
-@app.post("/api/admin/set-user-role")
-async def set_user_role(
-    req: SetUserRoleRequest,
-    authorization: Optional[str] = Header(None),
-):
-    """Promote a user to admin or demote an admin back to user (admin only)."""
-    requester_id = await _get_user_id_from_bearer(authorization)
-    await _require_admin(requester_id)
-
-    if req.role not in ("admin", "user"):
-        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
-
-    if req.user_id == requester_id:
-        raise HTTPException(status_code=400, detail="Cannot modify your own role")
-
-    supabase.table("users").update({"role": req.role}).eq("id", req.user_id).execute()
-
-    action = "promoted to admin" if req.role == "admin" else "demoted to user"
-    return {"ok": True, "role": req.role, "message": f"User {action} successfully"}
 
 
 @app.post("/api/admin/delete-user")

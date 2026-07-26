@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase'
 import { UserProfile, UserAnalysis } from '../../types/auth'
 
 export async function fetchUserProfileData(userId: string) {
-  //fetch profile data
+  // Fetch profile data
   let { data: profileData, error: profileError } = await supabase
     .from('users')
     .select('*')
@@ -14,25 +14,23 @@ export async function fetchUserProfileData(userId: string) {
     return { error: profileError }
   }
 
-  //Auto Create profile if missing
+  // Auto create profile if missing
   if (!profileData) {
     const { data: userData } = await supabase.auth.getUser()
     const metadata = userData?.user?.user_metadata || {}
-    
+
     const { data: newProfile, error: insertError } = await supabase
       .from('users')
-      .insert([
-        {
-          id: userId,
-          first_name: metadata.first_name || '',
-          last_name: metadata.last_name || '',
-          email: userData?.user?.email || '',
-          role: 'user'
-        }
-      ])
+      .insert([{
+        id: userId,
+        first_name: metadata.first_name || '',
+        last_name: metadata.last_name || '',
+        email: userData?.user?.email || '',
+        role: 'user'
+      }])
       .select()
       .single()
-      
+
     if (insertError) {
       console.error("Error creating user profile on first login:", insertError.message)
       return { error: insertError }
@@ -41,11 +39,10 @@ export async function fetchUserProfileData(userId: string) {
   }
 
   const { data: analysisData } = await supabase
-    .from('user_analysis') 
+    .from('user_analysis')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle()
-
 
   return {
     profile: (profileData as UserProfile) || null,

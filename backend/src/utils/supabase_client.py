@@ -307,15 +307,6 @@ def save_top_assets(
             "rsi": quant.get("rsi"),
             "sharpe_ratio": quant.get("sharpe_ratio"),
             "volatility": quant.get("volatility"),
-            # Objective cross-sectional quant sub-dimensions + context bands
-            # (see migrations/004). Null when the candidate universe was too
-            # small to rank (quant_normalisation = 'insufficient_universe').
-            "momentum_pctile": (quant.get("sub_dimensions") or {}).get("momentum"),
-            "risk_adj_pctile": (quant.get("sub_dimensions") or {}).get("risk_adjusted_return"),
-            "stability_pctile": (quant.get("sub_dimensions") or {}).get("stability"),
-            "rsi_band": (quant.get("bands") or {}).get("rsi"),
-            "beta_band": (quant.get("bands") or {}).get("beta"),
-            "quant_normalisation": quant.get("quant_normalisation"),
             "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),

@@ -4,6 +4,7 @@ import { ArrowRight, MessageSquare, BarChart3, Flame, Eye, Sparkles } from "luci
 import { type AssetRecommendation } from "../../hooks/useDashboardStats";
 import { discoveryProvenance } from "../../utils/discovery";
 import DualBar from "./DualBar";
+import AddToWatchlistButton from "./Addtowatchlistbutton";
 
 type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
 
@@ -179,6 +180,7 @@ export default function RecommendationCard({
         >
           Full analysis <ArrowRight className="w-3 h-3" />
         </Link>
+        <AddToWatchlistButton ticker={asset.ticker} />
       </div>
     </div>
   );
