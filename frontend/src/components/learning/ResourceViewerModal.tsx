@@ -1,4 +1,4 @@
-import type { LearningArticle } from "../../data/learningContent";
+import type { LearningArticle } from "../../types/learning";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const scrollbarStyles = `

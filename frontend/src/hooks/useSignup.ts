@@ -1,48 +1,48 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../store/authStore'
-import { validateEmail, validatePassword } from '../utils/validation'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import { useAuthStore } from "../store/authStore";
+import { validateEmail, validatePassword } from "../utils/validation";
 
 export function useSignup() {
-  const navigate = useNavigate()
-  const { setSession } = useAuthStore()
+  const navigate = useNavigate();
+  const { setSession } = useAuthStore();
 
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
-  })
-  
-  const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
-  const [loading, setLoading] = useState(false)
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccessMessage('')
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccessMessage("");
 
     if (!validateEmail(formData.email)) {
-      setError('Please enter a valid email address.')
-      setLoading(false)
-      return
+      setError("Please enter a valid email address.");
+      setLoading(false);
+      return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match.')
-      setLoading(false)
-      return
+      setError("Passwords do not match.");
+      setLoading(false);
+      return;
     }
 
-    const passwordCheck = validatePassword(formData.password)
+    const passwordCheck = validatePassword(formData.password);
     if (!passwordCheck.isValid) {
-      setError(passwordCheck.message)
-      setLoading(false)
-      return
+      setError(passwordCheck.message);
+      setLoading(false);
+      return;
     }
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -52,43 +52,51 @@ export function useSignup() {
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,
-          role: 'user'
-        }
-      }
-    })
+          role: "user",
+        },
+      },
+    });
 
     if (authError) {
-      setError(authError.message)
-      setLoading(false)
-      return
+      setError(authError.message);
+      setLoading(false);
+      return;
     }
 
     if (authData.user) {
       if (authData.session) {
-        const { error: dbError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: authData.user.id,
-              first_name: formData.firstName,
-              last_name: formData.lastName,
-              email: formData.email,
-              role: 'user'
-            }
-          ])
+        const { error: dbError } = await supabase.from("users").insert([
+          {
+            id: authData.user.id,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            email: formData.email,
+            role: "user",
+            learning_xp: 0,
+          },
+        ]);
 
         if (dbError) {
-          console.error("Profile creation error on signup:", dbError)
+          console.error("Profile creation error on signup:", dbError);
         }
-        
-        setSession(authData.session)
-        navigate('/onboarding')
+
+        setSession(authData.session);
+        navigate("/onboarding");
       } else {
-        setSuccessMessage('A confirmation link has been sent to your email address. Please click the link to verify your account.')
-        setLoading(false)
+        setSuccessMessage(
+          "A confirmation link has been sent to your email address. Please click the link to verify your account.",
+        );
+        setLoading(false);
       }
     }
-  }
+  };
 
-  return { formData, setFormData, error, successMessage, loading, handleSubmit }
+  return {
+    formData,
+    setFormData,
+    error,
+    successMessage,
+    loading,
+    handleSubmit,
+  };
 }
