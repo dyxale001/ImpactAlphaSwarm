@@ -5,6 +5,7 @@ export type LearningArticle = {
   slug: string;
   summary: string;
   content: string;
+  difficulty_level: string;
   created_at: string;
 };
 

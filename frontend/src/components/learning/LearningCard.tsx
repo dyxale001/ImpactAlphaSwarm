@@ -14,6 +14,10 @@ rounded-2xl
 p-5
 "
     >
+      <div className="mb-3 inline-flex rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+        {article.difficulty_level}
+      </div>
+
       <h3
         className="
 font-semibold

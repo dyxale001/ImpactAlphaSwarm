@@ -22,12 +22,14 @@ export default function LearningPage() {
     const title = article.title.toLowerCase();
     const summary = article.summary.toLowerCase();
     const content = article.content.toLowerCase();
+    const difficultyLevel = article.difficulty_level.toLowerCase();
 
     if (title === query) return 5;
     if (title.startsWith(query)) return 4;
     if (title.includes(query)) return 3;
     if (summary.includes(query)) return 2;
     if (content.includes(query)) return 1;
+    if (difficultyLevel.includes(query)) return 1;
 
     return 0;
   };
@@ -75,6 +77,7 @@ export default function LearningPage() {
             article.title,
             article.summary,
             article.content,
+            article.difficulty_level,
           ]
             .join(" ")
             .toLowerCase();
