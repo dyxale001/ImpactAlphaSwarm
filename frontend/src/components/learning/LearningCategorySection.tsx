@@ -34,7 +34,7 @@ text-sm text-brand-muted-fg
         </p>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
+      <div className="flex gap-4 overflow-x-auto py-6 pb-10 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {category.articles.map((article) => (
           <div key={article.id} className="w-[20rem] shrink-0 snap-start">
             <LearningCard

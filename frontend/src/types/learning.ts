@@ -53,6 +53,7 @@ export type LearningBadge = {
   name: string;
   description: string;
   icon_path: string;
+  icon_url?: string | null;
   criteria_type: string;
   criteria_value: string;
   created_at: string;

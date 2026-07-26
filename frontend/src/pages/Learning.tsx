@@ -257,8 +257,17 @@ export default function LearningPage() {
           id: current[articleId]?.id ?? articleId,
           user_id: userId,
           article_id: articleId,
-          status: result.passed ? "COMPLETED" : "IN_PROGRESS",
-          quiz_score: result.score,
+          status:
+            current[articleId]?.status === "COMPLETED"
+              ? "COMPLETED"
+              : result.passed
+                ? "COMPLETED"
+                : "IN_PROGRESS",
+          quiz_score:
+            current[articleId]?.quiz_score === null ||
+            current[articleId]?.quiz_score === undefined
+              ? result.score
+              : Math.max(current[articleId].quiz_score, result.score),
         },
       }));
 

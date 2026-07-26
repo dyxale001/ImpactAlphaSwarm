@@ -1,6 +1,13 @@
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import { LockKeyhole } from "lucide-react";
 import { badgeRequirementText } from "../../services/supabase/learningService";
 import type { LearningBadge } from "../../types/learning";
+
+type ActiveBadgeTooltip = {
+  badge: LearningBadge;
+  rect: DOMRect;
+};
 
 type Props = {
   badges: LearningBadge[];
@@ -13,6 +20,14 @@ export default function LearningBadgeGallery({
   earnedBadgeIds,
   hasUserContext,
 }: Props) {
+  const [activeTooltip, setActiveTooltip] = useState<ActiveBadgeTooltip | null>(
+    null,
+  );
+
+  const showTooltip = (badge: LearningBadge, element: HTMLElement) => {
+    setActiveTooltip({ badge, rect: element.getBoundingClientRect() });
+  };
+
   return (
     <section className="space-y-4">
       <div className="space-y-2">
@@ -24,7 +39,7 @@ export default function LearningBadgeGallery({
         </h2>
       </div>
 
-      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto py-6 pb-10 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {badges.length === 0 ? (
           <div className="min-w-[16rem] rounded-2xl border border-brand-border bg-brand-bg/60 p-6 text-sm text-brand-muted-fg">
             {hasUserContext
@@ -40,16 +55,16 @@ export default function LearningBadgeGallery({
             <div
               key={badge.id}
               tabIndex={0}
-              className="group relative w-[10.5rem] shrink-0 snap-start flex-col items-center gap-2.5 rounded-3xl border border-brand-border bg-brand-card p-3.5 text-center shadow-card outline-none transition-all duration-200 focus:border-brand-primary/40 focus:ring-2 focus:ring-brand-primary/20"
+              onMouseEnter={(event) => showTooltip(badge, event.currentTarget)}
+              onMouseLeave={() => setActiveTooltip(null)}
+              onFocus={(event) => showTooltip(badge, event.currentTarget)}
+              onBlur={() => setActiveTooltip(null)}
+              className={`group relative w-[10.5rem] shrink-0 snap-start flex-col items-center gap-2.5 rounded-3xl border border-brand-border bg-brand-card p-3.5 text-center shadow-card outline-none transition-all duration-200 focus:border-brand-primary/40 focus:ring-2 focus:ring-brand-primary/20 ${
+                isEarned ? "opacity-100" : "opacity-70 grayscale"
+              }`}
             >
               <div className="relative flex items-center justify-center">
-                <div
-                  className={`relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-full border border-brand-border bg-brand-bg/70 shadow-sm transition-all duration-300 group-hover:scale-[1.03] group-hover:shadow-lg group-focus-within:scale-[1.03] group-focus-within:shadow-lg sm:h-22 sm:w-22 ${
-                    isEarned
-                      ? ""
-                      : "opacity-60 grayscale blur-[0.15px] brightness-90"
-                  }`}
-                >
+                <div className="relative flex h-18 w-18 items-center justify-center overflow-hidden rounded-full border border-brand-border bg-brand-bg/70 shadow-sm transition-all duration-300 group-hover:scale-[1.03] group-hover:shadow-lg group-focus-within:scale-[1.03] group-focus-within:shadow-lg sm:h-22 sm:w-22">
                   {badge.icon_url ? (
                     <img
                       src={badge.icon_url}
@@ -84,19 +99,37 @@ export default function LearningBadgeGallery({
                   {badge.name}
                 </h3>
               </div>
-
-              <div className="pointer-events-none absolute left-1/2 top-[calc(100%+0.5rem)] z-30 hidden w-[min(17rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-brand-border bg-brand-card px-4 py-3 text-left shadow-2xl backdrop-blur-sm group-hover:block group-focus-within:block">
-                <p className="text-sm font-semibold text-brand-fg">
-                  {badge.name}
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-brand-muted-fg">
-                  {badgeRequirementText(badge)}
-                </p>
-              </div>
             </div>
           );
         })}
       </div>
+
+      {activeTooltip && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-50 w-[min(17rem,calc(100vw-2rem))] rounded-2xl border border-brand-border bg-brand-card px-4 py-3 text-left shadow-2xl backdrop-blur-sm"
+              style={{
+                left: activeTooltip.rect.left + activeTooltip.rect.width / 2,
+                top:
+                  activeTooltip.rect.top < 160
+                    ? activeTooltip.rect.bottom + 12
+                    : activeTooltip.rect.top - 12,
+                transform:
+                  activeTooltip.rect.top < 160
+                    ? "translateX(-50%)"
+                    : "translateX(-50%) translateY(-100%)",
+              }}
+            >
+              <p className="text-sm font-semibold text-brand-fg">
+                {activeTooltip.badge.name}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-brand-muted-fg">
+                {badgeRequirementText(activeTooltip.badge)}
+              </p>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

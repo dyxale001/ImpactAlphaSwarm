@@ -384,13 +384,20 @@ export async function submitLearningQuiz({
   const passed = score >= 80;
   const previousProgress = progressByArticleId[article.id];
   const previouslyCompleted = previousProgress?.status === "COMPLETED";
-  const status = passed ? "COMPLETED" : "IN_PROGRESS";
+  const previousQuizScore = previousProgress?.quiz_score ?? null;
+  const savedQuizScore =
+    previousQuizScore === null ? score : Math.max(previousQuizScore, score);
+  const status = previouslyCompleted
+    ? "COMPLETED"
+    : passed
+      ? "COMPLETED"
+      : "IN_PROGRESS";
 
   const progressPayload = {
     user_id: userId,
     article_id: article.id,
     status,
-    quiz_score: score,
+    quiz_score: savedQuizScore,
   };
 
   const { data: updatedProgressRows, error: progressUpdateError } =
@@ -443,7 +450,7 @@ export async function submitLearningQuiz({
       user_id: userId,
       article_id: article.id,
       status,
-      quiz_score: score,
+      quiz_score: savedQuizScore,
     },
   };
 
