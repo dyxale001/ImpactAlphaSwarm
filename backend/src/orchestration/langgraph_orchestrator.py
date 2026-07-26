@@ -155,6 +155,14 @@ DISCOVERY_POOL_SIZE = int(os.getenv("DISCOVERY_POOL_SIZE", "15"))
 # outrank seeds, so seeds fill only the shortfall to DISCOVERY_POOL_SIZE.
 DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE", "0.0"))
 
+# Unified ranking v2 switches (see UNIFIED_SCORING_PLAN.md / D-087). Off by
+# default: the legacy confidence score orders the feed exactly as before. In
+# shadow mode the v2 terms are computed and persisted for EVERY candidate while
+# the legacy order is still served, which is what makes the open direction and
+# convergence questions answerable from data rather than argument.
+UNIFIED_RANKING_ENABLED = os.getenv("UNIFIED_RANKING_ENABLED", "false").lower() == "true"
+UNIFIED_RANKING_SHADOW = os.getenv("UNIFIED_RANKING_SHADOW", "true").lower() == "true"
+
 
 def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
     """True if a discovered row is still benched. Unparseable timestamps fail
@@ -346,17 +354,137 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     return {"sentiment_results": sentiment_results}
 
 
+def _apply_ranking_v2(
+    tickers: list[str],
+    unified_scores: dict[str, dict],
+    legacy_order: list[dict],
+    quant_results: dict[str, dict],
+    sentiment_results: dict[str, dict],
+    risk_tolerance: str,
+    run_id: str | None,
+) -> list[dict]:
+    """Compute the disclosed v2 terms for every candidate, log them, and return the
+    top 5 in whichever order is currently authoritative.
+
+    In shadow mode the LEGACY order is still served — only the log is written — so
+    a night of real data can settle the open questions (plan §12/§13) without any
+    user seeing a changed feed.
+    """
+    from . import ranking
+    from ..utils.supabase_client import RANKING_V2_COLUMNS, save_ranking_shadow
+
+    ranked = ranking.rank_assets(tickers, quant_results, sentiment_results, risk_tolerance)
+    v2_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(ranked)}
+    legacy_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(legacy_order)}
+
+    # Attach the disclosed terms to the in-memory assets so save_top_assets can
+    # persist them for the top 5 (and the UI can eventually render the scorecard).
+    for row in ranked:
+        asset = unified_scores.get(row["ticker"])
+        if asset is None:
+            continue
+        asset["rank_score"] = row["rank_score"]
+        asset["signal_strength"] = row["signal_strength"]
+        asset["signal_direction"] = row["direction"]
+        asset["convergence"] = row["convergence"]
+        asset["convergence_state"] = row["convergence_state"]
+        asset["data_sufficiency"] = row["data_sufficiency"]
+        asset["profile_fit"] = row["profile_fit"]
+        asset["quant_lean"] = row["quant_lean"]
+        asset["sent_lean"] = row["sent_lean"]
+        asset["combined_lean"] = row["combined_lean"]
+        asset["quant_state"] = row["quant_state"]
+        asset["ranking_version"] = row["ranking_version"]
+        asset["ranking_weights"] = row["weights"]
+        asset["strength_variants"] = row["strength_variants"]
+        assert set(RANKING_V2_COLUMNS) <= set(asset), "v2 column/attach mismatch"
+
+    if run_id:
+        save_ranking_shadow(
+            run_id,
+            [
+                {
+                    "ticker": row["ticker"],
+                    "legacy_score": (unified_scores.get(row["ticker"]) or {}).get("unified_score"),
+                    "legacy_rank": legacy_rank_by_ticker.get(row["ticker"]),
+                    "v2_rank": v2_rank_by_ticker.get(row["ticker"]),
+                    "rank_score": row["rank_score"],
+                    "signal_strength": row["signal_strength"],
+                    "signal_direction": row["direction"],
+                    "convergence": row["convergence"],
+                    "convergence_state": row["convergence_state"],
+                    "data_sufficiency": row["data_sufficiency"],
+                    "profile_fit": row["profile_fit"],
+                    "quant_lean": row["quant_lean"],
+                    "sent_lean": row["sent_lean"],
+                    "combined_lean": row["combined_lean"],
+                    "quant_state": row["quant_state"],
+                    "strength_variants": row["strength_variants"],
+                    "ranking_version": row["ranking_version"],
+                    "ranking_weights": row["weights"],
+                    "risk_tolerance": risk_tolerance,
+                }
+                for row in ranked
+            ],
+        )
+
+    # How much WOULD the feed change? This is the ratification evidence.
+    legacy_top = [row["ticker"] for row in legacy_order[:5]]
+    v2_top = [row["ticker"] for row in ranked[:5]]
+    divergence = sum(
+        1 for i in range(min(len(legacy_top), len(v2_top))) if legacy_top[i] != v2_top[i]
+    )
+    tracer = get_tracer()
+    if tracer:
+        tracer.log_step(
+            "ranking_v2",
+            {
+                "mode": "shadow" if UNIFIED_RANKING_SHADOW else "live",
+                "direction_mode": ranking.DIRECTION_MODE,
+                "candidates": len(ranked),
+                "legacy_top_5": legacy_top,
+                "v2_top_5": v2_top,
+                "top_5_positions_changed": divergence,
+                "convergence_states": {
+                    state: sum(1 for row in ranked if row["convergence_state"] == state)
+                    for state in ranking.CONVERGENCE_STATES
+                },
+                "unfavourable_candidates": sum(
+                    1 for row in ranked if row["direction"] == "unfavourable"
+                ),
+            },
+        )
+    logger.info(
+        "Ranking v2 (%s, %s): %d candidates, %d of top-5 would change — legacy %s vs v2 %s",
+        "shadow" if UNIFIED_RANKING_SHADOW else "live",
+        ranking.DIRECTION_MODE, len(ranked), divergence, legacy_top, v2_top,
+    )
+
+    if UNIFIED_RANKING_SHADOW:
+        return legacy_order[:5]
+    # Live: order by rank_score, falling back to legacy if v2 produced nothing
+    # (e.g. `filter` mode dropped every candidate in a broad downturn).
+    if not ranked:
+        logger.warning("Ranking v2 returned no candidates; serving legacy order")
+        return legacy_order[:5]
+    return [unified_scores[row["ticker"]] for row in ranked[:5] if row["ticker"] in unified_scores]
+
+
 def synthesize_rankings(
     tickers: list[str],
     quant_results: dict[str, dict],
     sentiment_results: dict[str, dict],
     risk_tolerance: str,
     expertise_level: str,
+    run_id: str | None = None,
 ) -> tuple[list[dict], dict[str, dict]]:
     """Apply per-user business logic (hype/risk penalties, ranking, and the LLM
     reasoning trace for the top 5) on top of already-gathered quant + sentiment
     signals. Shared by the per-user graph (phase 3) and the batched daily run, so
-    the raw signals can be gathered once and personalized many times."""
+    the raw signals can be gathered once and personalized many times.
+
+    ``run_id`` is optional and used only to log the ranking-v2 shadow rows; the
+    function's return contract is unchanged, so existing callers keep working."""
     from ..utils.supabase_client import normalize_risk_tolerance
 
     # The manual-run path passes this straight through from the request body (which
@@ -405,7 +533,30 @@ def synthesize_rankings(
             "reasoning": None,
         }
 
-    top_5 = sorted(unified_scores.values(), key=lambda x: x["unified_score"], reverse=True)[:5]
+    legacy_order = sorted(
+        unified_scores.values(), key=lambda x: (-x["unified_score"], x["ticker"])
+    )
+    top_5 = legacy_order[:5]
+
+    # ── Unified ranking v2 (D-087) ───────────────────────────────────────────
+    # Computed for EVERY candidate, not just the survivors: a strongly bearish
+    # asset never reaches a top 5, and divergent hype names were already demoted
+    # out of it, so the direction and convergence questions are only answerable
+    # across the whole scoped set. Failure here must never fail a run.
+    if UNIFIED_RANKING_ENABLED:
+        try:
+            top_5 = _apply_ranking_v2(
+                tickers=tickers,
+                unified_scores=unified_scores,
+                legacy_order=legacy_order,
+                quant_results=quant_results,
+                sentiment_results=sentiment_results,
+                risk_tolerance=risk_tolerance,
+                run_id=run_id,
+            )
+        except Exception as e:
+            logger.exception("Ranking v2 failed, serving legacy order: %s", e)
+            top_5 = legacy_order[:5]
 
     # Generate the LLM reasoning trace only for the final top 5. Doing it for
     # every ticker (then discarding all but 5) wasted ~25 calls per run.
@@ -432,6 +583,7 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         state["sentiment_results"],
         state["risk_tolerance"],
         state["expertise_level"],
+        run_id=state.get("run_id"),
     )
 
     print("Generated Top 5 rankings")
@@ -656,6 +808,7 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
                 sentiment_results,
                 user["risk_tolerance"],
                 user["expertise_level"],
+                run_id=user["run_id"],
             )
             save_top_assets(
                 run_id=user["run_id"],

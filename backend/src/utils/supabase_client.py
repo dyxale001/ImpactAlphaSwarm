@@ -290,6 +290,26 @@ def update_ai_run_status(run_id: str, status: str) -> None:
     }).eq("id", run_id).execute()
 
 
+# Disclosed ranking-v2 fields written per recommendation (migration 010). Kept as
+# one list so the "retry without them" fallback below stays in sync automatically.
+RANKING_V2_COLUMNS = (
+    "rank_score",
+    "signal_strength",
+    "signal_direction",
+    "convergence",
+    "convergence_state",
+    "data_sufficiency",
+    "profile_fit",
+    "quant_lean",
+    "sent_lean",
+    "combined_lean",
+    "quant_state",
+    "ranking_version",
+    "ranking_weights",
+    "strength_variants",
+)
+
+
 def save_top_assets(
     run_id: str,
     user_id: str,
@@ -384,13 +404,64 @@ def save_top_assets(
             # Per-post transparency list: author, date, text, link, sentiment.
             "social_posts": sentiment.get("social_posts") or [],
         }
+
+        # Unified ranking v2 terms (migration 010), present only when the ranking
+        # module ran. Written for disclosure: the UI and the reasoning trace need
+        # to say WHY an asset placed where it did, not just where.
+        for key in RANKING_V2_COLUMNS:
+            if key in asset:
+                row[key] = asset[key]
+
         rows.append(row)
 
     if not rows:
         return {"status": "no_rows"}
 
-    resp = supabase.table("ai_recommendation").insert(rows).execute()
-    return {"status": "inserted", "response": resp.data}
+    try:
+        resp = supabase.table("ai_recommendation").insert(rows).execute()
+        return {"status": "inserted", "response": resp.data}
+    except Exception as e:
+        # Most likely migration 010 has not been applied yet, so the v2 columns
+        # don't exist. The recommendations themselves matter far more than the
+        # disclosure fields, so drop those and retry rather than lose the run.
+        if not any(key in row for row in rows for key in RANKING_V2_COLUMNS):
+            raise
+        print(f"Insert with ranking v2 columns failed ({e}); retrying without them")
+        legacy_rows = [
+            {k: v for k, v in row.items() if k not in RANKING_V2_COLUMNS} for row in rows
+        ]
+        resp = supabase.table("ai_recommendation").insert(legacy_rows).execute()
+        return {"status": "inserted_without_v2", "response": resp.data}
+
+
+# ---------------------------------------------------------------------------
+# Unified ranking v2 shadow log (see migrations/010)
+# ---------------------------------------------------------------------------
+# One row per (run, candidate) covering the WHOLE scoped set, not just the
+# surviving top 5. That breadth is the point: a strongly bearish asset never
+# reaches a top 5, and divergent hype names were already demoted out of it by the
+# old hype penalty, so neither the direction question nor the convergence term can
+# be evaluated from `ai_recommendation` alone.
+
+
+def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Upsert the v2 ranking breakdown for every candidate in a run.
+
+    Keyed on (run_id, ticker) so a re-run replaces its own rows. Best-effort: a
+    failure here (e.g. migration 010 not yet applied) is reported, never raised —
+    shadow logging must not be able to fail a user's analysis.
+    """
+    if not run_id or not rows:
+        return {"status": "no_rows"}
+    payload = [{**row, "run_id": run_id} for row in rows]
+    try:
+        supabase.table("ranking_shadow").upsert(
+            payload, on_conflict="run_id,ticker"
+        ).execute()
+        return {"status": "saved", "rows": len(payload)}
+    except Exception as e:
+        print(f"Ranking shadow log failed (continuing): {e}")
+        return {"status": "error", "error": str(e)}
 
 
 # ---------------------------------------------------------------------------
