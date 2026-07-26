@@ -307,15 +307,6 @@ def save_top_assets(
             "rsi": quant.get("rsi"),
             "sharpe_ratio": quant.get("sharpe_ratio"),
             "volatility": quant.get("volatility"),
-            # Objective cross-sectional quant sub-dimensions + context bands
-            # (see migrations/004). Null when the candidate universe was too
-            # small to rank (quant_normalisation = 'insufficient_universe').
-            "momentum_pctile": (quant.get("sub_dimensions") or {}).get("momentum"),
-            "risk_adj_pctile": (quant.get("sub_dimensions") or {}).get("risk_adjusted_return"),
-            "stability_pctile": (quant.get("sub_dimensions") or {}).get("stability"),
-            "rsi_band": (quant.get("bands") or {}).get("rsi"),
-            "beta_band": (quant.get("bands") or {}).get("beta"),
-            "quant_normalisation": quant.get("quant_normalisation"),
             "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
@@ -392,3 +383,168 @@ def load_marketaux_news_cache(
     for row in resp.data or []:
         out[row["ticker"]] = row.get("articles") or []
     return out
+
+
+# ---------------------------------------------------------------------------
+# Asset discovery (see migrations/009) — D-068
+# ---------------------------------------------------------------------------
+# Thin DB access for the nightly discovery agent. All scoring / decay /
+# hysteresis LOGIC lives in agents/asset_discovery.py; these helpers only read
+# and write. Two invariants are enforced here, not left to the caller:
+#   * Seed rows (origin='seed') are never rescored, retired, quarantined or
+#     reclassified — every mutating write below is guarded on origin='discovered'
+#     so a curated seed passed in by mistake is harmlessly ignored.
+#   * Rows are retired/quarantined, never deleted, so ai_recommendation history
+#     keeps resolving.
+
+# Columns the ranked read (scope_tickers) needs; selection/quarantine policy is
+# applied by the caller so it stays in one testable place.
+DISCOVERY_POOL_COLUMNS = "ticker,universe,origin,is_active,discovery_score,quarantined_until"
+
+
+def get_discovery_pool_rows(universes: List[str]) -> List[Dict[str, Any]]:
+    """Return the candidate rows (seeds + discovered) for the given universes in
+    a single round trip. Ranking and active/quarantine filtering are the
+    caller's job."""
+    try:
+        if not universes:
+            return []
+        resp = (
+            supabase.table("assets")
+            .select(DISCOVERY_POOL_COLUMNS)
+            .in_("universe", universes)
+            .execute()
+        )
+        return resp.data or []
+    except Exception as e:
+        print(f"Error fetching discovery pool rows: {e}")
+        return []
+
+
+def upsert_discovered_asset(
+    ticker: str,
+    name: str,
+    universe: str,
+    discovery_score: float,
+    sources: List[str],
+    market_cap_usd: Optional[float] = None,
+    ipo_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Insert or refresh a DISCOVERED asset row (idempotent on ticker).
+
+    Never reclassifies a seed: if the ticker already exists as origin='seed' it
+    is left untouched (the curated row wins and is already poolable as a seed).
+    Existing discovered rows are refreshed and reactivated; the quarantine is
+    cleared since a fresh, validated sighting supersedes it.
+    """
+    try:
+        existing = (
+            supabase.table("assets")
+            .select("id,origin")
+            .eq("ticker", ticker)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        fields: Dict[str, Any] = {
+            "universe": universe,
+            "discovery_score": discovery_score,
+            "discovery_sources": sources,
+            "last_discovered_at": now,
+            "is_active": True,
+            "quarantine_reason": None,
+            "quarantined_until": None,
+        }
+        if market_cap_usd is not None:
+            fields["market_cap_usd"] = market_cap_usd
+        if ipo_date is not None:
+            fields["ipo_date"] = ipo_date
+
+        if existing:
+            if existing[0].get("origin") == "seed":
+                return {"status": "skipped_seed", "ticker": ticker}
+            supabase.table("assets").update(fields).eq("ticker", ticker).eq(
+                "origin", "discovered"
+            ).execute()
+            return {"status": "updated", "ticker": ticker}
+
+        insert_row = {
+            "ticker": ticker,
+            "name": name or ticker,
+            "origin": "discovered",
+            "first_discovered_at": now,
+            **fields,
+        }
+        supabase.table("assets").insert(insert_row).execute()
+        return {"status": "inserted", "ticker": ticker}
+    except Exception as e:
+        print(f"Error upserting discovered asset {ticker}: {e}")
+        return {"status": "error", "ticker": ticker, "error": str(e)}
+
+
+def update_discovery_scores(score_by_ticker: Dict[str, float]) -> None:
+    """Persist recomputed discovery scores (hysteresis decay) for DISCOVERED
+    rows. Seeds are skipped via the origin guard."""
+    for ticker, score in score_by_ticker.items():
+        try:
+            supabase.table("assets").update({"discovery_score": score}).eq(
+                "ticker", ticker
+            ).eq("origin", "discovered").execute()
+        except Exception as e:
+            print(f"Error updating discovery score for {ticker}: {e}")
+
+
+def retire_assets(tickers: List[str], reason: str = "decayed_out") -> None:
+    """Soft-retire DISCOVERED rows (is_active=false) — the decay floor. Never
+    deletes; seeds skipped."""
+    if not tickers:
+        return
+    try:
+        supabase.table("assets").update(
+            {"is_active": False, "quarantine_reason": reason}
+        ).in_("ticker", tickers).eq("origin", "discovered").execute()
+    except Exception as e:
+        print(f"Error retiring assets {tickers}: {e}")
+
+
+def quarantine_assets(tickers: List[str], reason: str, until_iso: str) -> None:
+    """Bench DISCOVERED rows until ``until_iso`` (seeds skipped)."""
+    if not tickers:
+        return
+    try:
+        supabase.table("assets").update(
+            {"quarantine_reason": reason, "quarantined_until": until_iso}
+        ).in_("ticker", tickers).eq("origin", "discovered").execute()
+    except Exception as e:
+        print(f"Error quarantining assets {tickers}: {e}")
+
+
+def mark_quant_empty(tickers: List[str], quarantine_days: int = 30) -> None:
+    """Feedback hook (called from the nightly batch): a discovered ticker whose
+    quant fetch returned nothing this run is benched for ``quarantine_days``,
+    after which it can re-qualify through the funnel. Seeds are never benched, so
+    passing the whole empty-quant union here is safe."""
+    if not tickers:
+        return
+    until = (
+        datetime.datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(days=quarantine_days)
+    ).isoformat()
+    quarantine_assets(tickers, reason="no_quant_data", until_iso=until)
+
+
+def record_discovery_run(
+    summary: Dict[str, Any],
+    rejections: List[Dict[str, Any]],
+    status: str,
+) -> None:
+    """Write one audit row per nightly discovery pass (best-effort; a failure to
+    audit must not fail discovery)."""
+    try:
+        supabase.table("discovery_runs").insert(
+            {"summary": summary, "rejections": rejections, "status": status}
+        ).execute()
+    except Exception as e:
+        print(f"Error recording discovery run: {e}")

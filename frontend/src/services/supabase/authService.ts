@@ -2,7 +2,7 @@ import { supabase } from "../../lib/supabase";
 import { UserProfile, UserAnalysis } from "../../types/auth";
 
 export async function fetchUserProfileData(userId: string) {
-  //fetch profile data
+  // Fetch profile data
   let { data: profileData, error: profileError } = await supabase
     .from("users")
     .select("*")
@@ -14,7 +14,7 @@ export async function fetchUserProfileData(userId: string) {
     return { error: profileError };
   }
 
-  //Auto Create profile if missing
+  // Auto create profile if missing
   if (!profileData) {
     const { data: userData } = await supabase.auth.getUser();
     const metadata = userData?.user?.user_metadata || {};

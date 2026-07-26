@@ -56,9 +56,7 @@
 
   --fg-heading: var(--color-forest-700);
   --fg-body: var(--color-forest-900);
-  /* #62746e clears WCAG AA (≈5:1 on white) for small supporting text;
-     fg-subtle is reserved for decorative/large elements, not body copy. */
-  --fg-muted: #62746e;
+  --fg-muted: #6f827c;
   --fg-subtle: #9aaaa4;
   --fg-on-dark: #ffffff;
   --fg-on-accent: var(--color-forest-900);
@@ -175,7 +173,7 @@
   --color-brand-muted: var(--color-neutral-800);
   --color-brand-border: var(--border-default);
   --color-brand-fg: var(--color-forest-900);
-  --color-brand-muted-fg: var(--fg-muted);
+  --color-brand-muted-fg: var(--fg-subtle);
 
   /* RGB triplets for shadows that used `rgba(var(--brand-primary),...)` */
   --brand-primary: 27, 53, 48; /* from #1B3530 */

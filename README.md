@@ -156,7 +156,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_key_here
 
 # === Backend API Configuration ===
-VITE_API_BASE=http://localhost:8000
+VITE_API_URL=http://localhost:8000
 ```
 
 **Use the same Supabase URL as the backend.**
@@ -235,7 +235,7 @@ LANGSMITH_PROJECT               → (Optional) LangSmith project name
 ```
 VITE_SUPABASE_URL               → Supabase project URL (same as backend)
 VITE_SUPABASE_ANON_KEY          → Supabase anon key
-VITE_API_BASE                   → Backend URL (localhost:8000)
+VITE_API_URL                    → Backend URL (localhost:8000)
 ```
 
 ---

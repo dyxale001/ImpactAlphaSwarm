@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from dotenv import load_dotenv
@@ -44,7 +45,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     groq_llm = ChatGroq(
         api_key=GROQ_API_KEY,
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model="llama-3.3-70b-versatile",
         temperature=0.3,
         max_tokens=300,
     )
@@ -97,10 +98,10 @@ Technical Signals:
 - Sharpe Ratio: {quant_data.get('sharpe_ratio', 'N/A')}
 - Beta: {quant_data.get('beta', 'N/A'):.2f}
 
-Market Sentiment (news weighted higher than social):
+Market Sentiment:
 - Sentiment Score: {sentiment_data.get('sentiment_score', 'N/A')}/100
-- News Sentiment: {sentiment_data.get('news_sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted-source articles ({sentiment_data.get('news_bullish', 0)} positive, {sentiment_data.get('news_bearish', 0)} negative)
-- Social Sentiment: {sentiment_data.get('social_sentiment_score', 'N/A')}/100 from {sentiment_data.get('mention_count', 0)} posts ({sentiment_data.get('bullish_posts', 0)} bullish, {sentiment_data.get('bearish_posts', 0)} bearish)
+- Bullish Posts: {sentiment_data.get('bullish_posts', 0)}
+- Bearish Posts: {sentiment_data.get('bearish_posts', 0)}
 
 Risk Adjustments:
 - Hype Penalty: {adjustments.get('hype_penalty', 0)}
@@ -140,20 +141,131 @@ class AnalysisState(TypedDict):
     status: str
 
 
+
+# Hard cap on tickers analysed per run. Bounds the manual-run latency budget and
+# the nightly union. Env-tunable to match the rest of the config surface.
+MAX_SCOPED_TICKERS = int(os.getenv("MAX_SCOPED_TICKERS", "30"))
+
+# Discovery-agent read switches (see DISCOVERY_AGENT_PLAN.md / D-068). Off by
+# default: scope_tickers behaves exactly as the legacy seeded path until the flag
+# is flipped, and shadow mode lets discovery run + persist without being read.
+DISCOVERY_ENABLED = os.getenv("DISCOVERY_ENABLED", "false").lower() == "true"
+DISCOVERY_SHADOW_MODE = os.getenv("DISCOVERY_SHADOW_MODE", "true").lower() == "true"
+DISCOVERY_POOL_SIZE = int(os.getenv("DISCOVERY_POOL_SIZE", "15"))
+# Fixed score seeds carry in the union ranking; discovered names (score > this)
+# outrank seeds, so seeds fill only the shortfall to DISCOVERY_POOL_SIZE.
+DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE", "0.0"))
+
+
+def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
+    """True if a discovered row is still benched. Unparseable timestamps fail
+    open (treated as not quarantined) so a bad value can't silently shrink the
+    pool below the quant crowd."""
+    if not quarantined_until:
+        return False
+    try:
+        until = datetime.fromisoformat(str(quarantined_until).replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        return until > now
+    except (ValueError, TypeError):
+        return False
+
+
+def _rank_universe(rows: list[dict], now: datetime) -> list[str]:
+    """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
+
+    Seeds are always eligible at the fixed baseline score; discovered rows must
+    be active and not currently quarantined. Ties break on ticker so the order
+    is deterministic run-to-run (keeps the cap and quant crowd stable)."""
+    scored: list[tuple[float, str]] = []
+    for row in rows:
+        ticker = row.get("ticker")
+        if not ticker:
+            continue
+        if row.get("origin") == "seed":
+            score = DISCOVERY_SEED_BASELINE_SCORE
+        else:
+            if not row.get("is_active"):
+                continue
+            if _is_quarantined(row.get("quarantined_until"), now):
+                continue
+            raw = row.get("discovery_score")
+            score = float(raw) if raw is not None else 0.0
+        scored.append((score, ticker))
+    scored.sort(key=lambda pair: (-pair[0], pair[1]))
+    return [ticker for _, ticker in scored[:DISCOVERY_POOL_SIZE]]
+
+
+def _select_from_pool(
+    pool_rows: list[dict],
+    universes: list[str],
+    watchlist: list[str],
+    now: datetime,
+) -> list[str]:
+    """Assemble the scoped list from the discovered pool: watchlist first (kept
+    even if inactive/quarantined — personalization outranks pool hygiene), then a
+    round-robin across the user's universes by rank so each universe is fairly
+    represented under the cap. Deduped, capped at ``MAX_SCOPED_TICKERS``."""
+    by_universe: dict[str, list[dict]] = {u: [] for u in universes}
+    for row in pool_rows:
+        universe = row.get("universe")
+        if universe in by_universe:
+            by_universe[universe].append(row)
+    ranked = {u: _rank_universe(by_universe[u], now) for u in universes}
+
+    ordered = list(watchlist)
+    depth = max((len(names) for names in ranked.values()), default=0)
+    for rank in range(depth):
+        for universe in universes:
+            names = ranked[universe]
+            if rank < len(names):
+                ordered.append(names[rank])
+    return list(dict.fromkeys(ordered))[:MAX_SCOPED_TICKERS]
+
+
 def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> list[str]:
     """Resolve a user's investment universes (+ watchlist) to a capped, deduped
-    ticker list. Shared by the per-user graph and the batched daily run."""
+    ticker list. Shared by the per-user graph and the batched daily run.
+
+    When discovery is enabled and live, the set is drawn from the ranked
+    discovered pool (top ``DISCOVERY_POOL_SIZE`` per universe from discovered ∪
+    seeds); otherwise — and whenever the pool read is empty (migration not
+    applied, discovery never ran, or a read failure) — it falls back to the
+    legacy seeded path. Both paths are deterministic and watchlist-first: a
+    user's watchlisted tickers come first so the cap can never drop them.
+    """
+    watchlist = list(dict.fromkeys(watchlist or []))
+
+    if DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE:
+        from ..utils.supabase_client import get_discovery_pool_rows
+
+        pool_rows = get_discovery_pool_rows(universes)
+        if pool_rows:
+            return _select_from_pool(
+                pool_rows, universes, watchlist, datetime.now(timezone.utc)
+            )
+        # Empty pool → degrade to the seeded path rather than starve the run.
+
     from ..utils.supabase_client import get_assets_by_universes
 
-    tickers = get_assets_by_universes(universes)
-    tickers.extend(watchlist or [])
-    return list(set(tickers))[:30]
+    universe_tickers = get_assets_by_universes(universes)
+    # dict.fromkeys dedups while preserving first-seen order: watchlist entries
+    # win their slot, then universe tickers (sorted) fill the remainder.
+    ordered = list(dict.fromkeys([*watchlist, *sorted(universe_tickers)]))
+    return ordered[:MAX_SCOPED_TICKERS]
+
 
 
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 1: Initializing session and scoping data...")
 
-    tickers = scope_tickers(state["universes"], state["watchlist"])
+    from ..utils.supabase_client import get_assets_by_universes
+
+    # Fetch tickers from Supabase by universe
+    tickers = get_assets_by_universes(state["universes"])
+    tickers.extend(state["watchlist"])
+    tickers = list(set(tickers))[:30]
 
     print(f"Curated {len(tickers)} tickers for analysis")
     tracer = get_tracer()
@@ -165,6 +277,9 @@ def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
                 "tickers_count": len(tickers),
                 "universes": state["universes"],
                 "watchlist_count": len(state["watchlist"]),
+                # Whether this scope came from the discovered pool or the legacy
+                # seeded path (observability for the shadow/live rollout).
+                "discovery_enabled": DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE,
             },
         )
     return {
@@ -191,12 +306,6 @@ def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
                     beta=metrics.get("beta"),
                     volatility=metrics.get("volatility"),
                     raw_quant_score=metrics.get("raw_quant_score"),
-                    trailing_return=metrics.get("trailing_return"),
-                    data_points=metrics.get("data_points"),
-                    sub_dimensions=metrics.get("sub_dimensions"),
-                    bands=metrics.get("bands"),
-                    percentiles=metrics.get("percentiles"),
-                    quant_normalisation=metrics.get("quant_normalisation"),
                 )
                 tracer.add_quant_metrics(ticker, quant_metrics)
             tracer.log_step("phase_2_quant", {"count": len(quant_results), "tickers": list(quant_results.keys())})
@@ -214,10 +323,7 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 2B: Sentiment Scout scraping social signals...")
     tracer = get_tracer()
     try:
-        # User refresh: read tier-1 from the nightly Marketaux cache (no API call),
-        # so tier-1 articles remain visible without spending the call budget. The
-        # API is only hit by the nightly batch (run_daily_batch, marketaux="fetch").
-        sentiment_results = analyze_sentiment_tickers(state["tickers"], marketaux="cache")
+        sentiment_results = analyze_sentiment_tickers(state["tickers"])
     except Exception as e:
         logger.warning("Sentiment scout failed: %s", e)
         print("Sentiment scout failed; no sentiment results available")
@@ -238,22 +344,14 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     return {"sentiment_results": sentiment_results}
 
 
-def synthesize_rankings(
-    tickers: list[str],
-    quant_results: dict[str, dict],
-    sentiment_results: dict[str, dict],
-    risk_tolerance: str,
-    expertise_level: str,
-) -> tuple[list[dict], dict[str, dict]]:
-    """Apply per-user business logic (hype/risk penalties, ranking, and the LLM
-    reasoning trace for the top 5) on top of already-gathered quant + sentiment
-    signals. Shared by the per-user graph (phase 3) and the batched daily run, so
-    the raw signals can be gathered once and personalized many times."""
+def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
+    print("- Phase 3: Synthesizing results and applying business logic...")
+
     unified_scores = {}
 
-    for ticker in tickers:
-        quant = quant_results.get(ticker, {})
-        sentiment = sentiment_results.get(ticker, {})
+    for ticker in state["tickers"]:
+        quant = state["quant_results"].get(ticker, {})
+        sentiment = state["sentiment_results"].get(ticker, {})
 
         quant_score = quant.get("raw_quant_score", 50)
         sentiment_score = sentiment.get("sentiment_score", 50)
@@ -266,15 +364,24 @@ def synthesize_rankings(
         risk_penalty = 0
         beta = quant.get("beta", 1.0)
 
-        if risk_tolerance == "Conservative":
+        if state["risk_tolerance"] == "Conservative":
             if beta > 1.2:
                 risk_penalty = -15
-        elif risk_tolerance == "Aggressive":
+        elif state["risk_tolerance"] == "Aggressive":
             if sentiment_score > 70 and quant_score > 60:
                 risk_penalty = +5
 
         unified_score = quant_score * 0.5 + sentiment_score * 0.5 + hype_penalty + risk_penalty
         unified_score = max(0, min(100, unified_score))
+
+        reasoning = generate_reasoning_trace(
+            ticker=ticker,
+            quant_data=quant,
+            sentiment_data=sentiment,
+            adjustments={"hype_penalty": hype_penalty, "risk_penalty": risk_penalty},
+            risk_tolerance=state["risk_tolerance"],
+            expertise_level=state["expertise_level"],
+        )
 
         unified_scores[ticker] = {
             "ticker": ticker,
@@ -286,40 +393,17 @@ def synthesize_rankings(
             },
             "unified_score": unified_score,
             "beta": beta,
-            "reasoning": None,
+            "reasoning": reasoning,
         }
 
-    top_5 = sorted(unified_scores.values(), key=lambda x: x["unified_score"], reverse=True)[:5]
+    # Rank all analyzed assets — the full list is saved to ai_recommendation so
+    # watched assets outside the top 5 still get their scores on the watchlist.
+    # The frontend dashboard query uses .limit(5) so it always shows only the top 5.
+    all_ranked = sorted(unified_scores.values(), key=lambda x: x["unified_score"], reverse=True)
+    top_5 = all_ranked[:5]  # kept for logging / tracer only
 
-    # Generate the LLM reasoning trace only for the final top 5. Doing it for
-    # every ticker (then discarding all but 5) wasted ~25 calls per run.
-    for asset in top_5:
-        asset_ticker = asset["ticker"]
-        asset["reasoning"] = generate_reasoning_trace(
-            ticker=asset_ticker,
-            quant_data=quant_results.get(asset_ticker, {}),
-            sentiment_data=sentiment_results.get(asset_ticker, {}),
-            adjustments=asset["adjustments"],
-            risk_tolerance=risk_tolerance,
-            expertise_level=expertise_level,
-        )
-
-    return top_5, unified_scores
-
-
-def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 3: Synthesizing results and applying business logic...")
-
-    top_5, unified_scores = synthesize_rankings(
-        state["tickers"],
-        state["quant_results"],
-        state["sentiment_results"],
-        state["risk_tolerance"],
-        state["expertise_level"],
-    )
-
-    print("Generated Top 5 rankings")
-    for i, asset in enumerate(top_5, 1):
+    print(f"Generated rankings for {len(all_ranked)} assets (saving all, displaying top 5 on dashboard)")
+    for i, asset in enumerate(all_ranked, 1):
         print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
 
     tracer = get_tracer()
@@ -329,11 +413,12 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
             "phase_3_synthesis",
             {
                 "top_5": [asset["ticker"] for asset in top_5],
+                "all_ranked": [asset["ticker"] for asset in all_ranked],
                 "unified_scores": {t: unified_scores[t]["unified_score"] for t in unified_scores},
             },
         )
 
-    return {"final_rankings": top_5, "status": "synthesized"}
+    return {"final_rankings": all_ranked, "status": "synthesized"}
 
 
 def phase_4_output(state: AnalysisState) -> dict[str, Any]:
@@ -349,16 +434,17 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
 
     print("Output ready for frontend:")
     print(json.dumps(output, indent=2))
-    # Persist top-5 to Supabase (ensure this runs before returning)
+    # Persist ALL ranked assets to Supabase so watchlist cards can show scores
+    # for assets that didn't make the top 5. Dashboard still shows top 5 via .limit(5).
     try:
         save_res = save_top_assets(
             run_id=state["run_id"],
             user_id=state["user_id"],
-            top_5=state["final_rankings"],
+            top_5=state["final_rankings"],  # now contains all ranked assets
             quant_results=state.get("quant_results", {}),
             sentiment_results=state.get("sentiment_results", {}),
         )
-        logger.info(f"Saved top-5 to Supabase: {save_res.get('status')}")
+        logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
     except Exception as e:
         logger.error(f"Failed to save top-5 to Supabase: {e}")
 
@@ -473,6 +559,7 @@ def run_analysis(
         set_tracer(None)
 
 
+
 def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     """Resource-efficient nightly run.
 
@@ -502,6 +589,23 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     except Exception as e:
         logger.warning("Batch quant gather failed: %s", e)
         quant_results = {}
+
+    # Discovery feedback loop: a discovered ticker whose quant fetch came back
+    # empty this run is benched (quarantined) so it stops being selected until it
+    # re-qualifies. Guarded on a non-empty quant_results so a *total* quant outage
+    # can't quarantine the whole pool, and on origin='discovered' inside the helper
+    # so seeds are never benched. Only active when discovery is enabled.
+    if DISCOVERY_ENABLED and quant_results:
+        try:
+            from ..utils.supabase_client import mark_quant_empty
+
+            empty = [ticker for ticker in union if not quant_results.get(ticker)]
+            if empty:
+                mark_quant_empty(empty)
+                logger.info("Discovery: quarantined %d empty-quant tickers", len(empty))
+        except Exception as e:
+            logger.warning("Discovery quant-empty feedback failed: %s", e)
+
     try:
         # Nightly is the ONLY place the Marketaux API is called: one batched, deeply
         # paginated query for the whole union of tickers, whose tier-1 results are
@@ -590,3 +694,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
