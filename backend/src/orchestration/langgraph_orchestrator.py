@@ -357,6 +357,14 @@ def synthesize_rankings(
     reasoning trace for the top 5) on top of already-gathered quant + sentiment
     signals. Shared by the per-user graph (phase 3) and the batched daily run, so
     the raw signals can be gathered once and personalized many times."""
+    from ..utils.supabase_client import normalize_risk_tolerance
+
+    # The manual-run path passes this straight through from the request body (which
+    # the frontend fills from the raw DB column), so normalise here as well as on
+    # read — otherwise the exact-match comparisons below silently do nothing for
+    # lower-cased / misspelled values.
+    risk_tolerance = normalize_risk_tolerance(risk_tolerance)
+
     unified_scores = {}
 
     for ticker in tickers:

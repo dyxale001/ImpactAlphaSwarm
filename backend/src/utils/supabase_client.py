@@ -94,6 +94,49 @@ def fetch_price_at_run_in_zar(ticker: str) -> float | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Risk-tolerance normalisation
+# ---------------------------------------------------------------------------
+# `user_analysis.risk_tolerance` is free text and the stored values have drifted
+# into six spellings of three levels — 'Moderate', 'moderate', 'conservative',
+# 'Conservative', 'aggressive', 'Aggressive' and the misspelling 'aggresive'.
+# Consumers compare against exact title-case labels (e.g.
+# `risk_tolerance == "Conservative"`), so every lower-cased or misspelled row
+# silently skipped its risk handling: the personalisation looked applied but never
+# fired. Normalise once, on read, so downstream comparisons are safe.
+
+RISK_LEVELS = ("Conservative", "Moderate", "Aggressive")
+DEFAULT_RISK_LEVEL = "Moderate"
+
+# Casefolded spellings seen in live data, plus near-miss typos → canonical label.
+_RISK_ALIASES: Dict[str, str] = {
+    "conservative": "Conservative",
+    "conservitive": "Conservative",
+    "concervative": "Conservative",
+    "low": "Conservative",
+    "moderate": "Moderate",
+    "moderat": "Moderate",
+    "medium": "Moderate",
+    "balanced": "Moderate",
+    "aggressive": "Aggressive",
+    "aggresive": "Aggressive",   # observed in live data
+    "agressive": "Aggressive",
+    "high": "Aggressive",
+}
+
+
+def normalize_risk_tolerance(value: Any) -> str:
+    """Map any stored risk-tolerance spelling to one of ``RISK_LEVELS``.
+
+    Unknown, empty or non-string values fall back to ``DEFAULT_RISK_LEVEL`` (the
+    neutral profile) rather than raising, so a malformed row degrades to "no
+    special handling" instead of failing a run.
+    """
+    if not isinstance(value, str):
+        return DEFAULT_RISK_LEVEL
+    return _RISK_ALIASES.get(value.strip().casefold(), DEFAULT_RISK_LEVEL)
+
+
 def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
     """Fetch user preferences from user_analysis table."""
     try:
@@ -109,7 +152,9 @@ def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
             return {
                 "user_id": user_id,
                 "universes": universes,
-                "risk_tolerance": user.get("risk_tolerance", "Moderate"),
+                # Normalised: the raw column holds mixed casing + a typo, and
+                # exact-match consumers silently skipped those rows.
+                "risk_tolerance": normalize_risk_tolerance(user.get("risk_tolerance")),
                 "expertise_level": user.get("ai_derived_expertise", "novice"),  # novice, intermediate, advanced
             }
         return None
