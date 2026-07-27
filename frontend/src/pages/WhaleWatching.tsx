@@ -10,11 +10,13 @@ import {
   ChevronRight,
   Building2,
   Layers,
+  Sparkles,
 } from "lucide-react";
 import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import CompanySearch from "../components/research/CompanySearch";
+import WaveMotif from "../components/research/WaveMotif";
 import FundHoldingsView, {
   FundHoldingsDetail,
 } from "../components/research/FundHoldingsView";
@@ -31,12 +33,22 @@ const UNIVERSE_TILES = [
 
 type Section = "universes" | "funds";
 
-// Small "New" pill for companies the asset-discovery agent added in the last
-// week. Deliberately unexplained: it marks the row without turning the card
-// into a readout of the agent's internals.
+// Pill for companies the asset-discovery agent added in the last week.
+//
+// Picks up the lime accent the dashboard puts on a discovered top pick, since
+// it marks the same thing: a company the agent found rather than one we seeded.
+// Lime is the brand's signature and appears nowhere else here, so it reads as
+// "new" without a caption.
+//
+// Solid lime with forest text rather than the dashboard's tinted
+// `bg-brand-accent/15 text-brand-accent`: lime is a very light hue, so lime text
+// on a white card lands near 1.4:1 contrast and is effectively unreadable. The
+// design system already defines forest-900 as the colour to put on accent
+// (--fg-on-accent), which is legible and no less on-brand.
 function NewBadge() {
   return (
-    <span className="shrink-0 rounded-full bg-brand-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-primary">
+    <span className="chip shrink-0 bg-brand-accent text-brand-fg">
+      <Sparkles className="w-2.5 h-2.5" />
       New
     </span>
   );
@@ -85,30 +97,28 @@ export default function WhaleWatchingPage() {
 
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
-            <Waves className="w-7 h-7 text-brand-primary" />
+      {/* Header band. Forest ground with the wave motif breaking along the
+          bottom edge, which is the one place on this page a literal wave earns
+          its keep. Text sits on a relative layer so it clears the SVG. */}
+      <div className="relative overflow-hidden rounded-2xl bg-brand-primary px-7 pt-8 pb-16">
+        <WaveMotif className="h-24" />
+        <div className="relative">
+          <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
+            <Waves className="w-7 h-7 text-brand-accent" />
             Whale Watching
           </h1>
-          <p className="text-sm text-brand-muted-fg mt-1 max-w-2xl">
+          <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
             Follow the big money: insider dealings, the institutions and funds
             that own each stock, and what the largest investors are buying.
             Informational only; this never affects your recommendations.
           </p>
         </div>
-        <div className="w-full sm:w-auto sm:min-w-[18rem]">
-          <CompanySearch
-            assets={all}
-            onSelect={openCompany}
-            disabled={isLoading || all.length === 0}
-          />
-        </div>
       </div>
 
-      {/* Top-level tabs */}
-      <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
+      {/* Tabs and search share a row, so search sits with the content it
+          filters rather than competing with the header. */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
         {(
           [
             { id: "universes", label: "Universes", Icon: Layers },
@@ -128,6 +138,14 @@ export default function WhaleWatchingPage() {
             {s.label}
           </button>
         ))}
+        </div>
+        <div className="w-full sm:w-auto sm:min-w-[18rem]">
+          <CompanySearch
+            assets={all}
+            onSelect={openCompany}
+            disabled={isLoading || all.length === 0}
+          />
+        </div>
       </div>
 
       {/* A company panel opens over whichever section you came from, so it is
@@ -145,11 +163,17 @@ export default function WhaleWatchingPage() {
           </button>
 
           <div className="soft-card p-5 space-y-2">
-            <div className="flex items-baseline gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-2xl font-bold font-mono text-brand-fg">
                 {ticker}
               </h2>
-              <p className="text-sm text-brand-muted-fg">{selected?.name}</p>
+              {/* Solid green name pill, the same treatment the dashboard gives
+                  its top pick, so a company reads the same way in both places. */}
+              {selected?.name && (
+                <span className="px-3 py-1 rounded-full bg-brand-primary text-brand-bg text-xs font-mono">
+                  {selected.name}
+                </span>
+              )}
               {selected?.isNew && <NewBadge />}
             </div>
             {selected?.description && (
@@ -223,10 +247,10 @@ export default function WhaleWatchingPage() {
               <button
                 key={a.ticker}
                 onClick={() => openCompany(a.ticker, a.universe)}
-                className="text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98]"
+                className="group text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98]"
               >
                 <div className="flex items-baseline gap-2">
-                  <p className="text-lg font-bold font-mono text-brand-fg">
+                  <p className="text-lg font-bold font-mono text-brand-primary">
                     {a.ticker}
                   </p>
                   {a.isNew && <NewBadge />}
@@ -266,15 +290,20 @@ export default function WhaleWatchingPage() {
                     className="group text-left p-5 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div className="flex items-start justify-between">
-                      <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center mb-4">
-                        <Icon className="w-5 h-5 text-brand-primary" />
+                      {/* Solid forest tile with the icon knocked out in the
+                          page background, the same weight the dashboard gives
+                          its primary actions. The old 10% tint read as grey. */}
+                      <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                        <Icon className="w-5 h-5 text-brand-bg" />
                       </div>
                       <ChevronRight className="w-4 h-4 text-brand-muted-fg group-hover:text-brand-primary transition-colors" />
                     </div>
                     <p className="text-base font-semibold text-brand-fg">{id}</p>
                     <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
-                    <p className="text-[11px] text-brand-muted-fg mt-3 font-medium flex items-center gap-1.5">
-                      {isLoading ? "Loading…" : `${assets.length} companies`}
+                    <p className="text-[11px] mt-3 font-semibold flex items-center gap-1.5">
+                      <span className="text-brand-primary">
+                        {isLoading ? "Loading…" : `${assets.length} companies`}
+                      </span>
                       {newCount > 0 && <NewBadge />}
                     </p>
                   </button>

@@ -66,8 +66,11 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
     <section className="soft-card w-full p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-            <Waves className="w-3 h-3 text-brand-primary" />
+          {/* Panel eyebrows carry the brand green, matching the dashboard's
+              "Top Pick Today" label. Metric labels and footnotes stay muted, so
+              the green marks section starts rather than colouring everything. */}
+          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
+            <Waves className="w-3 h-3" />
             Whale Watching
           </p>
           <p className="text-sm text-brand-muted-fg">
