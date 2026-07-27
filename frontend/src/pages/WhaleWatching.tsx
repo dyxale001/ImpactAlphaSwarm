@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Waves,
   Cpu,
@@ -10,10 +10,13 @@ import {
   ChevronRight,
   Building2,
   Layers,
+  Activity,
 } from "lucide-react";
-import { useUniverseAssets } from "../hooks/useUniverseAssets";
+import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
+import WhaleActivityOverview from "../components/research/WhaleActivityOverview";
+import CompanySearch from "../components/research/CompanySearch";
 import FundHoldingsView, {
   FundHoldingsDetail,
 } from "../components/research/FundHoldingsView";
@@ -28,9 +31,22 @@ const UNIVERSE_TILES = [
   { id: "Healthcare", Icon: Heart, desc: "Biotech, pharma & medical devices" },
 ] as const;
 
+type Section = "activity" | "universes" | "funds";
+
+// Small "New" pill for companies the asset-discovery agent added in the last
+// week. Deliberately unexplained: it marks the row without turning the card
+// into a readout of the agent's internals.
+function NewBadge() {
+  return (
+    <span className="shrink-0 rounded-full bg-brand-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-primary">
+      New
+    </span>
+  );
+}
+
 export default function WhaleWatchingPage() {
-  const { byUniverse, isLoading, error } = useUniverseAssets();
-  const [section, setSection] = useState<"universes" | "funds">("universes");
+  const { byUniverse, all, isLoading, error } = useUniverseAssets();
+  const [section, setSection] = useState<Section>("activity");
   const [openFund, setOpenFund] = useState<FundHolding | null>(null);
   const [universe, setUniverse] = useState<string | null>(null);
   const [ticker, setTicker] = useState<string | null>(null);
@@ -46,48 +62,65 @@ export default function WhaleWatchingPage() {
     return key ? byUniverse[key] : [];
   };
 
-  const goToUniverses = () => {
-    setTicker(null);
-    setUniverse(null);
-  };
-  const goToUniverse = (u: string) => {
-    setTicker(null);
-    setUniverse(u);
-  };
-  const goToTicker = (t: string) => {
+  const assetByTicker = useMemo(() => {
+    const map: Record<string, UniverseAsset> = {};
+    for (const a of all) map[a.ticker] = a;
+    return map;
+  }, [all]);
+
+  const openCompany = (t: string, u: string | null) => {
     setTickerTab("insiders");
+    if (u) setUniverse(u);
     setTicker(t);
   };
+
+  const closeCompany = () => setTicker(null);
+
+  const goToSection = (s: Section) => {
+    setSection(s);
+    setTicker(null);
+    setUniverse(null);
+    setOpenFund(null);
+  };
+
+  const selected = ticker ? assetByTicker[ticker] : undefined;
 
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
       {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
-          <Waves className="w-7 h-7 text-brand-primary" />
-          Whale Watching
-        </h1>
-        <p className="text-sm text-brand-muted-fg mt-1 max-w-2xl">
-          Follow the big money — insider dealings, the institutions and funds
-          that own each stock, and what famous investors are buying.
-          Informational only; this never affects your recommendations.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
+            <Waves className="w-7 h-7 text-brand-primary" />
+            Whale Watching
+          </h1>
+          <p className="text-sm text-brand-muted-fg mt-1 max-w-2xl">
+            Follow the big money: insider dealings, the institutions and funds
+            that own each stock, and what the largest investors are buying.
+            Informational only; this never affects your recommendations.
+          </p>
+        </div>
+        <div className="w-full sm:w-auto sm:min-w-[18rem]">
+          <CompanySearch
+            assets={all}
+            onSelect={openCompany}
+            disabled={isLoading || all.length === 0}
+          />
+        </div>
       </div>
 
       {/* Top-level tabs */}
       <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
         {(
           [
+            { id: "activity", label: "Activity", Icon: Activity },
             { id: "universes", label: "Universes", Icon: Layers },
             { id: "funds", label: "Top Funds", Icon: Building2 },
           ] as const
         ).map((s) => (
           <button
             key={s.id}
-            onClick={() => {
-              setSection(s.id);
-              setOpenFund(null);
-            }}
+            onClick={() => goToSection(s.id)}
             className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               section === s.id
                 ? "bg-brand-primary text-brand-bg"
@@ -100,54 +133,34 @@ export default function WhaleWatchingPage() {
         ))}
       </div>
 
-      {section === "funds" ? (
-        openFund ? (
-          <FundHoldingsDetail fund={openFund} onBack={() => setOpenFund(null)} />
-        ) : (
-          <FundHoldingsView onOpenFund={setOpenFund} />
-        )
-      ) : (
-        <div className="space-y-6">
-          {/* Breadcrumb (only when drilled into a universe/ticker) */}
-          {(universe || ticker) && (
-            <nav className="flex items-center gap-2 text-sm text-brand-muted-fg flex-wrap">
-              <button
-                onClick={goToUniverses}
-                className="font-semibold text-brand-fg hover:text-brand-primary transition-colors"
-              >
-                Universes
-              </button>
-              {universe && (
-                <>
-                  <ChevronRight className="w-4 h-4 shrink-0" />
-                  <button
-                    onClick={() => goToUniverse(universe)}
-                    className={`transition-colors hover:text-brand-fg ${
-                      ticker ? "" : "text-brand-fg font-semibold"
-                    }`}
-                  >
-                    {universe}
-                  </button>
-                </>
-              )}
-              {ticker && (
-                <>
-                  <ChevronRight className="w-4 h-4 shrink-0" />
-                  <span className="text-brand-fg font-semibold">{ticker}</span>
-                </>
-              )}
-            </nav>
-          )}
-
-          {/* ── Level 3: ticker whale panel ─────────────────────────── */}
-          {ticker && universe ? (
+      {/* A company panel opens over whichever section you came from, so it is
+          reachable from search, the activity feed and the universe grid alike. */}
+      {ticker ? (
         <div className="space-y-6">
           <button
-            onClick={() => goToUniverse(universe)}
+            onClick={closeCompany}
             className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to {universe}
+            <ArrowLeft className="w-4 h-4" />
+            {universe && section === "universes"
+              ? `Back to ${universe}`
+              : "Back"}
           </button>
+
+          <div className="soft-card p-5 space-y-2">
+            <div className="flex items-baseline gap-2.5 flex-wrap">
+              <h2 className="text-2xl font-bold font-mono text-brand-fg">
+                {ticker}
+              </h2>
+              <p className="text-sm text-brand-muted-fg">{selected?.name}</p>
+              {selected?.isNew && <NewBadge />}
+            </div>
+            {selected?.description && (
+              <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl">
+                {selected.description}
+              </p>
+            )}
+          </div>
 
           {/* Tabs: insider dealings vs institutional owners */}
           <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1">
@@ -182,35 +195,58 @@ export default function WhaleWatchingPage() {
             <InstitutionalOwners ticker={ticker} />
           )}
         </div>
+      ) : section === "activity" ? (
+        <WhaleActivityOverview
+          onOpenCompany={openCompany}
+          onBrowseFunds={() => goToSection("funds")}
+        />
+      ) : section === "funds" ? (
+        openFund ? (
+          <FundHoldingsDetail
+            fund={openFund}
+            onBack={() => setOpenFund(null)}
+            onOpenCompany={openCompany}
+          />
+        ) : (
+          <FundHoldingsView onOpenFund={setOpenFund} />
+        )
       ) : universe ? (
-        /* ── Level 2: tickers within a universe ────────────────── */
+        /* Companies within a universe */
         <div className="space-y-6">
           <button
-            onClick={goToUniverses}
+            onClick={() => setUniverse(null)}
             className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> All universes
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-brand-fg">{universe}</h1>
+            <h2 className="text-2xl font-bold text-brand-fg">{universe}</h2>
             <p className="text-sm text-brand-muted-fg mt-1">
               Pick a company to see its insider dealings and institutional
               owners.
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {assetsFor(universe).map((a) => (
               <button
                 key={a.ticker}
-                onClick={() => goToTicker(a.ticker)}
+                onClick={() => openCompany(a.ticker, a.universe)}
                 className="text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98]"
               >
-                <p className="text-lg font-bold font-mono text-brand-fg">
-                  {a.ticker}
-                </p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-lg font-bold font-mono text-brand-fg">
+                    {a.ticker}
+                  </p>
+                  {a.isNew && <NewBadge />}
+                </div>
                 <p className="text-xs text-brand-muted-fg mt-0.5 truncate">
                   {a.name}
                 </p>
+                {a.description && (
+                  <p className="text-xs text-brand-muted-fg mt-2 leading-snug line-clamp-3">
+                    {a.description}
+                  </p>
+                )}
               </button>
             ))}
           </div>
@@ -221,19 +257,20 @@ export default function WhaleWatchingPage() {
           )}
         </div>
       ) : (
-        /* ── Level 1: universes ────────────────────────────────── */
+        /* Universe tiles */
         <div className="space-y-6">
           {error ? (
             <p className="text-sm text-brand-muted-fg italic">{error}</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {UNIVERSE_TILES.map(({ id, Icon, desc }) => {
-                const count = assetsFor(id).length;
+                const assets = assetsFor(id);
+                const newCount = assets.filter((a) => a.isNew).length;
                 return (
                   <button
                     key={id}
-                    onClick={() => goToUniverse(id)}
-                    disabled={isLoading || count === 0}
+                    onClick={() => setUniverse(id)}
+                    disabled={isLoading || assets.length === 0}
                     className="group text-left p-5 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div className="flex items-start justify-between">
@@ -244,16 +281,15 @@ export default function WhaleWatchingPage() {
                     </div>
                     <p className="text-base font-semibold text-brand-fg">{id}</p>
                     <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
-                    <p className="text-[11px] text-brand-muted-fg mt-3 font-medium">
-                      {isLoading ? "Loading…" : `${count} companies`}
+                    <p className="text-[11px] text-brand-muted-fg mt-3 font-medium flex items-center gap-1.5">
+                      {isLoading ? "Loading…" : `${assets.length} companies`}
+                      {newCount > 0 && <NewBadge />}
                     </p>
                   </button>
                 );
               })}
             </div>
           )}
-        </div>
-      )}
         </div>
       )}
     </div>

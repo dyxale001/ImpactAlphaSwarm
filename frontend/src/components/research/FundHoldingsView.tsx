@@ -87,11 +87,29 @@ function FundCard({
   );
 }
 
-function PositionRow({ p, i }: { p: FundHolding["positions"][number]; i: number }) {
+function PositionRow({
+  p,
+  onOpenCompany,
+}: {
+  p: FundHolding["positions"][number];
+  onOpenCompany?: (ticker: string, universe: string | null) => void;
+}) {
+  // Clickable when the parent can navigate, so a position is one click from the
+  // company's own insider and ownership panels rather than a dead end.
+  const Tag = onOpenCompany ? "button" : "div";
   return (
-    <div
-      key={`${p.ticker}-${i}`}
-      className="flex items-center gap-3 rounded-xl border border-brand-border/50 bg-brand-bg/50 px-3 py-2.5"
+    <Tag
+      {...(onOpenCompany
+        ? {
+            type: "button" as const,
+            onClick: () => onOpenCompany(p.ticker, p.universe),
+          }
+        : {})}
+      className={`w-full text-left flex items-center gap-3 rounded-xl border border-brand-border/50 bg-brand-bg/50 px-3 py-2.5 ${
+        onOpenCompany
+          ? "hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.99]"
+          : ""
+      }`}
     >
       <div className="flex-1 min-w-0">
         <p className="flex items-baseline gap-2">
@@ -125,7 +143,7 @@ function PositionRow({ p, i }: { p: FundHolding["positions"][number]; i: number 
           </p>
         )}
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -133,9 +151,11 @@ function PositionRow({ p, i }: { p: FundHolding["positions"][number]; i: number 
 export function FundHoldingsDetail({
   fund,
   onBack,
+  onOpenCompany,
 }: {
   fund: FundHolding;
   onBack: () => void;
+  onOpenCompany?: (ticker: string, universe: string | null) => void;
 }) {
   const count = fund.positions.length;
   const addedCount = fund.positions.filter((p) => (p.pct_change ?? 0) > 0).length;
@@ -192,7 +212,11 @@ export function FundHoldingsDetail({
           )}
         </div>
         {fund.positions.map((p, i) => (
-          <PositionRow key={`${p.ticker}-${i}`} p={p} i={i} />
+          <PositionRow
+            key={`${p.ticker}-${i}`}
+            p={p}
+            onOpenCompany={onOpenCompany}
+          />
         ))}
       </div>
 
