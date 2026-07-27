@@ -10,12 +10,10 @@ import {
   ChevronRight,
   Building2,
   Layers,
-  Activity,
 } from "lucide-react";
 import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
-import WhaleActivityOverview from "../components/research/WhaleActivityOverview";
 import CompanySearch from "../components/research/CompanySearch";
 import FundHoldingsView, {
   FundHoldingsDetail,
@@ -31,7 +29,7 @@ const UNIVERSE_TILES = [
   { id: "Healthcare", Icon: Heart, desc: "Biotech, pharma & medical devices" },
 ] as const;
 
-type Section = "activity" | "universes" | "funds";
+type Section = "universes" | "funds";
 
 // Small "New" pill for companies the asset-discovery agent added in the last
 // week. Deliberately unexplained: it marks the row without turning the card
@@ -46,7 +44,7 @@ function NewBadge() {
 
 export default function WhaleWatchingPage() {
   const { byUniverse, all, isLoading, error } = useUniverseAssets();
-  const [section, setSection] = useState<Section>("activity");
+  const [section, setSection] = useState<Section>("universes");
   const [openFund, setOpenFund] = useState<FundHolding | null>(null);
   const [universe, setUniverse] = useState<string | null>(null);
   const [ticker, setTicker] = useState<string | null>(null);
@@ -113,7 +111,6 @@ export default function WhaleWatchingPage() {
       <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
         {(
           [
-            { id: "activity", label: "Activity", Icon: Activity },
             { id: "universes", label: "Universes", Icon: Layers },
             { id: "funds", label: "Top Funds", Icon: Building2 },
           ] as const
@@ -134,7 +131,7 @@ export default function WhaleWatchingPage() {
       </div>
 
       {/* A company panel opens over whichever section you came from, so it is
-          reachable from search, the activity feed and the universe grid alike. */}
+          reachable from search and the universe grid alike. */}
       {ticker ? (
         <div className="space-y-6">
           <button
@@ -195,11 +192,6 @@ export default function WhaleWatchingPage() {
             <InstitutionalOwners ticker={ticker} />
           )}
         </div>
-      ) : section === "activity" ? (
-        <WhaleActivityOverview
-          onOpenCompany={openCompany}
-          onBrowseFunds={() => goToSection("funds")}
-        />
       ) : section === "funds" ? (
         openFund ? (
           <FundHoldingsDetail

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-// How long a discovered company keeps its "New" badge. Matches NEW_COMPANY_DAYS
-// in the backend so the badge and the overview's new-company count agree.
+// How long a discovered company keeps its "New" badge after the asset-discovery
+// agent first picked it up.
 const NEW_COMPANY_DAYS = 7;
 
 export interface UniverseAsset {

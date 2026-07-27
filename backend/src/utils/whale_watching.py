@@ -305,8 +305,8 @@ def read_all_institutions_cache(fresh_only: bool = False) -> dict[str, dict]:
     """Bulk-read the per-ticker institutional cache as {ticker: payload}.
 
     ``fresh_only`` restricts to rows inside INSTITUTIONS_CACHE_TTL. The nightly
-    refresh wants that (it only refetches what has gone stale); serving wants
-    everything, since a stale 13F snapshot still beats showing nothing.
+    warm wants that, since it only refetches what has gone stale; serving wants
+    everything, because a stale 13F snapshot still beats showing nothing.
     """
     out: dict[str, dict] = {}
     try:
@@ -326,14 +326,14 @@ def read_all_institutions_cache(fresh_only: bool = False) -> dict[str, dict]:
 
 
 def refresh_institutions_cache(assets: list[dict]) -> dict:
-    """Refetch institutional ownership for every tracked asset whose cache row is
-    missing or stale. Blocking and slow (one yfinance call per ticker), so this
-    belongs in the nightly job, never in a request.
+    """Warm the institutional cache: refetch every tracked asset whose row is
+    missing or past INSTITUTIONS_CACHE_TTL. Blocking and slow (one yfinance call
+    per stale ticker), so this belongs in the nightly job.
 
-    Splitting this out is what lets ``build_fund_holdings`` be a pure in-memory
-    aggregation: previously the /api/funds handler did these fetches inline, so
-    the first request after the weekly TTL expired paid for the whole pool. That
-    cost now grows every night the discovery agent adds tickers.
+    Doing it here is what keeps ``build_fund_holdings`` a pure in-memory
+    aggregation. Left inside the /api/funds request, the first call after the
+    weekly TTL expired paid for the whole pool while the user waited, and that
+    bill grows every night the discovery agent adds tickers.
     """
     fresh = read_all_institutions_cache(fresh_only=True)
     refreshed, failed = 0, 0
@@ -356,9 +356,9 @@ def build_fund_holdings(assets: list[dict]) -> list[dict]:
 
     Scoped to the companies we cover, so a fund's positions here are only in our
     tracked assets, not its whole portfolio. Pure aggregation over whatever the
-    institutional cache already holds: tickers with no cached row are skipped
-    rather than fetched, so this is fast and safe to run inside a request.
-    ``refresh_institutions_cache`` (nightly) is what fills the cache.
+    institutional cache already holds: an uncached ticker is skipped rather than
+    fetched, which is what makes this safe to run inside a request.
+    ``refresh_institutions_cache`` (nightly) is what fills that cache.
 
     Returns funds sorted by total value held, each with its positions (biggest
     first).
@@ -372,7 +372,7 @@ def build_fund_holdings(assets: list[dict]) -> list[dict]:
             continue
         payload = cache.get(ticker)
         if payload is None:
-            continue  # not fetched yet; the nightly refresh will pick it up
+            continue  # not fetched yet; the nightly warm will pick it up
         for holder in payload.get("holders") or []:
             name = holder.get("holder")
             if not name:
@@ -426,27 +426,6 @@ def write_funds_cache(funds: list) -> str:
     return fetched_at
 
 
-# ── Cross-company activity (the Whale Watching landing page) ──────────────────
-
-# How many insider dealings the feed carries. Enough to scroll, small enough that
-# the payload stays light.
-ACTIVITY_FEED_LIMIT = 40
-# A discovered company counts as "new" for this long after it first entered.
-NEW_COMPANY_DAYS = 7
-
-# SEC transaction codes for trades made on the open market: P is a purchase, S a
-# sale. Only these reflect a decision to buy or sell at the going price.
-#
-# The headline tiles are restricted to them because the raw feed is dominated by
-# mechanical events. Musk's largest TSLA rows are an option exercise (code M) of
-# 304M shares and the tax withholding on it (code F), the same event twice, each
-# worth about $7bn. Ranked by value alone they would present as the biggest
-# insider buy and the biggest insider sell we have ever seen, and neither is a
-# trade. The per-company panel already labels these natures; the tiles have no
-# room for a caveat, so they exclude them instead.
-OPEN_MARKET_CODES = {"P", "S"}
-
-
 ACTIVE_ASSET_COLUMNS = "ticker, name, universe, origin, first_discovered_at, description"
 
 
@@ -472,158 +451,3 @@ def read_active_assets() -> list[dict]:
     except Exception as e:
         logger.info("Active assets read failed: %s", e)
         return []
-
-
-def _read_all_insider_cache() -> dict[str, list]:
-    """Bulk-read every cached insider row as {ticker: transactions}."""
-    try:
-        res = (
-            supabase.table("insider_transactions_cache")
-            .select("ticker, transactions")
-            .execute()
-        )
-    except Exception as e:
-        logger.info("Bulk insider cache read failed: %s", e)
-        return {}
-    return {
-        row["ticker"]: (row.get("transactions") or [])
-        for row in (res.data or [])
-        if row.get("ticker")
-    }
-
-
-def _median(sorted_values: list[float]) -> float:
-    """Median of an already-sorted, non-empty list."""
-    n = len(sorted_values)
-    mid = n // 2
-    if n % 2:
-        return sorted_values[mid]
-    return (sorted_values[mid - 1] + sorted_values[mid]) / 2
-
-
-def _days_since(iso_value) -> Optional[int]:
-    if not iso_value:
-        return None
-    try:
-        when = datetime.datetime.fromisoformat(str(iso_value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=datetime.timezone.utc)
-    return (datetime.datetime.now(datetime.timezone.utc) - when).days
-
-
-def build_activity_overview(assets: list[dict]) -> dict:
-    """Aggregate the per-ticker whale caches into one cross-company view.
-
-    This is what the landing page needs and the old drill-down could not give:
-    what is happening across every tracked company at once, without picking a
-    ticker first. Pure aggregation over caches other endpoints already fill, so
-    it makes no external calls and adds no cache of its own.
-
-    ``assets`` is the active pool ([{ticker, name, universe, origin,
-    first_discovered_at}, ...]); anything outside it is ignored, which is what
-    keeps retired tickers out of the feed.
-    """
-    by_ticker = {
-        (a.get("ticker") or "").upper(): a for a in assets if a.get("ticker")
-    }
-    insider_by_ticker = _read_all_insider_cache()
-    institutions = read_all_institutions_cache()
-
-    # ── Feed: every insider dealing across the pool, most recently filed first ──
-    feed: list[dict] = []
-    for ticker, transactions in insider_by_ticker.items():
-        asset = by_ticker.get(ticker)
-        if asset is None:
-            continue
-        for txn in transactions:
-            feed.append({
-                "ticker": ticker,
-                "company": asset.get("name"),
-                "universe": asset.get("universe"),
-                "name": txn.get("name"),
-                "role": txn.get("role"),
-                "type": txn.get("type"),
-                "shares": txn.get("shares"),
-                "value": txn.get("value"),
-                "transaction_date": txn.get("transaction_date"),
-                "filing_date": txn.get("filing_date"),
-                "transaction_code": txn.get("transaction_code"),
-            })
-    feed.sort(
-        key=lambda t: (t.get("filing_date") or t.get("transaction_date") or ""),
-        reverse=True,
-    )
-
-    # ── Highlights: the single largest open-market move in each direction ──────
-    def _largest(kind: str) -> Optional[dict]:
-        scored = [
-            t
-            for t in feed
-            if t["type"] == kind
-            and (t.get("value") or 0) > 0
-            and (t.get("transaction_code") or "").strip().upper() in OPEN_MARKET_CODES
-        ]
-        return max(scored, key=lambda t: t["value"]) if scored else None
-
-    # Institutional accumulation: how much a company's reporting funds changed
-    # their stake at the last filing.
-    #
-    # Median, not mean: pct_change is per holder and the distribution is wildly
-    # skewed. ENPH's ten holders report [8.24, 1.0, 1.0, 0.85, 0.17, 0.11, 0.03,
-    # 0.01, -0.02, -0.27] — the mean is +111%, carried entirely by one fund that
-    # went from a token position to a real one, while the median +14% is what the
-    # typical holder actually did.
-    accumulation: list[dict] = []
-    for ticker, payload in institutions.items():
-        asset = by_ticker.get(ticker)
-        if asset is None:
-            continue
-        changes = sorted(
-            h["pct_change"]
-            for h in (payload.get("holders") or [])
-            if h.get("pct_change") is not None
-        )
-        if not changes:
-            continue
-        accumulation.append({
-            "ticker": ticker,
-            "company": asset.get("name"),
-            "universe": asset.get("universe"),
-            "median_pct_change": _median(changes),
-            "holders": len(changes),
-        })
-    accumulation.sort(key=lambda a: a["median_pct_change"], reverse=True)
-
-    new_companies = [
-        {
-            "ticker": a.get("ticker"),
-            "company": a.get("name"),
-            "universe": a.get("universe"),
-            "first_discovered_at": a.get("first_discovered_at"),
-        }
-        for a in assets
-        if a.get("origin") == "discovered"
-        and (_days_since(a.get("first_discovered_at")) or 999) <= NEW_COMPANY_DAYS
-    ]
-
-    return {
-        "feed": feed[:ACTIVITY_FEED_LIMIT],
-        "highlights": {
-            "biggest_buy": _largest("buy"),
-            "biggest_sell": _largest("sell"),
-            "most_accumulated": accumulation[0] if accumulation else None,
-            "most_reduced": accumulation[-1] if accumulation else None,
-        },
-        "counts": {
-            "companies": len(by_ticker),
-            "transactions": len(feed),
-            "new_companies": len(new_companies),
-            "companies_with_insider_data": sum(
-                1 for t in insider_by_ticker if t in by_ticker
-            ),
-        },
-        "new_companies": new_companies,
-        "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }

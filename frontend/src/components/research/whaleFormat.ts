@@ -27,22 +27,6 @@ export function formatDate(value: string | null | undefined): string {
       });
 }
 
-// "2 days ago" reads better than a date in a feed sorted by recency.
-export function formatRelative(value: string | null | undefined): string {
-  if (!value) return "";
-  const then = new Date(value).getTime();
-  if (Number.isNaN(then)) return "";
-  const days = Math.floor((Date.now() - then) / 86_400_000);
-  if (days < 0) return "";
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days} days ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} ${months === 1 ? "month" : "months"} ago`;
-  const years = Math.floor(months / 12);
-  return `${years} ${years === 1 ? "year" : "years"} ago`;
-}
-
 // SEC transaction codes (Finnhub `transactionCode`). The nature of the trade is
 // what explains the missing dollar values, and why a huge "sell" is often not a
 // decision to sell: only open-market trades settle at a market price. Grants,

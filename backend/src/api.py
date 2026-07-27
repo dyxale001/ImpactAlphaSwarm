@@ -113,25 +113,6 @@ async def usd_zar_fx_rate():
 # stay thin (read cache → fetch if stale → shape response).
 
 
-@app.get("/api/whales/activity")
-async def whale_overview():
-    """Cross-company whale activity: the insider feed across every tracked
-    company plus the biggest moves, for the Whale Watching landing page.
-
-    MUST stay declared above /api/whales/{ticker}. FastAPI matches routes in
-    declaration order, so with the parameterised route first this one is never
-    reached and "activity" is served as a ticker symbol instead.
-
-    Pure aggregation over caches the per-ticker endpoints and the nightly job
-    already fill, so it makes no external calls. Descriptions are not needed
-    here (the frontend already has them from the assets read).
-    """
-    loop = asyncio.get_running_loop()
-    assets = await loop.run_in_executor(None, ww.read_active_assets)
-    overview = await loop.run_in_executor(None, ww.build_activity_overview, assets)
-    return overview
-
-
 @app.get("/api/whales/{ticker}")
 async def whale_activity(ticker: str):
     """Recent insider dealings for a ticker, via Finnhub (US-listed only).
@@ -192,10 +173,12 @@ async def top_funds():
     """Institutional data inverted to per-fund holdings across all tracked assets
     (for the Top Funds / Notable Investors views).
 
-    Weekly read-through cache. The rebuild is now a pure in-memory aggregation
-    over the institutional cache, so it is fast even on a miss: filling that
-    cache is the nightly job's work (ww.refresh_institutions_cache), not this
-    request's.
+    Weekly read-through cache. A miss is still cheap because the rebuild is pure
+    aggregation over the institutional cache, which the nightly job warms
+    (ww.refresh_institutions_cache); this request never calls yfinance.
+
+    Scoped to active assets, so tickers the discovery agent has retired or
+    benched no longer contribute holdings.
     """
     cached = ww.read_funds_cache()
     if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
@@ -539,16 +522,16 @@ async def _refresh_whale_data() -> dict:
     """Nightly whale-watching maintenance, run after the discovery agent.
 
     Four stages, each isolated so one failing does not cost the others:
-      1. institutional ownership for tickers whose cache is missing or stale —
+      1. warm the institutional cache for tickers that are missing or stale —
          the slow part (one yfinance call each), which is exactly why it lives
-         here instead of inside the /api/funds request
-      2. rebuild the fund-holdings aggregation over the refreshed cache
+         here rather than inside the /api/funds request
+      2. rebuild the fund-holdings aggregation over the warmed cache
       3. describe any company that still has no blurb
       4. describe any fund we have not seen before
 
-    Stages 3 and 4 are the reason this exists at all: the discovery agent adds
-    tickers every night, each new ticker brings unfamiliar fund holders, and
-    both would otherwise show up undescribed.
+    Stages 3 and 4 are the reason this exists: the discovery agent adds tickers
+    every night, each new ticker brings unfamiliar fund holders, and both would
+    otherwise show up undescribed.
     """
     from src.utils import descriptions as desc
 
@@ -563,7 +546,7 @@ async def _refresh_whale_data() -> dict:
             None, ww.refresh_institutions_cache, assets
         )
     except Exception as e:
-        logger.warning("Institutional cache refresh failed: %s", e)
+        logger.warning("Institutional cache warm failed: %s", e)
         summary["institutions"] = {"error": str(e)}
 
     funds: list = []
@@ -620,12 +603,8 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
         except Exception as e:
             logger.exception("Discovery refresh failed (continuing on existing pool): %s", e)
 
-    # Refresh whale-watching data for the (possibly just-changed) pool, then
-    # describe anything new. Order matters: discovery adds tickers, the
-    # institutional refresh gives those tickers holders, the fund rebuild turns
-    # holders into funds, and only then do we know which fund names need blurbs.
-    #
-    # Every stage is best-effort and isolated — whale watching is purely
+    # Describe anything the discovery agent added tonight, so a new ticker is
+    # never shown as a bare symbol. Best-effort: whale watching is purely
     # informational, so a failure here must never stop the recommendation batch.
     whales_summary = None
     try:
