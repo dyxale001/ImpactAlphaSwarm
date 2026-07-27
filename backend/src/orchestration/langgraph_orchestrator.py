@@ -66,6 +66,98 @@ def get_tracer() -> Optional[Tracer]:
     return _current_tracer
 
 
+# ── Reasoning-trace vocabulary (ranking v2) ──────────────────────────────────
+# Plain-language renderings of the machine states, so the trace explains the same
+# four terms the UI shows rather than the penalties v2 removed.
+
+_AUDIENCE_GUIDANCE = {
+    "novice": "Write in plain English for a retail investor who is new to investing. Avoid jargon, define any technical term briefly, and focus on the bottom line.",
+    "intermediate": "Write for a retail investor who understands basic investing terms. Use some market language, but keep it clear and practical.",
+    "advanced": "Write for an experienced retail investor. You may use technical market language, but keep the explanation concise and grounded in the metrics.",
+}
+
+_CONVERGENCE_WORDS = {
+    "agree_strongly": "the price data and the news/social tone point the same way",
+    "lean_together": "the price data and the news/social tone broadly agree",
+    "mixed": "the price data and the news/social tone only partly agree",
+    "conflict": "the price data and the news/social tone CONTRADICT each other",
+}
+
+_QUANT_STATE_WORDS = {
+    "cross_sectional": "measured and ranked against the other assets in this run",
+    "insufficient_universe": "measured, but there were too few comparable assets to rank it today",
+    "no_data": "no usable price history was available",
+    "unmeasured": "no measurement was recorded for this asset",
+}
+
+# Language that would turn a description into a recommendation. D-081 forbids
+# prescription (no licence in SA); D-082 positions the product as information, not
+# advice. The trace may explain WHY something ranks where it does; it may never
+# say what to do about it.
+_ADVICE_PROHIBITION = (
+    "HARD RULES — the product is legally not allowed to give advice:\n"
+    "- NEVER use: buy, sell, hold, should, must, recommend, advise, target price, "
+    "undervalued, overvalued, opportunity, bargain, avoid.\n"
+    "- NEVER look forward. No predictions and no forward-looking nouns either — "
+    "not 'outlook', 'prospects', 'potential', 'poised to', 'set to rebound'.\n"
+    "- Describe only what the measurements SAY and why that places the asset where "
+    "it is in the list. Present tense, factual, no verdict on quality.\n"
+    "STYLE — this is read by a retail investor, not a quant desk:\n"
+    "- Name only the ONE or TWO factors that actually drove the placement. Do not "
+    "recite all four, and do not list a factor that had no effect (a fit of 1.00 "
+    "changed nothing — say nothing about it).\n"
+    "- Quote at most one number, and only if it helps. Prefer plain words "
+    "('the two signals disagree') over scores ('agreement 0.51')."
+)
+
+
+def _describe_terms(terms: dict) -> str:
+    """Render the four disclosed terms as prompt lines the model can paraphrase."""
+    weights = terms.get("ranking_weights") or {}
+    quant_state = terms.get("quant_state")
+    lines = [
+        f"- Signal strength: {terms.get('signal_strength'):.2f} of 1.00 "
+        f"(direction: {terms.get('signal_direction')})",
+        f"- Agreement between the two signals: {terms.get('convergence'):.2f} of 1.00 — "
+        f"{_CONVERGENCE_WORDS.get(terms.get('convergence_state'), 'partly agree')}",
+        f"- Depth of available evidence: {terms.get('data_sufficiency'):.2f} of 1.00",
+        f"- Fit with the user's stated risk preference: {terms.get('profile_fit'):.2f} of 1.00 "
+        f"(1.00 = no mismatch; lower = more volatile than they asked for)",
+        f"- Price-data status: {_QUANT_STATE_WORDS.get(quant_state, quant_state)}",
+    ]
+    if weights:
+        lines.append(
+            f"- Disclosed weighting used: price data {weights.get('quant')} / "
+            f"news+social tone {weights.get('sentiment')}"
+        )
+    if not terms.get("has_sentiment", True):
+        lines.append("- NOTE: no news or social coverage was found, so the tone signal is neutral by default, not genuinely balanced.")
+    return "\n".join(lines)
+
+
+def _reasoning_fallback(ticker: str, terms: Optional[dict], expertise_level: str) -> str:
+    """Deterministic trace for when the LLM is unavailable. Describes the terms;
+    asserts no verdict (the old fallback said 'strong fundamentals' / 'looks
+    solid', which is exactly the advisory framing the pivot removes)."""
+    if terms and terms.get("convergence_state"):
+        agreement = _CONVERGENCE_WORDS.get(terms["convergence_state"], "partly agree")
+        detail = (
+            f"{ticker} places here because {agreement}"
+            f" (agreement {terms.get('convergence', 0):.2f}, signal strength "
+            f"{terms.get('signal_strength', 0):.2f}, evidence depth "
+            f"{terms.get('data_sufficiency', 0):.2f})."
+        )
+        if terms.get("profile_fit", 1.0) < 1.0:
+            detail += " It is also more volatile than the risk preference on file."
+        if expertise_level == "novice":
+            return (
+                f"{detail} These are measurements of what the data currently shows, "
+                "not a view on whether to invest."
+            )
+        return detail
+    return f"{ticker}: ranking inputs were unavailable for this run."
+
+
 def generate_reasoning_trace(
     ticker: str,
     quant_data: dict,
@@ -73,20 +165,54 @@ def generate_reasoning_trace(
     adjustments: dict,
     risk_tolerance: str,
     expertise_level: str,
+    terms: Optional[dict] = None,
 ) -> str:
+    """Explain why an asset placed where it did.
+
+    When ``terms`` carries the ranking-v2 breakdown the trace describes those four
+    disclosed factors, so what the user READS matches what ordered the feed. Without
+    it (v2 disabled) the legacy penalty-based prompt is used unchanged.
+    """
+    use_v2 = bool(terms and terms.get("rank_score") is not None)
+
     if not groq_llm:
+        if use_v2:
+            return _reasoning_fallback(ticker, terms, expertise_level)
         return f"Quant Score: {quant_data.get('raw_quant_score', 'N/A')}, Sentiment: {sentiment_data.get('sentiment_score', 'N/A')}"
 
     try:
-        audience_guidance = {
-            "novice": "Write in plain English for a retail investor who is new to investing. Avoid jargon, define any technical term briefly, and focus on the bottom line.",
-            "intermediate": "Write for a retail investor who understands basic investing terms. Use some market language, but keep it clear and practical.",
-            "advanced": "Write for an experienced retail investor. You may use technical market language, but keep the explanation concise and grounded in the metrics.",
-        }
+        audience_guidance = _AUDIENCE_GUIDANCE
 
         audience_note = audience_guidance.get(expertise_level, audience_guidance["novice"])
 
-        prompt = f"""Generate a concise 1-2 sentence investment reasoning for {ticker} based on:
+        # Guard the float formatting: beta is None/absent for unmeasured tickers,
+        # and `{beta:.2f}` raises on a non-number — which previously sent every
+        # such ticker to the exception fallback below instead of the real prompt.
+        beta = quant_data.get("beta")
+        beta_text = f"{beta:.2f}" if isinstance(beta, (int, float)) else "not available"
+
+        if use_v2:
+            prompt = f"""Explain, in 1-2 sentences, why {ticker} sits where it does in a list of assets shown to one user.
+
+Audience guidance:
+- Expertise level: {expertise_level}
+- Instruction: {audience_note}
+
+The list is ordered by four disclosed factors, multiplied together. For {ticker}:
+{_describe_terms(terms)}
+
+Supporting measurements (facts, for colour — do not re-score them):
+- Sentiment score: {sentiment_data.get('sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted articles and {sentiment_data.get('mention_count', 0)} social posts
+- RSI: {quant_data.get('rsi', 'N/A')} · Sharpe: {quant_data.get('sharpe_ratio', 'N/A')} · Beta: {beta_text}
+- The user's stated risk preference: {risk_tolerance}
+
+{_ADVICE_PROHIBITION}
+
+Write it so the user can see WHICH factor drove the placement — above all when the
+two signals disagree, the evidence is thin, or it clashes with their risk
+preference. Those three are the things worth telling them about."""
+        else:
+            prompt = f"""Generate a concise 1-2 sentence investment reasoning for {ticker} based on:
 
     Audience guidance:
     - Expertise level: {expertise_level}
@@ -96,7 +222,7 @@ Technical Signals:
 - RSI: {quant_data.get('rsi', 'N/A')}
 - MACD Signal: {quant_data.get('macd', 'N/A')}
 - Sharpe Ratio: {quant_data.get('sharpe_ratio', 'N/A')}
-- Beta: {quant_data.get('beta', 'N/A'):.2f}
+- Beta: {beta_text}
 
 Market Sentiment (news weighted higher than social):
 - Sentiment Score: {sentiment_data.get('sentiment_score', 'N/A')}/100
@@ -119,12 +245,21 @@ Provide a brief, actionable explanation of why this asset ranks where it does. M
 
     except Exception as e:
         logger.warning(f"Failed to generate reasoning for {ticker}: {e}")
-        base_reasoning = f"Strong fundamentals (Quant: {quant_data.get('raw_quant_score', 'N/A')}) with market sentiment support (Sentiment: {sentiment_data.get('sentiment_score', 'N/A')})."
+        if use_v2:
+            return _reasoning_fallback(ticker, terms, expertise_level)
+        # Legacy fallback, reworded: the old text asserted "Strong fundamentals"
+        # and "This stock looks solid", which is a quality verdict — the exact
+        # advisory framing D-081/D-082 rule out. State the inputs instead.
+        base_reasoning = (
+            f"Quant score {quant_data.get('raw_quant_score', 'N/A')} and sentiment "
+            f"{sentiment_data.get('sentiment_score', 'N/A')} for this run."
+        )
         if expertise_level == "novice":
-            return f"This stock looks solid because the numbers are decent and the market mood is supportive. {base_reasoning}"
-        if expertise_level == "intermediate":
-            return base_reasoning
-        return f"{base_reasoning} The score reflects both the technical setup and sentiment inputs."
+            return (
+                f"{base_reasoning} These are measurements of what the data currently "
+                "shows, not a view on whether to invest."
+            )
+        return base_reasoning
 
 
 class AnalysisState(TypedDict):
@@ -569,6 +704,10 @@ def synthesize_rankings(
             adjustments=asset["adjustments"],
             risk_tolerance=risk_tolerance,
             expertise_level=expertise_level,
+            # The v2 terms were attached by _apply_ranking_v2; when absent the
+            # legacy penalty-based prompt is used, so the trace always describes
+            # whatever actually ordered the feed.
+            terms=asset if asset.get("rank_score") is not None else None,
         )
 
     return top_5, unified_scores
