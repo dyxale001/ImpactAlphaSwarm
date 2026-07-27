@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, MessageSquare, BarChart3, Flame, Eye, Sparkles } from "lucide-react";
-import { type AssetRecommendation } from "../../hooks/useDashboardStats";
+import {
+  type AssetRecommendation,
+  SCORECARD_ENABLED,
+} from "../../hooks/useDashboardStats";
 import { discoveryProvenance } from "../../utils/discovery";
+import {
+  CONVERGENCE_HEADLINE,
+  CONVERGENCE_TONE,
+  CONVERGENCE_DETAIL,
+} from "../../data/signalCopy";
 import DualBar from "./DualBar";
 
 type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
@@ -73,6 +81,12 @@ export default function RecommendationCard({
   const [tab, setTab] = useState<PreviewTab>("overview");
   const preview = getPreview(asset, tab);
 
+  const showScorecard = SCORECARD_ENABLED && asset.hasSignalTerms;
+  // quant_lean is the mean peer percentile mapped to [-1,+1], so invert it back to
+  // a 0-100 position for the marker. Null on legacy rows -> DualBar keeps its bar.
+  const quantPercentile =
+    asset.quantLean !== null ? ((asset.quantLean + 1) / 2) * 100 : null;
+
   const tabs = [
     { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
     { id: "sentiment" as PreviewTab, label: "Vibe", icon: MessageSquare },
@@ -111,27 +125,48 @@ export default function RecommendationCard({
       </div>
 
       <div className="flex items-end justify-between gap-3">
-        <div className="relative group">
-          <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
-            Confidence Score
-          </p>
-          <p className="text-xl font-bold font-mono leading-tight text-brand-fg">
-            {asset.confidenceScore}
-          </p>
-          <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 z-50">
-            <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
-              A unified measure of the AI's conviction in this asset. It blends
-              quantitative data with market sentiment, specifically applying
-              penalties to risky assets where social hype outpaces actual
-              financial strength.
+        {showScorecard && asset.convergenceState ? (
+          // The disclosed replacement for the score: a STATE, not a grade. No
+          // number, because a number is what invited "how good a buy is this".
+          <div className="relative group">
+            <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+              Signals
+            </p>
+            <span
+              className={`chip ${CONVERGENCE_TONE[asset.convergenceState]} font-semibold mt-1`}
+            >
+              {CONVERGENCE_HEADLINE[asset.convergenceState]}
+            </span>
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 z-50">
+              <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
+                {CONVERGENCE_DETAIL[asset.convergenceState]}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="relative group">
+            <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+              Confidence Score
+            </p>
+            <p className="text-xl font-bold font-mono leading-tight text-brand-fg">
+              {asset.confidenceScore}
+            </p>
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 z-50">
+              <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
+                A unified measure of the AI's conviction in this asset. It blends
+                quantitative data with market sentiment, specifically applying
+                penalties to risky assets where social hype outpaces actual
+                financial strength.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <DualBar
         sentimentScore={asset.sentimentScore}
         quantitativeScore={asset.fundamentalsScore}
+        quantPercentile={quantPercentile}
       />
 
       <div className="flex flex-wrap gap-2">

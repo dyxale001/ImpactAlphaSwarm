@@ -19,6 +19,9 @@ import { supabase } from "../lib/supabase";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
+import SignalScorecard from "../components/dashboard/SignalScorecard";
+import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
+import { CONVERGENCE_HEADLINE } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 
@@ -92,6 +95,11 @@ export default function DashboardPage() {
   }
 
   const topPickPreview = getTopPickPreview(topPickTab);
+  const showTopPickScorecard = Boolean(
+    SCORECARD_ENABLED && topPick?.hasSignalTerms,
+  );
+  const topPickQuantPercentile =
+    topPick?.quantLean != null ? ((topPick.quantLean + 1) / 2) * 100 : null;
 
   const {
     profile,
@@ -147,6 +155,14 @@ export default function DashboardPage() {
       "Hype Penalty",
       "Hype Flag",
       "Top Pick",
+      // Disclosed ranking factors (null on runs recorded before they existed).
+      "Signals",
+      "Signal Direction",
+      "Signal Strength",
+      "Agreement",
+      "Evidence Depth",
+      "Profile Fit",
+      "Quant Position (pctile)",
     ];
 
     const dataRows = sortedRecommendations.map((asset) => [
@@ -160,6 +176,17 @@ export default function DashboardPage() {
       asset.hypePenalty,
       asset.isHype ? "Yes" : "No",
       asset.rank === 1 ? "Yes" : "No",
+      asset.convergenceState
+        ? CONVERGENCE_HEADLINE[asset.convergenceState]
+        : "n/a",
+      asset.signalDirection ?? "n/a",
+      asset.signalStrength !== null ? asset.signalStrength.toFixed(3) : "n/a",
+      asset.convergence !== null ? asset.convergence.toFixed(3) : "n/a",
+      asset.dataSufficiency !== null ? asset.dataSufficiency.toFixed(3) : "n/a",
+      asset.profileFit !== null ? asset.profileFit.toFixed(3) : "n/a",
+      asset.quantLean !== null
+        ? Math.round(((asset.quantLean + 1) / 2) * 100)
+        : "n/a",
     ]);
 
     const csvLines = [
@@ -377,7 +404,9 @@ export default function DashboardPage() {
         >
           <Sparkles className="w-4 h-4 text-brand-primary" />
           <span className="text-xs uppercase text-brand-primary font-semibold">
-            Top Pick Today
+            {showTopPickScorecard
+              ? "Highest signal for your profile"
+              : "Top Pick Today"}
           </span>
         </Link>
         <div className="flex flex-col md:flex-row gap-6">
@@ -385,10 +414,26 @@ export default function DashboardPage() {
             to={`/asset/${topPick?.ticker}`}
             className="hover:opacity-80 transition-opacity relative z-50"
           >
-            <ConfidenceRing
-              score={topPick?.confidenceScore || 0}
-              label="Confidence Score"
-            />
+            {showTopPickScorecard ? (
+              <div className="w-full md:w-64 shrink-0">
+                <SignalScorecard
+                  terms={{
+                    signalStrength: topPick!.signalStrength,
+                    signalDirection: topPick!.signalDirection,
+                    convergence: topPick!.convergence,
+                    convergenceState: topPick!.convergenceState,
+                    dataSufficiency: topPick!.dataSufficiency,
+                    profileFit: topPick!.profileFit,
+                    quantState: topPick!.quantState,
+                  }}
+                />
+              </div>
+            ) : (
+              <ConfidenceRing
+                score={topPick?.confidenceScore || 0}
+                label="Confidence Score"
+              />
+            )}
           </Link>
           <div className="flex-1 space-y-3 w-full min-w-0">
             <Link
@@ -421,6 +466,7 @@ export default function DashboardPage() {
             <DualBar
               sentimentScore={topPick?.sentimentScore || 0}
               quantitativeScore={topPick?.fundamentalsScore || 0}
+              quantPercentile={topPickQuantPercentile}
             />
             <div className="flex items-center gap-1 bg-brand-bg border border-brand-border/50 rounded-full p-1 backdrop-blur-md">
               {[
