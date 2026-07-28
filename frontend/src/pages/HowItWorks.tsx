@@ -1,4 +1,5 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import SentimentMethodology from "../components/howItWorks/SentimentMethodology";
 import QuantMethodology from "../components/howItWorks/QuantMethodology";
@@ -17,6 +18,16 @@ import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 export default function HowItWorks() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
+  const { hash } = useLocation();
+
+  // Each card on the asset page links to its OWN explanation (#ranking,
+  // #sentiment, #quant), so honour the hash on arrival. Browsers do not scroll to
+  // an anchor that is rendered after the initial paint, hence doing it here.
+  useEffect(() => {
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hash]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-8 pb-20 pt-10 animate-fade-in-up">

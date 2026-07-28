@@ -7,8 +7,18 @@ import {
   MessageSquare,
   TriangleAlert,
   HelpCircle,
+  Scale,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
+import SignalScorecard, {
+  type SignalTerms,
+} from "../components/dashboard/SignalScorecard";
+import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
+import {
+  CONVERGENCE_DETAIL,
+  QUANT_STATE_NOTE,
+  type ConvergenceState,
+} from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
@@ -66,6 +76,27 @@ function SignalBar({
         />
       </div>
     </div>
+  );
+}
+
+// Each card owns its own explanation. One page-wide "how is this calculated?" made
+// the reader hunt for the part that applied to what they were looking at; scoping
+// the link to the section is the difference between disclosure and a document dump.
+function ExplainerLink({
+  ticker,
+  section,
+}: {
+  ticker: string;
+  section: "ranking" | "sentiment" | "quant";
+}) {
+  return (
+    <Link
+      to={`/asset/${ticker}/how-it-works#${section}`}
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+    >
+      <HelpCircle className="w-3.5 h-3.5" />
+      How is this calculated?
+    </Link>
   );
 }
 
@@ -149,6 +180,56 @@ export default function AssetDetailsPage() {
   const hypePenalty = recommendation?.hype_penalty ?? 0;
   const riskPenalty = recommendation?.risk_penalty ?? 0;
 
+  // Disclosed ranking factors (migration 010). Absent on legacy rows, which keep
+  // the confidence-score display.
+  const convergenceState = (recommendation?.convergence_state ??
+    null) as ConvergenceState | null;
+  const showScorecard =
+    SCORECARD_ENABLED &&
+    convergenceState !== null &&
+    recommendation?.signal_strength != null;
+
+  const signalTerms: SignalTerms = {
+    signalStrength: recommendation?.signal_strength ?? null,
+    signalDirection: recommendation?.signal_direction ?? null,
+    convergence: recommendation?.convergence ?? null,
+    convergenceState,
+    dataSufficiency: recommendation?.data_sufficiency ?? null,
+    profileFit: recommendation?.profile_fit ?? null,
+    quantState: recommendation?.quant_state ?? null,
+  };
+
+  // Only surface a factor when it actually affected placement. Listing all four
+  // every time (including a profile fit of 1.00 that changed nothing) is noise,
+  // and noise is what made the old penalty panel unreadable.
+  const placementNotes: string[] = [];
+  if (convergenceState === "conflict" || convergenceState === "mixed") {
+    placementNotes.push(CONVERGENCE_DETAIL[convergenceState]);
+  }
+  if (
+    typeof signalTerms.dataSufficiency === "number" &&
+    signalTerms.dataSufficiency < 0.75
+  ) {
+    placementNotes.push(
+      "Ranked lower because there is relatively little to go on — fewer trusted articles, posts or days of price history than for other candidates. That reflects what we know, not the asset itself.",
+    );
+  }
+  if (typeof signalTerms.profileFit === "number" && signalTerms.profileFit < 1) {
+    placementNotes.push(
+      "Ranked lower for you specifically: it moves more sharply than the risk preference you set during onboarding. Another user with a different preference would see it placed differently.",
+    );
+  }
+  if (signalTerms.quantState && signalTerms.quantState !== "cross_sectional") {
+    placementNotes.push(
+      QUANT_STATE_NOTE[signalTerms.quantState] ??
+        "The price measurements could not be ranked for this run.",
+    );
+  }
+  const needsAttention =
+    convergenceState === "conflict" ||
+    (typeof signalTerms.dataSufficiency === "number" &&
+      signalTerms.dataSufficiency < 0.75);
+
   return (
     <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
@@ -181,12 +262,26 @@ export default function AssetDetailsPage() {
 
         {recommendation ? (
           <div className="soft-card w-full p-5 space-y-5">
+            {/* The top card had no explainer of its own, even though it carries the
+                headline judgement. It gets the ranking walkthrough. */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
+                <BrainCircuit className="w-3 h-3 text-brand-primary" />
+                {showScorecard ? "Why it ranks here" : "Overall Assessment"}
+              </div>
+              <ExplainerLink ticker={asset.ticker} section="ranking" />
+            </div>
+
             <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-              <div className="shrink-0">
-                <ConfidenceRing
-                  score={recommendation.confidence_score || 0}
-                  label="Confidence Score"
-                />
+              <div className="shrink-0 w-full lg:w-72">
+                {showScorecard ? (
+                  <SignalScorecard terms={signalTerms} />
+                ) : (
+                  <ConfidenceRing
+                    score={recommendation.confidence_score || 0}
+                    label="Confidence Score"
+                  />
+                )}
               </div>
 
               <div className="flex-1 space-y-4">
@@ -197,9 +292,13 @@ export default function AssetDetailsPage() {
                       ? new Date(latestRunCreatedAt).toLocaleString()
                       : "—"}
                   </div>
-                  <div className="chip bg-brand-primary/15 text-brand-primary">
-                    Score {formatMetric(recommendation.confidence_score)}/100
-                  </div>
+                  {/* The 0-100 chip is only shown under the legacy score. With the
+                      disclosed factors there is deliberately no single figure. */}
+                  {!showScorecard && (
+                    <div className="chip bg-brand-primary/15 text-brand-primary">
+                      Score {formatMetric(recommendation.confidence_score)}/100
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -213,33 +312,69 @@ export default function AssetDetailsPage() {
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
-                    <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                      <Flame className="w-3 h-3 text-brand-primary" />
-                      Risk and Hype
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-brand-muted-fg">Hype penalty</span>
-                      <span className="font-semibold text-brand-fg">
-                        {formatMetric(hypePenalty)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-brand-muted-fg">Risk penalty</span>
-                      <span className="font-semibold text-brand-fg">
-                        {formatMetric(riskPenalty)}
-                      </span>
-                    </div>
-
-                    {(hypePenalty > 0 || riskPenalty > 0) && (
-                      <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                        <TriangleAlert className="w-4 h-4" />
-                        Penalties applied to the final score
+                  {/* Under the disclosed factors this panel reports WHY the asset
+                      placed where it did. The old version listed the hype and risk
+                      penalties — the mechanism convergence replaced — so it
+                      described arithmetic that no longer happens. */}
+                  {showScorecard ? (
+                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
+                        <Scale className="w-3 h-3 text-brand-primary" />
+                        What moved this asset
                       </div>
-                    )}
-                  </div>
+
+                      {placementNotes.length > 0 ? (
+                        <ul className="space-y-2 text-sm text-brand-fg/90">
+                          {placementNotes.map((note) => (
+                            <li key={note} className="leading-relaxed">
+                              {note}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm leading-relaxed text-brand-muted-fg">
+                          Nothing stood out: the signals agree, the evidence is
+                          reasonably deep, and the volatility matches the risk
+                          preference on file.
+                        </p>
+                      )}
+
+                      {needsAttention && (
+                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
+                          <TriangleAlert className="w-4 h-4" />
+                          Worth a closer look before drawing conclusions
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
+                        <Flame className="w-3 h-3 text-brand-primary" />
+                        Risk and Hype
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 text-sm">
+                        <span className="text-brand-muted-fg">Hype penalty</span>
+                        <span className="font-semibold text-brand-fg">
+                          {formatMetric(hypePenalty)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 text-sm">
+                        <span className="text-brand-muted-fg">Risk penalty</span>
+                        <span className="font-semibold text-brand-fg">
+                          {formatMetric(riskPenalty)}
+                        </span>
+                      </div>
+
+                      {(hypePenalty > 0 || riskPenalty > 0) && (
+                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
+                          <TriangleAlert className="w-4 h-4" />
+                          Penalties applied to the final score
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -268,13 +403,7 @@ export default function AssetDetailsPage() {
               </span>
             }
             action={
-              <Link
-                to={`/asset/${asset.ticker}/how-it-works`}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                How is this calculated?
-              </Link>
+              <ExplainerLink ticker={asset.ticker} section="sentiment" />
             }
           >
             {/* Headline: the blended, news-weighted score. */}
@@ -374,6 +503,7 @@ export default function AssetDetailsPage() {
             title="Quantitative Data"
             description="What the price history shows — measurements and peer context, not a recommendation."
             icon={BarChart3}
+            action={<ExplainerLink ticker={asset.ticker} section="quant" />}
           >
             <QuantMetricsPanel recommendation={recommendation} />
           </SectionCard>

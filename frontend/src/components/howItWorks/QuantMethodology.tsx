@@ -13,7 +13,7 @@ import { RAW_METRICS, RSI_BANDS, BETA_BANDS } from "../../data/quantExplainers";
 // the same source the asset page uses — so this page cannot drift from the panel.
 export default function QuantMethodology() {
   return (
-    <div className="soft-card w-full space-y-5 p-6">
+    <div id="quant" className="soft-card w-full space-y-5 p-6" style={{ scrollMarginTop: "1.5rem" }}>
       <MethodologyCardHeader
         icon={BarChart3}
         title="The price measurements"

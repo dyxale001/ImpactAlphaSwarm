@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageSquare, BarChart3, Flame, Eye, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  MessageSquare,
+  BarChart3,
+  Flame,
+  Eye,
+  Sparkles,
+  Scale,
+} from "lucide-react";
 import {
   type AssetRecommendation,
   SCORECARD_ENABLED,
@@ -25,12 +33,31 @@ function getPreview(asset: AssetRecommendation, tab: PreviewTab) {
             ? `Strong social momentum. With a score of ${asset.sentimentScore}/100, the internet is highly bullish on ${asset.ticker}.`
             : `Neutral chatter. A score of ${asset.sentimentScore}/100 indicates balanced or quiet discussion online.`,
       };
-    case "fundamentals":
+    case "fundamentals": {
+      // Prefer the disclosed peer position. The old copy quoted the retired
+      // composite and asserted "healthier financials backing the AI's decision" —
+      // a quality verdict, and about something the quant layer never measured.
+      if (asset.quantLean !== null) {
+        const pctile = Math.round(((asset.quantLean + 1) / 2) * 100);
+        return {
+          title: "Price Measurements",
+          body: `${asset.ticker}'s price measurements (momentum, risk-adjusted return, stability) sit around the ${pctile}th percentile of the assets analysed in this run. That is its position among today's candidates — not a rating.`,
+        };
+      }
       return {
         title: "Hard Numbers",
-        body: `Quantitative Score: ${asset.fundamentalsScore}/100. Higher quant scores indicate stronger technical signals and healthier financials backing the AI's decision.`,
+        body: `Quantitative Score: ${asset.fundamentalsScore}/100, from a run recorded before the per-metric breakdown was available.`,
       };
-    case "hype":
+    }
+    case "hype": {
+      // Convergence replaced the bolted-on hype penalty, so describe the state
+      // rather than points deducted from a score that no longer orders the feed.
+      if (asset.convergenceState) {
+        return {
+          title: "Signal Agreement",
+          body: CONVERGENCE_DETAIL[asset.convergenceState],
+        };
+      }
       return {
         title: "Hype Check",
         body:
@@ -38,6 +65,7 @@ function getPreview(asset: AssetRecommendation, tab: PreviewTab) {
             ? `Hype Penalty Applied: The AI deducted ${asset.hypePenalty} points from ${asset.ticker}'s final score because social hype is outpacing the math.`
             : `Clear Signal. No hype penalties were applied (${asset.hypePenalty} points deducted).`,
       };
+    }
     default:
       return { title: "Quick Take", body: asset.reasoning };
   }
@@ -91,7 +119,11 @@ export default function RecommendationCard({
     { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
     { id: "sentiment" as PreviewTab, label: "Vibe", icon: MessageSquare },
     { id: "fundamentals" as PreviewTab, label: "Numbers", icon: BarChart3 },
-    { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
+    // Relabelled once convergence is what demotes conflicting signals: "Hype"
+    // named the penalty mechanism, which no longer exists.
+    asset.convergenceState
+      ? { id: "hype" as PreviewTab, label: "Agreement", icon: Scale }
+      : { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
   ];
 
   return (
