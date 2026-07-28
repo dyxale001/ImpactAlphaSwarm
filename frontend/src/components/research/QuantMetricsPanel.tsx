@@ -8,8 +8,9 @@ import {
   BETA_BANDS,
   RAW_METRICS,
   PERCENTILE_CAPTION,
-  MODEL_SCORE_LABEL,
-  MODEL_SCORE_DISCLOSURE,
+  // MODEL_SCORE_LABEL / MODEL_SCORE_DISCLOSURE are no longer imported: the
+  // composite-score footer they labelled was removed. The constants remain in
+  // quantExplainers.ts so reverting this commit restores the footer intact.
   INSUFFICIENT_UNIVERSE_NOTE,
   NO_DATA_NOTE,
   type SubDimensionKey,
@@ -254,31 +255,17 @@ export default function QuantMetricsPanel({
         )}
       </div>
 
-      {/* The composite score, demoted to a disclosed footer: it still feeds the
-          unified score (back-compat shim), so hiding it would be less honest —
-          but it is the model's judgement, not a measurement, and is labelled
-          as such. Remove this block if/when D-086 ratifies dropping the gauge. */}
-      <div className="pt-3 border-t border-brand-border/50 space-y-1.5">
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-            {MODEL_SCORE_LABEL}
-          </span>
-          <span className="text-foreground font-mono font-semibold text-sm whitespace-nowrap">
-            {formatMetric(recommendation.quant_score, 0)}/100
-          </span>
-        </div>
-        <div className="h-1 w-full bg-background rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary/40"
-            style={{
-              width: `${Math.max(0, Math.min(100, recommendation.quant_score ?? 0))}%`,
-            }}
-          />
-        </div>
-        <p className="text-xs text-brand-muted-fg leading-relaxed">
-          {MODEL_SCORE_DISCLOSURE}
-        </p>
-      </div>
+      {/* The demoted composite-score footer was removed here. It was retained only
+          while `raw_quant_score` still ordered the feed — hiding a number that was
+          doing real work would have been less honest than disclosing it. The
+          disclosed four-factor ranking now decides placement, so the footer showed
+          a model judgement that no longer affects anything, competing with the
+          percentiles and bands above it that are actual measurements.
+
+          This removal supersedes part of D-076/D-049 (which endorsed keeping the
+          score visible), so it ships as its own commit and can be reverted alone.
+          `raw_quant_score` is still computed and persisted; retiring the scorer
+          itself is the separate cleanup in UNIFIED_SCORING_PLAN.md §4.1. */}
     </div>
   );
 }
