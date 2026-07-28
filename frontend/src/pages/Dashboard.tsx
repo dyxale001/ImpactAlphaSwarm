@@ -410,31 +410,35 @@ export default function DashboardPage() {
           </span>
         </Link>
         <div className="flex flex-col md:flex-row gap-6">
-          <Link
-            to={`/asset/${topPick?.ticker}`}
-            className="hover:opacity-80 transition-opacity relative z-50"
-          >
-            {showTopPickScorecard ? (
-              <div className="w-full md:w-64 shrink-0">
-                <SignalScorecard
-                  terms={{
-                    signalStrength: topPick!.signalStrength,
-                    signalDirection: topPick!.signalDirection,
-                    convergence: topPick!.convergence,
-                    convergenceState: topPick!.convergenceState,
-                    dataSufficiency: topPick!.dataSufficiency,
-                    profileFit: topPick!.profileFit,
-                    quantState: topPick!.quantState,
-                  }}
-                />
-              </div>
-            ) : (
+          {/* The scorecard is NOT wrapped in the asset Link: it contains its own
+              explainer buttons, and nesting <button> inside <a> is invalid markup
+              — it also made tapping an explainer navigate away instead of opening
+              it. Only the plain ring stays clickable. */}
+          {showTopPickScorecard ? (
+            <div className="w-full md:w-64 shrink-0">
+              <SignalScorecard
+                terms={{
+                  signalStrength: topPick!.signalStrength,
+                  signalDirection: topPick!.signalDirection,
+                  convergence: topPick!.convergence,
+                  convergenceState: topPick!.convergenceState,
+                  dataSufficiency: topPick!.dataSufficiency,
+                  profileFit: topPick!.profileFit,
+                  quantState: topPick!.quantState,
+                }}
+              />
+            </div>
+          ) : (
+            <Link
+              to={`/asset/${topPick?.ticker}`}
+              className="hover:opacity-80 transition-opacity relative z-50"
+            >
               <ConfidenceRing
                 score={topPick?.confidenceScore || 0}
                 label="Confidence Score"
               />
-            )}
-          </Link>
+            </Link>
+          )}
           <div className="flex-1 space-y-3 w-full min-w-0">
             <Link
               to={`/asset/${topPick?.ticker}`}
