@@ -417,6 +417,17 @@ def save_top_assets(
     if not rows:
         return {"status": "no_rows"}
 
+    # Make the write idempotent for this run. create_ai_run clears the PREVIOUS
+    # run's rows, but two analyses for the same user can race (observed 26ms
+    # apart: both deletes landed before either insert, leaving two full sets of 5
+    # under one run_id). Duplicates then broke the asset page, whose single-row
+    # lookup errors on multiple matches. Clearing by run_id here means the last
+    # writer wins with exactly one set, whatever the ordering.
+    try:
+        supabase.table("ai_recommendation").delete().eq("run_id", run_id).execute()
+    except Exception as e:
+        print(f"Warning: could not clear existing rows for run {run_id}: {e}")
+
     try:
         resp = supabase.table("ai_recommendation").insert(rows).execute()
         return {"status": "inserted", "response": resp.data}

@@ -48,14 +48,27 @@ export function useAssetDetails(ticker: string | undefined) {
         setLatestRunCreatedAt(latestRun?.created_at ?? null);
 
         if (latestRun) {
-          // 3. Fetch the specific recommendation for this asset in that run
-          const { data: recData } = await supabase
+          // 3. Fetch the specific recommendation for this asset in that run.
+          //    Deliberately NOT a bare maybeSingle(): that errors when more than
+          //    one row matches, and the error was being discarded, so the page
+          //    reported "no recent analysis" for an asset that was sitting at #1 on
+          //    the dashboard. Duplicates arise when two analyses for the same user
+          //    race (observed 26ms apart). Take the newest row and surface errors.
+          const { data: recData, error: recError } = await supabase
             .from("ai_recommendation")
             .select("*")
             .eq("run_id", latestRun.id)
             .eq("asset_id", assetData.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
             .maybeSingle();
 
+          if (recError) {
+            console.warn(
+              `Could not load the recommendation for ${ticker}:`,
+              recError.message,
+            );
+          }
           setRecommendation(recData ?? null);
         } else {
           setRecommendation(null);
