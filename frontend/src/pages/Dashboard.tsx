@@ -3,13 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Sparkles,
-  BarChart3,
   Download,
-  MessageSquare,
-  Eye,
-  Flame,
   ArrowRight,
   RefreshCw,
+  BrainCircuit,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
@@ -21,7 +18,7 @@ import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 import SignalScorecard from "../components/dashboard/SignalScorecard";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
-import { CONVERGENCE_HEADLINE } from "../data/signalCopy";
+import { CONVERGENCE_HEADLINE, CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 
@@ -51,9 +48,6 @@ export default function DashboardPage() {
     refreshRecommendations,
   } = useDashboardStats();
 
-  type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
-  const [topPickTab, setTopPickTab] = useState<PreviewTab>("overview");
-
   // Temporary toggle to hide header controls during this iteration
   const hideHeaderControls = true;
 
@@ -64,37 +58,15 @@ export default function DashboardPage() {
     return "Good evening";
   }
 
-  function getTopPickPreview(tab: PreviewTab) {
-    if (!topPick) return { title: "Quick Take", body: "" };
+  // The top pick's preview tabs were removed alongside the cards': they restated
+  // numbers already shown, and the "Hype Risk Assessment" tab described the
+  // penalty that convergence replaced. The reasoning trace is what remains.
+  const topPickReasoning =
+    topPick?.reasoning ||
+    (topPick?.convergenceState
+      ? CONVERGENCE_DETAIL[topPick.convergenceState]
+      : "No reasoning trace available for this run.");
 
-    switch (tab) {
-      case "sentiment":
-        return {
-          title: "Market Vibe",
-          body:
-            topPick.sentimentScore >= 70
-              ? `Strong social momentum. With a score of ${topPick.sentimentScore}/100, the internet is highly bullish on ${topPick.ticker}.`
-              : `Neutral chatter. A score of ${topPick.sentimentScore}/100 indicates balanced or quiet discussion online.`,
-        };
-      case "fundamentals":
-        return {
-          title: "Hard Numbers",
-          body: `Quantitative Score: ${topPick.fundamentalsScore}/100. Higher quant scores indicate stronger technical signals and healthier financials backing the AI's decision.`,
-        };
-      case "hype":
-        return {
-          title: "Hype Risk Assessment",
-          body:
-            topPick.hypePenalty > 0
-              ? `Hype Penalty Applied: The AI deducted ${topPick.hypePenalty} points from ${topPick.ticker}'s final score because social hype is outpacing the math.`
-              : `Clear Signal. No hype penalties were applied (${topPick.hypePenalty} points deducted).`,
-        };
-      default:
-        return { title: "Quick Take", body: topPick.reasoning };
-    }
-  }
-
-  const topPickPreview = getTopPickPreview(topPickTab);
   const showTopPickScorecard = Boolean(
     SCORECARD_ENABLED && topPick?.hasSignalTerms,
   );
@@ -472,37 +444,13 @@ export default function DashboardPage() {
               quantitativeScore={topPick?.fundamentalsScore || 0}
               quantPercentile={topPickQuantPercentile}
             />
-            <div className="flex items-center gap-1 bg-brand-bg border border-brand-border/50 rounded-full p-1 backdrop-blur-md">
-              {[
-                { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
-                {
-                  id: "sentiment" as PreviewTab,
-                  label: "Vibe",
-                  icon: MessageSquare,
-                },
-                {
-                  id: "fundamentals" as PreviewTab,
-                  label: "Numbers",
-                  icon: BarChart3,
-                },
-                { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTopPickTab(t.id)}
-                  className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded-full transition-colors ${topPickTab === t.id ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:text-brand-fg"}`}
-                >
-                  <t.icon className="w-3 h-3" />{" "}
-                  <span className="hidden sm:inline">{t.label}</span>
-                </button>
-              ))}
-            </div>
             <div className="bg-brand-bg backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
-              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold">
-                {topPickPreview.title}
+              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
+                <BrainCircuit className="w-3 h-3" />
+                Why it ranks here
               </p>
               <p className="text-xs text-brand-fg leading-relaxed w-full">
-                {topPickPreview.body}
+                {topPickReasoning}
               </p>
             </div>
             <div className="flex items-center justify-start">

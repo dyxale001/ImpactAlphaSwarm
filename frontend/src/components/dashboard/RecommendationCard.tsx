@@ -1,14 +1,5 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  MessageSquare,
-  BarChart3,
-  Flame,
-  Eye,
-  Sparkles,
-  Scale,
-} from "lucide-react";
+import { ArrowRight, Flame, Sparkles, BrainCircuit } from "lucide-react";
 import {
   type AssetRecommendation,
   SCORECARD_ENABLED,
@@ -21,81 +12,14 @@ import {
 } from "../../data/signalCopy";
 import DualBar from "./DualBar";
 
-type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
-
-function getPreview(asset: AssetRecommendation, tab: PreviewTab) {
-  switch (tab) {
-    case "sentiment":
-      return {
-        title: "Market Vibe",
-        body:
-          asset.sentimentScore >= 70
-            ? `Strong social momentum. With a score of ${asset.sentimentScore}/100, the internet is highly bullish on ${asset.ticker}.`
-            : `Neutral chatter. A score of ${asset.sentimentScore}/100 indicates balanced or quiet discussion online.`,
-      };
-    case "fundamentals": {
-      // Prefer the disclosed peer position. The old copy quoted the retired
-      // composite and asserted "healthier financials backing the AI's decision" —
-      // a quality verdict, and about something the quant layer never measured.
-      if (asset.quantLean !== null) {
-        const pctile = Math.round(((asset.quantLean + 1) / 2) * 100);
-        return {
-          title: "Price Measurements",
-          body: `${asset.ticker}'s price measurements (momentum, risk-adjusted return, stability) sit around the ${pctile}th percentile of the assets analysed in this run. That is its position among today's candidates — not a rating.`,
-        };
-      }
-      return {
-        title: "Hard Numbers",
-        body: `Quantitative Score: ${asset.fundamentalsScore}/100, from a run recorded before the per-metric breakdown was available.`,
-      };
-    }
-    case "hype": {
-      // Convergence replaced the bolted-on hype penalty, so describe the state
-      // rather than points deducted from a score that no longer orders the feed.
-      if (asset.convergenceState) {
-        return {
-          title: "Signal Agreement",
-          body: CONVERGENCE_DETAIL[asset.convergenceState],
-        };
-      }
-      return {
-        title: "Hype Check",
-        body:
-          asset.hypePenalty > 0
-            ? `Hype Penalty Applied: The AI deducted ${asset.hypePenalty} points from ${asset.ticker}'s final score because social hype is outpacing the math.`
-            : `Clear Signal. No hype penalties were applied (${asset.hypePenalty} points deducted).`,
-      };
-    }
-    default:
-      return { title: "Quick Take", body: asset.reasoning };
-  }
-}
-
-function MiniSparkline({
-  seed,
-  positive,
-}: {
-  seed: number;
-  positive: boolean;
-}) {
-  const points = Array.from({ length: 14 }, (_, i) => {
-    const v = Math.sin((seed + i) * 1.7) * 8 + Math.cos((seed + i) * 0.9) * 6;
-    return `${i * 8},${20 - v}`;
-  }).join(" ");
-  const stroke = positive ? "var(--color-brand-accent)" : "var(--color-brand-primary)";
-  return (
-    <svg viewBox="0 0 112 40" className="w-full h-10">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={stroke}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+// The four preview tabs (Overview / Vibe / Numbers / Hype) were removed. Three of
+// them restated numbers already on the card — the sentiment score, the quant
+// position — as prose, and the fourth described the hype penalty that convergence
+// replaced. That left the reasoning trace, the one thing the card could say that
+// nothing else on it says, hidden behind a tab nobody needed to click.
+//
+// Also removed with them: an unused MiniSparkline that drew a sine wave from the
+// ticker's hash — decorative fake price data on a transparency-focused product.
 
 export default function RecommendationCard({
   asset,
@@ -106,25 +30,11 @@ export default function RecommendationCard({
   sizeClass: string;
   delay: number;
 }) {
-  const [tab, setTab] = useState<PreviewTab>("overview");
-  const preview = getPreview(asset, tab);
-
   const showScorecard = SCORECARD_ENABLED && asset.hasSignalTerms;
   // quant_lean is the mean peer percentile mapped to [-1,+1], so invert it back to
   // a 0-100 position for the marker. Null on legacy rows -> DualBar keeps its bar.
   const quantPercentile =
     asset.quantLean !== null ? ((asset.quantLean + 1) / 2) * 100 : null;
-
-  const tabs = [
-    { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
-    { id: "sentiment" as PreviewTab, label: "Vibe", icon: MessageSquare },
-    { id: "fundamentals" as PreviewTab, label: "Numbers", icon: BarChart3 },
-    // Relabelled once convergence is what demotes conflicting signals: "Hype"
-    // named the penalty mechanism, which no longer exists.
-    asset.convergenceState
-      ? { id: "hype" as PreviewTab, label: "Agreement", icon: Scale }
-      : { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
-  ];
 
   return (
     <div
@@ -217,25 +127,16 @@ export default function RecommendationCard({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1 bg-brand-bg/60 border border-brand-border/60 rounded-full p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded-full transition-colors ${tab === t.id ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:text-brand-fg"}`}
-          >
-            <t.icon className="w-3 h-3" />{" "}
-            <span className="hidden sm:inline">{t.label}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50">
-        <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold">
-          {preview.title}
+        <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold flex items-center gap-1.5">
+          <BrainCircuit className="w-3 h-3 text-brand-primary" />
+          Why it ranks here
         </p>
         <p className="text-xs text-brand-fg/85 leading-relaxed">
-          {preview.body}
+          {asset.reasoning ||
+            (asset.convergenceState
+              ? CONVERGENCE_DETAIL[asset.convergenceState]
+              : "No reasoning trace available for this run.")}
         </p>
       </div>
 
