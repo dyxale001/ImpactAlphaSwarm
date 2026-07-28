@@ -704,10 +704,15 @@ def synthesize_rankings(
             adjustments=asset["adjustments"],
             risk_tolerance=risk_tolerance,
             expertise_level=expertise_level,
-            # The v2 terms were attached by _apply_ranking_v2; when absent the
-            # legacy penalty-based prompt is used, so the trace always describes
-            # whatever actually ordered the feed.
-            terms=asset if asset.get("rank_score") is not None else None,
+            # Only describe the v2 factors when they ACTUALLY ordered the feed. In
+            # shadow mode the terms are computed and attached (for logging) while
+            # the legacy score still decides placement, so using them here would
+            # have the trace explain a placement it did not cause.
+            terms=(
+                asset
+                if asset.get("rank_score") is not None and not UNIFIED_RANKING_SHADOW
+                else None
+            ),
         )
 
     return top_5, unified_scores
