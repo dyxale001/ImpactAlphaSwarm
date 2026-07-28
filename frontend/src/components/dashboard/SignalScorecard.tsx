@@ -6,7 +6,6 @@ import {
   CONVERGENCE_TONE,
   DIRECTION_COPY,
   QUANT_STATE_NOTE,
-  SCORECARD_DISCLOSURE,
   TERM_COPY,
   type ConvergenceState,
   type TermKey,
@@ -130,11 +129,11 @@ export default function SignalScorecard({
         <p className="text-[11px] text-slate-400">{quantNote}</p>
       )}
 
-      {!compact && (
-        <p className="text-[11px] text-brand-muted-fg leading-relaxed">
-          {SCORECARD_DISCLOSURE}
-        </p>
-      )}
+      {/* The "these four measurements decide the order / weighting is editorial /
+          not financial advice" paragraph used to sit here. It repeated under every
+          scorecard, which buried the factors it was meant to qualify. The same
+          explanation now lives once per page: in full in the ranking walkthrough
+          (each card links straight to it) and in the page-level disclaimer. */}
     </div>
   );
 }

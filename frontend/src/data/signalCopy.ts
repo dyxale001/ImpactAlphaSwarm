@@ -82,10 +82,11 @@ export const TERM_COPY: Record<
   },
 };
 
-/** The disclosure line shown under the scorecard. The ordering formula is an
- *  editorial choice, so it is stated plainly rather than presented as objective. */
-export const SCORECARD_DISCLOSURE =
-  "These four measurements decide the order of this list. The measurements are reproducible from public data; how they are weighted is our editorial choice, shown here so you can judge it. Nothing here is financial advice.";
+// A SCORECARD_DISCLOSURE constant lived here and was rendered under every
+// scorecard. Removed: repeating it per card buried the four factors it qualified.
+// The same points are now made once per page — the objective-vs-editorial split in
+// RankingMethodology (linked from each card) and the not-advice statement in the
+// page-level disclaimers on the dashboard and asset pages.
 
 export const DIRECTION_COPY: Record<string, string> = {
   favourable: "measurements lean favourable",

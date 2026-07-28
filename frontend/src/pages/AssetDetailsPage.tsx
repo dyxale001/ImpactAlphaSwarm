@@ -509,6 +509,21 @@ export default function AssetDetailsPage() {
           </SectionCard>
         </>
       )}
+
+      {/* This page had no disclaimer of its own — the only not-advice statement on
+          it came from a paragraph repeated under each scorecard. With that removed,
+          state it once here, as the dashboard does. */}
+      <div className="mt-4 pt-6 border-t border-brand-border/30">
+        <p className="text-xs text-brand-muted-fg leading-relaxed">
+          <strong className="text-brand-fg">Disclaimer:</strong> every figure on
+          this page is a measurement of past and present public data, produced by
+          automated analysis for information and education. The ordering reflects
+          measurements plus a weighting we choose and disclose — it is not
+          professional financial, investment or legal advice, and nothing here
+          predicts future prices. All trading involves risk. Please consult a
+          licensed financial advisor before making investment decisions.
+        </p>
+      </div>
     </div>
   );
 }
