@@ -166,8 +166,16 @@ export default function AssetDetailsPage() {
               {asset.name}
             </span>
           </div>
+          {/* Guarded: `recommendation` is nullable (see the checks below and the
+              optional chaining above), and an asset only has one once it has
+              reached a top 5. Dereferencing it here crashed the whole page for
+              every asset that never has — 48 of 88 rows at the time of writing,
+              both seeds and discovered names. price_at_run itself can also be null
+              when the price lookup fails. */}
           <p className="text-3xl font-mono text-brand-fg">
-            R {recommendation.price_at_run.toFixed(2)}
+            {typeof recommendation?.price_at_run === "number"
+              ? `R ${recommendation.price_at_run.toFixed(2)}`
+              : "Price unavailable"}
           </p>
         </div>
 
