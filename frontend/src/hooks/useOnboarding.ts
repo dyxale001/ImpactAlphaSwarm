@@ -20,6 +20,8 @@ export function useOnboarding() {
   // ── New: investor path & familiar asset picks ──────────────────────────
   const [investorPath, setInvestorPath] = useState('')
   const [familiarAssets, setFamiliarAssets] = useState<string[]>([])
+  // Opt-in: also save the user's familiar picks to their watchlist
+  const [addPicksToWatchlist, setAddPicksToWatchlist] = useState(true)
 
   // ── Existing form data ─────────────────────────────────────────────────
   const [formData, setFormData] = useState({
@@ -149,6 +151,29 @@ export function useOnboarding() {
 
     await fetchProfile(currentUserId)
 
+    // Save familiar-asset picks to the watchlist if the user opted in.
+    // Wrapped so a failure here can never block onboarding from completing.
+    if (addPicksToWatchlist && familiarAssets.length > 0) {
+      try {
+        const { data: assetRows } = await supabase
+          .from('assets')
+          .select('id, ticker')
+          .in('ticker', familiarAssets)
+
+        const idByTicker = new Map((assetRows || []).map(a => [a.ticker, a.id]))
+
+        await supabase.from('user_watchlist_assets').insert(
+          familiarAssets.map(ticker => ({
+            user_id: currentUserId,
+            ticker,
+            ...(idByTicker.get(ticker) ? { asset_id: idByTicker.get(ticker) } : {}),
+          }))
+        )
+      } catch (err) {
+        console.warn('Could not save watchlist picks:', err)
+      }
+    }
+
     try {
       const { run_id } = await startAnalysis({
         universes: formData.universe,
@@ -182,6 +207,8 @@ export function useOnboarding() {
     setInvestorPath,
     familiarAssets,
     toggleFamiliarAsset,
+    addPicksToWatchlist,
+    setAddPicksToWatchlist,
     // Existing
     handleSubmit,
     toggleUniverse,

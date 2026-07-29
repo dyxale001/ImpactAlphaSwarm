@@ -10,7 +10,6 @@ interface AuthState {
   analysis: UserAnalysis | null
   isLoading: boolean
   isProfileLoading: boolean
-
   setSession: (session: Session | null) => void
   fetchProfile: (userId: string) => Promise<void>
 }
@@ -20,31 +19,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
   analysis: null,
-  isLoading: true, 
-  isProfileLoading: false, 
-  
-  setSession: (session) => set(() => ({ 
-    session, 
+  isLoading: true,
+  isProfileLoading: false,
+
+  setSession: (session) => set(() => ({
+    session,
     user: session?.user ?? null,
     isLoading: false,
-    ...(session === null ? { isProfileLoading: false } : {})
+    ...(session === null ? { isProfileLoading: false, profile: null, analysis: null } : {})
   })),
-  
+
   fetchProfile: async (userId) => {
-    set({ isProfileLoading: true }) 
-    
+    set({ isProfileLoading: true })
 
     const { profile, analysis, error } = await fetchUserProfileData(userId)
-
     if (error) {
       set({ isProfileLoading: false })
       return
     }
-
-    set({ 
+    set({
       profile,
       analysis,
-      isProfileLoading: false 
+      isProfileLoading: false
     })
   }
 }))

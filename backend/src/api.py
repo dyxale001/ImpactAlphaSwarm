@@ -708,6 +708,23 @@ async def toggle_user_status(
     action = "activated" if req.is_active else "deactivated"
     return {"ok": True, "is_active": req.is_active, "message": f"User {action} successfully"}
 
+@app.post("/api/account/deactivate")
+async def deactivate_own_account(authorization: Optional[str] = Header(None)):
+    """Soft-deactivate: flags the account inactive but does NOT ban in Supabase
+    Auth, so the user can sign in again to reactivate. Admin deactivation
+    (toggle-user-status) applies a hard Auth ban and is not self-reversible."""
+    user_id = await _get_user_id_from_bearer(authorization)
+    supabase.table("users").update({"is_active": False}).eq("id", user_id).execute()
+    return {"ok": True, "message": "Account deactivated"}
+
+
+@app.post("/api/account/reactivate")
+async def reactivate_own_account(authorization: Optional[str] = Header(None)):
+    """Reactivate a soft-deactivated account. Fails for admin-banned accounts,
+    since those users can't obtain a valid token in the first place."""
+    user_id = await _get_user_id_from_bearer(authorization)
+    supabase.table("users").update({"is_active": True}).eq("id", user_id).execute()
+    return {"ok": True, "message": "Account reactivated"}
 
 @app.post("/api/admin/delete-user")
 async def delete_user_admin(
@@ -739,3 +756,6 @@ async def delete_user_admin(
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+        
+    
