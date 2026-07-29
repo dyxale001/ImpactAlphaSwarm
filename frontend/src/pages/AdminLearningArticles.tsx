@@ -225,6 +225,12 @@ export default function AdminLearningArticles() {
           >
             Articles
           </Link>
+          <Link
+            to="/admin/learning-questions"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Questions &amp; Answers
+          </Link>
         </div>
 
         {error && (

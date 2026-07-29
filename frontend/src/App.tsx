@@ -17,6 +17,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminEditUser from "./pages/AdminEditUser";
 import AdminLearningCategories from "./pages/AdminLearningCategories";
 import AdminLearningArticles from "./pages/AdminLearningArticles";
+import AdminLearningQuestions from "./pages/AdminLearningQuestions";
 import DashboardPage from "./pages/Dashboard";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
@@ -103,6 +104,10 @@ export default function App() {
           <Route
             path="/admin/learning-articles"
             element={<AdminLearningArticles />}
+          />
+          <Route
+            path="/admin/learning-questions"
+            element={<AdminLearningQuestions />}
           />
           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
         </Route>
