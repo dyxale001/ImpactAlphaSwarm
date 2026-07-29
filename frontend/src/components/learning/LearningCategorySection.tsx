@@ -1,17 +1,18 @@
-import type {
-  LearningArticle,
-  LearningCategory,
-} from "../../data/learningContent";
+import type { LearningArticle, LearningCategory } from "../../types/learning";
 import LearningCard from "./LearningCard";
 
 type Props = {
   category: LearningCategory;
   onOpenArticle: (article: LearningArticle) => void;
+  onTakeQuiz: (article: LearningArticle) => void;
+  getArticleQuizScore: (articleId: string) => number | null;
 };
 
 export default function LearningCategorySection({
   category,
   onOpenArticle,
+  onTakeQuiz,
+  getArticleQuizScore,
 }: Props) {
   return (
     <section className="space-y-4">
@@ -33,20 +34,17 @@ text-sm text-brand-muted-fg
         </p>
       </div>
 
-      <div
-        className="
-grid grid-cols-1
-md:grid-cols-2
-xl:grid-cols-3
-gap-4
-"
-      >
+      <div className="flex gap-4 overflow-x-auto py-6 pb-10 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {category.articles.map((article) => (
-          <LearningCard
-            key={article.id}
-            article={article}
-            onOpenArticle={onOpenArticle}
-          />
+          <div key={article.id} className="w-[20rem] shrink-0 snap-start">
+            <LearningCard
+              article={article}
+              onOpenArticle={onOpenArticle}
+              onTakeQuiz={onTakeQuiz}
+              canTakeQuiz={true}
+              hasPerfectScore={getArticleQuizScore(article.id) === 100}
+            />
+          </div>
         ))}
       </div>
     </section>

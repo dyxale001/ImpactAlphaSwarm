@@ -5,6 +5,8 @@ import MarkdownSyntaxHelper from "./MarkdownSyntaxHelper";
 import type { LearningCategory } from "../../data/learningContent";
 import type { LearningArticleFormValues } from "../../hooks/useAdminLearningArticles";
 
+const difficultyOptions = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
+
 type LearningArticleFormProps = {
   values: LearningArticleFormValues;
   categories: LearningCategory[];
@@ -105,6 +107,27 @@ export default function LearningArticleForm({
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
               placeholder="understanding-the-jse"
             />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+              Difficulty Level
+            </label>
+            <select
+              value={values.difficulty_level}
+              onChange={(event) =>
+                onChange("difficulty_level", event.target.value)
+              }
+              required
+              className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
+            >
+              <option value="">Select a difficulty level</option>
+              {difficultyOptions.map((difficultyLevel) => (
+                <option key={difficultyLevel} value={difficultyLevel}>
+                  {difficultyLevel}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-1">

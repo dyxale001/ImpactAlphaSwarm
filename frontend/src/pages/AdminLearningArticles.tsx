@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import {
@@ -38,6 +38,7 @@ export default function AdminLearningArticles() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const isEditing = Boolean(editingArticle.id);
   const articleCount = useMemo(() => articles.length, [articles.length]);
@@ -66,6 +67,16 @@ export default function AdminLearningArticles() {
     setFormError(null);
   };
 
+  const closeForm = () => {
+    resetForm();
+    setIsFormOpen(false);
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setIsFormOpen(true);
+  };
+
   useEffect(() => {
     if (!successMessage) return;
 
@@ -91,7 +102,7 @@ export default function AdminLearningArticles() {
         setSuccessMessage("Article created successfully.");
       }
 
-      resetForm();
+      closeForm();
     } catch (submitError) {
       setFormError(
         submitError instanceof Error
@@ -112,9 +123,11 @@ export default function AdminLearningArticles() {
         summary: article.summary,
         content: article.content,
         category_id: article.category_id,
+        difficulty_level: article.difficulty_level,
       },
     });
     setFormError(null);
+    setIsFormOpen(true);
   };
 
   const updateField = <K extends keyof LearningArticleFormValues>(
@@ -141,7 +154,7 @@ export default function AdminLearningArticles() {
     try {
       await deleteArticle(id);
       if (editingArticle.id === id) {
-        resetForm();
+        closeForm();
       }
       setSuccessMessage(`Article \"${title}\" deleted successfully.`);
     } catch (deleteError) {
@@ -177,6 +190,13 @@ export default function AdminLearningArticles() {
             <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
               Total Articles: {articleCount}
             </div>
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
+            >
+              Create Article
+            </button>
             <button
               onClick={handleSignOut}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger"
@@ -222,131 +242,159 @@ export default function AdminLearningArticles() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6 items-start">
-          <LearningArticleForm
-            values={editingArticle.values}
-            categories={categories}
-            isEditing={isEditing}
-            isSaving={saving}
-            formError={formError}
-            onSubmit={handleSubmit}
-            onReset={resetForm}
-            onChange={updateField}
-          />
-
-          <div className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
-            <div className="border-b border-brand-border/50 bg-brand-bg/50 px-5 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-brand-fg">
-                  Existing Articles
-                </h2>
-                <p className="text-sm text-brand-muted-fg mt-1">
-                  Edit the article content, slug or category assignment from
-                  here.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
-                  Filter
-                </label>
-                <select
-                  value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
-                  className="bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
-                >
-                  <option value="all">All categories</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <section className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
+          <div className="border-b border-brand-border/50 bg-brand-bg/50 px-5 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-brand-fg">
+                Existing Articles
+              </h2>
+              <p className="text-sm text-brand-muted-fg mt-1">
+                Edit the article content, slug or category assignment from here.
+              </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-brand-border/50 bg-brand-bg/50">
-                    <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
-                      Title
-                    </th>
-                    <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
-                      Slug
-                    </th>
-                    <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
-                      Summary
-                    </th>
-                    <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider text-right">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-brand-border/50">
-                  {filteredArticles.map((article) => {
-                    const category = categoryById.get(article.category_id);
-
-                    return (
-                      <tr
-                        key={article.id}
-                        className="hover:bg-brand-bg/30 transition-colors group"
-                      >
-                        <td className="p-5 align-top">
-                          <div className="font-semibold text-brand-fg text-base">
-                            {article.title}
-                          </div>
-                        </td>
-                        <td className="p-5 align-top text-sm text-brand-fg">
-                          {category?.name ?? "Unassigned"}
-                        </td>
-                        <td className="p-5 align-top text-sm text-brand-muted-fg font-mono">
-                          {article.slug}
-                        </td>
-                        <td className="p-5 align-top text-sm text-brand-muted-fg max-w-md line-clamp-3">
-                          {article.summary}
-                        </td>
-                        <td className="p-5 align-top text-right space-x-4 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(article)}
-                            className="text-brand-primary hover:text-brand-primary-glow font-semibold text-sm transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDelete(article.id, article.title)
-                            }
-                            className="inline-flex items-center gap-1.5 text-semantic-danger transition-colors hover:text-red-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {filteredArticles.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="p-8 text-center text-brand-muted-fg"
-                      >
-                        No articles match the current filter.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="flex items-center gap-3">
+              <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+                Filter
+              </label>
+              <select
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                className="bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              >
+                <option value="all">All categories</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-brand-border/50 bg-brand-bg/50">
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Difficulty
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Slug
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Summary
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider text-right">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-border/50">
+                {filteredArticles.map((article) => {
+                  const category = categoryById.get(article.category_id);
+
+                  return (
+                    <tr
+                      key={article.id}
+                      className="hover:bg-brand-bg/30 transition-colors group"
+                    >
+                      <td className="p-5 align-top">
+                        <div className="font-semibold text-brand-fg text-base">
+                          {article.title}
+                        </div>
+                      </td>
+                      <td className="p-5 align-top text-sm text-brand-fg">
+                        {category?.name ?? "Unassigned"}
+                      </td>
+                      <td className="p-5 align-top text-sm text-brand-fg">
+                        <span className="inline-flex rounded-full border border-brand-border bg-brand-bg/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+                          {article.difficulty_level}
+                        </span>
+                      </td>
+                      <td className="p-5 align-top text-sm text-brand-muted-fg font-mono">
+                        {article.slug}
+                      </td>
+                      <td className="p-5 align-top text-sm text-brand-muted-fg max-w-md line-clamp-3">
+                        {article.summary}
+                      </td>
+                      <td className="p-5 align-top text-right space-x-4 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(article)}
+                          className="text-brand-primary hover:text-brand-primary-glow font-semibold text-sm transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDelete(article.id, article.title)
+                          }
+                          className="inline-flex items-center gap-1.5 text-semantic-danger transition-colors hover:text-red-400"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredArticles.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="p-8 text-center text-brand-muted-fg"
+                    >
+                      No articles match the current filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
+
+        {isFormOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={closeForm}
+          >
+            <div
+              className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border border-brand-border/60 bg-brand-bg shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={closeForm}
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-brand-border bg-brand-card text-brand-muted-fg transition-colors hover:text-brand-fg"
+                aria-label="Close article form"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="p-4 lg:p-6">
+                <LearningArticleForm
+                  values={editingArticle.values}
+                  categories={categories}
+                  isEditing={isEditing}
+                  isSaving={saving}
+                  formError={formError}
+                  onSubmit={handleSubmit}
+                  onReset={resetForm}
+                  onChange={updateField}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
