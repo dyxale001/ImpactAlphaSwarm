@@ -209,7 +209,13 @@ export default function DashboardPage() {
     void loadExchangeRate();
   }, [loadExchangeRate]);
 
-  const { refresh } = useAnalysisRefresh();
+  // Both flags matter: `isRunning` covers the manual Refresh button, while the
+  // hook's own flag covers a refresh IT started (the stale auto-refresh). Only the
+  // button's state was being used, so an auto-refresh ran with no loading state at
+  // all — the page looked blank while a multi-minute analysis went on — and the
+  // auto-refresh guard could not see its own run.
+  const { refresh, isRunning: isAutoRefreshRunning } = useAnalysisRefresh();
+  const anyRunInFlight = isRunning || isAutoRefreshRunning;
   const isStale = isRunStale(latestRunCreatedAt);
 
   const handleSignOut = async () => {
@@ -261,7 +267,7 @@ export default function DashboardPage() {
   // Self-heal returning users whose data predates the last nightly run.
   useStaleAutoRefresh({
     isStale,
-    isRunning,
+    isRunning: anyRunInFlight,
     ready: !currentlyLoading && Boolean(profile?.id),
     refresh,
   });
@@ -276,7 +282,8 @@ export default function DashboardPage() {
 
   if (profile?.role === "admin") return null;
 
-  const showDashboardSkeleton = isRunning || isRunInProgress || isLoadingRecs;
+  const showDashboardSkeleton =
+    anyRunInFlight || isRunInProgress || isLoadingRecs;
 
   if (showDashboardSkeleton) {
     return <DashboardSkeleton />;

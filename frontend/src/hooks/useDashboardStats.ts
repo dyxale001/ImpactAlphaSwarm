@@ -170,7 +170,10 @@ export function useDashboardStats() {
             sentimentScore: rec.sentiment_score ?? 0,
             reasoning: rec.reasoning_trace ?? "",
             hypePenalty: rec.hype_penalty ?? 0,
-            isHype: (rec.hype_penalty ?? 0) > 0,
+            // The stored penalty is NEGATIVE (-25, see synthesize_rankings), so the
+            // old `> 0` test could never be true: the "Hype flagged" chip and the
+            // CSV "Hype Flag" column have always read false regardless of the data.
+            isHype: (rec.hype_penalty ?? 0) < 0,
             rank: rec.rank ?? 0,
             isDiscovered: asset?.origin === "discovered",
             discoverySources: (asset?.discovery_sources as string[] | null) ?? null,

@@ -231,57 +231,127 @@ def get_or_create_asset_id(ticker: str) -> Optional[str]:
     new_data = new_resp.data or []
     return new_data[0]["id"] if new_data else None
 
-def create_ai_run(user_id: str, status: str = "running") -> str:
-    """Create or update an ai_run row for the user. Since ai_runs has a unique 
-    constraint on user_id, we upsert: update if exists, insert if not."""
-    
-    try:
-        # Check if user already has an existing ai_run
-        existing_runs = supabase.table("ai_runs").select("id").eq("user_id", user_id).execute()
-        existing_data = existing_runs.data or []
-        
-        if existing_data:
-            # User already has an ai_run, update it
-            old_run_id = existing_data[0]["id"]
-            try:
-                # Delete associated ai_recommendation rows for the existing run
-                supabase.table("ai_recommendation").delete().eq("run_id", old_run_id).execute()
-                print(f"Deleted ai_recommendation rows for run_id: {old_run_id}")
-            except Exception as e:
-                print(f"Warning: Could not delete ai_recommendation rows: {e}")
-            
-            # Update the existing ai_run row
-            resp = supabase.table("ai_runs").update({
-                "status": status,
-                "created_at": datetime.datetime.utcnow().isoformat(),
-            }).eq("user_id", user_id).execute()
-            
-            data = resp.data or []
-            if data:
-                new_run_id = data[0]["id"]
-                print(f"Updated existing ai_run for user {user_id}: {new_run_id}")
-                return new_run_id
-    
-    except Exception as e:
-        print(f"Error checking existing ai_run: {e}")
-    
-    # Create new ai_run row (if user doesn't already have one)
-    try:
-        resp = supabase.table("ai_runs").insert({
-            "user_id": user_id,
-            "status": status,
-        }).execute()
+# How long a run may sit in 'running' before it is presumed abandoned and may be
+# claimed by a new one. Mirrors api.STALE_RUN_MINUTES, which heals such rows.
+RUN_LOCK_STALE_MINUTES = int(os.getenv("STALE_RUN_MINUTES", "15"))
 
+
+def acquire_ai_run(
+    user_id: str, stale_minutes: int = RUN_LOCK_STALE_MINUTES
+) -> tuple[Optional[str], bool]:
+    """Atomically claim this user's single ai_run row for a new analysis.
+
+    Returns ``(run_id, acquired)``. ``acquired=False`` means an analysis is already
+    in flight and the caller must NOT start another — the returned id is the run
+    already going, so the caller can simply poll that instead.
+
+    Why this exists: the previous check-then-update was not atomic, so two requests
+    26ms apart both "created" a run, both cleared the recommendations, and both ran
+    the full pipeline — double the API spend and duplicate rows. The claim below is
+    a single conditional UPDATE, so exactly one concurrent caller can win it.
+
+    An abandoned run (older than ``stale_minutes``) is stealable, otherwise a
+    crashed pipeline would lock the user out until manual intervention.
+    """
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    claim = {"status": "running", "created_at": now_iso}
+
+    # 1. Claim the row only if it is NOT already running. One winner by construction.
+    try:
+        resp = (
+            supabase.table("ai_runs")
+            .update(claim)
+            .eq("user_id", user_id)
+            .neq("status", "running")
+            .execute()
+        )
+        if resp.data:
+            return resp.data[0]["id"], True
+    except Exception as e:
+        print(f"Error claiming ai_run for {user_id}: {e}")
+
+    # 2. Either a run is in flight, or the user has no row at all.
+    try:
+        existing = (
+            supabase.table("ai_runs")
+            .select("id,status,created_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Error reading ai_run for {user_id}: {e}")
+        existing = []
+
+    if existing:
+        row = existing[0]
+        cutoff = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(minutes=stale_minutes)
+        ).isoformat()
+        # Steal an abandoned run — filtered on created_at so a run that started
+        # since our read is never stolen out from under itself.
+        try:
+            stolen = (
+                supabase.table("ai_runs")
+                .update(claim)
+                .eq("user_id", user_id)
+                .eq("status", "running")
+                .lt("created_at", cutoff)
+                .execute()
+            )
+            if stolen.data:
+                print(f"Reclaimed stale ai_run for user {user_id}")
+                return stolen.data[0]["id"], True
+        except Exception as e:
+            print(f"Error reclaiming stale ai_run for {user_id}: {e}")
+        return row["id"], False
+
+    # 3. No row yet — insert one. A concurrent insert loses on the unique
+    #    constraint, so fall back to reading the winner's row.
+    try:
+        resp = supabase.table("ai_runs").insert(
+            {"user_id": user_id, "status": "running"}
+        ).execute()
         data = resp.data or []
-        if not data:
-            raise RuntimeError("Failed to create ai_run row")
-
-        print(f"Created new ai_run: {data[0]['id']}")
-        return data[0]["id"]
-    
+        if data:
+            return data[0]["id"], True
     except Exception as e:
-        print(f"Error creating ai_run: {e}")
-        raise
+        print(f"Insert of ai_run lost a race for {user_id} ({e}); reading the winner")
+
+    try:
+        rows = (
+            supabase.table("ai_runs")
+            .select("id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if rows:
+            return rows[0]["id"], False
+    except Exception as e:
+        print(f"Error resolving ai_run for {user_id}: {e}")
+    return None, False
+
+
+def create_ai_run(user_id: str, status: str = "running") -> str:
+    """Claim an ai_run row for the user and return its id.
+
+    Thin wrapper over :func:`acquire_ai_run` kept for callers that do not care
+    whether they won the claim. NOTE it no longer deletes the user's existing
+    ai_recommendation rows: that used to happen at run START, so a failed or
+    interrupted analysis left the dashboard empty. ``save_top_assets`` clears the
+    run's rows immediately before inserting the new ones instead, which keeps
+    yesterday's results visible until fresh ones exist.
+    """
+    run_id, _acquired = acquire_ai_run(user_id)
+    if not run_id:
+        raise RuntimeError(f"Failed to create or claim an ai_run row for {user_id}")
+    return run_id
 
 
 def update_ai_run_status(run_id: str, status: str) -> None:

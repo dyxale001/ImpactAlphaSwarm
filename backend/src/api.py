@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
-from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, update_ai_run_status, fetch_fx_rate_to_zar
+from src.utils.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, supabase, create_ai_run, acquire_ai_run, update_ai_run_status, fetch_fx_rate_to_zar
 from src.utils import whale_watching as ww
 
 logger = logging.getLogger("alpha-api")
@@ -215,7 +215,16 @@ async def start_analysis(
     if not user_id:
         raise HTTPException(status_code=401, detail="Unable to determine user id from token")
 
-    run_id = create_ai_run(user_id=user_id, status="running")
+    # Claim the run atomically. If an analysis is already in flight for this user,
+    # return THAT run instead of starting a second pipeline: the frontend polls
+    # whatever run_id it receives, so this is transparent to it, and it stops the
+    # duplicate work that was costing double API spend (two runs seen 26ms apart).
+    run_id, acquired = acquire_ai_run(user_id)
+    if not run_id:
+        raise HTTPException(status_code=503, detail="Could not start an analysis run")
+    if not acquired:
+        logger.info("Analysis already running for user %s; returning run %s", user_id, run_id)
+        return {"run_id": run_id, "already_running": True}
 
     async def _bg_job():
         try:
@@ -337,7 +346,16 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
             logger.info("Daily run skipping user %s (no preferences/universes)", user_id)
             skipped += 1
             continue
-        run_id = create_ai_run(user_id=user_id, status="running")
+        # Respect the same lock as the interactive path: if this user already has an
+        # analysis in flight (e.g. they opened the dashboard as the batch started),
+        # skip them rather than run a second pipeline over the same tickers.
+        run_id, acquired = acquire_ai_run(user_id)
+        if not acquired:
+            logger.info(
+                "Daily run skipping user %s (an analysis is already in flight)", user_id
+            )
+            skipped += 1
+            continue
         users.append(
             {
                 "user_id": user_id,
