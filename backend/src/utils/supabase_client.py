@@ -526,23 +526,71 @@ def save_top_assets(
 
 
 def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Upsert the v2 ranking breakdown for every candidate in a run.
+    """Record the v2 ranking breakdown for every candidate in a run, per night.
 
-    Keyed on (run_id, ticker) so a re-run replaces its own rows. Best-effort: a
-    failure here (e.g. migration 010 not yet applied) is reported, never raised —
-    shadow logging must not be able to fail a user's analysis.
+    Rows are stamped with ``as_of_night`` (migration 011) so successive nights
+    ACCUMULATE instead of overwriting each other: run ids are reused per user, so
+    keying on (run_id, ticker) alone meant each night destroyed the one before it.
+
+    The night's slice is deleted before inserting rather than upserted, so a
+    same-night re-run replaces cleanly AND tickers that dropped out of the
+    candidate set don't linger as stale rows skewing the reports.
+
+    Best-effort: a failure here (e.g. migration 010/011 not yet applied) is
+    reported, never raised — shadow logging must not be able to fail an analysis.
     """
     if not run_id or not rows:
         return {"status": "no_rows"}
-    payload = [{**row, "run_id": run_id} for row in rows]
+
+    night = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    payload = [{**row, "run_id": run_id, "as_of_night": night} for row in rows]
     try:
-        supabase.table("ranking_shadow").upsert(
-            payload, on_conflict="run_id,ticker"
+        supabase.table("ranking_shadow").delete().eq("run_id", run_id).eq(
+            "as_of_night", night
         ).execute()
-        return {"status": "saved", "rows": len(payload)}
+    except Exception as e:
+        print(f"Could not clear tonight's ranking_shadow slice ({e}); continuing")
+    try:
+        supabase.table("ranking_shadow").insert(payload).execute()
+        return {"status": "saved", "rows": len(payload), "as_of_night": night}
     except Exception as e:
         print(f"Ranking shadow log failed (continuing): {e}")
         return {"status": "error", "error": str(e)}
+
+
+def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
+    """Return ``{ticker: v2_rank}`` from this run's most recent EARLIER night.
+
+    Feeds the ranking tie-band: near-equal candidates keep the order they had last
+    night instead of flipping on noise. Returns ``{}`` on any failure or when there
+    is no prior night, so the caller degrades to "no hysteresis" rather than
+    failing — first run, missing migration and read error all behave the same.
+    """
+    if not run_id:
+        return {}
+    night = before_night or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    try:
+        rows = (
+            supabase.table("ranking_shadow")
+            .select("ticker,v2_rank,as_of_night")
+            .eq("run_id", run_id)
+            .lt("as_of_night", night)
+            .order("as_of_night", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Could not read the previous ranking for {run_id}: {e}")
+        return {}
+    if not rows:
+        return {}
+    latest = rows[0].get("as_of_night")
+    return {
+        r["ticker"]: r["v2_rank"]
+        for r in rows
+        if r.get("as_of_night") == latest and r.get("v2_rank") is not None
+    }
 
 
 # ---------------------------------------------------------------------------

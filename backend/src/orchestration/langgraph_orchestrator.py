@@ -506,11 +506,28 @@ def _apply_ranking_v2(
     user seeing a changed feed.
     """
     from . import ranking
-    from ..utils.supabase_client import RANKING_V2_COLUMNS, save_ranking_shadow
+    from ..utils.supabase_client import (
+        RANKING_V2_COLUMNS,
+        get_previous_ranking,
+        save_ranking_shadow,
+    )
 
     ranked = ranking.rank_assets(tickers, quant_results, sentiment_results, risk_tolerance)
     v2_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(ranked)}
     legacy_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(legacy_order)}
+
+    # Feed stability: hold near-equal candidates in last night's order so ranks stop
+    # flipping on noise. Read BEFORE tonight's shadow write, or we'd read ourselves.
+    # Both orders are persisted so a shadow night can compare legacy vs v2-raw vs
+    # v2-stable churn before the mechanism is committed to.
+    previous_rank = get_previous_ranking(run_id) if run_id else {}
+    stabilised = ranking.apply_stability(ranked, previous_rank)
+    stable_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(stabilised)}
+    stability_holds = sum(
+        1
+        for i, row in enumerate(stabilised)
+        if v2_rank_by_ticker.get(row["ticker"]) != i + 1
+    )
 
     # Attach the disclosed terms to the in-memory assets so save_top_assets can
     # persist them for the top 5 (and the UI can eventually render the scorecard).
@@ -543,6 +560,7 @@ def _apply_ranking_v2(
                     "legacy_score": (unified_scores.get(row["ticker"]) or {}).get("unified_score"),
                     "legacy_rank": legacy_rank_by_ticker.get(row["ticker"]),
                     "v2_rank": v2_rank_by_ticker.get(row["ticker"]),
+                    "v2_rank_stable": stable_rank_by_ticker.get(row["ticker"]),
                     "rank_score": row["rank_score"],
                     "signal_strength": row["signal_strength"],
                     "signal_direction": row["direction"],
@@ -565,7 +583,7 @@ def _apply_ranking_v2(
 
     # How much WOULD the feed change? This is the ratification evidence.
     legacy_top = [row["ticker"] for row in legacy_order[:5]]
-    v2_top = [row["ticker"] for row in ranked[:5]]
+    v2_top = [row["ticker"] for row in stabilised[:5]]
     divergence = sum(
         1 for i in range(min(len(legacy_top), len(v2_top))) if legacy_top[i] != v2_top[i]
     )
@@ -580,6 +598,8 @@ def _apply_ranking_v2(
                 "legacy_top_5": legacy_top,
                 "v2_top_5": v2_top,
                 "top_5_positions_changed": divergence,
+                "tie_epsilon": ranking.TIE_EPSILON,
+                "stability_holds": stability_holds,
                 "convergence_states": {
                     state: sum(1 for row in ranked if row["convergence_state"] == state)
                     for state in ranking.CONVERGENCE_STATES
@@ -602,7 +622,11 @@ def _apply_ranking_v2(
     if not ranked:
         logger.warning("Ranking v2 returned no candidates; serving legacy order")
         return legacy_order[:5]
-    return [unified_scores[row["ticker"]] for row in ranked[:5] if row["ticker"] in unified_scores]
+    return [
+        unified_scores[row["ticker"]]
+        for row in stabilised[:5]
+        if row["ticker"] in unified_scores
+    ]
 
 
 def synthesize_rankings(

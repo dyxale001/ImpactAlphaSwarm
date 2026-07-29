@@ -5,10 +5,11 @@ is as untrustworthy as a misleading score. Compares a saved snapshot of a previo
 night against the current `ranking_shadow` contents, and benchmarks v2 churn against
 the LEGACY score's own churn — the fair comparison, since some movement is real.
 
-NOTE: `ranking_shadow` is keyed (run_id, ticker) and run_ids are reused nightly, so
-each run overwrites the last. Snapshot before re-running (see plan §13 R9/R8).
+Since migration 011 the table retains a row per night, so both nights are read
+straight from it — no snapshot needed. A JSON snapshot may still be passed as the
+second argument to compare against a night recorded before that migration.
 
-Usage:  venv/bin/python scripts/ranking_stability_report.py backend night1.json
+Usage:  venv/bin/python scripts/ranking_stability_report.py backend [night1.json]
 """
 import json
 import os
@@ -16,15 +17,30 @@ import statistics as st
 import sys
 from collections import Counter
 
-BACKEND, N1 = sys.argv[1], sys.argv[2]
+BACKEND = sys.argv[1]
+N1 = sys.argv[2] if len(sys.argv) > 2 else None
 sys.path.insert(0, BACKEND)
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(BACKEND, ".env"))
 from src.utils.supabase_client import supabase  # noqa: E402
 
-night1 = json.load(open(N1))
-night2 = supabase.table("ranking_shadow").select("*").execute().data or []
+_all = supabase.table("ranking_shadow").select("*").execute().data or []
+_nights = sorted({r.get("as_of_night") for r in _all if r.get("as_of_night")})
+
+if N1:
+    night1 = json.load(open(N1))
+    night2 = [r for r in _all if r.get("as_of_night") == _nights[-1]] if _nights else _all
+    print(f"comparing snapshot {N1} -> night {_nights[-1] if _nights else '(all)'}")
+elif len(_nights) >= 2:
+    night1 = [r for r in _all if r.get("as_of_night") == _nights[-2]]
+    night2 = [r for r in _all if r.get("as_of_night") == _nights[-1]]
+    print(f"comparing night {_nights[-2]} -> night {_nights[-1]}")
+else:
+    print(f"Need two nights of ranking_shadow data; found {len(_nights)} "
+          f"({', '.join(str(n) for n in _nights) or 'none'}).")
+    print("Run another shadow night, or pass a pre-migration-011 JSON snapshot.")
+    sys.exit(0)
 print(f"night 1: {len(night1)} rows    night 2: {len(night2)} rows\n")
 
 

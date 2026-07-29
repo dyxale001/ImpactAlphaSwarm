@@ -6,7 +6,7 @@ lean unfavourable and where each direction treatment would rank them (R1), wheth
 the convergence term fires (R3), whether the composite uses more than one term
 (R2), and the quant-state mix (R6). Read-only.
 
-Usage:  venv/bin/python scripts/ranking_shadow_report.py backend
+Usage:  venv/bin/python scripts/ranking_shadow_report.py backend [YYYY-MM-DD]
 """
 import os
 import statistics as st
@@ -21,6 +21,15 @@ load_dotenv(os.path.join(BACKEND, ".env"))
 from src.utils.supabase_client import supabase  # noqa: E402
 
 rows = supabase.table("ranking_shadow").select("*").execute().data or []
+
+# ranking_shadow now retains multiple nights (migration 011). Report on ONE night —
+# the most recent by default, or the date given as the second argument — otherwise
+# candidates would appear once per night and every count would be inflated.
+nights = sorted({r.get("as_of_night") for r in rows if r.get("as_of_night")})
+want = sys.argv[2] if len(sys.argv) > 2 else (nights[-1] if nights else None)
+if want:
+    rows = [r for r in rows if r.get("as_of_night") == want]
+    print(f"night: {want}" + (f"   (available: {', '.join(str(n) for n in nights)})" if len(nights) > 1 else ""))
 print(f"ranking_shadow rows: {len(rows)}")
 if not rows:
     print("NO ROWS — shadow logging did not write. Check the backend log.")

@@ -223,3 +223,9 @@ sachint/
 # Claude Code
 CLAUDE.md
 .claude/
+
+# Working design/decision docs kept local — they are personal planning artefacts
+# and their content lives in the vault design notes, which is the shared record.
+DISCOVERY_AGENT_PLAN.md
+UNIFIED_SCORING_PLAN.md
+RATIFICATION_PACK_*.md

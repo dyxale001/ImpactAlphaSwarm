@@ -55,6 +55,13 @@ DS_NEWS_FULL = int(os.getenv("RANK_DS_NEWS_FULL", "10"))
 DS_SOCIAL_FULL = int(os.getenv("RANK_DS_SOCIAL_FULL", "25"))
 DS_QUANT_FULL = int(os.getenv("RANK_DS_QUANT_FULL", "120"))
 
+# ── feed stability (plan §13 R9) ─────────────────────────────────────────────
+# Candidates whose rank_score differs by less than this are treated as effectively
+# tied, and ties keep last night's order. Default 0.02 sits just above the measured
+# mean nightly drift (~0.015) and just above the median adjacent gap (~0.017), so it
+# absorbs noise without masking real movement. Set to 0 to disable entirely.
+TIE_EPSILON = float(os.getenv("RANK_TIE_EPSILON", "0.02"))
+
 # Quant states (mirrors quant_analyst.score_universe + the legacy-null case).
 QUANT_RANKED = "cross_sectional"
 QUANT_SMALL_UNIVERSE = "insufficient_universe"
@@ -266,6 +273,69 @@ def rank_terms(
         "has_sentiment": has_sent,
         "weights": {"quant": W_QUANT, "sentiment": W_SENT},
     }
+
+
+def apply_stability(
+    ranked: list[dict[str, Any]],
+    previous_rank: Optional[dict[str, int]] = None,
+    epsilon: float = None,
+) -> list[dict[str, Any]]:
+    """Hold near-equal candidates in yesterday's order (plan §13 R9).
+
+    The problem this solves is measured: the four terms drift only ~0.015 a night,
+    but ``shift`` compresses rank_score into roughly 0.34–0.77, so the median gap
+    between adjacent candidates (~0.017) is smaller than one night's drift for 47%
+    of pairs. Ranks therefore flip on noise, which reads as an unstable feed even
+    though nothing meaningful changed.
+
+    How: walk the score-ordered list and group runs of candidates whose *consecutive*
+    gaps are under ``epsilon`` — those are "effectively tied". Within a group,
+    candidates seen last night keep their previous relative order; newcomers (the
+    discovery pool admits up to 5 per universe per night) sort after them by score.
+
+    Deliberately NOT smoothing the scores themselves: the product promises that the
+    four displayed factors ARE the sort key, so an EMA over rank_score would make
+    the shown breakdown stop explaining the order. This only reorders *within* the
+    noise band, so an asset improving by more than epsilon still moves freely — no
+    incumbent can be frozen in place.
+
+    ``epsilon = 0`` disables the mechanism and returns the input order, which makes
+    rollback an env change rather than a deploy.
+    """
+    eps = TIE_EPSILON if epsilon is None else epsilon
+    if eps <= 0 or len(ranked) < 2:
+        return list(ranked)
+
+    previous_rank = previous_rank or {}
+    if not previous_rank:
+        return list(ranked)
+
+    out: list[dict[str, Any]] = []
+    group: list[dict[str, Any]] = []
+
+    def flush(g: list[dict[str, Any]]) -> None:
+        if len(g) <= 1:
+            out.extend(g)
+            return
+        # Incumbents first, in last night's order; then newcomers by tonight's score.
+        incumbents = [r for r in g if r["ticker"] in previous_rank]
+        newcomers = [r for r in g if r["ticker"] not in previous_rank]
+        incumbents.sort(key=lambda r: (previous_rank[r["ticker"]], r["ticker"]))
+        newcomers.sort(key=lambda r: (-(r["rank_score"] or 0.0), r["ticker"]))
+        out.extend(incumbents + newcomers)
+
+    for row in ranked:
+        if not group:
+            group = [row]
+            continue
+        gap = (group[-1]["rank_score"] or 0.0) - (row["rank_score"] or 0.0)
+        if gap < eps:
+            group.append(row)          # still inside the noise band
+        else:
+            flush(group)
+            group = [row]
+    flush(group)
+    return out
 
 
 def rank_assets(
