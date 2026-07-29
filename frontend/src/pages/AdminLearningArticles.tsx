@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2, X } from "lucide-react";
+import { Edit3, Trash2, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import {
@@ -182,7 +182,7 @@ export default function AdminLearningArticles() {
               Learning Articles
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
-              Create, edit and publish articles for the Learning Centre.
+              Create, edit, and publish articles for the Learning Centre.
             </p>
           </div>
 
@@ -190,13 +190,6 @@ export default function AdminLearningArticles() {
             <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
               Total Articles: {articleCount}
             </div>
-            <button
-              type="button"
-              onClick={openCreateForm}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
-            >
-              Create Article
-            </button>
             <button
               onClick={handleSignOut}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium text-semantic-danger"
@@ -231,6 +224,12 @@ export default function AdminLearningArticles() {
           >
             Questions &amp; Answers
           </Link>
+          <Link
+            to="/admin/badges"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Badges
+          </Link>
         </div>
 
         {error && (
@@ -259,7 +258,7 @@ export default function AdminLearningArticles() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
                 Filter
               </label>
@@ -275,6 +274,13 @@ export default function AdminLearningArticles() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={openCreateForm}
+                className="inline-flex items-center gap-2 rounded-full bg-brand-fg px-4 py-2.5 text-sm font-medium text-brand-bg"
+              >
+                Create Article
+              </button>
             </div>
           </div>
 
@@ -330,12 +336,13 @@ export default function AdminLearningArticles() {
                       <td className="p-5 align-top text-sm text-brand-muted-fg max-w-md line-clamp-3">
                         {article.summary}
                       </td>
-                      <td className="p-5 align-top text-right space-x-4 whitespace-nowrap">
+                      <td className="p-5 align-top text-right whitespace-nowrap space-x-3">
                         <button
                           type="button"
                           onClick={() => startEdit(article)}
-                          className="text-brand-primary hover:text-brand-primary-glow font-semibold text-sm transition-colors"
+                          className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-card px-3 py-2 text-xs font-medium text-brand-fg transition-colors hover:bg-brand-bg/70"
                         >
+                          <Edit3 className="h-3.5 w-3.5" />
                           Edit
                         </button>
                         <button
@@ -343,9 +350,9 @@ export default function AdminLearningArticles() {
                           onClick={() =>
                             handleDelete(article.id, article.title)
                           }
-                          className="inline-flex items-center gap-1.5 text-semantic-danger transition-colors hover:text-red-400"
+                          className="inline-flex items-center gap-2 rounded-full border border-semantic-danger/30 bg-semantic-danger/10 px-3 py-2 text-xs font-medium text-semantic-danger transition-colors hover:bg-semantic-danger/20"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="h-3.5 w-3.5" />
                           Delete
                         </button>
                       </td>
@@ -374,7 +381,7 @@ export default function AdminLearningArticles() {
             onClick={closeForm}
           >
             <div
-              className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border border-brand-border/60 bg-brand-bg shadow-2xl"
+              className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-brand-border/60 bg-brand-bg shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <button
@@ -386,7 +393,7 @@ export default function AdminLearningArticles() {
                 <X className="h-4 w-4" />
               </button>
 
-              <div className="p-4 lg:p-6">
+              <div className="p-2 lg:p-3">
                 <LearningArticleForm
                   values={editingArticle.values}
                   categories={categories}

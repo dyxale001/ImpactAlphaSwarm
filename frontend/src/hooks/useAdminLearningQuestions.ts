@@ -45,7 +45,7 @@ const emptyQuestionFormValues: LearningQuestionFormValues = {
 const emptyAnswerFormValues: LearningAnswerFormValues = {
   answer: "",
   display_order: 1,
-  is_correct: true,
+  is_correct: false,
 };
 
 export function useAdminLearningQuestions() {

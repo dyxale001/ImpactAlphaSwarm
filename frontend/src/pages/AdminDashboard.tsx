@@ -201,6 +201,12 @@ export default function AdminDashboard() {
           >
             Questions &amp; Answers
           </Link>
+          <Link
+            to="/admin/badges"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Badges
+          </Link>
         </div>
 
         {/* Search bar */}

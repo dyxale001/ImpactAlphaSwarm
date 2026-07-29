@@ -46,7 +46,6 @@ export default function AdminLearningQuestions() {
   const { setSession } = useAuthStore();
   const navigate = useNavigate();
 
-  const [articleSearch, setArticleSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [isAnswerModalOpen, setIsAnswerModalOpen] = useState(false);
@@ -83,8 +82,6 @@ export default function AdminLearningQuestions() {
 
     return articles.filter((article) => article.category_id === categoryFilter);
   }, [articles, categoryFilter]);
-
-  const categoryCount = useMemo(() => categories.length, [categories.length]);
 
   const sortedQuestions = useMemo(
     () =>
@@ -357,8 +354,6 @@ export default function AdminLearningQuestions() {
     }
   };
 
-  const currentQuestionCount = questions.length;
-
   if (loadingArticles) {
     return <AdminLearningQuestionsSkeleton />;
   }
@@ -414,6 +409,12 @@ export default function AdminLearningQuestions() {
           >
             Questions &amp; Answers
           </Link>
+          <Link
+            to="/admin/badges"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Badges
+          </Link>
         </div>
 
         {error && (
@@ -449,36 +450,35 @@ export default function AdminLearningQuestions() {
                   questions you want to manage.
                 </p>
               </div>
-              {selectedArticle ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-card px-3 py-1.5 text-xs font-medium text-brand-fg">
-                  <BookOpen className="h-3.5 w-3.5 text-brand-primary" />
-                  {selectedArticle.category_name} → {selectedArticle.title}
-                </div>
-              ) : null}
-            </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
-                Filter
-              </label>
-              <select
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              >
-                <option value="all">All categories</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
-                Categories: {categoryCount}
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg whitespace-nowrap">
+                  Filter
+                </label>
+
+                <select
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className="bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                >
+                  <option value="all">All categories</option>
+
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedArticle ? (
+                  <div className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-card px-3 py-1.5 text-xs font-medium text-brand-fg">
+                    {selectedArticle.category_name} → {selectedArticle.title}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[31rem] rounded-2xl border border-brand-border bg-brand-card">
+            <div className="overflow-x-auto overflow-y-auto max-h-124 rounded-2xl border border-brand-border bg-brand-card">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-brand-border/50 bg-brand-bg/50">
@@ -789,9 +789,6 @@ export default function AdminLearningQuestions() {
           >
             <div className="flex items-start justify-between gap-4 border-b border-brand-border/60 bg-brand-bg/70 px-6 py-5">
               <div className="space-y-2">
-                <span className="inline-flex items-center rounded-full border border-brand-primary/15 bg-brand-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-primary">
-                  Answer Management
-                </span>
                 <h3 className="text-xl font-semibold text-brand-fg">
                   {managedQuestion.question}
                 </h3>
@@ -936,14 +933,6 @@ export default function AdminLearningQuestions() {
                       Ordered by display order.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={resetAnswerForm}
-                    className="inline-flex items-center gap-2 rounded-full bg-brand-fg px-4 py-2 text-sm font-medium text-brand-bg"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Answer
-                  </button>
                 </div>
 
                 <div className="space-y-3">

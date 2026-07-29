@@ -38,9 +38,6 @@ export default function LearningCategoryForm({
             Manage the category name, slug, description and display order.
           </p>
         </div>
-        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-brand-primary/10 text-brand-primary">
-          <BookOpen className="h-5 w-5" />
-        </div>
       </div>
 
       <div className="p-6 space-y-4">
@@ -81,7 +78,7 @@ export default function LearningCategoryForm({
               rows={4}
               required
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
-              placeholder="Short summary..."
+              placeholder="Short summary"
             />
           </div>
 
