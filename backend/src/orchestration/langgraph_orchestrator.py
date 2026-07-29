@@ -497,6 +497,7 @@ def _apply_ranking_v2(
     sentiment_results: dict[str, dict],
     risk_tolerance: str,
     run_id: str | None,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Compute the disclosed v2 terms for every candidate, log them, and return the
     top 5 in whichever order is currently authoritative.
@@ -508,6 +509,7 @@ def _apply_ranking_v2(
     from . import ranking
     from ..utils.supabase_client import (
         RANKING_V2_COLUMNS,
+        get_asset_universes,
         get_previous_ranking,
         save_ranking_shadow,
     )
@@ -520,6 +522,10 @@ def _apply_ranking_v2(
     # flipping on noise. Read BEFORE tonight's shadow write, or we'd read ourselves.
     # Both orders are persisted so a shadow night can compare legacy vs v2-raw vs
     # v2-stable churn before the mechanism is committed to.
+    # Stamped onto each shadow row so per-user and per-universe reads need no join
+    # (migration 012). One round trip for the whole candidate set.
+    universe_by_ticker = get_asset_universes([row["ticker"] for row in ranked]) if run_id else {}
+
     previous_rank = get_previous_ranking(run_id) if run_id else {}
     stabilised = ranking.apply_stability(ranked, previous_rank)
     stable_rank_by_ticker = {row["ticker"]: i + 1 for i, row in enumerate(stabilised)}
@@ -557,6 +563,8 @@ def _apply_ranking_v2(
             [
                 {
                     "ticker": row["ticker"],
+                    "user_id": user_id,
+                    "universe": universe_by_ticker.get(row["ticker"]),
                     "legacy_score": (unified_scores.get(row["ticker"]) or {}).get("unified_score"),
                     "legacy_rank": legacy_rank_by_ticker.get(row["ticker"]),
                     "v2_rank": v2_rank_by_ticker.get(row["ticker"]),
@@ -636,14 +644,16 @@ def synthesize_rankings(
     risk_tolerance: str,
     expertise_level: str,
     run_id: str | None = None,
+    user_id: str | None = None,
 ) -> tuple[list[dict], dict[str, dict]]:
     """Apply per-user business logic (hype/risk penalties, ranking, and the LLM
     reasoning trace for the top 5) on top of already-gathered quant + sentiment
     signals. Shared by the per-user graph (phase 3) and the batched daily run, so
     the raw signals can be gathered once and personalized many times.
 
-    ``run_id`` is optional and used only to log the ranking-v2 shadow rows; the
-    function's return contract is unchanged, so existing callers keep working."""
+    ``run_id`` and ``user_id`` are optional and used only to log the ranking-v2
+    shadow rows; the return contract is unchanged, so existing callers keep
+    working."""
     from ..utils.supabase_client import normalize_risk_tolerance
 
     # The manual-run path passes this straight through from the request body (which
@@ -712,6 +722,7 @@ def synthesize_rankings(
                 sentiment_results=sentiment_results,
                 risk_tolerance=risk_tolerance,
                 run_id=run_id,
+                user_id=user_id,
             )
         except Exception as e:
             logger.exception("Ranking v2 failed, serving legacy order: %s", e)
@@ -752,6 +763,7 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         state["risk_tolerance"],
         state["expertise_level"],
         run_id=state.get("run_id"),
+        user_id=state.get("user_id"),
     )
 
     print("Generated Top 5 rankings")
@@ -977,6 +989,7 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
                 user["risk_tolerance"],
                 user["expertise_level"],
                 run_id=user["run_id"],
+                user_id=user["user_id"],
             )
             save_top_assets(
                 run_id=user["run_id"],

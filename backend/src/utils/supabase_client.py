@@ -558,6 +558,31 @@ def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, An
         return {"status": "error", "error": str(e)}
 
 
+def get_asset_universes(tickers: List[str]) -> Dict[str, str]:
+    """Return ``{ticker: universe}`` for the given tickers in one round trip.
+
+    Used to stamp each shadow row with the universe the asset was analysed UNDER
+    (migration 012), so a per-universe view needs no join and stays historically
+    accurate even if the asset is later reclassified. Missing tickers are simply
+    absent from the result — a watchlist ticker may have no assets row.
+    """
+    if not tickers:
+        return {}
+    try:
+        rows = (
+            supabase.table("assets")
+            .select("ticker,universe")
+            .in_("ticker", list(tickers))
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Could not read asset universes: {e}")
+        return {}
+    return {r["ticker"]: r["universe"] for r in rows if r.get("ticker")}
+
+
 def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
     """Return ``{ticker: v2_rank}`` from this run's most recent EARLIER night.
 
