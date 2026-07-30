@@ -8,80 +8,21 @@ import {
   Users,
 } from "lucide-react";
 import { useWhaleData } from "../../hooks/useWhaleData";
+import {
+  NATURE_DEFS,
+  formatDate,
+  formatName,
+  formatShares,
+  formatUsd,
+  txnNature,
+} from "./whaleFormat";
 
 // Large insider (director/exec) dealings for a ticker. Purely informational —
 // this panel is deliberately kept out of the Unified Confidence Score. The
 // "not scored" badge makes that explicit to the user.
-
-function formatUsd(value: number | null): string {
-  if (value == null) return "—";
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
-}
-
-function formatShares(shares: number): string {
-  return shares.toLocaleString("en-US");
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-// Finnhub returns insider names upper-cased and in "LAST FIRST" order. Title-case
-// them and tidy initials/suffixes; leave the token order as-is (can't reliably
-// tell how many leading tokens are the surname).
-function formatName(raw: string): string {
-  return raw
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .map((w) => {
-      if (w === "jr" || w === "jr.") return "Jr.";
-      if (w === "sr" || w === "sr.") return "Sr.";
-      if (["ii", "iii", "iv", "v"].includes(w)) return w.toUpperCase();
-      if (w.replace(".", "").length === 1) return `${w.charAt(0).toUpperCase()}.`;
-      return w.charAt(0).toUpperCase() + w.slice(1);
-    })
-    .join(" ");
-}
-
-// SEC transaction codes (Finnhub `transactionCode`). The nature of the trade is
-// what explains the missing dollar values: only open-market trades settle at a
-// market price — grants, option exercises and tax withholding do not.
-const TXN_NATURE: Record<string, string> = {
-  P: "Open market",
-  S: "Open market",
-  A: "Grant",
-  M: "Options",
-  X: "Options",
-  F: "Tax withholding",
-  G: "Gift",
-  D: "Sale to issuer",
-  C: "Conversion",
-};
-
-function txnNature(code?: string | null): string | null {
-  if (!code) return null;
-  return TXN_NATURE[code.trim().toUpperCase()] ?? null;
-}
-
-// Plain-language definitions surfaced on hover so a non-expert user understands
-// what each transaction type means — and why only some carry a dollar value.
-const NATURE_DEFS: Record<string, string> = {
-  "Open market": "A trade on the public market at the going price, where the insider chose to buy or sell with their own money. The clearest read on conviction.",
-  Grant: "Shares awarded as compensation (e.g. RSUs), not bought on the market, so there is no purchase price.",
-  Options: "Shares acquired by exercising stock options, or the related settlement. Not an open-market purchase.",
-  "Tax withholding": "Shares the company held back to cover taxes owed when equity awards vested. Routine, not a sell decision.",
-  Gift: "Shares given away or received as a gift, so no money changes hands.",
-  "Sale to issuer": "Shares sold back directly to the company rather than on the open market.",
-  Conversion: "Shares obtained by converting another security (e.g. a derivative) into common stock.",
-};
+//
+// Formatting lives in ./whaleFormat so this panel and the cross-company
+// activity feed render the same rows identically.
 
 export default function WhaleWatching({ ticker }: { ticker: string }) {
   const { transactions, source, fetchedAt, isLoading, error } =
@@ -125,8 +66,11 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
     <section className="soft-card w-full p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-            <Waves className="w-3 h-3 text-brand-primary" />
+          {/* Panel eyebrows carry the brand green, matching the dashboard's
+              "Top Pick Today" label. Metric labels and footnotes stay muted, so
+              the green marks section starts rather than colouring everything. */}
+          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
+            <Waves className="w-3 h-3" />
             Whale Watching
           </p>
           <p className="text-sm text-brand-muted-fg">

@@ -171,15 +171,22 @@ async def institutional_ownership(ticker: str):
 @app.get("/api/funds")
 async def top_funds():
     """Institutional data inverted to per-fund holdings across all tracked assets
-    (for the Top Funds / Notable Investors views). Weekly read-through cache; the
-    first build after expiry aggregates every tracked ticker, so it can be slow."""
+    (for the Top Funds / Notable Investors views).
+
+    Weekly read-through cache. A miss is still cheap because the rebuild is pure
+    aggregation over the institutional cache, which the nightly job warms
+    (ww.refresh_institutions_cache); this request never calls yfinance.
+
+    Scoped to active assets, so tickers the discovery agent has retired or
+    benched no longer contribute holdings.
+    """
     cached = ww.read_funds_cache()
     if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
         funds = ww.with_descriptions(cached.get("payload") or [])
         return {"funds": funds, "cached": True, "fetched_at": cached.get("fetched_at")}
 
-    assets = supabase.table("assets").select("ticker, universe").execute().data or []
     loop = asyncio.get_running_loop()
+    assets = await loop.run_in_executor(None, ww.read_active_assets)
     funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
     fetched_at = ww.write_funds_cache(funds)
     return {"funds": ww.with_descriptions(funds), "cached": False, "fetched_at": fetched_at}
@@ -509,6 +516,60 @@ async def get_price_history(ticker: str):
     except Exception as exc:
         logger.warning("Price history fetch failed for %s: %s", ticker, exc)
         return {"ticker": ticker.upper(), "closes": [], "dates": []}
+
+
+async def _refresh_whale_data() -> dict:
+    """Nightly whale-watching maintenance, run after the discovery agent.
+
+    Four stages, each isolated so one failing does not cost the others:
+      1. warm the institutional cache for tickers that are missing or stale —
+         the slow part (one yfinance call each), which is exactly why it lives
+         here rather than inside the /api/funds request
+      2. rebuild the fund-holdings aggregation over the warmed cache
+      3. describe any company that still has no blurb
+      4. describe any fund we have not seen before
+
+    Stages 3 and 4 are the reason this exists: the discovery agent adds tickers
+    every night, each new ticker brings unfamiliar fund holders, and both would
+    otherwise show up undescribed.
+    """
+    from src.utils import descriptions as desc
+
+    loop = asyncio.get_running_loop()
+    summary: dict = {}
+
+    assets = await loop.run_in_executor(None, ww.read_active_assets)
+    summary["assets"] = len(assets)
+
+    try:
+        summary["institutions"] = await loop.run_in_executor(
+            None, ww.refresh_institutions_cache, assets
+        )
+    except Exception as e:
+        logger.warning("Institutional cache warm failed: %s", e)
+        summary["institutions"] = {"error": str(e)}
+
+    funds: list = []
+    try:
+        funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
+        ww.write_funds_cache(funds)
+        summary["funds"] = len(funds)
+    except Exception as e:
+        logger.warning("Fund holdings rebuild failed: %s", e)
+        summary["funds"] = {"error": str(e)}
+
+    try:
+        fund_names = [f["fund"] for f in funds if f.get("fund")]
+        summary["descriptions"] = await loop.run_in_executor(
+            None, desc.backfill_descriptions, fund_names
+        )
+    except Exception as e:
+        logger.warning("Description backfill failed: %s", e)
+        summary["descriptions"] = {"error": str(e)}
+
+    return summary
+
+
 @app.post("/api/analysis/run-daily")
 async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
@@ -541,6 +602,16 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
             logger.info("Discovery refresh complete: %s", discovery_summary.get("universes"))
         except Exception as e:
             logger.exception("Discovery refresh failed (continuing on existing pool): %s", e)
+
+    # Describe anything the discovery agent added tonight, so a new ticker is
+    # never shown as a bare symbol. Best-effort: whale watching is purely
+    # informational, so a failure here must never stop the recommendation batch.
+    whales_summary = None
+    try:
+        whales_summary = await _refresh_whale_data()
+        logger.info("Whale data refresh complete: %s", whales_summary)
+    except Exception as e:
+        logger.exception("Whale data refresh failed (serving existing caches): %s", e)
 
     from src.utils.supabase_client import get_active_user_ids, get_user_preferences
     from src.orchestration.langgraph_orchestrator import run_daily_batch
@@ -581,6 +652,7 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
         "failed": batch.get("failed", 0),
         "unique_tickers": batch.get("tickers", 0),
         "discovery": discovery_summary,
+        "whales": whales_summary,
     }
     logger.info("Daily run finished: %s", summary)
     return summary

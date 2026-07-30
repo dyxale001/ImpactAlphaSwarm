@@ -7,8 +7,8 @@ import { startAnalysis, getStatus, getResult } from '../services/api/analysis'
 import { pollUntilComplete } from '../services/api/poll'
 import { inferUniverseFromAssets } from '../utils/onboardingData'
 
-// Total steps: 1=Path, 2=Assets, 3=Capital, 4=Survey, 5=Review
-const TOTAL_STEPS = 5
+// Total steps: 1=Path, 2=Assets, 3=Survey, 4=Review
+const TOTAL_STEPS = 4
 const SUBMIT_STEP = TOTAL_STEPS
 
 export function useOnboarding() {
@@ -25,7 +25,6 @@ export function useOnboarding() {
 
   // ── Existing form data ─────────────────────────────────────────────────
   const [formData, setFormData] = useState({
-    capital: '',
     surveyAnswers: {} as Record<string, string>,
     universe: [] as string[],
   })
@@ -79,11 +78,6 @@ export function useOnboarding() {
     }
 
     if (step === 3) {
-      if (!formData.capital || parseFloat(formData.capital) <= 0)
-        return setError('Please enter valid initial capital.')
-    }
-
-    if (step === 4) {
       if (Object.keys(formData.surveyAnswers).length < 20)
         return setError('Please answer all survey questions.')
       if (formData.universe.length === 0)
@@ -98,7 +92,7 @@ export function useOnboarding() {
     setStep(prev => prev - 1)
   }
 
-  // ── Final submit (step 5) ──────────────────────────────────────────────
+  // ── Final submit (step 4) ──────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -126,7 +120,6 @@ export function useOnboarding() {
 
     const analysisPayload = {
       user_id: currentUserId,
-      capital: parseFloat(formData.capital),
       risk_tolerance: psychometrics.riskTolerance,
       investment_universe: formData.universe,
       survey_answers: {

@@ -245,6 +245,29 @@ def update_ai_run_status(run_id: str, status: str) -> None:
     }).eq("id", run_id).execute()
 
 
+def get_last_news_for_asset(asset_id: str) -> Optional[Dict[str, Any]]:
+    """Most recent stored news for an asset that actually had articles, or None.
+
+    Used to avoid overwriting good news with an empty result: when a run's news
+    fetch comes back empty (a transient Finnhub failure, an empty cache), we carry
+    the last non-empty news forward rather than zeroing what a prior run stored."""
+    try:
+        resp = (
+            supabase.table("ai_recommendation")
+            .select("news_articles,news_count,news_sentiment_score,news_bullish,news_bearish")
+            .eq("asset_id", asset_id)
+            .gt("news_count", 0)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        print(f"Error fetching last news for asset {asset_id}: {e}")
+        return None
+
+
 def save_top_assets(
     run_id: str,
     user_id: str,
@@ -289,6 +312,24 @@ def save_top_assets(
             if price_cache is not None:
                 price_cache[ticker] = price_at_run
 
+        # News sub-signal. If this run collected no news at all (empty cache or a
+        # transient Finnhub failure), don't persist zeros over the last good news
+        # we stored -- carry the most recent non-empty news forward instead, so one
+        # blip can't blank out an asset's news until the next nightly run.
+        news_articles = sentiment.get("news_articles") or []
+        news_count = int(sentiment.get("news_count") or 0)
+        news_sentiment_score = sentiment.get("news_sentiment_score")
+        news_bullish = int(sentiment.get("news_bullish") or 0)
+        news_bearish = int(sentiment.get("news_bearish") or 0)
+        if news_count == 0 and not news_articles:
+            prior = get_last_news_for_asset(asset_id)
+            if prior:
+                news_articles = prior.get("news_articles") or []
+                news_count = int(prior.get("news_count") or 0)
+                news_sentiment_score = prior.get("news_sentiment_score")
+                news_bullish = int(prior.get("news_bullish") or 0)
+                news_bearish = int(prior.get("news_bearish") or 0)
+
         row = {
             "asset_id": asset_id,
             "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
@@ -312,21 +353,23 @@ def save_top_assets(
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
             # News sub-signal (blended into sentiment_score, weighted higher than
             # social). Defaults to the blended score / 0 when no news was found.
+            # Uses the carried-forward values above so a blank run keeps the last
+            # good news instead of overwriting it with zeros.
             "news_sentiment_score": int(
-                sentiment.get("news_sentiment_score")
-                or sentiment.get("sentiment_score")
-                or 0
+                news_sentiment_score
+                if news_sentiment_score is not None
+                else (sentiment.get("sentiment_score") or 0)
             ),
             "social_sentiment_score": int(
                 sentiment.get("social_sentiment_score")
                 or sentiment.get("sentiment_score")
                 or 0
             ),
-            "news_count": int(sentiment.get("news_count") or 0),
-            "news_bullish": int(sentiment.get("news_bullish") or 0),
-            "news_bearish": int(sentiment.get("news_bearish") or 0),
+            "news_count": news_count,
+            "news_bullish": news_bullish,
+            "news_bearish": news_bearish,
             # Per-article transparency list: publisher, tier, date, headline, link.
-            "news_articles": sentiment.get("news_articles") or [],
+            "news_articles": news_articles,
             # Per-post transparency list: author, date, text, link, sentiment.
             "social_posts": sentiment.get("social_posts") or [],
         }
@@ -374,6 +417,54 @@ def load_marketaux_news_cache(
     ).isoformat()
     resp = (
         supabase.table("marketaux_news_cache")
+        .select("ticker,articles,fetched_at")
+        .in_("ticker", tickers)
+        .gte("fetched_at", cutoff)
+        .execute()
+    )
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for row in resp.data or []:
+        out[row["ticker"]] = row.get("articles") or []
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Finnhub trusted-source news cache (see migrations/010)
+# ---------------------------------------------------------------------------
+# Finnhub is capped at 60 calls/min per key; querying it live on every user
+# refresh exhausted that budget and 429'd the news signal to nothing. The nightly
+# batch now writes each ticker's trusted-tier articles here, and refreshes read
+# them back instead of re-hitting the API (mirrors the Marketaux cache above).
+
+
+def save_finnhub_news_cache(ticker_to_articles: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Upsert each ticker's trusted-tier Finnhub articles into the cache (keyed by
+    ticker). Tickers are written even with an empty list so a ticker that lost its
+    coverage this run doesn't keep serving stale articles."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    rows = [
+        {"ticker": ticker, "articles": articles or [], "fetched_at": now}
+        for ticker, articles in ticker_to_articles.items()
+    ]
+    if not rows:
+        return
+    supabase.table("finnhub_news_cache").upsert(rows, on_conflict="ticker").execute()
+
+
+def load_finnhub_news_cache(
+    tickers: List[str], max_age_hours: int = 48
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Return cached Finnhub articles per ticker, fresher than ``max_age_hours``.
+    Tickers with no fresh cache entry are omitted (so the caller can tell a cache
+    miss apart from a genuinely empty result and top it up live)."""
+    if not tickers:
+        return {}
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(hours=max_age_hours)
+    ).isoformat()
+    resp = (
+        supabase.table("finnhub_news_cache")
         .select("ticker,articles,fetched_at")
         .in_("ticker", tickers)
         .gte("fetched_at", cutoff)

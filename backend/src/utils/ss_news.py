@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -55,6 +57,34 @@ MARKETAUX_MAX_PAGES = int(os.getenv("MARKETAUX_MAX_PAGES", "25"))
 # week-old news).
 MARKETAUX_CACHE_MAX_AGE_HOURS = int(os.getenv("MARKETAUX_CACHE_MAX_AGE_HOURS", "48"))
 
+# Finnhub company-news is now cached by the nightly batch and read back on refresh
+# (see migrations/010) so refreshes stop making a live call per ticker. Cache
+# entries are usable on refresh for this many hours after the nightly fetch.
+FINNHUB_CACHE_MAX_AGE_HOURS = int(os.getenv("FINNHUB_CACHE_MAX_AGE_HOURS", "48"))
+# On refresh, a ticker missing from the cache (e.g. watchlisted intraday) is topped
+# up with a single throttled live call. Cap how many such live calls one refresh
+# may make so a cold cache can't turn one refresh into a long live burst; the rest
+# are covered by the next nightly run. 0 disables the cap.
+FINNHUB_LIVE_TOPUP_MAX = int(os.getenv("FINNHUB_LIVE_TOPUP_MAX", "15"))
+
+# --- Shared Finnhub rate throttle --------------------------------------------
+# The free plan allows 60 calls/min per key; going over returns HTTP 429 and the
+# call is lost. Space every Finnhub call in this process to stay safely under that
+# ceiling (default ~1.1s => ~54/min). Shared by all callers in ss_news so the
+# nightly union gather and any live top-ups can't collectively burst past the cap.
+_FINNHUB_MIN_INTERVAL = float(os.getenv("FINNHUB_MIN_INTERVAL_SECONDS", "1.1"))
+_finnhub_throttle_lock = threading.Lock()
+_finnhub_last_call = 0.0
+
+
+def _finnhub_throttle() -> None:
+    global _finnhub_last_call
+    with _finnhub_throttle_lock:
+        wait = _FINNHUB_MIN_INTERVAL - (time.monotonic() - _finnhub_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _finnhub_last_call = time.monotonic()
+
 
 def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list[SocialMention]]:
 	"""Collect recent company news from trusted financial publishers via Finnhub."""
@@ -76,8 +106,16 @@ def _collect_finnhub_news(tickers: list[str], limit: int = 30) -> dict[str, list
 		params = {"symbol": _api_symbol(sym), "from": date_from, "to": date_to, "token": api_key}
 
 		try:
+			_finnhub_throttle()
 			resp = requests.get(FINNHUB_NEWS_URL, params=params, headers=headers, timeout=10)
 			if resp.status_code != 200:
+				# Surface the failure instead of silently degrading to social-only.
+				# 429 (free-tier rate limit) is the usual culprit and gets a louder
+				# level since it means calls are being dropped, not that news is absent.
+				if resp.status_code == 429:
+					logger.warning("Finnhub news fetch for %s rate limited (HTTP 429)", sym)
+				else:
+					logger.info("Finnhub news fetch for %s returned HTTP %s", sym, resp.status_code)
 				continue
 			payload = resp.json()
 			if not isinstance(payload, list):
@@ -223,7 +261,8 @@ def _collect_marketaux_news(tickers: list[str]) -> dict[str, list[SocialMention]
 
 
 def _mention_to_cache(mention: SocialMention) -> dict[str, Any]:
-	"""Serialize a Marketaux SocialMention to the cache JSON shape."""
+	"""Serialize a news SocialMention to the cache JSON shape (Finnhub + Marketaux
+	share the same fields)."""
 	return {
 		"text": mention.text,
 		"headline": mention.headline,
@@ -235,7 +274,7 @@ def _mention_to_cache(mention: SocialMention) -> dict[str, Any]:
 
 
 def _cache_to_mention(ticker: str, data: dict[str, Any]) -> SocialMention:
-	"""Rebuild a SocialMention from a cached Marketaux article."""
+	"""Rebuild a news SocialMention from a cached article."""
 	return SocialMention(
 		ticker=ticker,
 		text=data.get("text", ""),
@@ -280,37 +319,63 @@ def _load_marketaux_cache(tickers: list[str]) -> dict[str, list[SocialMention]]:
 	}
 
 
-def collect_news(tickers: list[str], marketaux: str = "off") -> dict[str, list[SocialMention]]:
-	"""Collect trusted-source news for the tickers.
-
-	Finnhub is always queried live. The Marketaux tier-1 top-up is controlled by
-	``marketaux``:
-
-	- ``"off"``   (default): Finnhub only.
-	- ``"fetch"`` (nightly batch): call the Marketaux API (deep pagination) and
-	  write the results to the per-ticker cache for refreshes to reuse.
-	- ``"cache"`` (user refresh): read the last nightly pull from the cache -- no
-	  API call -- so tier-1 stays visible without spending the call budget.
-
-	Marketaux articles are merged into the Finnhub list, de-duplicated by headline
-	(the Finnhub copy is kept when both carry the same story).
-	"""
-	normalized_tickers = _normalize_tickers(tickers)
+def _finnhub_live(tickers: list[str]) -> dict[str, list[SocialMention]]:
+	"""Live Finnhub collection with the historical NameError guard."""
 	try:
-		finnhub_news = _collect_finnhub_news(normalized_tickers)
+		return _collect_finnhub_news(tickers)
 	except NameError:
-		finnhub_news = {ticker: [] for ticker in normalized_tickers}
+		return {ticker: [] for ticker in tickers}
 
-	if marketaux == "fetch":
-		marketaux_news = _collect_marketaux_news(normalized_tickers)
-		_save_marketaux_cache(marketaux_news)
-	elif marketaux == "cache":
-		marketaux_news = _load_marketaux_cache(normalized_tickers)
-	else:
-		return finnhub_news
 
+def _save_finnhub_cache(results: dict[str, list[SocialMention]]) -> None:
+	"""Persist a Finnhub pull so refreshes can reuse it. Best-effort: a cache write
+	must never break the run."""
+	try:
+		from .supabase_client import save_finnhub_news_cache
+
+		payload = {
+			ticker: [_mention_to_cache(m) for m in mentions]
+			for ticker, mentions in results.items()
+		}
+		save_finnhub_news_cache(payload)
+	except Exception as exc:
+		logger.warning("Failed to write Finnhub cache: %s", exc)
+
+
+def _load_finnhub_cache(
+	tickers: list[str],
+) -> tuple[dict[str, list[SocialMention]], list[str]]:
+	"""Load cached Finnhub articles per ticker. Returns ``(hits, misses)`` where a
+	hit is a ticker with a fresh cache row (even an empty one -- genuinely no news
+	last night) and a miss is a ticker with no fresh row (never cached / stale), to
+	be topped up live by the caller. Best-effort: on any failure every ticker is a
+	miss so news degrades to a live fetch rather than vanishing."""
+	try:
+		from .supabase_client import load_finnhub_news_cache
+
+		cached = load_finnhub_news_cache(tickers, FINNHUB_CACHE_MAX_AGE_HOURS)
+	except Exception as exc:
+		logger.warning("Failed to read Finnhub cache: %s", exc)
+		return {}, list(tickers)
+
+	hits = {
+		ticker: [_cache_to_mention(ticker, item) for item in cached[ticker]]
+		for ticker in tickers
+		if ticker in cached
+	}
+	misses = [ticker for ticker in tickers if ticker not in cached]
+	return hits, misses
+
+
+def _merge_news(
+	tickers: list[str],
+	finnhub_news: dict[str, list[SocialMention]],
+	marketaux_news: dict[str, list[SocialMention]],
+) -> dict[str, list[SocialMention]]:
+	"""Merge Marketaux articles into the Finnhub list per ticker, de-duplicated by
+	headline (the Finnhub copy wins when both carry the same story)."""
 	merged: dict[str, list[SocialMention]] = {}
-	for ticker in normalized_tickers:
+	for ticker in tickers:
 		existing = finnhub_news.get(ticker, [])
 		seen = {_news_dedup_key(mention.headline or mention.text) for mention in existing}
 		extra = [
@@ -320,3 +385,53 @@ def collect_news(tickers: list[str], marketaux: str = "off") -> dict[str, list[S
 		]
 		merged[ticker] = existing + extra
 	return merged
+
+
+def collect_news(tickers: list[str], marketaux: str = "off") -> dict[str, list[SocialMention]]:
+	"""Collect trusted-source news for the tickers.
+
+	Both news sources are cached by the nightly batch and read back on refresh so a
+	user refresh makes essentially no live API calls (which is what kept Finnhub's
+	60/min free-tier budget from being exhausted). Controlled by ``marketaux``:
+
+	- ``"off"``   (default): Finnhub live only, no caching (standalone/manual path).
+	- ``"fetch"`` (nightly batch): query Finnhub and Marketaux live (deep pagination
+	  for Marketaux) and write both to their per-ticker caches for refreshes to reuse.
+	- ``"cache"`` (user refresh): read both from the cache -- no Finnhub call per
+	  ticker -- topping up only cache-miss tickers (e.g. watchlisted intraday) with
+	  a single throttled live Finnhub call each, bounded by FINNHUB_LIVE_TOPUP_MAX.
+
+	Marketaux articles are merged into the Finnhub list, de-duplicated by headline
+	(the Finnhub copy is kept when both carry the same story).
+	"""
+	normalized_tickers = _normalize_tickers(tickers)
+
+	if marketaux == "off":
+		return _finnhub_live(normalized_tickers)
+
+	if marketaux == "fetch":
+		finnhub_news = _finnhub_live(normalized_tickers)
+		_save_finnhub_cache(finnhub_news)
+		marketaux_news = _collect_marketaux_news(normalized_tickers)
+		_save_marketaux_cache(marketaux_news)
+		return _merge_news(normalized_tickers, finnhub_news, marketaux_news)
+
+	# marketaux == "cache" (user refresh): read the caches, top up only misses.
+	finnhub_news, misses = _load_finnhub_cache(normalized_tickers)
+	if misses:
+		topup = misses if FINNHUB_LIVE_TOPUP_MAX <= 0 else misses[:FINNHUB_LIVE_TOPUP_MAX]
+		if len(misses) > len(topup):
+			logger.info(
+				"Finnhub cache: %d of %d missing tickers topped up live this refresh "
+				"(rest deferred to the nightly run)",
+				len(topup),
+				len(misses),
+			)
+		if topup:
+			live = _finnhub_live(topup)
+			finnhub_news.update(live)
+			# Persist the top-up so the next refresh is a cache hit, not another call.
+			_save_finnhub_cache(live)
+	# Any ticker still absent (deferred miss) resolves to an empty list in the merge.
+	marketaux_news = _load_marketaux_cache(normalized_tickers)
+	return _merge_news(normalized_tickers, finnhub_news, marketaux_news)

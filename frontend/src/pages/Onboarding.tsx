@@ -1,6 +1,5 @@
 import { Layers, ArrowUpRight, Activity, Search, Check, Cpu, Zap, TrendingUp, Bot, Heart, Eye } from 'lucide-react'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { formatNumberWithSpaces, unformatNumberSpaces } from '../utils/stringFormatters'
 import { SURVEY_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import InvestorCard from '../components/InvestorCard'
 import { useAuthStore } from '../store/authStore'
@@ -32,7 +31,6 @@ export default function Onboarding() {
   const {
     step,
     formData,
-    setFormData,
     error,
     loading,
     psychometrics,
@@ -48,13 +46,11 @@ export default function Onboarding() {
     handleSurveyAnswer,
   } = useOnboarding()
 
-  const defaultInput = 'bg-brand-bg border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-accent focus:border-brand-accent transition-all w-full'
-
   const answeredCount = Object.keys(formData.surveyAnswers).length
   const totalQuestions = SURVEY_QUESTIONS.length
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100)
 
-  const stepTitles = ['Your Path', 'What You Know', 'Capital', 'Assessment', 'Profile']
+  const stepTitles = ['Your Path', 'What You Know', 'Assessment', 'Profile']
 
   return (
     <div className="min-h-screen py-6 md:py-12 flex items-center justify-center bg-brand-bg auth-bg p-4 relative overflow-hidden selection:bg-brand-primary selection:text-white">
@@ -99,9 +95,8 @@ export default function Onboarding() {
           <h1 className="text-2xl md:text-3xl font-bold text-brand-fg tracking-tight">
             {step === 1 && 'How do you like to invest?'}
             {step === 2 && 'What do you already follow?'}
-            {step === 3 && 'Starting Capital'}
-            {step === 4 && 'Risk Profile Assessment'}
-            {step === 5 && 'Profile Authorised'}
+            {step === 3 && 'Risk Profile Assessment'}
+            {step === 4 && 'Profile Authorised'}
           </h1>
           <p className="text-brand-muted-fg mt-1.5 text-sm">
             {step === 1 && 'Pick the style that sounds most like you — adjustable any time.'}
@@ -268,31 +263,8 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* ── STEP 3: Capital ────────────────────────────────────────────── */}
+        {/* ── STEP 3: Survey & Sectors ───────────────────────────────────── */}
         {step === 3 && (
-          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-400">
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-[10px] text-brand-muted-fg font-bold tracking-[0.12em] uppercase">
-                Starting Capital (ZAR)
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted-fg font-bold">R</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="250 000"
-                  value={formatNumberWithSpaces(formData.capital)}
-                  onChange={e => setFormData({ ...formData, capital: unformatNumberSpaces(e.target.value) })}
-                  className={`${defaultInput} pl-9 text-lg font-medium`}
-                />
-              </div>
-              <p className="text-xs text-brand-muted-fg mt-0.5">Determines position sizing across recommendations.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 4: Survey & Sectors ───────────────────────────────────── */}
-        {step === 4 && (
           <div className="flex flex-col flex-1 min-h-0 animate-in fade-in slide-in-from-right-4 duration-400">
 
             {/* Progress */}
@@ -384,13 +356,12 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* ── STEP 5: Profile Review ─────────────────────────────────────── */}
-        {step === 5 && (
+        {/* ── STEP 4: Profile Review ─────────────────────────────────────── */}
+        {step === 4 && (
           <div className="flex flex-col gap-5 animate-in zoom-in-95 fade-in duration-400 overflow-y-auto py-4">
             <InvestorCard
               firstName={user?.user_metadata?.first_name || 'Authorised'}
               lastName={user?.user_metadata?.last_name || 'Investor'}
-              capital={formData.capital}
               universe={formData.universe}
               tolerance={psychometrics.riskTolerance}
               expertise={psychometrics.calculatedExpertise}
@@ -427,15 +398,14 @@ export default function Onboarding() {
 
           <button
             type="submit"
-            disabled={loading || (step === 4 && (progressPercent < 100 || formData.universe.length === 0))}
+            disabled={loading || (step === 3 && (progressPercent < 100 || formData.universe.length === 0))}
             className="flex-1 bg-accent hover:bg-accent/80 hover:shadow-glow-accent text-brand-fg py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none"
           >
             {loading
               ? 'Initializing AlphaSwarm…'
               : step === 1 ? 'Continue'
               : step === 2 ? (familiarAssets.length > 0 ? `Continue with ${familiarAssets.length} picks` : 'Continue')
-              : step === 3 ? 'Continue to Assessment'
-              : step === 4 ? 'Generate Profile'
+              : step === 3 ? 'Generate Profile'
               : 'Confirm & Enter Dashboard'}
           </button>
         </div>
