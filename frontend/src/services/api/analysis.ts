@@ -136,9 +136,42 @@ export interface TopFundsResponse {
   fetched_at?: string | null;
 }
 
+
 // Institutional data inverted to per-fund holdings across all tracked assets.
 export async function getTopFunds() {
   const res = await fetch(`${BASE}/api/funds`);
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<TopFundsResponse>;
+}
+
+export async function deactivateOwnAccount() {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/account/deactivate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function reactivateOwnAccount() {
+  const token = await getToken();
+  if (!token) throw new Error("No auth token");
+
+  const res = await fetch(`${BASE}/api/account/reactivate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }

@@ -1,4 +1,4 @@
-import { Layers, ArrowUpRight, Activity, Search, Check, Cpu, Zap, TrendingUp, Bot, Heart } from 'lucide-react'
+import { Layers, ArrowUpRight, Activity, Search, Check, Cpu, Zap, TrendingUp, Bot, Heart, Eye } from 'lucide-react'
 import { useOnboarding } from '../hooks/useOnboarding'
 import { SURVEY_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import InvestorCard from '../components/InvestorCard'
@@ -38,6 +38,8 @@ export default function Onboarding() {
     setInvestorPath,
     familiarAssets,
     toggleFamiliarAsset,
+    addPicksToWatchlist,
+    setAddPicksToWatchlist,
     handleSubmit,
     toggleUniverse,
     prevStep,
@@ -98,9 +100,10 @@ export default function Onboarding() {
           </h1>
           <p className="text-brand-muted-fg mt-1.5 text-sm">
             {step === 1 && 'Pick the style that sounds most like you — adjustable any time.'}
-            {step === 2 && "Select companies you recognise. We'll use your picks to suggest sectors."}
-            {step === 3 && 'Calibrates your AI risk mandate and recommendation filter.'}
-            {step === 4 && 'Review your AI-generated institutional profile.'}
+            {step === 2 && "Select companies you recognise — we'll suggest sectors and can start your watchlist."}
+            {step === 3 && 'Sets the foundation for position sizing calculations.'}
+            {step === 4 && 'Calibrates your AI risk mandate and recommendation filter.'}
+            {step === 5 && 'Review your AI-generated institutional profile.'}
           </p>
         </div>
 
@@ -235,6 +238,28 @@ export default function Onboarding() {
                 </div>
               )
             })()}
+
+            {/* Watchlist opt-in */}
+            {familiarAssets.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setAddPicksToWatchlist(!addPicksToWatchlist)}
+                aria-pressed={addPicksToWatchlist}
+                className="shrink-0 mt-2 flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-brand-border/40 bg-brand-bg/20 hover:border-brand-border/70 transition-colors text-left animate-in fade-in duration-300"
+              >
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                  addPicksToWatchlist
+                    ? 'bg-brand-primary border-brand-primary'
+                    : 'border-brand-muted-fg/40'
+                }`}>
+                  {addPicksToWatchlist && <Check size={9} strokeWidth={3.5} className="text-white" />}
+                </span>
+                <Eye className="w-3.5 h-3.5 text-brand-muted-fg shrink-0" />
+                <span className="text-[11px] text-brand-fg">
+                  Also add {familiarAssets.length === 1 ? 'this' : 'these'} to my watchlist
+                </span>
+              </button>
+            )}
           </div>
         )}
 
