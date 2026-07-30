@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { getBadgeIconSignedUrl } from "./badgeStorageService";
 import type {
   LearningArticle,
   LearningBadge,
@@ -14,8 +15,6 @@ const ARTICLE_XP: Record<LearningDifficultyLevel, number> = {
   INTERMEDIATE: 100,
   ADVANCED: 150,
 };
-
-const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 type LearningCentreCategoryRow = Omit<LearningCategory, "articles"> & {
   articles?: Array<
@@ -238,7 +237,7 @@ export async function fetchLearningBadges() {
 
   const badgesWithSignedUrls = await Promise.all(
     ((data ?? []) as LearningBadge[]).map(async (badge) => {
-      const iconUrl = await loadBadgeIconUrl(badge.icon_path);
+      const iconUrl = await getBadgeIconSignedUrl(badge.icon_path);
 
       return {
         ...badge,
@@ -248,22 +247,6 @@ export async function fetchLearningBadges() {
   );
 
   return badgesWithSignedUrls;
-}
-
-export async function loadBadgeIconUrl(iconPath: string) {
-  if (!iconPath) {
-    return null;
-  }
-
-  const { data, error } = await supabase.storage
-    .from("badges")
-    .createSignedUrl(iconPath, SIGNED_URL_TTL_SECONDS);
-
-  if (error) {
-    return null;
-  }
-
-  return data?.signedUrl ?? null;
 }
 
 export async function fetchLearningUserState(userId: string) {

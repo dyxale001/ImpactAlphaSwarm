@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { Edit3, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import {
@@ -171,8 +171,8 @@ export default function AdminLearningCategories() {
               Learning Categories
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
-              Create and manage the Learning Centre category structure shown on
-              the website.
+              Create and manage the Learning Centre categories shown on the
+              website.
             </p>
           </div>
 
@@ -207,6 +207,18 @@ export default function AdminLearningCategories() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
           >
             Articles
+          </Link>
+          <Link
+            to="/admin/learning-questions"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Questions &amp; Answers
+          </Link>
+          <Link
+            to="/admin/badges"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
+          >
+            Badges
           </Link>
         </div>
 
@@ -281,12 +293,13 @@ export default function AdminLearningCategories() {
                       <td className="p-5 text-sm font-medium text-brand-fg">
                         {category.articles?.length ?? 0}
                       </td>
-                      <td className="p-5 text-right space-x-4">
+                      <td className="p-5 text-right whitespace-nowrap space-x-3">
                         <button
                           type="button"
                           onClick={() => startEdit(category)}
-                          className="text-brand-primary hover:text-brand-primary-glow font-semibold text-sm transition-colors"
+                          className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-card px-3 py-2 text-xs font-medium text-brand-fg transition-colors hover:bg-brand-bg/70"
                         >
+                          <Edit3 className="h-3.5 w-3.5" />
                           Edit
                         </button>
                         <button
@@ -294,9 +307,9 @@ export default function AdminLearningCategories() {
                           onClick={() =>
                             void handleDelete(category.id, category.name)
                           }
-                          className="text-semantic-danger hover:text-red-400 font-semibold text-sm transition-colors inline-flex items-center gap-1"
+                          className="inline-flex items-center gap-2 rounded-full border border-semantic-danger/30 bg-semantic-danger/10 px-3 py-2 text-xs font-medium text-semantic-danger transition-colors hover:bg-semantic-danger/20"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                           Delete
                         </button>
                       </td>
