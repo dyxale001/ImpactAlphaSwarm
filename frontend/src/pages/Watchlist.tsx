@@ -39,7 +39,7 @@ function TopPickRow({ pick, index }: { pick: TopPick; index: number }) {
         {pick.reasoning || 'No reasoning available.'}
       </p>
 
-      {/* Scores */}
+      {/* Scores
       <div className="flex items-center gap-6 shrink-0">
         <div className="text-center">
           <p className="text-[9px] uppercase tracking-wider text-brand-muted-fg font-semibold">Confidence</p>
@@ -53,7 +53,7 @@ function TopPickRow({ pick, index }: { pick: TopPick; index: number }) {
           <p className="text-[9px] uppercase tracking-wider text-brand-muted-fg font-semibold">Quant</p>
           <p className={`text-sm font-bold font-mono ${scoreColor(pick.quantScore)}`}>{pick.quantScore}</p>
         </div>
-      </div>
+      </div> */}
 
       {/* Price + link */}
       <div className="text-right shrink-0">
