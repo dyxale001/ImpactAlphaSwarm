@@ -3,13 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Sparkles,
-  BarChart3,
   Download,
-  MessageSquare,
-  Eye,
-  Flame,
   ArrowRight,
   RefreshCw,
+  BrainCircuit,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
@@ -20,6 +17,9 @@ import { type AssetSearchResult } from "../hooks/useWatchlistData";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
+import SignalScorecard from "../components/dashboard/SignalScorecard";
+import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
+import { CONVERGENCE_HEADLINE, CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 import WatchlistSearch from "../components/watchlist/WatchlistSearch";
@@ -50,9 +50,6 @@ export default function DashboardPage() {
     refreshRecommendations,
   } = useDashboardStats();
 
-  type PreviewTab = "overview" | "sentiment" | "fundamentals" | "hype";
-  const [topPickTab, setTopPickTab] = useState<PreviewTab>("overview");
-
   // Temporary toggle to hide header controls during this iteration
   const hideHeaderControls = true;
 
@@ -63,37 +60,20 @@ export default function DashboardPage() {
     return "Good evening";
   }
 
-  function getTopPickPreview(tab: PreviewTab) {
-    if (!topPick) return { title: "Quick Take", body: "" };
+  // The top pick's preview tabs were removed alongside the cards': they restated
+  // numbers already shown, and the "Hype Risk Assessment" tab described the
+  // penalty that convergence replaced. The reasoning trace is what remains.
+  const topPickReasoning =
+    topPick?.reasoning ||
+    (topPick?.convergenceState
+      ? CONVERGENCE_DETAIL[topPick.convergenceState]
+      : "No reasoning trace available for this run.");
 
-    switch (tab) {
-      case "sentiment":
-        return {
-          title: "Market Vibe",
-          body:
-            topPick.sentimentScore >= 70
-              ? `Strong social momentum. With a score of ${topPick.sentimentScore}/100, the internet is highly bullish on ${topPick.ticker}.`
-              : `Neutral chatter. A score of ${topPick.sentimentScore}/100 indicates balanced or quiet discussion online.`,
-        };
-      case "fundamentals":
-        return {
-          title: "Hard Numbers",
-          body: `Quantitative Score: ${topPick.fundamentalsScore}/100. Higher quant scores indicate stronger technical signals and healthier financials backing the AI's decision.`,
-        };
-      case "hype":
-        return {
-          title: "Hype Risk Assessment",
-          body:
-            topPick.hypePenalty > 0
-              ? `Hype Penalty Applied: The AI deducted ${topPick.hypePenalty} points from ${topPick.ticker}'s final score because social hype is outpacing the math.`
-              : `Clear Signal. No hype penalties were applied (${topPick.hypePenalty} points deducted).`,
-        };
-      default:
-        return { title: "Quick Take", body: topPick.reasoning };
-    }
-  }
-
-  const topPickPreview = getTopPickPreview(topPickTab);
+  const showTopPickScorecard = Boolean(
+    SCORECARD_ENABLED && topPick?.hasSignalTerms,
+  );
+  const topPickQuantPercentile =
+    topPick?.quantLean != null ? ((topPick.quantLean + 1) / 2) * 100 : null;
 
   const {
     profile,
@@ -182,6 +162,14 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
       "Hype Penalty",
       "Hype Flag",
       "Top Pick",
+      // Disclosed ranking factors (null on runs recorded before they existed).
+      "Signals",
+      "Signal Direction",
+      "Signal Strength",
+      "Agreement",
+      "Evidence Depth",
+      "Profile Fit",
+      "Quant Position (pctile)",
     ];
 
     const dataRows = sortedRecommendations.map((asset) => [
@@ -195,6 +183,17 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
       asset.hypePenalty,
       asset.isHype ? "Yes" : "No",
       asset.rank === 1 ? "Yes" : "No",
+      asset.convergenceState
+        ? CONVERGENCE_HEADLINE[asset.convergenceState]
+        : "n/a",
+      asset.signalDirection ?? "n/a",
+      asset.signalStrength !== null ? asset.signalStrength.toFixed(3) : "n/a",
+      asset.convergence !== null ? asset.convergence.toFixed(3) : "n/a",
+      asset.dataSufficiency !== null ? asset.dataSufficiency.toFixed(3) : "n/a",
+      asset.profileFit !== null ? asset.profileFit.toFixed(3) : "n/a",
+      asset.quantLean !== null
+        ? Math.round(((asset.quantLean + 1) / 2) * 100)
+        : "n/a",
     ]);
 
     const csvLines = [
@@ -245,7 +244,13 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
     void loadExchangeRate();
   }, [loadExchangeRate]);
 
-  const { refresh } = useAnalysisRefresh();
+  // Both flags matter: `isRunning` covers the manual Refresh button, while the
+  // hook's own flag covers a refresh IT started (the stale auto-refresh). Only the
+  // button's state was being used, so an auto-refresh ran with no loading state at
+  // all — the page looked blank while a multi-minute analysis went on — and the
+  // auto-refresh guard could not see its own run.
+  const { refresh, isRunning: isAutoRefreshRunning } = useAnalysisRefresh();
+  const anyRunInFlight = isRunning || isAutoRefreshRunning;
   const isStale = isRunStale(latestRunCreatedAt);
 
   const handleSignOut = async () => {
@@ -306,7 +311,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
   // Self-heal returning users whose data predates the last nightly run.
   useStaleAutoRefresh({
     isStale,
-    isRunning,
+    isRunning: anyRunInFlight,
     ready: !currentlyLoading && Boolean(profile?.id),
     refresh,
   });
@@ -321,7 +326,8 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
 
   if (profile?.role === "admin") return null;
 
-  const showDashboardSkeleton = isRunning || isRunInProgress || isLoadingRecs;
+  const showDashboardSkeleton =
+    anyRunInFlight || isRunInProgress || isLoadingRecs;
 
   if (showDashboardSkeleton) {
     return <DashboardSkeleton />;
@@ -421,19 +427,41 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
         >
           <Sparkles className="w-4 h-4 text-brand-primary" />
           <span className="text-xs uppercase text-brand-primary font-semibold">
-            Top Pick Today
+            {showTopPickScorecard
+              ? "Highest signal for your profile"
+              : "Top Pick Today"}
           </span>
         </Link>
         <div className="flex flex-col md:flex-row gap-6">
-          <Link
-            to={`/asset/${topPick?.ticker}`}
-            className="hover:opacity-80 transition-opacity relative z-50"
-          >
-            <ConfidenceRing
-              score={topPick?.confidenceScore || 0}
-              label="Confidence Score"
-            />
-          </Link>
+          {/* The scorecard is NOT wrapped in the asset Link: it contains its own
+              explainer buttons, and nesting <button> inside <a> is invalid markup
+              — it also made tapping an explainer navigate away instead of opening
+              it. Only the plain ring stays clickable. */}
+          {showTopPickScorecard ? (
+            <div className="w-full md:w-64 shrink-0">
+              <SignalScorecard
+                terms={{
+                  signalStrength: topPick!.signalStrength,
+                  signalDirection: topPick!.signalDirection,
+                  convergence: topPick!.convergence,
+                  convergenceState: topPick!.convergenceState,
+                  dataSufficiency: topPick!.dataSufficiency,
+                  profileFit: topPick!.profileFit,
+                  quantState: topPick!.quantState,
+                }}
+              />
+            </div>
+          ) : (
+            <Link
+              to={`/asset/${topPick?.ticker}`}
+              className="hover:opacity-80 transition-opacity relative z-50"
+            >
+              <ConfidenceRing
+                score={topPick?.confidenceScore || 0}
+                label="Confidence Score"
+              />
+            </Link>
+          )}
           <div className="flex-1 space-y-3 w-full min-w-0">
             <Link
               to={`/asset/${topPick?.ticker}`}
@@ -465,38 +493,15 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
             <DualBar
               sentimentScore={topPick?.sentimentScore || 0}
               quantitativeScore={topPick?.fundamentalsScore || 0}
+              quantPercentile={topPickQuantPercentile}
             />
-            <div className="flex items-center gap-1 bg-brand-bg border border-brand-border/50 rounded-full p-1 backdrop-blur-md">
-              {[
-                { id: "overview" as PreviewTab, label: "Overview", icon: Eye },
-                {
-                  id: "sentiment" as PreviewTab,
-                  label: "Vibe",
-                  icon: MessageSquare,
-                },
-                {
-                  id: "fundamentals" as PreviewTab,
-                  label: "Numbers",
-                  icon: BarChart3,
-                },
-                { id: "hype" as PreviewTab, label: "Hype", icon: Flame },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTopPickTab(t.id)}
-                  className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded-full transition-colors ${topPickTab === t.id ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:text-brand-fg"}`}
-                >
-                  <t.icon className="w-3 h-3" />{" "}
-                  <span className="hidden sm:inline">{t.label}</span>
-                </button>
-              ))}
-            </div>
             <div className="bg-brand-bg backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
-              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold">
-                {topPickPreview.title}
+              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
+                <BrainCircuit className="w-3 h-3" />
+                Why it ranks here
               </p>
               <p className="text-xs text-brand-fg leading-relaxed w-full">
-                {topPickPreview.body}
+                {topPickReasoning}
               </p>
             </div>
             <div className="flex items-center justify-start">
@@ -564,12 +569,14 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
           <p className="text-xs text-brand-muted-fg leading-relaxed">
             <strong className="text-brand-fg block mb-2">Disclaimer:</strong>
             AlphaSwarm is an AI-powered analytical tool designed for
-            informational and educational purposes only. The "Confidence,"
-            "Quant," and "Sentiment" scores are generated by automated
-            algorithms and do not constitute professional financial, investment,
-            or legal advice. All trading involves risk; past performance is not
-            indicative of future results. Please consult with a licensed
-            financial advisor before making any investment decisions.
+            informational and educational purposes only. Every figure shown is a
+            measurement of public data produced by automated analysis, and the
+            ordering of this list reflects those measurements plus a weighting we
+            choose and disclose. Nothing here constitutes professional financial,
+            investment or legal advice, and nothing predicts future prices. All
+            trading involves risk; past performance is not indicative of future
+            results. Please consult with a licensed financial advisor before
+            making any investment decisions.
           </p>
         </div>
       </div>

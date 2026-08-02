@@ -15,9 +15,13 @@ export default function ConfidenceRing({
         return "A unified measure of the AI's conviction in this asset. It blends quantitative data with market sentiment, specifically applying penalties to risky assets where social hype outpaces actual financial strength.";
       case "Sentiment Score":
         return "A real-time measure of market mood and social momentum. High scores indicate strong bullish chatter across social channels and news, while low scores suggest bearish or quiet sentiment.";
-      case "Quantitative Score":
-      case "Quant Score":
-        return "A purely data-driven score based on financial health, valuation models, and technical indicators. This metric ignores market emotion to evaluate the underlying mathematical strength of the asset.";
+      // The "Quantitative Score" / "Quant Score" cases were removed: no caller ever
+      // passed those labels, so the copy was unreachable — and it was wrong twice
+      // over. It claimed "valuation models", which the quant layer does not compute
+      // (RSI, MACD, Sharpe, beta, volatility), and it framed the result as "the
+      // underlying mathematical strength of the asset", a quality verdict of the
+      // kind D-081/D-082 exclude. Peer position is disclosed in QuantMetricsPanel
+      // and DualBar instead.
       default:
         return label;
     }

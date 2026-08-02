@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
+import type { ConvergenceState } from "../data/signalCopy";
 
 export interface AssetRecommendation {
   assetId: string;
@@ -16,7 +17,27 @@ export interface AssetRecommendation {
   rank: number;
   isDiscovered: boolean;
   discoverySources: string[] | null;
+  // Unified ranking v2 terms (migration 010). Null on legacy rows and whenever the
+  // backend ranking is disabled, which is what the legacy display falls back on.
+  signalStrength: number | null;
+  signalDirection: string | null;
+  convergence: number | null;
+  convergenceState: ConvergenceState | null;
+  dataSufficiency: number | null;
+  profileFit: number | null;
+  quantLean: number | null;
+  quantState: string | null;
+  hasSignalTerms: boolean;
 }
+
+/** Show the disclosed scorecard instead of the confidence score.
+ *
+ * Separate from the backend flag on purpose. In shadow mode the backend WRITES the
+ * v2 terms while still ordering the feed by the legacy score — so rendering the
+ * scorecard then would explain a placement those terms did not decide. This flag
+ * flips only when the backend ranking goes live. */
+export const SCORECARD_ENABLED =
+  (import.meta.env.VITE_UNIFIED_SCORECARD ?? "false") === "true";
 
 export function useDashboardStats() {
   const { profile } = useAuthStore();
@@ -88,7 +109,15 @@ export function useDashboardStats() {
             sentiment_score,
             reasoning_trace,
             hype_penalty,
-            price_at_run
+            price_at_run,
+            signal_strength,
+            signal_direction,
+            convergence,
+            convergence_state,
+            data_sufficiency,
+            profile_fit,
+            quant_lean,
+            quant_state
           `,
         )
         .eq("run_id", latestRunId)
@@ -141,10 +170,24 @@ export function useDashboardStats() {
             sentimentScore: rec.sentiment_score ?? 0,
             reasoning: rec.reasoning_trace ?? "",
             hypePenalty: rec.hype_penalty ?? 0,
-            isHype: (rec.hype_penalty ?? 0) > 0,
+            // The stored penalty is NEGATIVE (-25, see synthesize_rankings), so the
+            // old `> 0` test could never be true: the "Hype flagged" chip and the
+            // CSV "Hype Flag" column have always read false regardless of the data.
+            isHype: (rec.hype_penalty ?? 0) < 0,
             rank: rec.rank ?? 0,
             isDiscovered: asset?.origin === "discovered",
             discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
+            signalStrength: rec.signal_strength ?? null,
+            signalDirection: rec.signal_direction ?? null,
+            convergence: rec.convergence ?? null,
+            convergenceState: (rec.convergence_state as ConvergenceState) ?? null,
+            dataSufficiency: rec.data_sufficiency ?? null,
+            profileFit: rec.profile_fit ?? null,
+            quantLean: rec.quant_lean ?? null,
+            quantState: rec.quant_state ?? null,
+            // Only treat the row as scorecard-ready when the ordering factors are
+            // actually present — legacy rows must fall back, not render blanks.
+            hasSignalTerms: rec.convergence_state != null && rec.signal_strength != null,
           };
         },
       );

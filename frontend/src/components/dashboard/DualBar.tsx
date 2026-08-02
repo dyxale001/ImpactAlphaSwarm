@@ -1,10 +1,39 @@
+/**
+ * Sentiment tone + quant position.
+ *
+ * The two halves are deliberately drawn DIFFERENTLY, because they are different
+ * kinds of measurement:
+ *
+ *  - Sentiment is a measured tone on a 0-100 scale, so a proportional bar is a
+ *    fair depiction of it.
+ *  - Quant is NOT a 0-100 quality score. When the peer percentile is available it
+ *    is drawn as a position MARKER on a neutral track — matching
+ *    QuantMetricsPanel, which avoided fill bars precisely because a filled bar
+ *    reads as "score out of 100". The old version rendered the legacy composite
+ *    `raw_quant_score` as a fill bar labelled "Quantitative Score", with a tooltip
+ *    claiming it evaluated "the underlying mathematical strength of the asset" —
+ *    a quality verdict, and the covert buy-o-meter the transparency pivot removes.
+ *
+ * Legacy rows (no percentile) keep the old bar so nothing breaks; that is why
+ * `quantitativeScore` is still accepted.
+ */
 export default function DualBar({
   sentimentScore,
   quantitativeScore,
+  quantPercentile = null,
 }: {
   sentimentScore: number;
   quantitativeScore: number;
+  /** Mean peer percentile (0-100) from the disclosed sub-dimensions. When given,
+   *  the quant half becomes a position marker instead of a score bar. */
+  quantPercentile?: number | null;
 }) {
+  const hasPercentile =
+    quantPercentile !== null && !Number.isNaN(quantPercentile as number);
+  const markerPos = hasPercentile
+    ? Math.max(2, Math.min(98, quantPercentile as number))
+    : 0;
+
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -15,9 +44,9 @@ export default function DualBar({
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
-                A real-time measure of market mood and social momentum. High
-                scores indicate strong bullish chatter across social channels
-                and news, while low scores suggest bearish or quiet sentiment.
+                A measure of market mood from trusted news articles and social
+                posts. Higher means the tone of that coverage is more positive — it
+                describes what is being said, not what will happen.
               </div>
             </div>
           </span>
@@ -32,31 +61,43 @@ export default function DualBar({
           />
         </div>
       </div>
+
       <div className="space-y-1">
         <div className="flex justify-between">
           <span className="relative group inline-block">
             <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
-              Quantitative Score
+              {hasPercentile ? "Quant Position vs Peers" : "Quantitative Score"}
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
-                A purely data-driven score based on financial health, valuation
-                models, and technical indicators. This metric ignores market
-                emotion to evaluate the underlying mathematical strength of the
-                asset.
+                {hasPercentile
+                  ? "Where this asset's price measurements (momentum, risk-adjusted return, stability) sit relative to the other assets analysed in the same run. A factual position among today's candidates — not a rating, and not a forecast."
+                  : "A data-driven reading from technical indicators. Shown for runs recorded before the disclosed per-metric breakdown was available."}
               </div>
             </div>
           </span>
           <span className="text-foreground font-mono font-semibold">
-            {quantitativeScore}%
+            {hasPercentile
+              ? `${Math.round(quantPercentile as number)}th pctile`
+              : `${quantitativeScore}%`}
           </span>
         </div>
-        <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary"
-            style={{ width: `${quantitativeScore}%` }}
-          />
-        </div>
+        {hasPercentile ? (
+          // Marker on a neutral track: a position, not a filled quantity.
+          <div className="relative h-1.5 w-full bg-background rounded-full">
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-brand-primary border-2 border-brand-surface shadow-sm"
+              style={{ left: `${markerPos}%` }}
+            />
+          </div>
+        ) : (
+          <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary"
+              style={{ width: `${quantitativeScore}%` }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface UseStaleAutoRefreshParams {
   /** Whether the latest run predates the most recent nightly refresh. */
@@ -22,16 +22,22 @@ export function useStaleAutoRefresh({
   ready,
   refresh,
 }: UseStaleAutoRefreshParams): void {
-  const [triggered, setTriggered] = useState(false);
+  // A ref, not state: StrictMode double-invokes the mount effect (setup → cleanup
+  // → setup) BEFORE a state update re-renders, so with useState both setups saw
+  // `triggered === false` and fired two analyses milliseconds apart. A ref is
+  // written synchronously, so the second setup sees the guard already closed.
+  // (The backend claim in acquire_ai_run is the authoritative protection — it also
+  // covers two tabs and nightly-vs-manual overlap, which no frontend guard can.)
+  const triggered = useRef(false);
 
   useEffect(() => {
-    if (!ready || triggered || isRunning) return;
+    if (!ready || triggered.current || isRunning) return;
     if (isStale) {
-      setTriggered(true);
+      triggered.current = true;
       void refresh();
     }
     // `refresh` is intentionally excluded: the call is one-shot and guarded by
     // `triggered`, so we don't want identity changes to re-run this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, isStale, isRunning, triggered]);
+  }, [ready, isStale, isRunning]);
 }

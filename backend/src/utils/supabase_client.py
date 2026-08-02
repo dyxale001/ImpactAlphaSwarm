@@ -94,6 +94,49 @@ def fetch_price_at_run_in_zar(ticker: str) -> float | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Risk-tolerance normalisation
+# ---------------------------------------------------------------------------
+# `user_analysis.risk_tolerance` is free text and the stored values have drifted
+# into six spellings of three levels — 'Moderate', 'moderate', 'conservative',
+# 'Conservative', 'aggressive', 'Aggressive' and the misspelling 'aggresive'.
+# Consumers compare against exact title-case labels (e.g.
+# `risk_tolerance == "Conservative"`), so every lower-cased or misspelled row
+# silently skipped its risk handling: the personalisation looked applied but never
+# fired. Normalise once, on read, so downstream comparisons are safe.
+
+RISK_LEVELS = ("Conservative", "Moderate", "Aggressive")
+DEFAULT_RISK_LEVEL = "Moderate"
+
+# Casefolded spellings seen in live data, plus near-miss typos → canonical label.
+_RISK_ALIASES: Dict[str, str] = {
+    "conservative": "Conservative",
+    "conservitive": "Conservative",
+    "concervative": "Conservative",
+    "low": "Conservative",
+    "moderate": "Moderate",
+    "moderat": "Moderate",
+    "medium": "Moderate",
+    "balanced": "Moderate",
+    "aggressive": "Aggressive",
+    "aggresive": "Aggressive",   # observed in live data
+    "agressive": "Aggressive",
+    "high": "Aggressive",
+}
+
+
+def normalize_risk_tolerance(value: Any) -> str:
+    """Map any stored risk-tolerance spelling to one of ``RISK_LEVELS``.
+
+    Unknown, empty or non-string values fall back to ``DEFAULT_RISK_LEVEL`` (the
+    neutral profile) rather than raising, so a malformed row degrades to "no
+    special handling" instead of failing a run.
+    """
+    if not isinstance(value, str):
+        return DEFAULT_RISK_LEVEL
+    return _RISK_ALIASES.get(value.strip().casefold(), DEFAULT_RISK_LEVEL)
+
+
 def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
     """Fetch user preferences from user_analysis table."""
     try:
@@ -109,7 +152,9 @@ def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
             return {
                 "user_id": user_id,
                 "universes": universes,
-                "risk_tolerance": user.get("risk_tolerance", "Moderate"),
+                # Normalised: the raw column holds mixed casing + a typo, and
+                # exact-match consumers silently skipped those rows.
+                "risk_tolerance": normalize_risk_tolerance(user.get("risk_tolerance")),
                 "expertise_level": user.get("ai_derived_expertise", "novice"),  # novice, intermediate, advanced
             }
         return None
@@ -186,63 +231,153 @@ def get_or_create_asset_id(ticker: str) -> Optional[str]:
     new_data = new_resp.data or []
     return new_data[0]["id"] if new_data else None
 
-def create_ai_run(user_id: str, status: str = "running") -> str:
-    """Create or update an ai_run row for the user. Since ai_runs has a unique 
-    constraint on user_id, we upsert: update if exists, insert if not."""
-    
-    try:
-        # Check if user already has an existing ai_run
-        existing_runs = supabase.table("ai_runs").select("id").eq("user_id", user_id).execute()
-        existing_data = existing_runs.data or []
-        
-        if existing_data:
-            # User already has an ai_run, update it
-            old_run_id = existing_data[0]["id"]
-            try:
-                # Delete associated ai_recommendation rows for the existing run
-                supabase.table("ai_recommendation").delete().eq("run_id", old_run_id).execute()
-                print(f"Deleted ai_recommendation rows for run_id: {old_run_id}")
-            except Exception as e:
-                print(f"Warning: Could not delete ai_recommendation rows: {e}")
-            
-            # Update the existing ai_run row
-            resp = supabase.table("ai_runs").update({
-                "status": status,
-                "created_at": datetime.datetime.utcnow().isoformat(),
-            }).eq("user_id", user_id).execute()
-            
-            data = resp.data or []
-            if data:
-                new_run_id = data[0]["id"]
-                print(f"Updated existing ai_run for user {user_id}: {new_run_id}")
-                return new_run_id
-    
-    except Exception as e:
-        print(f"Error checking existing ai_run: {e}")
-    
-    # Create new ai_run row (if user doesn't already have one)
-    try:
-        resp = supabase.table("ai_runs").insert({
-            "user_id": user_id,
-            "status": status,
-        }).execute()
+# How long a run may sit in 'running' before it is presumed abandoned and may be
+# claimed by a new one. Mirrors api.STALE_RUN_MINUTES, which heals such rows.
+RUN_LOCK_STALE_MINUTES = int(os.getenv("STALE_RUN_MINUTES", "15"))
 
+
+def acquire_ai_run(
+    user_id: str, stale_minutes: int = RUN_LOCK_STALE_MINUTES
+) -> tuple[Optional[str], bool]:
+    """Atomically claim this user's single ai_run row for a new analysis.
+
+    Returns ``(run_id, acquired)``. ``acquired=False`` means an analysis is already
+    in flight and the caller must NOT start another — the returned id is the run
+    already going, so the caller can simply poll that instead.
+
+    Why this exists: the previous check-then-update was not atomic, so two requests
+    26ms apart both "created" a run, both cleared the recommendations, and both ran
+    the full pipeline — double the API spend and duplicate rows. The claim below is
+    a single conditional UPDATE, so exactly one concurrent caller can win it.
+
+    An abandoned run (older than ``stale_minutes``) is stealable, otherwise a
+    crashed pipeline would lock the user out until manual intervention.
+    """
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    claim = {"status": "running", "created_at": now_iso}
+
+    # 1. Claim the row only if it is NOT already running. One winner by construction.
+    try:
+        resp = (
+            supabase.table("ai_runs")
+            .update(claim)
+            .eq("user_id", user_id)
+            .neq("status", "running")
+            .execute()
+        )
+        if resp.data:
+            return resp.data[0]["id"], True
+    except Exception as e:
+        print(f"Error claiming ai_run for {user_id}: {e}")
+
+    # 2. Either a run is in flight, or the user has no row at all.
+    try:
+        existing = (
+            supabase.table("ai_runs")
+            .select("id,status,created_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Error reading ai_run for {user_id}: {e}")
+        existing = []
+
+    if existing:
+        row = existing[0]
+        cutoff = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(minutes=stale_minutes)
+        ).isoformat()
+        # Steal an abandoned run — filtered on created_at so a run that started
+        # since our read is never stolen out from under itself.
+        try:
+            stolen = (
+                supabase.table("ai_runs")
+                .update(claim)
+                .eq("user_id", user_id)
+                .eq("status", "running")
+                .lt("created_at", cutoff)
+                .execute()
+            )
+            if stolen.data:
+                print(f"Reclaimed stale ai_run for user {user_id}")
+                return stolen.data[0]["id"], True
+        except Exception as e:
+            print(f"Error reclaiming stale ai_run for {user_id}: {e}")
+        return row["id"], False
+
+    # 3. No row yet — insert one. A concurrent insert loses on the unique
+    #    constraint, so fall back to reading the winner's row.
+    try:
+        resp = supabase.table("ai_runs").insert(
+            {"user_id": user_id, "status": "running"}
+        ).execute()
         data = resp.data or []
-        if not data:
-            raise RuntimeError("Failed to create ai_run row")
-
-        print(f"Created new ai_run: {data[0]['id']}")
-        return data[0]["id"]
-    
+        if data:
+            return data[0]["id"], True
     except Exception as e:
-        print(f"Error creating ai_run: {e}")
-        raise
+        print(f"Insert of ai_run lost a race for {user_id} ({e}); reading the winner")
+
+    try:
+        rows = (
+            supabase.table("ai_runs")
+            .select("id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if rows:
+            return rows[0]["id"], False
+    except Exception as e:
+        print(f"Error resolving ai_run for {user_id}: {e}")
+    return None, False
+
+
+def create_ai_run(user_id: str, status: str = "running") -> str:
+    """Claim an ai_run row for the user and return its id.
+
+    Thin wrapper over :func:`acquire_ai_run` kept for callers that do not care
+    whether they won the claim. NOTE it no longer deletes the user's existing
+    ai_recommendation rows: that used to happen at run START, so a failed or
+    interrupted analysis left the dashboard empty. ``save_top_assets`` clears the
+    run's rows immediately before inserting the new ones instead, which keeps
+    yesterday's results visible until fresh ones exist.
+    """
+    run_id, _acquired = acquire_ai_run(user_id)
+    if not run_id:
+        raise RuntimeError(f"Failed to create or claim an ai_run row for {user_id}")
+    return run_id
 
 
 def update_ai_run_status(run_id: str, status: str) -> None:
     supabase.table("ai_runs").update({
         "status": status,
     }).eq("id", run_id).execute()
+
+
+# Disclosed ranking-v2 fields written per recommendation (migration 010). Kept as
+# one list so the "retry without them" fallback below stays in sync automatically.
+RANKING_V2_COLUMNS = (
+    "rank_score",
+    "signal_strength",
+    "signal_direction",
+    "convergence",
+    "convergence_state",
+    "data_sufficiency",
+    "profile_fit",
+    "quant_lean",
+    "sent_lean",
+    "combined_lean",
+    "quant_state",
+    "ranking_version",
+    "ranking_weights",
+    "strength_variants",
+)
 
 
 def get_last_news_for_asset(asset_id: str) -> Optional[Dict[str, Any]]:
@@ -348,6 +483,15 @@ def save_top_assets(
             "rsi": quant.get("rsi"),
             "sharpe_ratio": quant.get("sharpe_ratio"),
             "volatility": quant.get("volatility"),
+            # Objective cross-sectional quant sub-dimensions + context bands
+            # (see migrations/004). Null when the candidate universe was too
+            # small to rank (quant_normalisation = 'insufficient_universe').
+            "momentum_pctile": (quant.get("sub_dimensions") or {}).get("momentum"),
+            "risk_adj_pctile": (quant.get("sub_dimensions") or {}).get("risk_adjusted_return"),
+            "stability_pctile": (quant.get("sub_dimensions") or {}).get("stability"),
+            "rsi_band": (quant.get("bands") or {}).get("rsi"),
+            "beta_band": (quant.get("bands") or {}).get("beta"),
+            "quant_normalisation": quant.get("quant_normalisation"),
             "sources": normalized_sources,
             "bullish_posts": int(sentiment.get("bullish_posts") or 0),
             "bearish_posts": int(sentiment.get("bearish_posts") or 0),
@@ -373,13 +517,148 @@ def save_top_assets(
             # Per-post transparency list: author, date, text, link, sentiment.
             "social_posts": sentiment.get("social_posts") or [],
         }
+
+        # Unified ranking v2 terms (migration 010), present only when the ranking
+        # module ran. Written for disclosure: the UI and the reasoning trace need
+        # to say WHY an asset placed where it did, not just where.
+        for key in RANKING_V2_COLUMNS:
+            if key in asset:
+                row[key] = asset[key]
+
         rows.append(row)
 
     if not rows:
         return {"status": "no_rows"}
 
-    resp = supabase.table("ai_recommendation").insert(rows).execute()
-    return {"status": "inserted", "response": resp.data}
+    # Make the write idempotent for this run. create_ai_run clears the PREVIOUS
+    # run's rows, but two analyses for the same user can race (observed 26ms
+    # apart: both deletes landed before either insert, leaving two full sets of 5
+    # under one run_id). Duplicates then broke the asset page, whose single-row
+    # lookup errors on multiple matches. Clearing by run_id here means the last
+    # writer wins with exactly one set, whatever the ordering.
+    try:
+        supabase.table("ai_recommendation").delete().eq("run_id", run_id).execute()
+    except Exception as e:
+        print(f"Warning: could not clear existing rows for run {run_id}: {e}")
+
+    try:
+        resp = supabase.table("ai_recommendation").insert(rows).execute()
+        return {"status": "inserted", "response": resp.data}
+    except Exception as e:
+        # Most likely migration 010 has not been applied yet, so the v2 columns
+        # don't exist. The recommendations themselves matter far more than the
+        # disclosure fields, so drop those and retry rather than lose the run.
+        if not any(key in row for row in rows for key in RANKING_V2_COLUMNS):
+            raise
+        print(f"Insert with ranking v2 columns failed ({e}); retrying without them")
+        legacy_rows = [
+            {k: v for k, v in row.items() if k not in RANKING_V2_COLUMNS} for row in rows
+        ]
+        resp = supabase.table("ai_recommendation").insert(legacy_rows).execute()
+        return {"status": "inserted_without_v2", "response": resp.data}
+
+
+# ---------------------------------------------------------------------------
+# Unified ranking v2 shadow log (see migrations/010)
+# ---------------------------------------------------------------------------
+# One row per (run, candidate) covering the WHOLE scoped set, not just the
+# surviving top 5. That breadth is the point: a strongly bearish asset never
+# reaches a top 5, and divergent hype names were already demoted out of it by the
+# old hype penalty, so neither the direction question nor the convergence term can
+# be evaluated from `ai_recommendation` alone.
+
+
+def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Record the v2 ranking breakdown for every candidate in a run, per night.
+
+    Rows are stamped with ``as_of_night`` (migration 011) so successive nights
+    ACCUMULATE instead of overwriting each other: run ids are reused per user, so
+    keying on (run_id, ticker) alone meant each night destroyed the one before it.
+
+    The night's slice is deleted before inserting rather than upserted, so a
+    same-night re-run replaces cleanly AND tickers that dropped out of the
+    candidate set don't linger as stale rows skewing the reports.
+
+    Best-effort: a failure here (e.g. migration 010/011 not yet applied) is
+    reported, never raised — shadow logging must not be able to fail an analysis.
+    """
+    if not run_id or not rows:
+        return {"status": "no_rows"}
+
+    night = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    payload = [{**row, "run_id": run_id, "as_of_night": night} for row in rows]
+    try:
+        supabase.table("ranking_shadow").delete().eq("run_id", run_id).eq(
+            "as_of_night", night
+        ).execute()
+    except Exception as e:
+        print(f"Could not clear tonight's ranking_shadow slice ({e}); continuing")
+    try:
+        supabase.table("ranking_shadow").insert(payload).execute()
+        return {"status": "saved", "rows": len(payload), "as_of_night": night}
+    except Exception as e:
+        print(f"Ranking shadow log failed (continuing): {e}")
+        return {"status": "error", "error": str(e)}
+
+
+def get_asset_universes(tickers: List[str]) -> Dict[str, str]:
+    """Return ``{ticker: universe}`` for the given tickers in one round trip.
+
+    Used to stamp each shadow row with the universe the asset was analysed UNDER
+    (migration 012), so a per-universe view needs no join and stays historically
+    accurate even if the asset is later reclassified. Missing tickers are simply
+    absent from the result — a watchlist ticker may have no assets row.
+    """
+    if not tickers:
+        return {}
+    try:
+        rows = (
+            supabase.table("assets")
+            .select("ticker,universe")
+            .in_("ticker", list(tickers))
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Could not read asset universes: {e}")
+        return {}
+    return {r["ticker"]: r["universe"] for r in rows if r.get("ticker")}
+
+
+def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
+    """Return ``{ticker: v2_rank}`` from this run's most recent EARLIER night.
+
+    Feeds the ranking tie-band: near-equal candidates keep the order they had last
+    night instead of flipping on noise. Returns ``{}`` on any failure or when there
+    is no prior night, so the caller degrades to "no hysteresis" rather than
+    failing — first run, missing migration and read error all behave the same.
+    """
+    if not run_id:
+        return {}
+    night = before_night or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    try:
+        rows = (
+            supabase.table("ranking_shadow")
+            .select("ticker,v2_rank,as_of_night")
+            .eq("run_id", run_id)
+            .lt("as_of_night", night)
+            .order("as_of_night", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        print(f"Could not read the previous ranking for {run_id}: {e}")
+        return {}
+    if not rows:
+        return {}
+    latest = rows[0].get("as_of_night")
+    return {
+        r["ticker"]: r["v2_rank"]
+        for r in rows
+        if r.get("as_of_night") == latest and r.get("v2_rank") is not None
+    }
 
 
 # ---------------------------------------------------------------------------

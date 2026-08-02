@@ -23,7 +23,7 @@ import {
 // sentiment scout pipeline (backend/src/agents/sentiment_scout.py).
 export default function SentimentMethodology() {
   return (
-    <div className="soft-card w-full space-y-6 p-6">
+    <div id="sentiment" className="soft-card w-full space-y-6 p-6" style={{ scrollMarginTop: "1.5rem" }}>
       <MethodologyCardHeader
         icon={MessageSquare}
         title="The Sentiment Score"
