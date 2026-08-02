@@ -72,6 +72,12 @@ class QuantMetrics:
 	beta: Optional[float] = None
 	volatility: Optional[float] = None
 	raw_quant_score: Optional[float] = None
+	trailing_return: Optional[float] = None
+	data_points: Optional[int] = None
+	sub_dimensions: Optional[Dict[str, Any]] = None
+	bands: Optional[Dict[str, Any]] = None
+	percentiles: Optional[Dict[str, Any]] = None
+	quant_normalisation: Optional[str] = None
 
 
 class Tracer:
