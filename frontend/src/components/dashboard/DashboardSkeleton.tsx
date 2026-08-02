@@ -19,16 +19,16 @@ export default function DashboardSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-lg p-6 bg-accent/50 border border-brand-border/40">
-        <div className="h-4 w-32 rounded bg-brand-border/40 mb-5" />
+      <div className="rounded-2xl p-6 bg-brand-primary">
+        <div className="h-4 w-32 rounded bg-white/15 mb-5" />
         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
-          <div className="h-48 rounded-2xl bg-brand-border/35" />
+          <div className="h-48 rounded-2xl bg-white/15" />
           <div className="space-y-3">
-            <div className="h-7 w-24 rounded bg-brand-border/35" />
-            <div className="h-5 w-40 rounded bg-brand-border/30" />
-            <div className="h-16 rounded-xl bg-brand-border/30" />
-            <div className="h-9 rounded-full bg-brand-border/30" />
-            <div className="h-20 rounded-2xl bg-brand-border/30" />
+            <div className="h-7 w-24 rounded bg-white/15" />
+            <div className="h-5 w-40 rounded bg-white/10" />
+            <div className="h-16 rounded-xl bg-white/10" />
+            <div className="h-9 rounded-full bg-white/10" />
+            <div className="h-20 rounded-2xl bg-white/10" />
           </div>
         </div>
       </div>

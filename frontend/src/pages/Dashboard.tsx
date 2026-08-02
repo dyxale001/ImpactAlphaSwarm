@@ -419,14 +419,16 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
         />
       )}
 
-      {/* Top Pick */}
-      <div className="bg-accent/90 backdrop-blur-xl rounded-lg p-6 relative z-50 overflow-visible transition-colors glass-card">
+      {/* Top Pick — dark hero surface, same recipe as the WhaleWatching header
+          (forest-700 + lime accents + light insets); extract a shared class when
+          a third consumer appears */}
+      <div className="relative z-50 overflow-visible rounded-2xl bg-brand-primary p-6">
         <Link
           to={`/asset/${topPick?.ticker}`}
-          className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit"
+          className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
         >
-          <Sparkles className="w-4 h-4 text-brand-primary" />
-          <span className="text-xs uppercase text-brand-primary font-semibold">
+          <Sparkles className="w-4 h-4 text-brand-accent" />
+          <span className="text-xs uppercase text-brand-accent font-semibold">
             {showTopPickScorecard
               ? "Highest signal for your profile"
               : "Top Pick Today"}
@@ -438,7 +440,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
               — it also made tapping an explainer navigate away instead of opening
               it. Only the plain ring stays clickable. */}
           {showTopPickScorecard ? (
-            <div className="w-full md:w-64 shrink-0">
+            <div className="w-full md:w-64 shrink-0 rounded-2xl bg-brand-bg p-4">
               <SignalScorecard
                 terms={{
                   signalStrength: topPick!.signalStrength,
@@ -454,7 +456,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
           ) : (
             <Link
               to={`/asset/${topPick?.ticker}`}
-              className="hover:opacity-80 transition-opacity relative z-50"
+              className="hover:opacity-80 transition-opacity relative z-50 rounded-2xl bg-brand-bg p-4 self-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               <ConfidenceRing
                 score={topPick?.confidenceScore || 0}
@@ -468,13 +470,13 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
               className="flex items-start gap-3 hover:opacity-80 transition-opacity w-fit"
             >
               <div>
-                <h2 className="text-2xl font-bold font-mono">
+                <h2 className="text-2xl font-bold font-mono text-brand-bg">
                   {topPick?.ticker}
                 </h2>
-                <span className="px-3 py-1 bg-primary rounded-full text-xs font-mono text-background bt-2">
+                <span className="inline-block mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-mono text-brand-bg">
                   {topPick?.name}
                 </span>
-                <div className="text-xl font-mono text-primary mt-3">
+                <div className="text-xl font-mono text-brand-bg mt-3">
                   R{" "}
                   <span className="font-mono">
                     {topPick?.currentPrice?.toFixed(2)}
@@ -490,12 +492,14 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
                 <Sparkles className="w-3 h-3" /> Discovered via trending
               </span>
             ) : null}
-            <DualBar
-              sentimentScore={topPick?.sentimentScore || 0}
-              quantitativeScore={topPick?.fundamentalsScore || 0}
-              quantPercentile={topPickQuantPercentile}
-            />
-            <div className="bg-brand-bg backdrop-blur-md rounded-2xl p-3 border border-brand-border/50 w-full h-auto">
+            <div className="rounded-2xl bg-brand-bg p-3">
+              <DualBar
+                sentimentScore={topPick?.sentimentScore || 0}
+                quantitativeScore={topPick?.fundamentalsScore || 0}
+                quantPercentile={topPickQuantPercentile}
+              />
+            </div>
+            <div className="bg-brand-bg rounded-2xl p-3 w-full h-auto">
               <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
                 <BrainCircuit className="w-3 h-3" />
                 Why it ranks here
@@ -507,7 +511,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
             <div className="flex items-center justify-start">
               <Link
                 to={`/asset/${topPick?.ticker}`}
-                className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold"
+                className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
               >
                 Full analysis <ArrowRight className="w-3 h-3" />
               </Link>
