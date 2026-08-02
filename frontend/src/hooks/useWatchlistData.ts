@@ -141,7 +141,7 @@ export function useWatchlistData() {
             sentimentScore:  r.sentiment_score  ?? 0,
             quantScore:      r.quant_score      ?? 0,
             reasoning:       r.reasoning_trace  ?? '',
-            isHype:          (r.hype_penalty    ?? 0) > 0,
+            isHype:          (r.hype_penalty    ?? 0) < 0,
             priceAtRun:      r.price_at_run     ?? 0,
             universe:        a.universe         ?? '',
           }
