@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { Eye, RefreshCw, ArrowUpDown, TrendingUp } from 'lucide-react'
 import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
 import { Link } from 'react-router-dom'
 import WatchlistSearch from '../components/watchlist/WatchlistSearch'
@@ -15,9 +15,6 @@ const SECTOR_DOT: Record<string, string> = {
 
 // ─── Top pick row — horizontal, spacious, readable ─────────────────────────
 function TopPickRow({ pick, index }: { pick: TopPick; index: number }) {
-  const scoreColor = (s: number) =>
-    s >= 70 ? 'text-brand-accent' : s >= 50 ? 'text-semantic-warning' : 'text-brand-primary'
-
   return (
     <div
       className="soft-card p-5 flex items-center gap-5 hover:border-brand-primary/30 transition-all"
@@ -75,7 +72,6 @@ export default function WatchlistPage() {
     topPicks,
     allRanked,
     showAllRanked,
-    setShowAllRanked,
     watchedAssets,
     displayedAssets,
     loading,
@@ -153,7 +149,6 @@ export default function WatchlistPage() {
                 Top {topPicks.length}
               </span>
             </div>
-            
           </div>
 
           <div className="space-y-2">
