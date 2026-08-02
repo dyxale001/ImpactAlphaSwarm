@@ -96,7 +96,7 @@ export default function WhaleWatchingPage() {
   const selected = ticker ? assetByTicker[ticker] : undefined;
 
   return (
-    <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
       {/* Header band. Forest ground with the wave motif breaking along the
           bottom edge, which is the one place on this page a literal wave earns
           its keep. Text sits on a relative layer so it clears the SVG. */}

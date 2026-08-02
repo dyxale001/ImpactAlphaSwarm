@@ -103,7 +103,7 @@ export default function WatchlistPage() {
 
 
   return (
-    <div className="max-w-6xl mx-auto pt-10 px-8 pb-16 space-y-10">
+    <div className="max-w-7xl mx-auto pt-10 px-8 pb-16 space-y-10">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       {/* Header band. Forest ground with a radar sweep rippling from the
