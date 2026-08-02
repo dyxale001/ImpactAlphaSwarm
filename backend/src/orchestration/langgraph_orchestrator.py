@@ -662,9 +662,9 @@ def synthesize_rankings(
 
     unified_scores = {}
 
-    for ticker in state["tickers"]:
-        quant = state["quant_results"].get(ticker, {})
-        sentiment = state["sentiment_results"].get(ticker, {})
+    for ticker in tickers:
+        quant = quant_results.get(ticker, {})
+        sentiment = sentiment_results.get(ticker, {})
 
         quant_score = quant.get("raw_quant_score", 50)
         sentiment_score = sentiment.get("sentiment_score", 50)
@@ -677,24 +677,15 @@ def synthesize_rankings(
         risk_penalty = 0
         beta = quant.get("beta", 1.0)
 
-        if state["risk_tolerance"] == "Conservative":
+        if risk_tolerance == "Conservative":
             if beta > 1.2:
                 risk_penalty = -15
-        elif state["risk_tolerance"] == "Aggressive":
+        elif risk_tolerance == "Aggressive":
             if sentiment_score > 70 and quant_score > 60:
                 risk_penalty = +5
 
         unified_score = quant_score * 0.5 + sentiment_score * 0.5 + hype_penalty + risk_penalty
         unified_score = max(0, min(100, unified_score))
-
-        reasoning = generate_reasoning_trace(
-            ticker=ticker,
-            quant_data=quant,
-            sentiment_data=sentiment,
-            adjustments={"hype_penalty": hype_penalty, "risk_penalty": risk_penalty},
-            risk_tolerance=state["risk_tolerance"],
-            expertise_level=state["expertise_level"],
-        )
 
         unified_scores[ticker] = {
             "ticker": ticker,
@@ -706,7 +697,7 @@ def synthesize_rankings(
             },
             "unified_score": unified_score,
             "beta": beta,
-            "reasoning": reasoning,
+            "reasoning": None,
         }
 
     legacy_order = sorted(
