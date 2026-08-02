@@ -5,18 +5,17 @@ export default function LearningCenterSkeleton() {
         Loading learning centre...
       </div>
 
-      <div className="-mx-4 rounded-lg bg-brand-bg/60 p-4 px-4 backdrop-blur-xl">
+      <div className="hero-card px-7 pt-8 pb-16">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <div className="h-4 w-28 rounded bg-brand-border/35" />
-            <div className="h-9 w-[min(32rem,100%)] rounded bg-brand-border/40" />
-            <div className="h-4 w-[min(42rem,100%)] rounded bg-brand-border/30" />
-            <div className="h-4 w-[min(38rem,100%)] rounded bg-brand-border/30" />
+          <div className="space-y-3">
+            <div className="h-3 w-28 rounded bg-white/15" />
+            <div className="h-9 w-[min(32rem,100%)] rounded bg-white/15" />
+            <div className="h-4 w-[min(42rem,100%)] rounded bg-white/10" />
           </div>
 
-          <div className="rounded-2xl border border-brand-border bg-brand-card px-4 py-3">
-            <div className="h-3 w-20 rounded bg-brand-border/30" />
-            <div className="mt-2 h-7 w-20 rounded bg-brand-border/40" />
+          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <div className="h-3 w-20 rounded bg-white/15" />
+            <div className="mt-2 h-7 w-20 rounded bg-white/10" />
           </div>
         </div>
       </div>
