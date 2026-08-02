@@ -1,6 +1,6 @@
 export default function LearningCenterSkeleton() {
   return (
-    <div className="relative mx-auto max-w-7xl animate-pulse space-y-6 px-8 pb-10 pt-10">
+    <div className="relative mx-auto max-w-7xl animate-pulse space-y-8 px-8 pb-16 pt-10">
       <div className="pointer-events-none fixed inset-y-0 left-64 right-0 z-30 flex items-center justify-center text-brand-fg">
         Loading learning centre...
       </div>

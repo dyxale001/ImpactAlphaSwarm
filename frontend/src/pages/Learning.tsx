@@ -299,7 +299,7 @@ export default function LearningPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-7xl space-y-8 px-6">
+      <div className="max-w-7xl mx-auto pt-10 px-8 pb-16 space-y-8">
         <div className="-mx-4 flex flex-col gap-4 rounded-lg bg-brand-bg/60 p-4 px-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-primary">
