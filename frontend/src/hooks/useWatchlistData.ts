@@ -147,7 +147,7 @@ export function useWatchlistData() {
           }
         }).filter((p: TopPick) => p.ticker)
 
-        setTopPicks(mapped.slice(0, 4))
+        setTopPicks(mapped.slice(0, 5))
         setAllRanked(mapped)
       }
     }
