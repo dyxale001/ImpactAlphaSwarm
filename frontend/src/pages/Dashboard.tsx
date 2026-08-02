@@ -419,10 +419,9 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
         />
       )}
 
-      {/* Top Pick — dark hero surface, same recipe as the WhaleWatching header
-          (forest-700 + lime accents + light insets); extract a shared class when
-          a third consumer appears */}
-      <div className="relative z-50 overflow-visible rounded-2xl bg-brand-primary p-6">
+      {/* Top Pick — dark hero surface (hero-card), same family as the
+          WhaleWatching and Watchlist headers */}
+      <div className="hero-card z-50 overflow-visible p-6">
         <Link
           to={`/asset/${topPick?.ticker}`}
           className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"

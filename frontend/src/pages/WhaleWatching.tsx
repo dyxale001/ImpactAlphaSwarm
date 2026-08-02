@@ -100,7 +100,7 @@ export default function WhaleWatchingPage() {
       {/* Header band. Forest ground with the wave motif breaking along the
           bottom edge, which is the one place on this page a literal wave earns
           its keep. Text sits on a relative layer so it clears the SVG. */}
-      <div className="relative overflow-hidden rounded-2xl bg-brand-primary px-7 pt-8 pb-16">
+      <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
         <WaveMotif className="h-24" />
         <div className="relative">
           <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
