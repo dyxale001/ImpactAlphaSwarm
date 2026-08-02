@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Eye, FileText, PencilLine, Save, RotateCcw } from "lucide-react";
+import { Eye, PencilLine, Save, RotateCcw } from "lucide-react";
 import MarkdownRenderer from "../learning/MarkdownRenderer";
 import MarkdownSyntaxHelper from "./MarkdownSyntaxHelper";
 import type { LearningCategory } from "../../data/learningContent";
 import type { LearningArticleFormValues } from "../../hooks/useAdminLearningArticles";
+
+const difficultyOptions = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
 
 type LearningArticleFormProps = {
   values: LearningArticleFormValues;
@@ -47,39 +49,9 @@ export default function LearningArticleForm({
             assignment.
           </p>
         </div>
-        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-brand-primary/10 text-brand-primary">
-          <FileText className="h-5 w-5" />
-        </div>
       </div>
 
       <div className="p-5 lg:p-6 space-y-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setViewMode("edit")}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              viewMode === "edit"
-                ? "bg-brand-fg text-brand-bg"
-                : "border border-brand-border bg-brand-card text-brand-muted-fg hover:text-brand-fg"
-            }`}
-          >
-            <PencilLine className="w-4 h-4" />
-            Editor
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("preview")}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              viewMode === "preview"
-                ? "bg-brand-fg text-brand-bg"
-                : "border border-brand-border bg-brand-card text-brand-muted-fg hover:text-brand-fg"
-            }`}
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-        </div>
-
         <div className="grid grid-cols-1 gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
@@ -105,6 +77,27 @@ export default function LearningArticleForm({
               className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
               placeholder="understanding-the-jse"
             />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+              Difficulty Level
+            </label>
+            <select
+              value={values.difficulty_level}
+              onChange={(event) =>
+                onChange("difficulty_level", event.target.value)
+              }
+              required
+              className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-y"
+            >
+              <option value="">Select a difficulty level</option>
+              {difficultyOptions.map((difficultyLevel) => (
+                <option key={difficultyLevel} value={difficultyLevel}>
+                  {difficultyLevel}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -138,6 +131,33 @@ export default function LearningArticleForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewMode("edit")}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                viewMode === "edit"
+                  ? "bg-brand-fg text-brand-bg"
+                  : "border border-brand-border bg-brand-card text-brand-muted-fg hover:text-brand-fg"
+              }`}
+            >
+              <PencilLine className="w-4 h-4" />
+              Editor
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("preview")}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                viewMode === "preview"
+                  ? "bg-brand-fg text-brand-bg"
+                  : "border border-brand-border bg-brand-card text-brand-muted-fg hover:text-brand-fg"
+              }`}
+            >
+              <Eye className="w-4 h-4" />
+              Preview
+            </button>
           </div>
 
           {viewMode === "edit" ? (

@@ -1,4 +1,4 @@
-import type { LearningArticle } from "../../data/learningContent";
+import type { LearningArticle } from "../../types/learning";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const scrollbarStyles = `
@@ -72,6 +72,9 @@ flex-col
                 <span className="inline-flex items-center rounded-full border border-brand-primary/15 bg-brand-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-primary">
                   Learning Article
                 </span>
+                <div className="inline-flex rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+                  {article.difficulty_level}
+                </div>
               </div>
               <button
                 onClick={onClose}

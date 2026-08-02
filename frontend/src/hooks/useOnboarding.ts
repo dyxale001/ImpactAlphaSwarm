@@ -7,8 +7,8 @@ import { startAnalysis, getStatus, getResult } from '../services/api/analysis'
 import { pollUntilComplete } from '../services/api/poll'
 import { inferUniverseFromAssets } from '../utils/onboardingData'
 
-// Total steps: 1=Path, 2=Assets, 3=Capital, 4=Survey, 5=Review
-const TOTAL_STEPS = 5
+// Total steps: 1=Path, 2=Assets, 3=Survey, 4=Review
+const TOTAL_STEPS = 4
 const SUBMIT_STEP = TOTAL_STEPS
 
 export function useOnboarding() {
@@ -20,10 +20,11 @@ export function useOnboarding() {
   // ── New: investor path & familiar asset picks ──────────────────────────
   const [investorPath, setInvestorPath] = useState('')
   const [familiarAssets, setFamiliarAssets] = useState<string[]>([])
+  // Opt-in: also save the user's familiar picks to their watchlist
+  const [addPicksToWatchlist, setAddPicksToWatchlist] = useState(true)
 
   // ── Existing form data ─────────────────────────────────────────────────
   const [formData, setFormData] = useState({
-    capital: '',
     surveyAnswers: {} as Record<string, string>,
     universe: [] as string[],
   })
@@ -77,11 +78,6 @@ export function useOnboarding() {
     }
 
     if (step === 3) {
-      if (!formData.capital || parseFloat(formData.capital) <= 0)
-        return setError('Please enter valid initial capital.')
-    }
-
-    if (step === 4) {
       if (Object.keys(formData.surveyAnswers).length < 20)
         return setError('Please answer all survey questions.')
       if (formData.universe.length === 0)
@@ -96,7 +92,7 @@ export function useOnboarding() {
     setStep(prev => prev - 1)
   }
 
-  // ── Final submit (step 5) ──────────────────────────────────────────────
+  // ── Final submit (step 4) ──────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -124,7 +120,6 @@ export function useOnboarding() {
 
     const analysisPayload = {
       user_id: currentUserId,
-      capital: parseFloat(formData.capital),
       risk_tolerance: psychometrics.riskTolerance,
       investment_universe: formData.universe,
       survey_answers: {
@@ -148,6 +143,29 @@ export function useOnboarding() {
     }
 
     await fetchProfile(currentUserId)
+
+    // Save familiar-asset picks to the watchlist if the user opted in.
+    // Wrapped so a failure here can never block onboarding from completing.
+    if (addPicksToWatchlist && familiarAssets.length > 0) {
+      try {
+        const { data: assetRows } = await supabase
+          .from('assets')
+          .select('id, ticker')
+          .in('ticker', familiarAssets)
+
+        const idByTicker = new Map((assetRows || []).map(a => [a.ticker, a.id]))
+
+        await supabase.from('user_watchlist_assets').insert(
+          familiarAssets.map(ticker => ({
+            user_id: currentUserId,
+            ticker,
+            ...(idByTicker.get(ticker) ? { asset_id: idByTicker.get(ticker) } : {}),
+          }))
+        )
+      } catch (err) {
+        console.warn('Could not save watchlist picks:', err)
+      }
+    }
 
     try {
       const { run_id } = await startAnalysis({
@@ -182,6 +200,8 @@ export function useOnboarding() {
     setInvestorPath,
     familiarAssets,
     toggleFamiliarAsset,
+    addPicksToWatchlist,
+    setAddPicksToWatchlist,
     // Existing
     handleSubmit,
     toggleUniverse,

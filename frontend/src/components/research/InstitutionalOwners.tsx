@@ -79,8 +79,8 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
     <section className="soft-card w-full p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-            <Building2 className="w-3 h-3 text-brand-primary" />
+          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
+            <Building2 className="w-3 h-3" />
             Institutional Owners
           </p>
           <p className="text-sm text-brand-muted-fg">
@@ -132,7 +132,7 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
           {holders.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold">
                   Top holders
                 </p>
                 {(addedCount > 0 || reducedCount > 0) && (

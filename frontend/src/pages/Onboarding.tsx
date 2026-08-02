@@ -1,6 +1,5 @@
-import { Layers, ArrowUpRight, Activity, Search, Check, Cpu, Zap, TrendingUp, Bot, Heart } from 'lucide-react'
+import { Layers, ArrowUpRight, Activity, Search, Check, Cpu, Zap, TrendingUp, Bot, Heart, Eye } from 'lucide-react'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { formatNumberWithSpaces, unformatNumberSpaces } from '../utils/stringFormatters'
 import { SURVEY_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import InvestorCard from '../components/InvestorCard'
 import { useAuthStore } from '../store/authStore'
@@ -32,7 +31,6 @@ export default function Onboarding() {
   const {
     step,
     formData,
-    setFormData,
     error,
     loading,
     psychometrics,
@@ -40,19 +38,19 @@ export default function Onboarding() {
     setInvestorPath,
     familiarAssets,
     toggleFamiliarAsset,
+    addPicksToWatchlist,
+    setAddPicksToWatchlist,
     handleSubmit,
     toggleUniverse,
     prevStep,
     handleSurveyAnswer,
   } = useOnboarding()
 
-  const defaultInput = 'bg-brand-bg border border-brand-border text-brand-fg placeholder:text-brand-border p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-accent focus:border-brand-accent transition-all w-full'
-
   const answeredCount = Object.keys(formData.surveyAnswers).length
   const totalQuestions = SURVEY_QUESTIONS.length
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100)
 
-  const stepTitles = ['Your Path', 'What You Know', 'Capital', 'Assessment', 'Profile']
+  const stepTitles = ['Your Path', 'What You Know', 'Assessment', 'Profile']
 
   return (
     <div className="min-h-screen py-6 md:py-12 flex items-center justify-center bg-brand-bg auth-bg p-4 relative overflow-hidden selection:bg-brand-primary selection:text-white">
@@ -97,13 +95,12 @@ export default function Onboarding() {
           <h1 className="text-2xl md:text-3xl font-bold text-brand-fg tracking-tight">
             {step === 1 && 'How do you like to invest?'}
             {step === 2 && 'What do you already follow?'}
-            {step === 3 && 'Starting Capital'}
-            {step === 4 && 'Risk Profile Assessment'}
-            {step === 5 && 'Profile Authorised'}
+            {step === 3 && 'Risk Profile Assessment'}
+            {step === 4 && 'Profile Authorised'}
           </h1>
           <p className="text-brand-muted-fg mt-1.5 text-sm">
             {step === 1 && 'Pick the style that sounds most like you — adjustable any time.'}
-            {step === 2 && "Select companies you recognise. We'll use your picks to suggest sectors."}
+            {step === 2 && "Select companies you recognise — we'll suggest sectors and can start your watchlist."}
             {step === 3 && 'Sets the foundation for position sizing calculations.'}
             {step === 4 && 'Calibrates your AI risk mandate and recommendation filter.'}
             {step === 5 && 'Review your AI-generated institutional profile.'}
@@ -241,34 +238,33 @@ export default function Onboarding() {
                 </div>
               )
             })()}
+
+            {/* Watchlist opt-in */}
+            {familiarAssets.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setAddPicksToWatchlist(!addPicksToWatchlist)}
+                aria-pressed={addPicksToWatchlist}
+                className="shrink-0 mt-2 flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-brand-border/40 bg-brand-bg/20 hover:border-brand-border/70 transition-colors text-left animate-in fade-in duration-300"
+              >
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                  addPicksToWatchlist
+                    ? 'bg-brand-primary border-brand-primary'
+                    : 'border-brand-muted-fg/40'
+                }`}>
+                  {addPicksToWatchlist && <Check size={9} strokeWidth={3.5} className="text-white" />}
+                </span>
+                <Eye className="w-3.5 h-3.5 text-brand-muted-fg shrink-0" />
+                <span className="text-[11px] text-brand-fg">
+                  Also add {familiarAssets.length === 1 ? 'this' : 'these'} to my watchlist
+                </span>
+              </button>
+            )}
           </div>
         )}
 
-        {/* ── STEP 3: Capital ────────────────────────────────────────────── */}
+        {/* ── STEP 3: Survey & Sectors ───────────────────────────────────── */}
         {step === 3 && (
-          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-400">
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-[10px] text-brand-muted-fg font-bold tracking-[0.12em] uppercase">
-                Starting Capital (ZAR)
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted-fg font-bold">R</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="250 000"
-                  value={formatNumberWithSpaces(formData.capital)}
-                  onChange={e => setFormData({ ...formData, capital: unformatNumberSpaces(e.target.value) })}
-                  className={`${defaultInput} pl-9 text-lg font-medium`}
-                />
-              </div>
-              <p className="text-xs text-brand-muted-fg mt-0.5">Determines position sizing across recommendations.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 4: Survey & Sectors ───────────────────────────────────── */}
-        {step === 4 && (
           <div className="flex flex-col flex-1 min-h-0 animate-in fade-in slide-in-from-right-4 duration-400">
 
             {/* Progress */}
@@ -360,13 +356,12 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* ── STEP 5: Profile Review ─────────────────────────────────────── */}
-        {step === 5 && (
+        {/* ── STEP 4: Profile Review ─────────────────────────────────────── */}
+        {step === 4 && (
           <div className="flex flex-col gap-5 animate-in zoom-in-95 fade-in duration-400 overflow-y-auto py-4">
             <InvestorCard
               firstName={user?.user_metadata?.first_name || 'Authorised'}
               lastName={user?.user_metadata?.last_name || 'Investor'}
-              capital={formData.capital}
               universe={formData.universe}
               tolerance={psychometrics.riskTolerance}
               expertise={psychometrics.calculatedExpertise}
@@ -403,15 +398,14 @@ export default function Onboarding() {
 
           <button
             type="submit"
-            disabled={loading || (step === 4 && (progressPercent < 100 || formData.universe.length === 0))}
+            disabled={loading || (step === 3 && (progressPercent < 100 || formData.universe.length === 0))}
             className="flex-1 bg-accent hover:bg-accent/80 hover:shadow-glow-accent text-brand-fg py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none"
           >
             {loading
               ? 'Initializing AlphaSwarm…'
               : step === 1 ? 'Continue'
               : step === 2 ? (familiarAssets.length > 0 ? `Continue with ${familiarAssets.length} picks` : 'Continue')
-              : step === 3 ? 'Continue to Assessment'
-              : step === 4 ? 'Generate Profile'
+              : step === 3 ? 'Generate Profile'
               : 'Confirm & Enter Dashboard'}
           </button>
         </div>

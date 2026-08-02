@@ -14,6 +14,12 @@ from typing import Optional
 
 import httpx
 
+from .descriptions import (
+    FUND_BLURB_FALLBACK,
+    curated_fund_blurb,
+    normalise_fund_key,
+    read_fund_descriptions,
+)
 from .supabase_client import supabase
 
 logger = logging.getLogger("alpha-api")
@@ -271,109 +277,102 @@ def write_institutions_cache(symbol: str, payload: dict) -> str:
 
 # ── Fund holdings (institutional data inverted: fund → its positions) ──────────
 
-# Plain-English descriptions for the funds people are most likely to see, matched
-# on a normalised substring of the fund name. Edit these freely; they ship in the
-# /api/funds payload so no frontend redeploy is needed to change the wording.
-FUND_BLURBS: list[tuple[str, str]] = [
-    ("blackrock", "The biggest investment manager in the world. It runs the iShares range of ETFs and looks after money for pension funds, governments and ordinary savers."),
-    ("vanguard", "Owned by its own funds rather than outside shareholders, and famous for making cheap index funds popular. One of the largest investment managers around."),
-    ("state street", "It launched the first American ETF, the SPDR fund known as SPY, and is a big index manager and custodian bank."),
-    ("geode", "A quiet index manager that runs many of Fidelity's index funds behind the scenes."),
-    ("fmr", "The parent company of Fidelity, a large privately owned manager of mutual funds, share dealing and pensions."),
-    ("fidelity", "A large privately owned investment manager offering mutual funds, share dealing and pensions."),
-    ("morgan stanley", "A global investment bank. Its fund management arm invests for big institutions and wealthy clients."),
-    ("jpmorgan", "The fund management side of America's biggest bank."),
-    ("jp morgan", "The fund management side of America's biggest bank."),
-    ("goldman", "The fund management side of the Wall Street bank Goldman Sachs."),
-    ("berkshire", "Warren Buffett's holding company, known for backing a small number of companies and holding them for many years."),
-    ("norges", "Norway's sovereign wealth fund. It is one of the largest investors in the world, built from the country's oil money."),
-    ("t. rowe", "A long established manager of actively run mutual funds and pension products."),
-    ("capital", "One of the oldest and biggest active managers, home to the American Funds range."),
-    ("wellington", "A large privately owned firm that manages money for institutions and other fund companies."),
-    ("invesco", "A global manager best known for its QQQ fund, which tracks the Nasdaq 100 index."),
-    ("northern trust", "A custody bank and investment manager serving institutions and wealthy families."),
-    ("schwab", "A big broker whose fund arm runs cheap index funds and ETFs."),
-    ("dimensional", "A manager known as DFA that builds its funds around academic research on how markets behave."),
-    ("mellon", "BNY Mellon, one of the largest custodian banks and investment managers in the world."),
-    ("franklin", "Franklin Templeton, a global manager of mutual funds and ETFs across many markets."),
-    ("ubs", "A Swiss bank and one of the biggest wealth managers in the world, looking after money for rich individuals and institutions."),
-    ("deutsche", "The fund arm of Deutsche Bank, known as DWS, managing money across shares, bonds and property."),
-    ("pimco", "A specialist in bonds and one of the largest fixed income managers anywhere."),
-    ("allianz", "A giant German insurer whose fund arm invests the premiums it collects, and the parent of PIMCO."),
-    ("wells fargo", "The fund arm of Wells Fargo, one of America's largest high street banks."),
-    ("bank of america", "The fund and wealth arm of Bank of America, which also owns the Merrill brand."),
-    ("merrill", "The wealth and investment side of Bank of America, a long established American broker."),
-    ("legal & general", "A large British insurer and one of the biggest managers of pension money in the UK, known as LGIM."),
-    ("legal and general", "A large British insurer and one of the biggest managers of pension money in the UK, known as LGIM."),
-    ("schroders", "One of Britain's oldest and largest investment managers, running funds for institutions and savers."),
-    ("aberdeen", "A British manager, now called abrdn, offering funds across shares, bonds and property."),
-    ("abrdn", "A British manager offering funds across shares, bonds and property, formerly Aberdeen."),
-    ("nuveen", "The fund arm of American pensions giant TIAA, with a strong focus on income and real assets."),
-    ("bridgewater", "The world's largest hedge fund, famous for trading on big economic trends."),
-    ("citadel", "A large American hedge fund and market maker known for fast, computer driven trading."),
-    ("renaissance", "A secretive hedge fund that trades using heavy maths and statistics, run by former scientists."),
-    ("royal bank of canada", "The fund arm of Canada's largest bank, known as RBC."),
-    ("bank of montreal", "The fund arm of one of Canada's oldest banks, known as BMO."),
-    ("macquarie", "An Australian bank and one of the world's biggest investors in infrastructure like roads and airports."),
-]
-
-_FUND_BLURB_FALLBACK = (
-    "An institutional investment firm that buys and holds shares in companies on "
-    "behalf of its clients."
-)
-
-
-def fund_description(name: str) -> str:
-    """Return a plain-English blurb for a fund, matched on its name."""
-    lowered = (name or "").lower()
-    for match, text in FUND_BLURBS:
-        if match in lowered:
-            return text
-    return _FUND_BLURB_FALLBACK
-
-
 def with_descriptions(funds: list[dict]) -> list[dict]:
-    """Attach a fresh `description` to each fund. Applied at serve time so edits to
-    FUND_BLURBS take effect immediately, even for funds cached before this field
-    existed. Mutates and returns the list."""
+    """Attach a fresh ``description`` to each fund, applied at serve time so a
+    newly generated blurb shows up without rebuilding the holdings cache.
+
+    Resolution order per fund:
+      1. the cached row in ``fund_descriptions`` (written by the nightly LLM
+         backfill, or hand-edited with is_manual set)
+      2. a curated blurb for one of the big names, covering the window before the
+         first backfill has run
+      3. the generic fallback
+
+    One bulk read serves the whole list. Mutates and returns ``funds``.
+    """
+    cached = read_fund_descriptions()
     for f in funds:
-        f["description"] = fund_description(f.get("fund", ""))
+        name = f.get("fund", "")
+        f["description"] = (
+            cached.get(normalise_fund_key(name))
+            or curated_fund_blurb(name)
+            or FUND_BLURB_FALLBACK
+        )
     return funds
 
 
-def build_fund_holdings(assets: list[dict]) -> list[dict]:
-    """Invert per-ticker institutional data into per-fund holdings across the given
-    tracked assets ([{ticker, universe}, ...]).
+def read_all_institutions_cache(fresh_only: bool = False) -> dict[str, dict]:
+    """Bulk-read the per-ticker institutional cache as {ticker: payload}.
 
-    Scoped to the companies we cover — a fund's positions here are only in our
-    tracked assets, not its whole portfolio. Reuses the per-ticker institutional
-    cache in bulk and only fetches tickers that aren't already cached fresh.
-    Returns funds sorted by total value held across the universe, each with its
-    positions (biggest first). Blocking — call via run_in_executor.
+    ``fresh_only`` restricts to rows inside INSTITUTIONS_CACHE_TTL. The nightly
+    warm wants that, since it only refetches what has gone stale; serving wants
+    everything, because a stale 13F snapshot still beats showing nothing.
     """
-    # Bulk-read fresh per-ticker caches so we refetch as little as possible.
-    fresh_cache: dict[str, dict] = {}
+    out: dict[str, dict] = {}
     try:
         res = (
             supabase.table("institutional_holders_cache")
             .select("ticker, payload, fetched_at")
             .execute()
         )
-        for row in res.data or []:
-            if cache_is_fresh(row, INSTITUTIONS_CACHE_TTL):
-                fresh_cache[row["ticker"]] = row.get("payload") or {}
     except Exception as e:
         logger.info("Bulk institutions cache read failed: %s", e)
+        return out
+    for row in res.data or []:
+        if fresh_only and not cache_is_fresh(row, INSTITUTIONS_CACHE_TTL):
+            continue
+        out[row["ticker"]] = row.get("payload") or {}
+    return out
+
+
+def refresh_institutions_cache(assets: list[dict]) -> dict:
+    """Warm the institutional cache: refetch every tracked asset whose row is
+    missing or past INSTITUTIONS_CACHE_TTL. Blocking and slow (one yfinance call
+    per stale ticker), so this belongs in the nightly job.
+
+    Doing it here is what keeps ``build_fund_holdings`` a pure in-memory
+    aggregation. Left inside the /api/funds request, the first call after the
+    weekly TTL expired paid for the whole pool while the user waited, and that
+    bill grows every night the discovery agent adds tickers.
+    """
+    fresh = read_all_institutions_cache(fresh_only=True)
+    refreshed, failed = 0, 0
+    for asset in assets:
+        ticker = (asset.get("ticker") or "").upper()
+        if not ticker or ticker in fresh:
+            continue
+        try:
+            write_institutions_cache(ticker, fetch_institutional(ticker))
+            refreshed += 1
+        except Exception as e:
+            logger.info("Institutional refresh failed for %s: %s", ticker, e)
+            failed += 1
+    return {"refreshed": refreshed, "failed": failed, "already_fresh": len(fresh)}
+
+
+def build_fund_holdings(assets: list[dict]) -> list[dict]:
+    """Invert per-ticker institutional data into per-fund holdings across the given
+    tracked assets ([{ticker, universe}, ...]).
+
+    Scoped to the companies we cover, so a fund's positions here are only in our
+    tracked assets, not its whole portfolio. Pure aggregation over whatever the
+    institutional cache already holds: an uncached ticker is skipped rather than
+    fetched, which is what makes this safe to run inside a request.
+    ``refresh_institutions_cache`` (nightly) is what fills that cache.
+
+    Returns funds sorted by total value held, each with its positions (biggest
+    first).
+    """
+    cache = read_all_institutions_cache()
 
     funds: dict[str, dict] = {}
     for asset in assets:
         ticker = (asset.get("ticker") or "").upper()
         if not ticker:
             continue
-        payload = fresh_cache.get(ticker)
+        payload = cache.get(ticker)
         if payload is None:
-            payload = fetch_institutional(ticker)
-            write_institutions_cache(ticker, payload)
+            continue  # not fetched yet; the nightly warm will pick it up
         for holder in payload.get("holders") or []:
             name = holder.get("holder")
             if not name:
@@ -393,8 +392,9 @@ def build_fund_holdings(assets: list[dict]) -> list[dict]:
     result = list(funds.values())
     for entry in result:
         entry["positions"].sort(key=lambda p: p.get("value") or 0, reverse=True)
-        entry["description"] = fund_description(entry["fund"])
     result.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
+    # Descriptions are attached by with_descriptions() at serve time, not baked
+    # into the cached payload, so a blurb generated after this build still shows.
     return result
 
 
@@ -424,3 +424,30 @@ def write_funds_cache(funds: list) -> str:
     except Exception as e:
         logger.warning("Funds cache write failed: %s", e)
     return fetched_at
+
+
+ACTIVE_ASSET_COLUMNS = "ticker, name, universe, origin, first_discovered_at, description"
+
+
+def read_active_assets() -> list[dict]:
+    """The assets whale watching should show: active, and not currently benched.
+
+    The discovery agent soft-retires and quarantines rows rather than deleting
+    them (migration 009), so an unfiltered read of ``assets`` keeps surfacing
+    companies the agent has already dropped. Every whale-watching read goes
+    through here so that cannot happen in one place and not another.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        res = (
+            supabase.table("assets")
+            .select(ACTIVE_ASSET_COLUMNS)
+            .eq("is_active", True)
+            .or_(f"quarantined_until.is.null,quarantined_until.lt.{now}")
+            .order("ticker")
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        logger.info("Active assets read failed: %s", e)
+        return []

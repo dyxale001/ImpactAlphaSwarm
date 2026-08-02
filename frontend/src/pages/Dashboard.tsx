@@ -12,6 +12,7 @@ import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
 import { type AssetRecommendation } from "../hooks/useDashboardStats";
 import { supabase } from "../lib/supabase";
+import { type AssetSearchResult } from "../hooks/useWatchlistData";
 
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import DualBar from "../components/dashboard/DualBar";
@@ -21,6 +22,7 @@ import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 import { CONVERGENCE_HEADLINE, CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
+import WatchlistSearch from "../components/watchlist/WatchlistSearch";
 
 import {
   startAnalysis,
@@ -87,6 +89,39 @@ export default function DashboardPage() {
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [exchangeRateSource, setExchangeRateSource] =
     useState<string>("Yahoo Finance");
+
+  // ── Watchlist search (inline — no separate hook needed) ────────────────
+  const [wlSearch, setWlSearch]   = useState("");
+  const [wlResults, setWlResults] = useState<any[]>([]);
+  const [wlLoading, setWlLoading] = useState(false);
+
+  const BASE = import.meta.env.VITE_API_BASE ?? "";
+
+  useEffect(() => {
+    if (!wlSearch.trim()) { setWlResults([]); return; }
+    const timer = setTimeout(async () => {
+      setWlLoading(true);
+      try {
+        const res  = await fetch(`${BASE}/api/assets/search?q=${encodeURIComponent(wlSearch)}`);
+        const data = res.ok ? await res.json() : { results: [] };
+        setWlResults(data.results || []);
+      } catch { setWlResults([]); }
+      setWlLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [wlSearch, BASE]);
+
+const handleAddToWatchlist = async (result: AssetSearchResult) => {
+  if (!profile?.id) return;
+  const { error } = await supabase
+    .from("user_watchlist_assets")
+    .insert({
+      user_id: profile.id,
+      ticker:  result.ticker,
+      ...(result.asset_id ? { asset_id: result.asset_id } : {}),
+    });
+  if (!error) setWlSearch("");
+};
 
   const escapeCsvValue = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);
@@ -235,9 +270,18 @@ export default function DashboardPage() {
         ? analysis.investment_universe
         : [];
 
+      // Fetch user's actual watchlist tickers to merge into this run
+      const { data: wlRows } = await supabase
+        .from("user_watchlist_assets")
+        .select("ticker, assets(ticker)")
+        .eq("user_id", profile.id);
+      const watchlistTickers = (wlRows || [])
+        .map((r: any) => r.ticker || r.assets?.ticker)
+        .filter(Boolean) as string[];
+
       const { run_id } = await startAnalysis({
         universes,
-        watchlist: [],
+        watchlist: watchlistTickers,
         risk_tolerance: analysis?.risk_tolerance ?? "Moderate",
         expertise_level: analysis?.ai_derived_expertise ?? "novice",
       });
@@ -470,6 +514,20 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Watchlist Search */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-muted-fg mb-2">
+          Add to Watchlist
+        </p>
+        <WatchlistSearch
+          search={wlSearch}
+          setSearch={setWlSearch}
+          searchResults={wlResults}
+          searchLoading={wlLoading}
+          onAdd={handleAddToWatchlist}
+        />
       </div>
 
       {/* Grid */}

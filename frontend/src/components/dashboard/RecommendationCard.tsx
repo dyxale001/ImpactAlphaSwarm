@@ -11,6 +11,7 @@ import {
   CONVERGENCE_DETAIL,
 } from "../../data/signalCopy";
 import DualBar from "./DualBar";
+import AddToWatchlistButton from "./Addtowatchlistbutton";
 
 // The four preview tabs (Overview / Vibe / Numbers / Hype) were removed. Three of
 // them restated numbers already on the card — the sentiment score, the quant
@@ -147,6 +148,7 @@ export default function RecommendationCard({
         >
           Full analysis <ArrowRight className="w-3 h-3" />
         </Link>
+        <AddToWatchlistButton ticker={asset.ticker} />
       </div>
     </div>
   );

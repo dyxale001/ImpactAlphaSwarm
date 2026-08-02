@@ -45,7 +45,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     groq_llm = ChatGroq(
         api_key=GROQ_API_KEY,
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model="llama-3.3-70b-versatile",
         temperature=0.3,
         max_tokens=300,
     )
@@ -224,10 +224,10 @@ Technical Signals:
 - Sharpe Ratio: {quant_data.get('sharpe_ratio', 'N/A')}
 - Beta: {beta_text}
 
-Market Sentiment (news weighted higher than social):
+Market Sentiment:
 - Sentiment Score: {sentiment_data.get('sentiment_score', 'N/A')}/100
-- News Sentiment: {sentiment_data.get('news_sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted-source articles ({sentiment_data.get('news_bullish', 0)} positive, {sentiment_data.get('news_bearish', 0)} negative)
-- Social Sentiment: {sentiment_data.get('social_sentiment_score', 'N/A')}/100 from {sentiment_data.get('mention_count', 0)} posts ({sentiment_data.get('bullish_posts', 0)} bullish, {sentiment_data.get('bearish_posts', 0)} bearish)
+- Bullish Posts: {sentiment_data.get('bullish_posts', 0)}
+- Bearish Posts: {sentiment_data.get('bearish_posts', 0)}
 
 Risk Adjustments:
 - Hype Penalty: {adjustments.get('hype_penalty', 0)}
@@ -274,6 +274,7 @@ class AnalysisState(TypedDict):
     final_rankings: list[dict]
     run_id: str
     status: str
+
 
 
 # Hard cap on tickers analysed per run. Bounds the manual-run latency budget and
@@ -398,10 +399,16 @@ def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> l
     return ordered[:MAX_SCOPED_TICKERS]
 
 
+
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 1: Initializing session and scoping data...")
 
-    tickers = scope_tickers(state["universes"], state["watchlist"])
+    from ..utils.supabase_client import get_assets_by_universes
+
+    # Fetch tickers from Supabase by universe
+    tickers = get_assets_by_universes(state["universes"])
+    tickers.extend(state["watchlist"])
+    tickers = list(set(tickers))[:30]
 
     print(f"Curated {len(tickers)} tickers for analysis")
     tracer = get_tracer()
@@ -442,12 +449,6 @@ def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
                     beta=metrics.get("beta"),
                     volatility=metrics.get("volatility"),
                     raw_quant_score=metrics.get("raw_quant_score"),
-                    trailing_return=metrics.get("trailing_return"),
-                    data_points=metrics.get("data_points"),
-                    sub_dimensions=metrics.get("sub_dimensions"),
-                    bands=metrics.get("bands"),
-                    percentiles=metrics.get("percentiles"),
-                    quant_normalisation=metrics.get("quant_normalisation"),
                 )
                 tracer.add_quant_metrics(ticker, quant_metrics)
             tracer.log_step("phase_2_quant", {"count": len(quant_results), "tickers": list(quant_results.keys())})
@@ -465,10 +466,7 @@ def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
     print("- Phase 2B: Sentiment Scout scraping social signals...")
     tracer = get_tracer()
     try:
-        # User refresh: read tier-1 from the nightly Marketaux cache (no API call),
-        # so tier-1 articles remain visible without spending the call budget. The
-        # API is only hit by the nightly batch (run_daily_batch, marketaux="fetch").
-        sentiment_results = analyze_sentiment_tickers(state["tickers"], marketaux="cache")
+        sentiment_results = analyze_sentiment_tickers(state["tickers"])
     except Exception as e:
         logger.warning("Sentiment scout failed: %s", e)
         print("Sentiment scout failed; no sentiment results available")
@@ -664,9 +662,9 @@ def synthesize_rankings(
 
     unified_scores = {}
 
-    for ticker in tickers:
-        quant = quant_results.get(ticker, {})
-        sentiment = sentiment_results.get(ticker, {})
+    for ticker in state["tickers"]:
+        quant = state["quant_results"].get(ticker, {})
+        sentiment = state["sentiment_results"].get(ticker, {})
 
         quant_score = quant.get("raw_quant_score", 50)
         sentiment_score = sentiment.get("sentiment_score", 50)
@@ -679,15 +677,24 @@ def synthesize_rankings(
         risk_penalty = 0
         beta = quant.get("beta", 1.0)
 
-        if risk_tolerance == "Conservative":
+        if state["risk_tolerance"] == "Conservative":
             if beta > 1.2:
                 risk_penalty = -15
-        elif risk_tolerance == "Aggressive":
+        elif state["risk_tolerance"] == "Aggressive":
             if sentiment_score > 70 and quant_score > 60:
                 risk_penalty = +5
 
         unified_score = quant_score * 0.5 + sentiment_score * 0.5 + hype_penalty + risk_penalty
         unified_score = max(0, min(100, unified_score))
+
+        reasoning = generate_reasoning_trace(
+            ticker=ticker,
+            quant_data=quant,
+            sentiment_data=sentiment,
+            adjustments={"hype_penalty": hype_penalty, "risk_penalty": risk_penalty},
+            risk_tolerance=state["risk_tolerance"],
+            expertise_level=state["expertise_level"],
+        )
 
         unified_scores[ticker] = {
             "ticker": ticker,
@@ -699,7 +706,7 @@ def synthesize_rankings(
             },
             "unified_score": unified_score,
             "beta": beta,
-            "reasoning": None,
+            "reasoning": reasoning,
         }
 
     legacy_order = sorted(
@@ -766,7 +773,18 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         user_id=state.get("user_id"),
     )
 
-    print("Generated Top 5 rankings")
+    # Persist EVERY analysed asset, not just the survivors, so watchlist cards for
+    # assets outside the top 5 still carry scores (main's behaviour, PR #16). The
+    # `rank` column is simply the list position and the dashboard orders by it with
+    # .limit(5), so the authoritative top 5 must stay at the FRONT — otherwise the
+    # legacy five would be served even with ranking v2 live.
+    chosen = {asset["ticker"] for asset in top_5}
+    all_ranked = list(top_5) + sorted(
+        (a for a in unified_scores.values() if a["ticker"] not in chosen),
+        key=lambda x: (-x["unified_score"], x["ticker"]),
+    )
+
+    print(f"Generated rankings for {len(all_ranked)} assets (saving all, top 5 displayed)")
     for i, asset in enumerate(top_5, 1):
         print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
 
@@ -777,11 +795,12 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
             "phase_3_synthesis",
             {
                 "top_5": [asset["ticker"] for asset in top_5],
+                "all_ranked": [asset["ticker"] for asset in all_ranked],
                 "unified_scores": {t: unified_scores[t]["unified_score"] for t in unified_scores},
             },
         )
 
-    return {"final_rankings": top_5, "status": "synthesized"}
+    return {"final_rankings": all_ranked, "status": "synthesized"}
 
 
 def phase_4_output(state: AnalysisState) -> dict[str, Any]:
@@ -797,16 +816,17 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
 
     print("Output ready for frontend:")
     print(json.dumps(output, indent=2))
-    # Persist top-5 to Supabase (ensure this runs before returning)
+    # Persist ALL ranked assets to Supabase so watchlist cards can show scores
+    # for assets that didn't make the top 5. Dashboard still shows top 5 via .limit(5).
     try:
         save_res = save_top_assets(
             run_id=state["run_id"],
             user_id=state["user_id"],
-            top_5=state["final_rankings"],
+            top_5=state["final_rankings"],  # now contains all ranked assets
             quant_results=state.get("quant_results", {}),
             sentiment_results=state.get("sentiment_results", {}),
         )
-        logger.info(f"Saved top-5 to Supabase: {save_res.get('status')}")
+        logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
     except Exception as e:
         logger.error(f"Failed to save top-5 to Supabase: {e}")
 
@@ -919,6 +939,7 @@ def run_analysis(
 
     finally:
         set_tracer(None)
+
 
 
 def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1057,3 +1078,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

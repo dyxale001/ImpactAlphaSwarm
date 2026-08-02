@@ -31,10 +31,23 @@ export function useAssetDetails(ticker: string | undefined) {
           .from("assets")
           .select("*")
           .eq("ticker", ticker.toUpperCase())
-          .single();
+          .maybeSingle();
 
         if (assetError) throw assetError;
         setAsset(assetData);
+
+        // Fire-and-forget cache refresh — updates the asset's price in the DB
+        // if it's more than 4 days old. Silent fail so it never blocks the UI.
+        const apiBase = import.meta.env.VITE_API_BASE ?? "";
+        fetch(`${apiBase}/api/assets/${ticker.toUpperCase()}/refresh`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data?.refreshed && data.current_price) {
+              // Update local state so the user sees the fresh price immediately
+              setAsset((prev: any) => prev ? { ...prev, current_price: data.current_price, last_updated: data.last_updated } : prev);
+            }
+          })
+          .catch(() => {}) // silent fail
 
         // 2. Find the user's latest AI run
         const { data: latestRun } = await supabase
