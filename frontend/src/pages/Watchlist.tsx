@@ -4,6 +4,7 @@ import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWat
 import { Link } from 'react-router-dom'
 import WatchlistSearch from '../components/watchlist/WatchlistSearch'
 import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
+import RadarMotif from '../components/watchlist/RadarMotif'
 
 const SECTOR_DOT: Record<string, string> = {
   'Technology':    'bg-blue-400',
@@ -105,18 +106,27 @@ export default function WatchlistPage() {
     <div className="max-w-6xl mx-auto pt-10 px-8 pb-16 space-y-10">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-1">Asset Library</p>
-          <h1 className="text-3xl font-bold tracking-tight text-brand-fg">Watchlist</h1>
-          <p className="text-brand-muted-fg text-sm mt-1">
-            Track any asset. Watched assets are included in your next analysis run.
-          </p>
+      {/* Header band. Forest ground with a radar sweep rippling from the
+          bottom-right corner — the watchlist as a scanner, each blip a tracked
+          contact. Content sits on a relative layer so it clears the SVG. */}
+      <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
+        <RadarMotif className="h-24" />
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Asset Library</p>
+            <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
+              <Eye className="w-7 h-7 text-brand-accent" />
+              Watchlist
+            </h1>
+            <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
+              Track any asset. Watched assets are included in your next analysis run.
+            </p>
+          </div>
+          <button onClick={refreshWatchlist} title="Refresh"
+            className="p-2 rounded-full border border-white/20 text-brand-bg/75 hover:text-brand-bg hover:border-white/40 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
-        <button onClick={refreshWatchlist} title="Refresh"
-          className="p-2 rounded-full border border-brand-border text-brand-muted-fg hover:text-brand-fg transition-colors">
-          <RefreshCw className="w-4 h-4" />
-        </button>
       </div>
 
       {/* ── Search + Browse ─────────────────────────────────────────── */}
