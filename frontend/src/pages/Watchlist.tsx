@@ -110,7 +110,7 @@ export default function WatchlistPage() {
           bottom-right corner — the watchlist as a scanner, each blip a tracked
           contact. Content sits on a relative layer so it clears the SVG. */}
       <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
-        <RadarMotif className="h-24" />
+        <RadarMotif className="h-full" />
         <div className="relative flex items-start justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Asset Library</p>

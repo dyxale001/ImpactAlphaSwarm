@@ -5,10 +5,12 @@
 // filled layered mass (same family as the whale header's WaveMotif), then a
 // lime pass: hairline arcs brightening toward the origin, plus blip dots.
 //
-// preserveAspectRatio="none" stretches the sweep to any header width; circles
-// flatten into ellipses, which reads as ripples on a receding plane. Arcs and
-// blips use vector-effect="non-scaling-stroke" so lines stay hairline-thin and
-// blips stay round at every viewport.
+// preserveAspectRatio="none" stretches the sweep to whatever box the caller
+// gives it; circles distort into ellipses, which reads as ripples on a
+// receding plane. Pass h-full so the rings span the whole card and crop only
+// at its real edges — a shorter band slices the discs at an invisible line
+// mid-card. Arcs and blips use vector-effect="non-scaling-stroke" so lines
+// stay hairline-thin and blips stay round at every viewport.
 export default function RadarMotif({ className = "" }: { className?: string }) {
   return (
     <svg
