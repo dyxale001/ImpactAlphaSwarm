@@ -440,8 +440,9 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
               — it also made tapping an explainer navigate away instead of opening
               it. Only the plain ring stays clickable. */}
           {showTopPickScorecard ? (
-            <div className="w-full md:w-64 shrink-0 rounded-2xl bg-brand-bg p-4">
+            <div className="w-full md:w-64 shrink-0 rounded-2xl bg-white/5 border border-white/10 p-4">
               <SignalScorecard
+                onDark
                 terms={{
                   signalStrength: topPick!.signalStrength,
                   signalDirection: topPick!.signalDirection,
@@ -456,11 +457,12 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
           ) : (
             <Link
               to={`/asset/${topPick?.ticker}`}
-              className="hover:opacity-80 transition-opacity relative z-50 rounded-2xl bg-brand-bg p-4 self-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="hover:opacity-80 transition-opacity relative z-50 rounded-2xl bg-white/5 border border-white/10 p-4 self-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               <ConfidenceRing
                 score={topPick?.confidenceScore || 0}
                 label="Confidence Score"
+                onDark
               />
             </Link>
           )}
@@ -492,19 +494,20 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
                 <Sparkles className="w-3 h-3" /> Discovered via trending
               </span>
             ) : null}
-            <div className="rounded-2xl bg-brand-bg p-3">
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
               <DualBar
                 sentimentScore={topPick?.sentimentScore || 0}
                 quantitativeScore={topPick?.fundamentalsScore || 0}
                 quantPercentile={topPickQuantPercentile}
+                onDark
               />
             </div>
-            <div className="bg-brand-bg rounded-2xl p-3 w-full h-auto">
-              <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-3 w-full h-auto">
+              <p className="text-[10px] text-brand-accent uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
                 <BrainCircuit className="w-3 h-3" />
                 Why it ranks here
               </p>
-              <p className="text-xs text-brand-fg leading-relaxed w-full">
+              <p className="text-xs text-brand-bg/85 leading-relaxed w-full">
                 {topPickReasoning}
               </p>
             </div>

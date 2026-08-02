@@ -1,9 +1,12 @@
 export default function ConfidenceRing({
   score,
   label,
+  onDark = false,
 }: {
   score: number;
   label: string;
+  /** Render on a dark (forest) surface: lime arc/label, light number, tinted track. */
+  onDark?: boolean;
 }) {
   const radius = 35;
   const circumference = 2 * Math.PI * radius;
@@ -35,25 +38,37 @@ export default function ConfidenceRing({
             cx="40"
             cy="40"
             r={radius}
-            className="stroke-background fill-none"
+            className={`fill-none ${onDark ? "stroke-white/15" : "stroke-background"}`}
             strokeWidth="6"
           />
           <circle
             cx="40"
             cy="40"
             r={radius}
-            className="stroke-primary fill-none transition-all duration-1000"
+            className={`fill-none transition-all duration-1000 ${
+              onDark ? "stroke-brand-accent" : "stroke-primary"
+            }`}
             strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
           />
         </svg>
-        <span className="absolute text-xl font-bold font-mono">{score}</span>
+        <span
+          className={`absolute text-xl font-bold font-mono ${
+            onDark ? "text-brand-bg" : ""
+          }`}
+        >
+          {score}
+        </span>
       </div>
 
       <div className="relative group">
-        <span className="text-[10px] text-primary uppercase font-semibold">
+        <span
+          className={`text-[10px] uppercase font-semibold ${
+            onDark ? "text-brand-accent" : "text-primary"
+          }`}
+        >
           {label}
         </span>
         <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-full ml-3 top-1/2 -translate-y-1/2 w-64 z-50">

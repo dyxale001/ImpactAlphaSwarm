@@ -21,12 +21,15 @@ export default function DualBar({
   sentimentScore,
   quantitativeScore,
   quantPercentile = null,
+  onDark = false,
 }: {
   sentimentScore: number;
   quantitativeScore: number;
   /** Mean peer percentile (0-100) from the disclosed sub-dimensions. When given,
    *  the quant half becomes a position marker instead of a score bar. */
   quantPercentile?: number | null;
+  /** Render on a dark (forest) surface: lime labels/fills, light text, tinted tracks. */
+  onDark?: boolean;
 }) {
   const hasPercentile =
     quantPercentile !== null && !Number.isNaN(quantPercentile as number);
@@ -34,12 +37,19 @@ export default function DualBar({
     ? Math.max(2, Math.min(98, quantPercentile as number))
     : 0;
 
+  const labelTone = onDark ? "text-brand-accent" : "text-primary";
+  const valueTone = onDark ? "text-brand-bg" : "text-foreground";
+  const trackTone = onDark ? "bg-white/15" : "bg-background";
+  const fillTone = onDark ? "bg-brand-accent" : "bg-primary";
+
   return (
     <div className="space-y-3">
       <div className="space-y-1">
         <div className="flex justify-between">
           <span className="relative group inline-block">
-            <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+            >
               Sentiment Score
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
@@ -50,13 +60,13 @@ export default function DualBar({
               </div>
             </div>
           </span>
-          <span className="text-foreground font-mono font-semibold">
+          <span className={`font-mono font-semibold ${valueTone}`}>
             {sentimentScore}%
           </span>
         </div>
-        <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
+        <div className={`h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
           <div
-            className="h-full bg-primary"
+            className={`h-full ${fillTone}`}
             style={{ width: `${sentimentScore}%` }}
           />
         </div>
@@ -65,7 +75,9 @@ export default function DualBar({
       <div className="space-y-1">
         <div className="flex justify-between">
           <span className="relative group inline-block">
-            <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+            >
               {hasPercentile ? "Quant Position vs Peers" : "Quantitative Score"}
             </span>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
@@ -76,7 +88,7 @@ export default function DualBar({
               </div>
             </div>
           </span>
-          <span className="text-foreground font-mono font-semibold">
+          <span className={`font-mono font-semibold ${valueTone}`}>
             {hasPercentile
               ? `${Math.round(quantPercentile as number)}th pctile`
               : `${quantitativeScore}%`}
@@ -84,16 +96,20 @@ export default function DualBar({
         </div>
         {hasPercentile ? (
           // Marker on a neutral track: a position, not a filled quantity.
-          <div className="relative h-1.5 w-full bg-background rounded-full">
+          <div className={`relative h-1.5 w-full rounded-full ${trackTone}`}>
             <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-brand-primary border-2 border-brand-surface shadow-sm"
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full border-2 shadow-sm ${
+                onDark
+                  ? "bg-brand-accent border-brand-primary"
+                  : "bg-brand-primary border-brand-surface"
+              }`}
               style={{ left: `${markerPos}%` }}
             />
           </div>
         ) : (
-          <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
+          <div className={`h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
             <div
-              className="h-full bg-primary"
+              className={`h-full ${fillTone}`}
               style={{ width: `${quantitativeScore}%` }}
             />
           </div>
