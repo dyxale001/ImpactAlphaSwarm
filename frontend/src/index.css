@@ -46,6 +46,21 @@
   --color-danger: #e25757;
   --color-info: #5ba4e6;
 
+  /* Warning text on the light warning tint (hype chips) */
+  --color-warning-strong: #b28a1a;
+
+  /* Price movement (sparklines, price deltas) */
+  --color-gain: #22c55e;
+  --color-loss: #ef4444;
+
+  /* Sector accent dots (asset pickers, sector chips) */
+  --color-sector-technology: #60a5fa;
+  --color-sector-green-energy: #4ade80;
+  --color-sector-finance: #fbbf24;
+  --color-sector-ai-robotics: #c084fc;
+  --color-sector-ai-robotics-strong: #8b5cf6;
+  --color-sector-healthcare: #f472b6;
+
   /* Semantic surface tokens */
   --bg-page: var(--color-neutral-100);
   --bg-elevated: var(--color-neutral-0);
@@ -238,6 +253,35 @@
   }
 }
 
+@keyframes ribbon-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ribbon-text-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes shine {
   0% {
     transform: translateX(-150%) skewX(-12deg);
@@ -261,7 +305,46 @@ body {
   font-family: var(--font-sans);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 @layer utilities {
+  /* Squiggle ribbons that draw themselves in on mount (auth panel, onboarding
+     rail). The path must set pathLength="1" and stroke-dasharray="1"; duration
+     is overridable via --ribbon-draw-duration. Under prefers-reduced-motion
+     the ribbon renders fully drawn and the copy stays visible. */
+  .ribbon-draw {
+    stroke-dashoffset: 1;
+  }
+  .ribbon-text {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ribbon-draw {
+      animation: ribbon-draw var(--ribbon-draw-duration, 1600ms)
+        var(--ease-standard) 300ms forwards;
+    }
+    .ribbon-text {
+      opacity: 0;
+      animation: ribbon-text-in 600ms ease 1300ms forwards;
+    }
+    .animate-fade-up {
+      animation: fade-up var(--duration-slow) var(--ease-standard);
+    }
+    .animate-fade-up-delayed {
+      animation: fade-up var(--duration-slow) var(--ease-standard) 500ms
+        backwards;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ribbon-draw {
+      stroke-dashoffset: 0;
+    }
+  }
+
   .font-sans {
     font-family: var(--font-sans) !important;
   }
@@ -281,21 +364,4 @@ body {
     background-size: cover;
   }
 
-  /* Landing-specific placement so the auth artwork sits to the sides nicely */
-  .landing-auth-bg {
-    background-image: url("/backgrounds/untitled-design-3.png");
-    background-repeat: no-repeat;
-    /* push artwork farther off the left/right edges and scale up */
-    background-position: center;
-    background-size: cover;
-  }
-
-  /* Mobile tweak: use cover on small screens so it doesn't crop oddly */
-  @media (max-width: 768px) {
-    .landing-auth-bg {
-      background-position: center top;
-      background-size: cover;
-      background-attachment: scroll;
-    }
-  }
 }
