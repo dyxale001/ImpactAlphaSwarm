@@ -24,7 +24,7 @@ export default function LearningCard({
         </div>
       ) : null}
 
-      <div className="mb-3 inline-flex rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+      <div className="mb-3 inline-flex self-start rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
         {article.difficulty_level}
       </div>
 
