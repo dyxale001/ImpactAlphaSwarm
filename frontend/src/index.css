@@ -253,6 +253,35 @@
   }
 }
 
+@keyframes ribbon-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ribbon-text-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes shine {
   0% {
     transform: translateX(-150%) skewX(-12deg);
@@ -283,6 +312,39 @@ body {
 }
 
 @layer utilities {
+  /* Squiggle ribbons that draw themselves in on mount (auth panel, onboarding
+     rail). The path must set pathLength="1" and stroke-dasharray="1"; duration
+     is overridable via --ribbon-draw-duration. Under prefers-reduced-motion
+     the ribbon renders fully drawn and the copy stays visible. */
+  .ribbon-draw {
+    stroke-dashoffset: 1;
+  }
+  .ribbon-text {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ribbon-draw {
+      animation: ribbon-draw var(--ribbon-draw-duration, 1600ms)
+        var(--ease-standard) 300ms forwards;
+    }
+    .ribbon-text {
+      opacity: 0;
+      animation: ribbon-text-in 600ms ease 1300ms forwards;
+    }
+    .animate-fade-up {
+      animation: fade-up var(--duration-slow) var(--ease-standard);
+    }
+    .animate-fade-up-delayed {
+      animation: fade-up var(--duration-slow) var(--ease-standard) 500ms
+        backwards;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ribbon-draw {
+      stroke-dashoffset: 0;
+    }
+  }
+
   .font-sans {
     font-family: var(--font-sans) !important;
   }
