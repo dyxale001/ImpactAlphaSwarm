@@ -46,6 +46,21 @@
   --color-danger: #e25757;
   --color-info: #5ba4e6;
 
+  /* Warning text on the light warning tint (hype chips) */
+  --color-warning-strong: #b28a1a;
+
+  /* Price movement (sparklines, price deltas) */
+  --color-gain: #22c55e;
+  --color-loss: #ef4444;
+
+  /* Sector accent dots (asset pickers, sector chips) */
+  --color-sector-technology: #60a5fa;
+  --color-sector-green-energy: #4ade80;
+  --color-sector-finance: #fbbf24;
+  --color-sector-ai-robotics: #c084fc;
+  --color-sector-ai-robotics-strong: #8b5cf6;
+  --color-sector-healthcare: #f472b6;
+
   /* Semantic surface tokens */
   --bg-page: var(--color-neutral-100);
   --bg-elevated: var(--color-neutral-0);
@@ -261,6 +276,12 @@ body {
   font-family: var(--font-sans);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 @layer utilities {
   .font-sans {
     font-family: var(--font-sans) !important;
@@ -281,21 +302,4 @@ body {
     background-size: cover;
   }
 
-  /* Landing-specific placement so the auth artwork sits to the sides nicely */
-  .landing-auth-bg {
-    background-image: url("/backgrounds/untitled-design-3.png");
-    background-repeat: no-repeat;
-    /* push artwork farther off the left/right edges and scale up */
-    background-position: center;
-    background-size: cover;
-  }
-
-  /* Mobile tweak: use cover on small screens so it doesn't crop oddly */
-  @media (max-width: 768px) {
-    .landing-auth-bg {
-      background-position: center top;
-      background-size: cover;
-      background-attachment: scroll;
-    }
-  }
 }
