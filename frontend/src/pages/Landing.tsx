@@ -273,30 +273,6 @@ function StopHeader({ eyebrow, title, body }: { eyebrow: string; title: string; 
   )
 }
 
-function PersonaCard({
-  initial,
-  avatarClass,
-  title,
-  quote,
-}: {
-  initial: string
-  avatarClass: string
-  title: string
-  quote: string
-}) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm">
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarClass}`}>
-        {initial}
-      </div>
-      <div>
-        <p className="mb-0.5 text-xs font-semibold text-forest-700">{title}</p>
-        <p className="text-[13px] italic leading-[1.55] text-muted">{quote}</p>
-      </div>
-    </div>
-  )
-}
-
 function ScorecardRowsDark() {
   return (
     <div className="my-1.5 flex w-full flex-col gap-[11px]">
@@ -595,12 +571,6 @@ export default function Landing() {
               title="Tell the Swarm Who You Are"
               body="Choose your investor path, tap the companies you already know, and take a short risk assessment. All AI recommendations are filtered through the risk mandate that results. Fit with your profile is one of the four disclosed ranking factors."
             />
-            <PersonaCard
-              initial="B"
-              avatarClass="bg-lime-200 text-forest-700"
-              title="Betty · illustrative persona · first-time investor"
-              quote={'"I chose \'conservative\' once, and the app has never shown me a moonshot since."'}
-            />
           </div>
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-3 gap-2.5">
@@ -674,12 +644,6 @@ export default function Landing() {
               eyebrow="Stop 02 · The Dashboard"
               title="One Daily Pick, Fully Explained"
               body={'Your dashboard centralizes the Swarm\'s intelligence: a ranked top pick, sentiment and quant read side by side, and a "why it ranks here" trace on every card.'}
-            />
-            <PersonaCard
-              initial="T"
-              avatarClass="bg-forest-700 text-lime-500"
-              title="The time-poor investor · illustrative persona"
-              quote={'"One pick with my morning coffee. I read the reasoning, not a hundred headlines."'}
             />
           </div>
         </div>
@@ -845,12 +809,6 @@ export default function Landing() {
                 title="Follow the Big Money"
                 body="Open any company for its insider dealings (SEC Form 4) and institutional owners (13F filings), or flip to Top Funds, with a cluster-buying callout when multiple insiders buy within 30 days."
               />
-              <PersonaCard
-                initial="T"
-                avatarClass="bg-forest-700 text-lime-500"
-                title="The time-poor investor · illustrative persona"
-                quote={'"Before I buy, I check who else owns it. Two taps, and I know what the whales are doing."'}
-              />
             </div>
           </div>
         </div>
@@ -879,12 +837,6 @@ export default function Landing() {
               eyebrow="Stop 05 · Learning Centre"
               title="Learn as You Go, Earn as You Learn"
               body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 80%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
-            />
-            <PersonaCard
-              initial="B"
-              avatarClass="bg-lime-200 text-forest-700"
-              title="Betty · illustrative persona · first-time investor"
-              quote={'"I didn\'t know what diversification meant a month ago. Now I have the badge to prove I do."'}
             />
           </div>
           <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start">
