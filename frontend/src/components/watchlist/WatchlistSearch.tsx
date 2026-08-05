@@ -28,7 +28,7 @@ export default function WatchlistSearch({
           onChange={e => setSearch(e.target.value)}
           placeholder="Search any ticker or company name…"
           aria-label="Search assets"
-          className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
+          className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
         />
         {search && (
           <button
