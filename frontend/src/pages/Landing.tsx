@@ -655,7 +655,7 @@ export default function Landing() {
           viewBox="0 0 1600 700"
           para={0.12}
           rot={3}
-          className="z-1 top-[1070px] -left-[220px] h-[720px] w-[1650px]"
+          className="z-1 top-[1010px] -left-[220px] h-[720px] w-[1650px]"
           strokeClass="stroke-lime-500"
           strokeWidth={54}
           text="Track The Signals · Question The Hype · Learn As You Go · Track The Signals · Question The Hype · Learn As You Go"
@@ -820,7 +820,7 @@ export default function Landing() {
           viewBox="0 0 1500 900"
           para={0.1}
           rot={-3}
-          className="z-1 top-[2220px] -left-[200px] h-[940px] w-[1560px]"
+          className="z-1 top-[1990px] -left-[200px] h-[940px] w-[1560px]"
           strokeClass="stroke-lime-300"
           strokeWidth={64}
           text="Read · Quiz · Earn The Badge · Every Concept In Plain Language · Read · Quiz · Earn The Badge"
