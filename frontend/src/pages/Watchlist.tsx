@@ -228,7 +228,7 @@ export default function WatchlistPage() {
           {loading && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map(n => (
-                <div key={n} className="soft-card border-l-4 border-l-brand-border/30 p-4 space-y-3 animate-pulse">
+                <div key={n} className="soft-card p-4 space-y-3 animate-pulse">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-brand-border/30 shrink-0" />
                     <div className="space-y-1.5 flex-1">
