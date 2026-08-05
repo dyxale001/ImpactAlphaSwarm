@@ -59,7 +59,7 @@ function PercentileTrack({ pctile }: { pctile: number }) {
 
 function ExplainerBody({ text }: { text: string }) {
   return (
-    <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg bg-brand-bg/55 border border-brand-border/50 rounded-xl px-3 py-2">
+    <p className="mt-2 text-sm leading-relaxed text-brand-fg/75 bg-brand-bg/55 border border-brand-border/50 rounded-xl px-3 py-2">
       {text}
     </p>
   );
@@ -147,7 +147,7 @@ export default function QuantMetricsPanel({
                       : "—"}
                   </span>
                 </div>
-                <p className="text-xs text-brand-muted-fg mt-0.5">
+                <p className="text-sm text-brand-fg/75 mt-0.5">
                   {copy.subtitle}
                 </p>
                 {pctile !== null && <PercentileTrack pctile={pctile} />}
@@ -155,7 +155,7 @@ export default function QuantMetricsPanel({
               </div>
             );
           })}
-          <p className="text-[11px] text-brand-muted-fg">
+          <p className="text-xs text-brand-fg/70">
             {PERCENTILE_CAPTION}
           </p>
         </div>
@@ -178,14 +178,14 @@ export default function QuantMetricsPanel({
                 type="button"
                 onClick={() => toggle("rsi")}
                 aria-expanded={openExplainer === "rsi"}
-                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs transition-colors hover:border-brand-primary/40"
+                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-sm transition-colors hover:border-brand-primary/40"
               >
                 <span className="font-mono font-semibold text-brand-fg">
                   RSI {formatMetric(recommendation.rsi, 0)}
                 </span>
                 {/* Neutral slate on purpose: colouring "oversold" green would
                     re-encode the buy signal the bands replace. */}
-                <span className="text-slate-500 font-medium">
+                <span className="text-slate-600 font-medium">
                   {RSI_BANDS[rsiBand]}
                 </span>
                 <Info className="w-3 h-3 text-brand-muted-fg shrink-0" />
@@ -196,12 +196,12 @@ export default function QuantMetricsPanel({
                 type="button"
                 onClick={() => toggle("beta")}
                 aria-expanded={openExplainer === "beta"}
-                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs transition-colors hover:border-brand-primary/40"
+                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-sm transition-colors hover:border-brand-primary/40"
               >
                 <span className="font-mono font-semibold text-brand-fg">
                   Beta {formatMetric(recommendation.beta)}
                 </span>
-                <span className="text-slate-500 font-medium">
+                <span className="text-slate-600 font-medium">
                   {BETA_BANDS[betaBand]}
                 </span>
                 <Info className="w-3 h-3 text-brand-muted-fg shrink-0" />
