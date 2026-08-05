@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Eye, RefreshCw, ChevronDown, ChevronUp, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { Eye, RefreshCw, ArrowUpDown, TrendingUp } from 'lucide-react'
 import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
 import { Link } from 'react-router-dom'
 import WatchlistSearch from '../components/watchlist/WatchlistSearch'
 import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
+import RadarMotif from '../components/watchlist/RadarMotif'
 
 const SECTOR_DOT: Record<string, string> = {
   'Technology':    'bg-blue-400',
@@ -15,9 +16,6 @@ const SECTOR_DOT: Record<string, string> = {
 
 // ─── Top pick row — horizontal, spacious, readable ─────────────────────────
 function TopPickRow({ pick, index }: { pick: TopPick; index: number }) {
-  const scoreColor = (s: number) =>
-    s >= 70 ? 'text-brand-accent' : s >= 50 ? 'text-semantic-warning' : 'text-brand-primary'
-
   return (
     <div
       className="soft-card p-5 flex items-center gap-5 hover:border-brand-primary/30 transition-all"
@@ -75,7 +73,6 @@ export default function WatchlistPage() {
     topPicks,
     allRanked,
     showAllRanked,
-    setShowAllRanked,
     watchedAssets,
     displayedAssets,
     loading,
@@ -106,21 +103,30 @@ export default function WatchlistPage() {
 
 
   return (
-    <div className="max-w-6xl mx-auto pt-10 px-8 pb-16 space-y-10">
+    <div className="max-w-7xl mx-auto pt-10 px-8 pb-16 space-y-10">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-1">Asset Library</p>
-          <h1 className="text-3xl font-bold tracking-tight text-brand-fg">Watchlist</h1>
-          <p className="text-brand-muted-fg text-sm mt-1">
-            Track any asset. Watched assets are included in your next analysis run.
-          </p>
+      {/* Header band. Forest ground with a radar sweep rippling from the
+          bottom-right corner — the watchlist as a scanner, each blip a tracked
+          contact. Content sits on a relative layer so it clears the SVG. */}
+      <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
+        <RadarMotif className="h-full" />
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Asset Library</p>
+            <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
+              <Eye className="w-7 h-7 text-brand-accent" />
+              Watchlist
+            </h1>
+            <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
+              Track any asset. Watched assets are included in your next analysis run.
+            </p>
+          </div>
+          <button onClick={refreshWatchlist} title="Refresh"
+            className="p-2 rounded-full border border-white/20 text-brand-bg/75 hover:text-brand-bg hover:border-white/40 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
-        <button onClick={refreshWatchlist} title="Refresh"
-          className="p-2 rounded-full border border-brand-border text-brand-muted-fg hover:text-brand-fg transition-colors">
-          <RefreshCw className="w-4 h-4" />
-        </button>
       </div>
 
       {/* ── Search + Browse ─────────────────────────────────────────── */}
@@ -153,7 +159,6 @@ export default function WatchlistPage() {
                 Top {topPicks.length}
               </span>
             </div>
-            
           </div>
 
           <div className="space-y-2">
@@ -223,7 +228,7 @@ export default function WatchlistPage() {
           {loading && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map(n => (
-                <div key={n} className="soft-card border-l-4 border-l-brand-border/30 p-4 space-y-3 animate-pulse">
+                <div key={n} className="soft-card p-4 space-y-3 animate-pulse">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-brand-border/30 shrink-0" />
                     <div className="space-y-1.5 flex-1">

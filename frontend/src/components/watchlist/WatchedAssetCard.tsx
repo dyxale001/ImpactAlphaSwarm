@@ -11,14 +11,14 @@ import { ArrowRight, X } from 'lucide-react'
 import { type WatchlistAsset } from '../../hooks/useWatchlistData'
 
 // ─── Sector styles ─────────────────────────────────────────────────────────
-const SECTOR_STYLE: Record<string, { border: string; text: string; dot: string }> = {
-  'Technology':    { border: 'border-l-blue-400',   text: 'text-blue-400',   dot: 'bg-blue-400' },
-  'Green Energy':  { border: 'border-l-green-400',  text: 'text-green-400',  dot: 'bg-green-400' },
-  'Finance':       { border: 'border-l-amber-400',  text: 'text-amber-400',  dot: 'bg-amber-400' },
-  'AI & Robotics': { border: 'border-l-purple-400', text: 'text-purple-400', dot: 'bg-purple-400' },
-  'Healthcare':    { border: 'border-l-pink-400',   text: 'text-pink-400',   dot: 'bg-pink-400' },
+const SECTOR_STYLE: Record<string, { text: string; dot: string }> = {
+  'Technology':    { text: 'text-blue-400',   dot: 'bg-blue-400' },
+  'Green Energy':  { text: 'text-green-400',  dot: 'bg-green-400' },
+  'Finance':       { text: 'text-amber-400',  dot: 'bg-amber-400' },
+  'AI & Robotics': { text: 'text-purple-400', dot: 'bg-purple-400' },
+  'Healthcare':    { text: 'text-pink-400',   dot: 'bg-pink-400' },
 }
-const DEFAULT_SECTOR = { border: 'border-l-brand-border/50', text: 'text-brand-muted-fg', dot: 'bg-brand-border' }
+const DEFAULT_SECTOR = { text: 'text-brand-muted-fg', dot: 'bg-brand-border' }
 
 // ─── Sparkline with real yfinance data ─────────────────────────────────────
 function Sparkline({ ticker }: { ticker: string }) {
@@ -75,7 +75,7 @@ export default function WatchedAssetCard({ asset, onRemove, isRemoving }: Props)
 
   return (
     <div
-      className={`soft-card border-l-4 ${sc.border} p-4 flex flex-col gap-3 hover:border-brand-primary/30 transition-all ${isRemoving ? 'opacity-40 pointer-events-none' : ''}`}
+      className={`soft-card p-4 flex flex-col gap-3 hover:border-brand-primary/30 transition-all ${isRemoving ? 'opacity-40 pointer-events-none' : ''}`}
       style={{ animation: 'slide-up 0.4s ease-out forwards' }}
     >
       {/* Header row */}

@@ -46,6 +46,15 @@ export const CONVERGENCE_TONE: Record<ConvergenceState, string> = {
   conflict: "bg-semantic-warning/15 text-semantic-warning",
 };
 
+// Tones for the scorecard's on-dark variant (the forest hero card): the
+// brand-primary tones above are forest-on-forest there.
+export const CONVERGENCE_TONE_ON_DARK: Record<ConvergenceState, string> = {
+  agree_strongly: "bg-brand-accent/15 text-brand-accent",
+  lean_together: "bg-brand-accent/10 text-brand-accent",
+  mixed: "bg-white/10 text-brand-bg/70",
+  conflict: "bg-semantic-warning/15 text-semantic-warning",
+};
+
 export type TermKey =
   | "signal_strength"
   | "convergence"

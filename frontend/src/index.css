@@ -215,6 +215,14 @@
     border-radius: var(--radius-brand);
     box-shadow: var(--shadow-card);
   }
+  /* Dark hero surface — forest band shared by page headers (Whale Watching,
+     Watchlist) and the dashboard Top Pick. Consumers add their own padding,
+     overflow, and z-index. */
+  .hero-card {
+    position: relative;
+    border-radius: var(--radius-brand);
+    background-color: var(--color-brand-primary);
+  }
   .chip {
     @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase transition-colors;
   }

@@ -115,10 +115,10 @@ export default function RecommendationCard({
       <div className="flex flex-wrap gap-2">
         {asset.isDiscovered ? (
           <span
-            className="chip bg-brand-accent/15 text-brand-accent"
+            className="chip bg-brand-accent text-brand-fg"
             title={discoveryProvenance(asset.discoverySources)}
           >
-            <Sparkles className="w-3 h-3" /> Discovered
+            <Sparkles className="w-2.5 h-2.5" /> Discovered
           </span>
         ) : null}
         {asset.isHype ? (

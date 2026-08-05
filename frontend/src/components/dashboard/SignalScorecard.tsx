@@ -4,7 +4,7 @@ import {
   CONVERGENCE_DETAIL,
   CONVERGENCE_HEADLINE,
   CONVERGENCE_TONE,
-  DIRECTION_COPY,
+  CONVERGENCE_TONE_ON_DARK,
   QUANT_STATE_NOTE,
   TERM_COPY,
   type ConvergenceState,
@@ -33,12 +33,26 @@ export interface SignalTerms {
   quantState: string | null;
 }
 
-function TermTrack({ value }: { value: number }) {
+function TermTrack({
+  value,
+  onDark = false,
+}: {
+  value: number;
+  onDark?: boolean;
+}) {
   const pos = Math.max(2, Math.min(98, value * 100));
   return (
-    <div className="relative h-1.5 w-full bg-background rounded-full mt-1.5">
+    <div
+      className={`relative h-1.5 w-full rounded-full mt-1.5 ${
+        onDark ? "bg-white/15" : "bg-background"
+      }`}
+    >
       <div
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-brand-primary border-2 border-brand-surface shadow-sm"
+        className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full border-2 shadow-sm ${
+          onDark
+            ? "bg-brand-accent border-brand-primary"
+            : "bg-brand-primary border-brand-surface"
+        }`}
         style={{ left: `${pos}%` }}
       />
     </div>
@@ -48,11 +62,20 @@ function TermTrack({ value }: { value: number }) {
 export default function SignalScorecard({
   terms,
   compact = false,
+  onDark = false,
 }: {
   terms: SignalTerms;
   compact?: boolean;
+  /** Render on a dark (forest) surface: lime labels, light text, tinted tracks. */
+  onDark?: boolean;
 }) {
   const [open, setOpen] = useState<TermKey | "headline" | null>(null);
+
+  const labelTone = onDark ? "text-brand-accent" : "text-primary";
+  const mutedTone = onDark ? "text-brand-bg/60" : "text-brand-muted-fg";
+  const explainerTone = onDark
+    ? "text-brand-bg/75 bg-white/10 border-white/10"
+    : "text-brand-muted-fg bg-brand-bg/55 border-brand-border/50";
 
   const state = terms.convergenceState;
   const rows: { key: TermKey; value: number | null }[] = [
@@ -73,18 +96,17 @@ export default function SignalScorecard({
             type="button"
             onClick={() => setOpen(open === "headline" ? null : "headline")}
             aria-expanded={open === "headline"}
-            className={`chip ${CONVERGENCE_TONE[state]} font-semibold`}
+            className={`chip ${
+              (onDark ? CONVERGENCE_TONE_ON_DARK : CONVERGENCE_TONE)[state]
+            } font-semibold`}
           >
             {CONVERGENCE_HEADLINE[state]}
             <Info className="w-3 h-3 shrink-0" />
           </button>
-          {terms.signalDirection && (
-            <p className="text-[11px] text-brand-muted-fg mt-1.5">
-              {DIRECTION_COPY[terms.signalDirection] ?? terms.signalDirection}
-            </p>
-          )}
           {open === "headline" && (
-            <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg bg-brand-bg/55 border border-brand-border/50 rounded-xl px-3 py-2">
+            <p
+              className={`mt-2 text-xs leading-relaxed border rounded-xl px-3 py-2 ${explainerTone}`}
+            >
               {CONVERGENCE_DETAIL[state]}
             </p>
           )}
@@ -105,18 +127,24 @@ export default function SignalScorecard({
                 className="w-full text-left group"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+                  <span
+                    className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+                  >
                     {copy.label}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-brand-muted-fg">
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11px] ${mutedTone}`}
+                  >
                     {value === null ? "not measured" : copy.question}
                     <Info className="w-3 h-3 shrink-0 opacity-60 group-hover:opacity-100" />
                   </span>
                 </div>
-                {value !== null && <TermTrack value={value} />}
+                {value !== null && <TermTrack value={value} onDark={onDark} />}
               </button>
               {isOpen && (
-                <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg bg-brand-bg/55 border border-brand-border/50 rounded-xl px-3 py-2">
+                <p
+                  className={`mt-2 text-xs leading-relaxed border rounded-xl px-3 py-2 ${explainerTone}`}
+                >
                   {copy.detail}
                 </p>
               )}
@@ -126,7 +154,9 @@ export default function SignalScorecard({
       </div>
 
       {quantNote && (
-        <p className="text-[11px] text-slate-400">{quantNote}</p>
+        <p className={`text-[11px] ${onDark ? "text-brand-bg/60" : "text-slate-400"}`}>
+          {quantNote}
+        </p>
       )}
 
       {/* The "these four measurements decide the order / weighting is editorial /

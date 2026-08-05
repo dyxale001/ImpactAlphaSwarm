@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { BookOpen, Search, X } from "lucide-react";
 
 import ArticleViewerModal from "../components/learning/ResourceViewerModal";
 import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
+import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
 import {
   fetchLearningBadges,
@@ -299,56 +300,63 @@ export default function LearningPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-7xl space-y-8 px-6">
-        <div className="-mx-4 flex flex-col gap-4 rounded-lg bg-brand-bg/60 p-4 px-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-primary">
-              Learning Centre
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight text-brand-fg">
-              Build confidence with guided investing lessons
-            </h1>
-            <p className="text-sm leading-relaxed text-brand-muted-fg">
-              Explore structured educational content designed to help you
-              understand markets, evaluate opportunities, and grow your
-              investing toolkit.
-            </p>
-          </div>
+      <div className="max-w-7xl mx-auto pt-10 px-8 pb-16 space-y-8">
+        {/* Header band. Forest ground with sprouting leaf blades bottom-right —
+            growth for the learning centre. Content sits on a relative layer so
+            it clears the SVG. */}
+        <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
+          <SproutMotif className="h-full" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
+                Learning Centre
+              </p>
+              <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
+                <BookOpen className="w-7 h-7 text-brand-accent" />
+                Build confidence with guided investing lessons
+              </h1>
+              <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
+                Explore structured educational content designed to help you
+                understand markets, evaluate opportunities, and grow your
+                investing toolkit.
+              </p>
+            </div>
 
-          <div className="rounded-2xl border border-brand-border bg-brand-card px-4 py-3 text-sm text-brand-fg shadow-card">
-            <p className="text-xs uppercase tracking-[0.12em] text-brand-muted-fg">
-              Learning XP
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-brand-primary">
-              {learningXp} XP
-            </p>
+            <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
+              <p className="text-xs uppercase tracking-widest text-brand-bg/60">
+                Learning XP
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-brand-accent">
+                {learningXp} XP
+              </p>
+            </div>
           </div>
         </div>
 
-        <section className="relative z-40 rounded-2xl bg-brand-card p-4 shadow-card">
-          <div className="flex items-center gap-3 rounded-xl border border-brand-border bg-brand-bg/70 px-4 py-3">
-            <Search className="h-4 w-4" />
-
+        <section className="relative z-40">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search learning topics..."
-              className="w-full bg-transparent text-brand-fg placeholder:text-brand-muted-fg focus:outline-none"
+              aria-label="Search learning topics"
+              className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
             />
-
             {search ? (
               <button
                 type="button"
+                aria-label="Clear search"
                 onClick={() => setSearch("")}
-                className="text-xs font-medium text-brand-muted-fg transition-colors hover:text-brand-fg"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg transition-colors hover:text-brand-fg"
               >
-                Clear
+                <X className="w-4 h-4" />
               </button>
             ) : null}
           </div>
 
           {search.trim().length > 0 ? (
-            <div className="absolute left-4 right-4 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-brand-border bg-brand-card shadow-card">
+            <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg">
               <div className="border-b border-brand-border/60 px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-eyebrow text-brand-muted-fg">
                   Suggestions

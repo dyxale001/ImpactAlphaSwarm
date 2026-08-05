@@ -17,14 +17,14 @@ export default function LearningCard({
   hasPerfectScore,
 }: Props) {
   return (
-    <article className="glass-card relative h-full rounded-2xl p-5">
+    <article className="glass-card relative flex h-full flex-col rounded-2xl p-5">
       {hasPerfectScore ? (
         <div className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-primary/20 bg-brand-primary/10 text-brand-primary shadow-sm">
           <Trophy className="h-5 w-5" />
         </div>
       ) : null}
 
-      <div className="mb-3 inline-flex rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+      <div className="mb-3 inline-flex self-start rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
         {article.difficulty_level}
       </div>
 
@@ -47,7 +47,7 @@ mt-2
         {article.summary}
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-auto flex flex-wrap gap-3 pt-5">
         <button
           onClick={() => onOpenArticle(article)}
           className="
