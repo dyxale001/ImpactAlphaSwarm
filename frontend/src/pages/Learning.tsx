@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Search } from "lucide-react";
+import { BookOpen, Search, X } from "lucide-react";
 
 import ArticleViewerModal from "../components/learning/ResourceViewerModal";
 import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
@@ -333,30 +333,30 @@ export default function LearningPage() {
           </div>
         </div>
 
-        <section className="relative z-40 rounded-2xl bg-brand-card p-4 shadow-card">
-          <div className="flex items-center gap-3 rounded-xl border border-brand-border bg-brand-bg/70 px-4 py-3">
-            <Search className="h-4 w-4" />
-
+        <section className="relative z-40">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search learning topics..."
-              className="w-full bg-transparent text-brand-fg placeholder:text-brand-muted-fg focus:outline-none"
+              aria-label="Search learning topics"
+              className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
             />
-
             {search ? (
               <button
                 type="button"
+                aria-label="Clear search"
                 onClick={() => setSearch("")}
-                className="text-xs font-medium text-brand-muted-fg transition-colors hover:text-brand-fg"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg transition-colors hover:text-brand-fg"
               >
-                Clear
+                <X className="w-4 h-4" />
               </button>
             ) : null}
           </div>
 
           {search.trim().length > 0 ? (
-            <div className="absolute left-4 right-4 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-brand-border bg-brand-card shadow-card">
+            <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg">
               <div className="border-b border-brand-border/60 px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-eyebrow text-brand-muted-fg">
                   Suggestions

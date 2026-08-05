@@ -20,12 +20,9 @@ export default function LearningCenterSkeleton() {
         </div>
       </div>
 
-      <section className="rounded-lg bg-brand-card p-4">
-        <div className="flex items-center gap-3 rounded-xl border border-brand-border bg-brand-bg/70 px-4 py-3">
-          <div className="h-4 w-4 rounded bg-brand-border/40" />
-          <div className="h-4 flex-1 rounded bg-brand-border/30" />
-          <div className="h-4 w-10 rounded bg-brand-border/30" />
-        </div>
+      <section className="flex items-center gap-3 rounded-full border border-brand-border/60 bg-brand-card px-4 py-2.5">
+        <div className="h-4 w-4 rounded bg-brand-border/40" />
+        <div className="h-4 flex-1 rounded bg-brand-border/30" />
       </section>
 
       <section className="space-y-4 rounded-lg border border-brand-border bg-brand-card p-4">
