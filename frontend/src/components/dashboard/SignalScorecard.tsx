@@ -5,7 +5,6 @@ import {
   CONVERGENCE_HEADLINE,
   CONVERGENCE_TONE,
   CONVERGENCE_TONE_ON_DARK,
-  DIRECTION_COPY,
   QUANT_STATE_NOTE,
   TERM_COPY,
   type ConvergenceState,
@@ -104,11 +103,6 @@ export default function SignalScorecard({
             {CONVERGENCE_HEADLINE[state]}
             <Info className="w-3 h-3 shrink-0" />
           </button>
-          {terms.signalDirection && (
-            <p className={`text-[11px] mt-1.5 ${mutedTone}`}>
-              {DIRECTION_COPY[terms.signalDirection] ?? terms.signalDirection}
-            </p>
-          )}
           {open === "headline" && (
             <p
               className={`mt-2 text-xs leading-relaxed border rounded-xl px-3 py-2 ${explainerTone}`}
