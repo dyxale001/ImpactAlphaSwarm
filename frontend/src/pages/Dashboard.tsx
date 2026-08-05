@@ -487,10 +487,10 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
             </Link>
             {topPick?.isDiscovered ? (
               <span
-                className="chip bg-brand-accent/15 text-brand-accent w-fit"
+                className="chip bg-brand-accent text-brand-fg w-fit"
                 title={discoveryProvenance(topPick?.discoverySources)}
               >
-                <Sparkles className="w-3 h-3" /> Discovered via trending
+                <Sparkles className="w-2.5 h-2.5" /> Discovered via trending
               </span>
             ) : null}
             <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
