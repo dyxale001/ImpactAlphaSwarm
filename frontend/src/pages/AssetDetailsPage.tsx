@@ -260,6 +260,14 @@ export default function AssetDetailsPage() {
               ? `R ${recommendation.price_at_run.toFixed(2)}`
               : "Price unavailable"}
           </p>
+          {/* Same cached one-liner the whale-watching company panel shows, so an
+              asset reads the same way wherever you meet it. Absent for assets
+              whose description hasn't been generated yet. */}
+          {asset.description && (
+            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-3">
+              {asset.description}
+            </p>
+          )}
         </div>
 
         {recommendation ? (
