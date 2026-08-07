@@ -169,7 +169,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
       "Agreement",
       "Evidence Depth",
       "Profile Fit",
-      "Quant Position (pctile)",
+      "Quant Position (percentile)",
     ];
 
     const dataRows = sortedRecommendations.map((asset) => [

@@ -8,5 +8,5 @@ export function discoveryProvenance(sources: string[] | null | undefined): strin
   if (s.includes("llm")) how.push("an AI sector scan");
   if (s.includes("yfinance_screener")) how.push("a market-activity screen");
   const via = how.length ? how.join(" + ") : "the discovery agent";
-  return `Surfaced by the discovery agent via ${via} — a fresh candidate beyond the curated list, validated before being analysed.`;
+  return `Surfaced by the discovery agent via ${via}, a fresh candidate beyond the curated list, validated before being analysed.`;
 }

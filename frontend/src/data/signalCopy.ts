@@ -27,13 +27,13 @@ export const CONVERGENCE_HEADLINE: Record<ConvergenceState, string> = {
 
 export const CONVERGENCE_DETAIL: Record<ConvergenceState, string> = {
   agree_strongly:
-    "The price data and the news/social tone point in the same direction. Agreement between two independent signals is what moves an asset up this list — it is not a prediction.",
+    "The price data and the news/social tone point in the same direction. Agreement between two independent signals is what moves an asset up this list. It is not a prediction.",
   lean_together:
     "The price data and the news/social tone broadly agree, with some difference between them.",
   mixed:
     "The price data and the news/social tone only partly agree, so this asset sits lower than its individual readings alone would suggest.",
   conflict:
-    "The price data and the news/social tone contradict each other — for example strong online enthusiasm alongside weak price measurements. Worth looking closer before drawing conclusions.",
+    "The price data and the news/social tone contradict each other, for example strong online enthusiasm alongside weak price measurements. Worth looking closer before drawing conclusions.",
 };
 
 /** Neutral chip styling per state. Amber for conflict is a CAUTION about our own
@@ -69,19 +69,19 @@ export const TERM_COPY: Record<
     label: "Signal strength",
     question: "How strongly do the measurements lean?",
     detail:
-      "How far the combined price and tone measurements sit from neutral. A high reading means the inputs are saying something definite; a low one means they are close to neutral. Direction is shown separately — strength alone says nothing about which way.",
+      "How far the combined price and tone measurements sit from neutral. A high reading means the inputs are saying something definite; a low one means they are close to neutral. Direction is shown separately; strength alone says nothing about which way.",
   },
   convergence: {
     label: "Agreement",
     question: "Do the two signals agree?",
     detail:
-      "Whether the price data and the news/social tone point the same way. Two independent signals agreeing carries more weight than either alone, so disagreement moves an asset down the list — and is shown to you rather than hidden.",
+      "Whether the price data and the news/social tone point the same way. Two independent signals agreeing carries more weight than either alone, so disagreement moves an asset down the list, and is shown to you rather than hidden.",
   },
   data_sufficiency: {
     label: "Evidence depth",
     question: "Is there enough to go on?",
     detail:
-      "How much material this reading is based on: trusted news articles, social posts and days of price history. A thin reading is ranked lower on purpose — not because the asset is worse, but because we know less about it.",
+      "How much material this reading is based on: trusted news articles, social posts and days of price history. A thin reading is ranked lower on purpose, not because the asset is worse, but because we know less about it.",
   },
   profile_fit: {
     label: "Fit with your profile",

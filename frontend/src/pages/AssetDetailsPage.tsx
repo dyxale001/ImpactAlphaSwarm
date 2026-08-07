@@ -213,7 +213,7 @@ export default function AssetDetailsPage() {
     signalTerms.dataSufficiency < 0.75
   ) {
     placementNotes.push(
-      "Ranked lower because there is relatively little to go on — fewer trusted articles, posts or days of price history than for other candidates. That reflects what we know, not the asset itself.",
+      "Ranked lower because there is relatively little to go on: fewer trusted articles, posts or days of price history than for other candidates. That reflects what we know, not the asset itself.",
     );
   }
   if (typeof signalTerms.profileFit === "number" && signalTerms.profileFit < 1) {
@@ -260,6 +260,14 @@ export default function AssetDetailsPage() {
               ? `R ${recommendation.price_at_run.toFixed(2)}`
               : "Price unavailable"}
           </p>
+          {/* Same cached one-liner the whale-watching company panel shows, so an
+              asset reads the same way wherever you meet it. Absent for assets
+              whose description hasn't been generated yet. */}
+          {asset.description && (
+            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-3">
+              {asset.description}
+            </p>
+          )}
         </div>
 
         {recommendation ? (
@@ -503,7 +511,7 @@ export default function AssetDetailsPage() {
 
           <SectionCard
             title="Quantitative Data"
-            description="What the price history shows — measurements and peer context, not a recommendation."
+            description="What the price history shows: measurements and peer context, not a recommendation."
             icon={BarChart3}
             action={<ExplainerLink ticker={asset.ticker} section="quant" />}
           >
@@ -520,7 +528,7 @@ export default function AssetDetailsPage() {
           <strong className="text-brand-fg">Disclaimer:</strong> every figure on
           this page is a measurement of past and present public data, produced by
           automated analysis for information and education. The ordering reflects
-          measurements plus a weighting we choose and disclose — it is not
+          measurements plus a weighting we choose and disclose. It is not
           professional financial, investment or legal advice, and nothing here
           predicts future prices. All trading involves risk. Please consult a
           licensed financial advisor before making investment decisions.

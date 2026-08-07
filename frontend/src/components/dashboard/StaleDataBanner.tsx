@@ -25,7 +25,7 @@ export default function StaleDataBanner({
       <p className="text-xs text-brand-muted-fg leading-relaxed">
         {isRefreshing ? (
           <>
-            Your insights are from {describeRunAge(latestRunCreatedAt)} —
+            Your insights are from {describeRunAge(latestRunCreatedAt)},
             refreshing with the latest market data…
           </>
         ) : (

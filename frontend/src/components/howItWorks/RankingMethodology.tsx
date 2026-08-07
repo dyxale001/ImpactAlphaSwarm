@@ -22,7 +22,7 @@ export default function RankingMethodology() {
       <MethodologyCardHeader
         icon={ListOrdered}
         title="How the list is ordered"
-        subtitle="Four measurements decide placement — there is no single overall score."
+        subtitle="Four measurements decide placement. There is no single overall score."
       />
 
       <div className="rounded-2xl border border-brand-border/50 bg-brand-bg/40 px-4 py-3">
@@ -44,7 +44,7 @@ export default function RankingMethodology() {
             key={key}
             n={i + 1}
             icon={icon}
-            title={`${TERM_COPY[key].label} — ${TERM_COPY[key].question}`}
+            title={`${TERM_COPY[key].label}: ${TERM_COPY[key].question}`}
             isLast={i === terms.length - 1}
           >
             <p>{TERM_COPY[key].detail}</p>
@@ -63,9 +63,9 @@ export default function RankingMethodology() {
           agreement.
         </p>
         <p className="text-sm leading-relaxed text-brand-muted-fg">
-          The headline you see on a card — for example “
+          The headline you see on a card, for example “
           {CONVERGENCE_HEADLINE.agree_strongly}” or “
-          {CONVERGENCE_HEADLINE.conflict}” — is the agreement reading in words.
+          {CONVERGENCE_HEADLINE.conflict}”, is the agreement reading in words.
           When the two signals contradict each other the asset moves{" "}
           <span className="font-semibold text-brand-fg">down</span> the list, and
           we say so rather than quietly adjusting the number.
@@ -78,7 +78,7 @@ export default function RankingMethodology() {
             The measurements are reproducible: given the same public price and
             news data, anyone applying the same published formulas gets the same
             numbers. How those measurements are weighted against each other is our
-            editorial choice — so we show it to you instead of claiming it is
+            editorial choice, so we show it to you instead of claiming it is
             objective. Nothing on this page predicts a future price.
           </p>
         </div>

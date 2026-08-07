@@ -55,7 +55,7 @@ export default function DualBar({
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 A measure of market mood from trusted news articles and social
-                posts. Higher means the tone of that coverage is more positive — it
+                posts. Higher means the tone of that coverage is more positive. It
                 describes what is being said, not what will happen.
               </div>
             </div>
@@ -83,14 +83,14 @@ export default function DualBar({
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 {hasPercentile
-                  ? "Where this asset's price measurements (momentum, risk-adjusted return, stability) sit relative to the other assets analysed in the same run. A factual position among today's candidates — not a rating, and not a forecast."
+                  ? "Where this asset's price measurements (momentum, risk-adjusted return, stability) sit relative to the other assets analysed in the same run. A factual position among today's candidates, not a rating, and not a forecast."
                   : "A data-driven reading from technical indicators. Shown for runs recorded before the disclosed per-metric breakdown was available."}
               </div>
             </div>
           </span>
           <span className={`font-mono font-semibold ${valueTone}`}>
             {hasPercentile
-              ? `${Math.round(quantPercentile as number)}th pctile`
+              ? `${Math.round(quantPercentile as number)}th percentile`
               : `${quantitativeScore}%`}
           </span>
         </div>
