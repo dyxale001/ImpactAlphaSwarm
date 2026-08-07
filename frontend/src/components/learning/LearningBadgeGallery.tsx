@@ -109,7 +109,15 @@ export default function LearningBadgeGallery({
             <div
               className="pointer-events-none fixed z-50 w-[min(17rem,calc(100vw-2rem))] rounded-2xl border border-brand-border bg-brand-card px-4 py-3 text-left shadow-2xl backdrop-blur-sm"
               style={{
-                left: activeTooltip.rect.left + activeTooltip.rect.width / 2,
+                left: Math.min(
+                  Math.max(
+                    activeTooltip.rect.left + activeTooltip.rect.width / 2,
+                    16 + Math.min(272, window.innerWidth - 32) / 2,
+                  ),
+                  window.innerWidth -
+                    16 -
+                    Math.min(272, window.innerWidth - 32) / 2,
+                ),
                 top:
                   activeTooltip.rect.top < 160
                     ? activeTooltip.rect.bottom + 12

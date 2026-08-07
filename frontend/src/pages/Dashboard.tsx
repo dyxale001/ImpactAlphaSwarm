@@ -334,12 +334,12 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
   }
 
   return (
-    <div className="space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto">
+    <div className="space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
         <div className="flex items-center gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-brand-fg">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-brand-fg">
               {getTimeGreeting()}
               {profile?.first_name ? `, ${profile.first_name}` : ""}
             </h1>
@@ -348,8 +348,8 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-sm text-brand-muted-fg">
-          <span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm text-brand-muted-fg">
+          <span className="w-full lg:w-auto">
             Last AI run:{" "}
             {latestRunCreatedAt
               ? new Date(latestRunCreatedAt).toLocaleString()
@@ -396,7 +396,7 @@ const handleAddToWatchlist = async (result: AssetSearchResult) => {
           </div>
         </div>
       </div>
-      <div className="inline-flex w-fit items-center rounded-lg border border-brand-border/50 bg-brand-bg/60 backdrop-blur-xl px-4 py-2 text-xs text-brand-muted-fg">
+      <div className="inline-flex w-fit max-w-full flex-wrap items-center rounded-lg border border-brand-border/50 bg-brand-bg/60 backdrop-blur-xl px-4 py-2 text-xs text-brand-muted-fg">
         {exchangeRate !== null ? (
           <>
             US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}

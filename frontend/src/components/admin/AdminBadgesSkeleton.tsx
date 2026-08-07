@@ -1,6 +1,6 @@
 export default function AdminBadgesSkeleton() {
   return (
-    <div className="relative space-y-8 p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
+    <div className="relative space-y-8 p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
       <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center text-brand-fg">
         Loading badges...
       </div>

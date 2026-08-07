@@ -36,7 +36,7 @@ text-sm text-brand-muted-fg
 
       <div className="flex gap-4 overflow-x-auto py-6 pb-10 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
         {category.articles.map((article) => (
-          <div key={article.id} className="w-[20rem] shrink-0 snap-start">
+          <div key={article.id} className="w-[min(20rem,80vw)] shrink-0 snap-start">
             <LearningCard
               article={article}
               onOpenArticle={onOpenArticle}

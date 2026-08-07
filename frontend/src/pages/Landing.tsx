@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Terminal,
   Activity,
+  Menu,
   Zap,
   Flame,
   Sparkles,
@@ -316,6 +317,7 @@ function ScorecardRowsLight() {
 
 export default function Landing() {
   const rootRef = useRef<HTMLDivElement>(null)
+  const [navOpen, setNavOpen] = useState(false)
   useRibbonScroll(rootRef)
 
   return (
@@ -324,35 +326,69 @@ export default function Landing() {
       className="relative min-h-screen overflow-x-clip bg-neutral-100 font-sans text-forest-900 selection:bg-lime-500 selection:text-forest-900"
     >
       {/* ═══ Nav ═══ */}
-      <nav className="relative z-20 mx-auto flex max-w-[1200px] items-center justify-between px-8 py-6">
+      <nav className="relative z-20 mx-auto flex max-w-[1200px] items-center justify-between px-4 py-6 sm:px-8">
         <Wordmark />
         <div className="flex items-center gap-2">
-          <a href="#journey" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 md:inline-flex">
+          <a href="#journey" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
             The Journey
           </a>
-          <a href="#swarm" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 md:inline-flex">
+          <a href="#swarm" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
             The Swarm
           </a>
-          <a href="#faq" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 md:inline-flex">
+          <a href="#faq" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
             FAQ
           </a>
           <Link
             to="/login"
-            className="ml-2 rounded-full border border-forest-900/14 px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:border-forest-900/28"
+            className="ml-2 hidden rounded-full border border-forest-900/14 px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:border-forest-900/28 sm:inline-flex"
           >
             Sign In
           </Link>
           <Link
             to="/signup"
-            className="rounded-full bg-forest-700 px-[22px] py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-85"
+            className="rounded-full bg-forest-700 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-85 sm:px-[22px] sm:py-2.5"
           >
             Open Account
           </Link>
+          <button
+            type="button"
+            onClick={() => setNavOpen((o) => !o)}
+            aria-label="Open menu"
+            aria-expanded={navOpen}
+            className="inline-flex rounded-full p-2 text-forest-900 transition-colors hover:bg-neutral-200 lg:hidden"
+          >
+            <Menu size={20} strokeWidth={2} />
+          </button>
         </div>
+
+        {navOpen && (
+          <div className="absolute top-full right-4 z-30 flex w-56 flex-col gap-1 rounded-2xl border border-forest-900/10 bg-white p-2 shadow-xl sm:right-8 lg:hidden">
+            {[
+              ['#journey', 'The Journey'],
+              ['#swarm', 'The Swarm'],
+              ['#faq', 'FAQ'],
+            ].map(([href, label]) => (
+              <a
+                key={href}
+                href={href}
+                onClick={() => setNavOpen(false)}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-100"
+              >
+                {label}
+              </a>
+            ))}
+            <Link
+              to="/login"
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-100 sm:hidden"
+            >
+              Sign In
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* ═══ Hero ═══ */}
-      <header className="relative mx-auto max-w-[1200px] px-8 pt-6">
+      <header className="relative mx-auto max-w-[1200px] px-4 sm:px-8 pt-6">
         {/* Hero ribbon: above the lime panel, below the bento cards */}
         <SquiggleRibbon
           pathId="rb-hero"
@@ -360,7 +396,7 @@ export default function Landing() {
           viewBox="0 0 1400 900"
           para={0.16}
           rot={5}
-          className="z-3 -top-[140px] -left-[120px] h-[960px] w-[1500px]"
+          className="hidden lg:block z-3 -top-[140px] -left-[120px] h-[960px] w-[1500px]"
           strokeClass="stroke-lime-500"
           strokeWidth={58}
           text="Emotionless Research · Explainable Signals · Built For Everyday Investors · Powered By A Swarm Of Specialist Agents · Emotionless Research"
@@ -376,7 +412,7 @@ export default function Landing() {
               <Activity size={13} strokeWidth={2} />
               Welcome To AlphaSwarm
             </span>
-            <h1 className="text-[42px] font-medium leading-[1.05] tracking-tight text-balance text-forest-700 md:text-[68px]">
+            <h1 className="text-[34px] font-medium leading-[1.05] tracking-tight text-balance text-forest-700 sm:text-[42px] md:text-[68px]">
               Meet Your AI Investment Committee
             </h1>
             <p className="max-w-[480px] text-lg leading-relaxed text-forest-900">
@@ -490,7 +526,7 @@ export default function Landing() {
       </header>
 
       {/* ═══ The Swarm ═══ */}
-      <section id="swarm" className="relative mx-auto mt-32 max-w-[1200px] px-8">
+      <section id="swarm" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-forest-900 px-8 py-12 md:px-16 md:py-[72px]">
           <svg viewBox="0 0 600 600" className="pointer-events-none absolute -top-[180px] -right-[160px] h-[480px] w-[480px]" aria-hidden="true">
             <circle cx="300" cy="300" r="280" className="fill-lime-500" opacity="0.16" />
@@ -535,7 +571,7 @@ export default function Landing() {
       </section>
 
       {/* ═══ Journey ═══ */}
-      <section id="journey" className="relative mx-auto mt-32 max-w-[1200px] px-8">
+      <section id="journey" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
         <div className="mx-auto mb-24 max-w-[620px] text-center">
           <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">The Journey</p>
           <h2 className="mb-4 text-4xl font-medium leading-[1.1] tracking-tight text-balance text-forest-700 md:text-5xl">
@@ -553,7 +589,7 @@ export default function Landing() {
           viewBox="0 0 1300 1100"
           para={0.12}
           rot={-2}
-          className="z-1 top-[160px] -right-[180px] h-[1100px] w-[1300px]"
+          className="hidden lg:block z-1 top-[160px] -right-[180px] h-[1100px] w-[1300px]"
           strokeClass="stroke-forest-700"
           strokeWidth={52}
           strokeOpacity={0.95}
@@ -573,7 +609,7 @@ export default function Landing() {
             />
           </div>
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <div className="rounded-md border border-lime-500 bg-white p-3.5 ring-4 ring-lime-500/25">
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] font-bold text-forest-900">Technology</span>
@@ -655,7 +691,7 @@ export default function Landing() {
           viewBox="0 0 1600 700"
           para={0.12}
           rot={3}
-          className="z-1 top-[1010px] -left-[220px] h-[720px] w-[1650px]"
+          className="hidden lg:block z-1 top-[1010px] -left-[220px] h-[720px] w-[1650px]"
           strokeClass="stroke-lime-500"
           strokeWidth={54}
           text="Track The Signals · Question The Hype · Learn As You Go · Track The Signals · Question The Hype · Learn As You Go"
@@ -820,7 +856,7 @@ export default function Landing() {
           viewBox="0 0 1500 900"
           para={0.1}
           rot={-3}
-          className="z-1 top-[1990px] -left-[200px] h-[940px] w-[1560px]"
+          className="hidden lg:block z-1 top-[1990px] -left-[200px] h-[940px] w-[1560px]"
           strokeClass="stroke-lime-300"
           strokeWidth={64}
           text="Read · Quiz · Earn The Badge · Every Concept In Plain Language · Read · Quiz · Earn The Badge"
@@ -949,14 +985,14 @@ export default function Landing() {
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section id="cta" className="relative mx-auto mt-32 max-w-[1200px] px-8">
+      <section id="cta" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
         <SquiggleRibbon
           pathId="rb-cta"
           d="M950,20 C780,90 700,50 640,140 C570,250 760,330 680,470"
           viewBox="0 0 900 500"
           para={0.14}
           rot={4}
-          className="z-1 -top-[120px] -right-[140px] h-[480px] w-[860px]"
+          className="hidden lg:block z-1 -top-[120px] -right-[140px] h-[480px] w-[860px]"
           strokeClass="stroke-lime-500"
           strokeWidth={48}
           text="Join The Swarm · Research Without The Noise · Join The Swarm"
@@ -994,7 +1030,7 @@ export default function Landing() {
       </section>
 
       {/* ═══ Footer ═══ */}
-      <footer className="relative z-2 mx-auto mt-24 max-w-[1200px] px-8 pb-12">
+      <footer className="relative z-2 mx-auto mt-24 max-w-[1200px] px-4 sm:px-8 pb-12">
         <div className="flex flex-wrap justify-between gap-12 border-b border-forest-900/8 pb-10">
           <div className="max-w-[300px]">
             <div className="mb-3">

@@ -37,10 +37,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-10 pt-10 px-8 pb-16 max-w-4xl mx-auto">
+    <div className="space-y-10 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 max-w-4xl mx-auto">
 
       {/* Page header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-fg">Settings</h1>
           <p className="text-sm text-brand-muted-fg mt-1">Manage your account and app preferences.</p>
@@ -48,7 +48,7 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleSignOut}
-          className="px-4 py-2 rounded-full bg-danger/30 border border-danger hover:bg-danger hover:text-white text-semantic-danger text-sm transition-colors"
+          className="self-start shrink-0 whitespace-nowrap px-4 py-2 rounded-full bg-danger/30 border border-danger hover:bg-danger hover:text-white text-semantic-danger text-sm transition-colors"
         >
           Sign out
         </button>
@@ -62,7 +62,7 @@ export default function SettingsPage() {
         </div>
 
         <form onSubmit={onSubmitAccount} className="space-y-4">
-          <div className="glass-card p-6 space-y-4">
+          <div className="glass-card p-4 sm:p-6 space-y-4">
             <h3 className="text-sm font-semibold text-brand-fg">Account Information</h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -57,7 +57,7 @@ export function NewsArticleRow({
           {t.label}
         </span>
         <SentimentSignals score={a.sentiment_score} influence={a.influence} />
-        <span className="truncate">{a.source || "—"}</span>
+        <span className="min-w-0 truncate">{a.source || "—"}</span>
         {a.url && (
           <ExternalLink className="h-3.5 w-3.5 shrink-0 text-brand-muted-fg" />
         )}

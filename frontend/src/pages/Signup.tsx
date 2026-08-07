@@ -52,7 +52,7 @@ export default function Signup() {
         <form onSubmit={handleSubmit} className="animate-fade-up flex flex-col gap-5">
           <div>
             <p className="mb-2.5 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Join The Swarm</p>
-            <h1 className="mb-2.5 text-[40px] font-medium leading-[1.1] tracking-tight text-forest-700">
+            <h1 className="mb-2.5 text-[30px] sm:text-[34px] lg:text-[40px] font-medium leading-[1.1] tracking-tight text-forest-700">
               Open Your Account
             </h1>
             <p className="text-[15px] leading-relaxed text-muted">Set up in minutes. Your first explained pick today.</p>

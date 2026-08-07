@@ -82,7 +82,7 @@ function FundRow({
       className="group w-full text-left flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-card px-4 py-3 hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.99]"
     >
       {/* The rank is what makes this read as ordered rather than as a pile. */}
-      <span className="w-6 shrink-0 text-right text-xs font-mono font-semibold text-brand-muted-fg tabular-nums">
+      <span className="hidden sm:block w-6 shrink-0 text-right text-xs font-mono font-semibold text-brand-muted-fg tabular-nums">
         {rank}
       </span>
 
@@ -141,7 +141,7 @@ function PositionRow({
             {p.ticker}
           </span>
           {p.universe && (
-            <span className="text-[10px] text-brand-muted-fg truncate">
+            <span className="text-[10px] text-brand-muted-fg min-w-0 truncate">
               {p.universe}
             </span>
           )}

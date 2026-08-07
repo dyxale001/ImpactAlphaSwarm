@@ -1,6 +1,6 @@
 export default function AdminEditUserSkeleton() {
   return (
-    <div className="relative p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
+    <div className="relative p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
       <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center text-brand-fg">
         Loading user details...
       </div>

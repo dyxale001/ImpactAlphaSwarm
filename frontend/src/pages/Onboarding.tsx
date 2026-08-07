@@ -436,7 +436,7 @@ export default function Onboarding() {
             <button
               type="submit"
               disabled={loading || (step === 3 && (progressPercent < 100 || formData.universe.length === 0))}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-forest-700 p-4 text-[15px] font-semibold text-white transition-opacity hover:opacity-85 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-forest-700 p-4 text-[13px] sm:text-[15px] font-semibold text-white transition-opacity hover:opacity-85 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading
                 ? 'Initializing AlphaSwarm…'

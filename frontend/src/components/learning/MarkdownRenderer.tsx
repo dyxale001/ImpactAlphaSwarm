@@ -97,7 +97,7 @@ const markdownComponents: Components = {
   ),
 
   table: ({ children }) => (
-    <div className="my-8 overflow-hidden rounded-2xl border border-brand-border/60 shadow-sm">
+    <div className="my-8 overflow-x-auto rounded-2xl border border-brand-border/60 shadow-sm">
       <table className="w-full border-collapse bg-brand-card text-left text-sm text-brand-fg">
         {children}
       </table>

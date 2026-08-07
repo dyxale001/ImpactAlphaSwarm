@@ -134,7 +134,7 @@ export default function CompanySearch({
                 <span className="text-sm font-bold font-mono text-brand-fg shrink-0">
                   {a.ticker}
                 </span>
-                <span className="text-xs text-brand-muted-fg truncate">
+                <span className="text-xs text-brand-muted-fg min-w-0 truncate">
                   {a.name}
                 </span>
                 {a.isNew && (

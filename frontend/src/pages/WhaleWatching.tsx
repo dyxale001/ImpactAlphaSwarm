@@ -96,15 +96,15 @@ export default function WhaleWatchingPage() {
   const selected = ticker ? assetByTicker[ticker] : undefined;
 
   return (
-    <div className="max-w-7xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-6 animate-fade-in-up">
       {/* Header band. Forest ground with the wave motif breaking along the
           bottom edge, which is the one place on this page a literal wave earns
           its keep. Text sits on a relative layer so it clears the SVG. */}
-      <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
+      <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
         <WaveMotif className="h-24" />
         <div className="relative">
-          <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
-            <Waves className="w-7 h-7 text-brand-accent" />
+          <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
+            <Waves className="w-7 h-7 shrink-0 text-brand-accent" />
             Whale Watching
           </h1>
           <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
@@ -170,7 +170,7 @@ export default function WhaleWatchingPage() {
               {/* Solid green name pill, the same treatment the dashboard gives
                   its top pick, so a company reads the same way in both places. */}
               {selected?.name && (
-                <span className="px-3 py-1 rounded-full bg-brand-primary text-brand-bg text-xs font-mono">
+                <span className="px-3 py-1 rounded-full bg-brand-primary text-brand-bg text-xs font-mono truncate max-w-full">
                   {selected.name}
                 </span>
               )}
@@ -184,7 +184,7 @@ export default function WhaleWatchingPage() {
           </div>
 
           {/* Tabs: insider dealings vs institutional owners */}
-          <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1">
+          <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
             {(
               [
                 { id: "insiders", label: "Insider Dealings", Icon: Waves },

@@ -71,7 +71,7 @@ export default function RecommendationCard({
         {showScorecard && asset.convergenceState ? (
           // The disclosed replacement for the score: a STATE, not a grade. No
           // number, because a number is what invited "how good a buy is this".
-          <div className="relative group">
+          <div className="relative group" tabIndex={0}>
             <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
               Signals
             </p>
@@ -80,21 +80,21 @@ export default function RecommendationCard({
             >
               {CONVERGENCE_HEADLINE[asset.convergenceState]}
             </span>
-            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 z-50">
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 {CONVERGENCE_DETAIL[asset.convergenceState]}
               </div>
             </div>
           </div>
         ) : (
-          <div className="relative group">
+          <div className="relative group" tabIndex={0}>
             <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
               Confidence Score
             </p>
             <p className="text-xl font-bold font-mono leading-tight text-brand-fg">
               {asset.confidenceScore}
             </p>
-            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 z-50">
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 A unified measure of the AI's conviction in this asset. It blends
                 quantitative data with market sentiment, specifically applying

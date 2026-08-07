@@ -279,7 +279,7 @@ export default function AdminBadges() {
   }
 
   return (
-    <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
           <div className="space-y-2">
