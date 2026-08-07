@@ -90,7 +90,7 @@ export default function DualBar({
           </span>
           <span className={`font-mono font-semibold ${valueTone}`}>
             {hasPercentile
-              ? `${Math.round(quantPercentile as number)}th pctile`
+              ? `${Math.round(quantPercentile as number)}th percentile`
               : `${quantitativeScore}%`}
           </span>
         </div>

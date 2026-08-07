@@ -472,7 +472,7 @@ export default function Landing() {
             <div>
               <div className="mb-1 flex justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-forest-700">Quant Position vs Peers</span>
-                <span className="text-xs font-semibold text-forest-900">81st pctile</span>
+                <span className="text-xs font-semibold text-forest-900">81st percentile</span>
               </div>
               <div className="relative h-1.5 rounded-full bg-neutral-100">
                 <span className="absolute top-1/2 left-[81%] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-forest-700 shadow-[0_2px_6px_rgba(17,35,32,0.05)]" />
