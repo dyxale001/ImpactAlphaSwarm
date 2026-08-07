@@ -40,7 +40,7 @@ function IconPreview({
       <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
         {label}
       </p>
-      <div className="flex h-32 items-center justify-center overflow-hidden rounded-2xl border border-brand-border bg-brand-bg/50">
+      <div className="flex h-24 md:h-32 items-center justify-center overflow-hidden rounded-2xl border border-brand-border bg-brand-bg/50">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -116,7 +116,7 @@ export default function BadgeFormModal({
               <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
                 Replacement preview
               </p>
-              <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-bg/40 px-4 text-center">
+              <div className="flex h-24 md:h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-bg/40 px-4 text-center">
                 {selectedIconPreviewUrl ? (
                   <img
                     src={selectedIconPreviewUrl}

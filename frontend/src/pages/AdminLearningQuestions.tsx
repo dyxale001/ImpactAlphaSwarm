@@ -366,7 +366,7 @@ export default function AdminLearningQuestions() {
             <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
               Admin
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Questions &amp; Answers
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
@@ -479,7 +479,7 @@ export default function AdminLearningQuestions() {
             </div>
 
             <div className="overflow-x-auto overflow-y-auto max-h-124 rounded-2xl border border-brand-border bg-brand-card">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[1000px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-brand-border/50 bg-brand-bg/50">
                     <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">

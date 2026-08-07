@@ -167,7 +167,7 @@ export default function AdminLearningCategories() {
             <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
               Admin
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Learning Categories
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
@@ -237,7 +237,7 @@ export default function AdminLearningCategories() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6 items-start">
+        <section className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 items-start">
           <LearningCategoryForm
             values={editingCategory.values}
             isEditing={isEditing}
@@ -250,7 +250,7 @@ export default function AdminLearningCategories() {
 
           <div className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[760px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-brand-border/50 bg-brand-bg/50">
                     <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">

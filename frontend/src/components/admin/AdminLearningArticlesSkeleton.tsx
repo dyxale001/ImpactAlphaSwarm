@@ -24,22 +24,7 @@ export default function AdminLearningArticlesSkeleton() {
           <div className="h-10 w-28 rounded-full bg-brand-border/30" />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6 items-start">
-          <div className="rounded-brand border border-brand-border bg-background shadow-card p-6 space-y-4">
-            <div className="h-5 w-28 rounded bg-brand-border/35" />
-            <div className="space-y-3">
-              <div className="h-10 rounded-lg bg-brand-border/30" />
-              <div className="h-10 rounded-lg bg-brand-border/30" />
-              <div className="h-10 rounded-lg bg-brand-border/30" />
-              <div className="h-24 rounded-lg bg-brand-border/30" />
-              <div className="h-24 rounded-lg bg-brand-border/30" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <div className="h-10 w-28 rounded-full bg-brand-border/30" />
-              <div className="h-10 w-24 rounded-full bg-brand-border/30" />
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 gap-6 items-start">
           <div className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
             <div className="border-b border-brand-border/50 bg-brand-bg/50 px-5 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="space-y-2">
