@@ -17,7 +17,7 @@ export async function startAnalysis(payload: {
   console.log("Token from session:", token ? "✓ exists" : "✗ null");
 
   if (!token) {
-    throw new Error("No auth token — user may not be logged in");
+    throw new Error("No auth token, user may not be logged in");
   }
 
   const res = await fetch(`${BASE}/api/analysis/start`, {

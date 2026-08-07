@@ -57,7 +57,7 @@ export default function HowItWorks() {
               <span className="font-semibold text-brand-fg">price</span>{" "}
               measurements (the technicals and risk). This page walks through how
               each measurement is produced, and how they decide the order of your
-              list — so nothing about what you see is a black box.
+              list, so nothing about what you see is a black box.
             </>
           ) : (
             <>

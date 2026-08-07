@@ -24,7 +24,7 @@ export const SUB_DIMENSIONS: Record<
     label: "Momentum",
     subtitle: "How strongly the price has been trending recently",
     detail:
-      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other asset in the same run. It describes what the price has already done — it does not predict what it will do next.",
+      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other asset in the same run. It describes what the price has already done. It does not predict what it will do next.",
   },
   risk_adjusted_return: {
     label: "Risk-adjusted return",
@@ -36,7 +36,7 @@ export const SUB_DIMENSIONS: Record<
     label: "Stability",
     subtitle: "How steady the price has been day to day",
     detail:
-      "Ranks the asset's price volatility against the other assets in the same run, with steadier prices ranking higher. Stability describes past behaviour — it is not a measure of safety.",
+      "Ranks the asset's price volatility against the other assets in the same run, with steadier prices ranking higher. Stability describes past behaviour. It is not a measure of safety.",
   },
 };
 
@@ -44,7 +44,7 @@ export const SUB_DIMENSIONS: Record<
 // unanchored percentile is exactly the kind of number that fuels analysis
 // paralysis.
 export const PERCENTILE_CAPTION =
-  "Percentiles compare this asset with the other assets analysed in the same run — a position among peers, not a rating.";
+  "Percentiles compare this asset with the other assets analysed in the same run, a position among peers, not a rating.";
 
 // Context metrics are shown as definitional bands only. Both are non-monotonic
 // (neither direction is simply "better"), which is why they are never ranked.
@@ -102,7 +102,7 @@ export const RAW_METRICS: {
     key: "macd_histogram",
     label: "MACD histogram",
     detail:
-      "How the MACD trend gap has been changing recently — positive means the upward pressure has been strengthening, negative means weakening.",
+      "How the MACD trend gap has been changing recently: positive means the upward pressure has been strengthening, negative means weakening.",
   },
   {
     key: "rsi",
@@ -114,7 +114,7 @@ export const RAW_METRICS: {
     key: "sharpe_ratio",
     label: "Sharpe ratio",
     detail:
-      "Past return relative to volatility over the analysis window — how much return the price earned per unit of turbulence.",
+      "Past return relative to volatility over the analysis window: how much return the price earned per unit of turbulence.",
   },
   {
     key: "volatility",
@@ -124,10 +124,10 @@ export const RAW_METRICS: {
   },
 ];
 
-export const MODEL_SCORE_LABEL = "Model quant score — used in today's ranking";
+export const MODEL_SCORE_LABEL = "Model quant score, used in today's ranking";
 
 export const MODEL_SCORE_DISCLOSURE =
-  "This is the model's own synthesis of the measurements above. It is an input to how your feed is ordered — an editorial judgement, not a measurement.";
+  "This is the model's own synthesis of the measurements above. It is an input to how your feed is ordered, an editorial judgement, not a measurement.";
 
 export const INSUFFICIENT_UNIVERSE_NOTE =
   "This run analysed too few assets for a fair peer comparison, so percentile ranks aren't shown. The measurements below still apply.";

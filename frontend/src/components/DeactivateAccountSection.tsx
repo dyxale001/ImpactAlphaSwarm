@@ -30,7 +30,7 @@ export default function DeactivateAccountSection() {
         <h3 className="text-sm font-semibold text-semantic-danger">Deactivate Account</h3>
         <p className="text-xs text-brand-muted-fg mt-1 leading-relaxed">
           Deactivating hides your account and signs you out immediately.
-          Your data is kept — you can reactivate at any time by signing back in.
+          Your data is kept. You can reactivate at any time by signing back in.
         </p>
       </div>
 

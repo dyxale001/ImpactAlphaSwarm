@@ -17,7 +17,7 @@ export default function QuantMethodology() {
       <MethodologyCardHeader
         icon={BarChart3}
         title="The price measurements"
-        subtitle="Facts about recent price behaviour — deliberately not a rating."
+        subtitle="Facts about recent price behaviour, deliberately not a rating."
       />
 
       <div className="pt-1">
@@ -29,7 +29,7 @@ export default function QuantMethodology() {
           <ul className="mt-1 space-y-1.5">
             {RAW_METRICS.map((m) => (
               <li key={m.key}>
-                <span className="font-semibold text-brand-fg">{m.label}</span> —{" "}
+                <span className="font-semibold text-brand-fg">{m.label}</span>:{" "}
                 {m.detail}
               </li>
             ))}
@@ -50,8 +50,7 @@ export default function QuantMethodology() {
             report{" "}
             <span className="font-semibold text-brand-fg">
               where it sits among the other assets analysed in the same run
-            </span>{" "}
-            — for example “78th percentile”. That is a factual count, not a
+            </span>, for example “78th percentile”. That is a factual count, not a
             judgement.
           </p>
           <p>
@@ -67,16 +66,16 @@ export default function QuantMethodology() {
           <p>
             Two measurements are deliberately{" "}
             <span className="font-semibold text-brand-fg">never ranked</span>,
-            because for them “higher” is not “better” — both extremes are simply
+            because for them “higher” is not “better”; both extremes are simply
             notable. They are shown as definitional labels instead:
           </p>
           <ul className="mt-1 space-y-1.5">
             <li>
-              <span className="font-semibold text-brand-fg">RSI</span> —{" "}
+              <span className="font-semibold text-brand-fg">RSI</span>:{" "}
               {Object.values(RSI_BANDS).join(" · ")}
             </li>
             <li>
-              <span className="font-semibold text-brand-fg">Beta</span> —{" "}
+              <span className="font-semibold text-brand-fg">Beta</span>:{" "}
               {Object.values(BETA_BANDS).join(" · ")}
             </li>
           </ul>
@@ -97,7 +96,7 @@ export default function QuantMethodology() {
             An earlier version folded these measurements into one quantitative
             score where higher meant better. We removed it. Rules such as
             “oversold, therefore add points” bundle a forecast and a value
-            judgement into a single number — a recommendation dressed up as data.
+            judgement into a single number, a recommendation dressed up as data.
           </p>
           <p>
             What remains is every underlying measurement, its position among
