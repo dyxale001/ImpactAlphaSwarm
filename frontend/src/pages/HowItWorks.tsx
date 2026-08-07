@@ -30,7 +30,7 @@ export default function HowItWorks() {
   }, [hash]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-8 pb-20 pt-10 animate-fade-in-up">
+    <div className="mx-auto max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8 pb-20 pt-6 lg:pt-10 animate-fade-in-up">
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-brand-fg"

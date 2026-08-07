@@ -1,6 +1,6 @@
 export default function AdminLearningCategoriesSkeleton() {
   return (
-    <div className="relative space-y-8 p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
+    <div className="relative space-y-8 p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg animate-pulse">
       <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center text-brand-fg">
         Loading learning categories...
       </div>
@@ -24,7 +24,7 @@ export default function AdminLearningCategoriesSkeleton() {
           <div className="h-10 w-28 rounded-full bg-brand-border/30" />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 items-start">
           <div className="rounded-brand border border-brand-border bg-background shadow-card p-6 space-y-4">
             <div className="h-5 w-32 rounded bg-brand-border/35" />
             <div className="space-y-3">

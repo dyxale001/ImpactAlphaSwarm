@@ -279,14 +279,14 @@ export default function AdminBadges() {
   }
 
   return (
-    <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
               Admin
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">Badges</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Badges</h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
               Create, edit, and manage the badges shown in the Learning Centre.
             </p>
@@ -373,7 +373,7 @@ export default function AdminBadges() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full min-w-[980px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-brand-border/50 bg-brand-bg/50">
                   <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
@@ -430,7 +430,9 @@ export default function AdminBadges() {
                         </div>
                       </td>
                       <td className="p-5 align-top text-sm text-brand-muted-fg max-w-md">
-                        {badge.description}
+                        <span className="line-clamp-2 break-words">
+                          {badge.description}
+                        </span>
                       </td>
                       <td className="p-5 align-top text-sm text-brand-fg">
                         <span className="inline-flex rounded-full border border-brand-border bg-brand-bg/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
@@ -467,7 +469,7 @@ export default function AdminBadges() {
                 {badges.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       className="p-8 text-center text-brand-muted-fg"
                     >
                       No badges have been created yet.

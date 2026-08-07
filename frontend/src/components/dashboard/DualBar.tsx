@@ -46,13 +46,13 @@ export default function DualBar({
     <div className="space-y-3">
       <div className="space-y-1">
         <div className="flex justify-between">
-          <span className="relative group inline-block">
+          <span className="relative group inline-block" tabIndex={0}>
             <span
               className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
             >
               Sentiment Score
             </span>
-            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 A measure of market mood from trusted news articles and social
                 posts. Higher means the tone of that coverage is more positive — it
@@ -74,13 +74,13 @@ export default function DualBar({
 
       <div className="space-y-1">
         <div className="flex justify-between">
-          <span className="relative group inline-block">
+          <span className="relative group inline-block" tabIndex={0}>
             <span
               className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
             >
               {hasPercentile ? "Quant Position vs Peers" : "Quantitative Score"}
             </span>
-            <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-64 z-50">
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 {hasPercentile
                   ? "Where this asset's price measurements (momentum, risk-adjusted return, stability) sit relative to the other assets analysed in the same run. A factual position among today's candidates — not a rating, and not a forecast."

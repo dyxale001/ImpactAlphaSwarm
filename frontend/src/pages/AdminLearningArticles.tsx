@@ -171,14 +171,14 @@ export default function AdminLearningArticles() {
   }
 
   return (
-    <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
               Admin
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Learning Articles
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
@@ -258,14 +258,14 @@ export default function AdminLearningArticles() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap min-w-0">
               <label className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
                 Filter
               </label>
               <select
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
-                className="bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                className="w-full sm:w-auto max-w-full bg-brand-bg border border-brand-border text-brand-fg px-3 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
               >
                 <option value="all">All categories</option>
                 {categories.map((category) => (
@@ -285,7 +285,7 @@ export default function AdminLearningArticles() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full min-w-[1000px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-brand-border/50 bg-brand-bg/50">
                   <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">

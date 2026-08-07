@@ -64,14 +64,15 @@ export default function ConfidenceRing({
       </div>
 
       <div className="relative group">
-        <span
+        <button
+          type="button"
           className={`text-[10px] uppercase font-semibold ${
             onDark ? "text-brand-accent" : "text-primary"
           }`}
         >
           {label}
-        </span>
-        <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-full ml-3 top-1/2 -translate-y-1/2 w-64 z-50">
+        </button>
+        <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute top-full mt-2 left-1/2 -translate-x-1/2 w-64 max-w-[calc(100vw-2rem)] z-50">
           <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
             {tooltipText(label)}
           </div>

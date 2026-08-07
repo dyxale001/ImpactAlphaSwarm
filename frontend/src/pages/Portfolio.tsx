@@ -16,7 +16,7 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto">
+    <div className="space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-brand-fg">Paper Trading Portfolio</h1>

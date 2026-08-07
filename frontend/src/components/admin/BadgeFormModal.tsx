@@ -40,7 +40,7 @@ function IconPreview({
       <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
         {label}
       </p>
-      <div className="flex h-32 items-center justify-center overflow-hidden rounded-2xl border border-brand-border bg-brand-bg/50">
+      <div className="flex h-24 md:h-32 items-center justify-center overflow-hidden rounded-2xl border border-brand-border bg-brand-bg/50">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -85,10 +85,10 @@ export default function BadgeFormModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl overflow-hidden rounded-3xl border border-brand-border/60 bg-brand-card shadow-2xl"
+        className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-brand-border/60 bg-brand-card shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-brand-border/60 bg-brand-bg/70 px-6 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-brand-border/60 bg-brand-bg/70 px-6 py-5">
           <div className="space-y-2">
             <h3 className="text-xl font-semibold text-brand-fg">
               {isEditing ? "Edit Badge" : "Create Badge"}
@@ -109,14 +109,14 @@ export default function BadgeFormModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-5 px-6 py-6">
+        <form onSubmit={onSubmit} className="flex-1 overflow-y-auto overscroll-contain space-y-5 px-6 py-6">
           <div className="grid gap-4 md:grid-cols-2">
             <IconPreview label="Current icon" imageUrl={existingIconUrl} />
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
                 Replacement preview
               </p>
-              <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-bg/40 px-4 text-center">
+              <div className="flex h-24 md:h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-bg/40 px-4 text-center">
                 {selectedIconPreviewUrl ? (
                   <img
                     src={selectedIconPreviewUrl}

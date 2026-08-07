@@ -1,7 +1,7 @@
 export default function AssetDetailsSkeleton() {
   return (
-    <div className="relative max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-pulse">
-      <div className="pointer-events-none fixed inset-y-0 left-64 right-0 z-30 flex items-center justify-center text-brand-fg">
+    <div className="relative max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-pulse">
+      <div className="pointer-events-none fixed inset-y-0 left-0 lg:left-64 right-0 z-30 flex items-center justify-center text-brand-fg">
         Loading asset data...
       </div>
 

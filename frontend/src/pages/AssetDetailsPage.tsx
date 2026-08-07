@@ -57,7 +57,7 @@ function SignalBar({
   return (
     <div>
       <div className="flex justify-between items-center gap-2">
-        <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-2 min-w-0 flex-wrap">
           {label}
           {weightPct != null && (
             <span className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium">
@@ -93,9 +93,11 @@ function ExplainerLink({
     <Link
       to={`/asset/${ticker}/how-it-works#${section}`}
       className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+      title="How is this calculated?"
     >
       <HelpCircle className="w-3.5 h-3.5" />
-      How is this calculated?
+      <span className="hidden sm:inline">How is this calculated?</span>
+      <span className="sm:hidden">How?</span>
     </Link>
   );
 }
@@ -164,7 +166,7 @@ export default function AssetDetailsPage() {
 
   if (!asset) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen space-y-4">
+      <div className="flex flex-col items-center justify-center min-h-[60dvh] space-y-4">
         <p className="text-brand-fg">Asset not found.</p>
         <button
           onClick={() => navigate(-1)}
@@ -231,7 +233,7 @@ export default function AssetDetailsPage() {
       signalTerms.dataSufficiency < 0.75);
 
   return (
-    <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-8 animate-fade-in-up">
+    <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
         to="/dashboard"
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
@@ -241,9 +243,9 @@ export default function AssetDetailsPage() {
 
       <div className="flex flex-col gap-6">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-4xl font-bold text-brand-fg">{asset.ticker}</h1>
-            <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h1 className="text-3xl lg:text-4xl font-bold text-brand-fg">{asset.ticker}</h1>
+            <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary max-w-full truncate">
               {asset.name}
             </span>
           </div>
@@ -253,7 +255,7 @@ export default function AssetDetailsPage() {
               every asset that never has — 48 of 88 rows at the time of writing,
               both seeds and discovered names. price_at_run itself can also be null
               when the price lookup fails. */}
-          <p className="text-3xl font-mono text-brand-fg">
+          <p className="text-2xl lg:text-3xl font-mono text-brand-fg">
             {typeof recommendation?.price_at_run === "number"
               ? `R ${recommendation.price_at_run.toFixed(2)}`
               : "Price unavailable"}

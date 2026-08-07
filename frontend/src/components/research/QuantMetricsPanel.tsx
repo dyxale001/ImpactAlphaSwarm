@@ -234,6 +234,7 @@ export default function QuantMetricsPanel({
             {RAW_METRICS.map((m) => (
               <div
                 key={m.key}
+                tabIndex={0}
                 className="relative group rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
               >
                 <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
@@ -244,7 +245,7 @@ export default function QuantMetricsPanel({
                 </div>
                 {/* Same hover tooltip treatment as ConfidenceRing, but above the
                     pill — a side flyout would overflow the grid's outer columns. */}
-                <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 z-50">
+                <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 max-w-[calc(100vw-2rem)] z-50">
                   <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                     {m.detail}
                   </div>

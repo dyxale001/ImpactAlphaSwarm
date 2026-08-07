@@ -1,7 +1,7 @@
 export default function DashboardSkeleton() {
   return (
-    <div className="relative space-y-6 pt-10 px-8 pb-10 max-w-7xl mx-auto animate-pulse">
-      <div className="pointer-events-none fixed inset-y-0 left-64 right-0 z-30 flex items-center justify-center text-brand-fg">
+    <div className="relative space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto animate-pulse">
+      <div className="pointer-events-none fixed inset-y-0 left-0 lg:left-64 right-0 z-30 flex items-center justify-center text-brand-fg">
         Loading...
       </div>
 

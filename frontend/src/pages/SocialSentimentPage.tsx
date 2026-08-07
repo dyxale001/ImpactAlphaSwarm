@@ -39,7 +39,7 @@ export default function SocialSentimentPage() {
     recommendation?.social_sentiment_score ?? recommendation?.sentiment_score;
 
   return (
-    <div className="max-w-5xl mx-auto pt-10 px-8 pb-20 space-y-6 animate-fade-in-up">
+    <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-6 animate-fade-in-up">
       <SourcePageHeader
         ticker={tickerLabel}
         icon={MessageSquare}

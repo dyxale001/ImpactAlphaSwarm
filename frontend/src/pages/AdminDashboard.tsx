@@ -146,7 +146,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
             <p className="text-xs uppercase tracking-[0.12em] text-brand-primary font-semibold">
               Admin
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Platform Users
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">
@@ -251,7 +251,7 @@ export default function AdminDashboard() {
         {/* Table */}
         <div className="bg-background border border-brand-border rounded-brand overflow-hidden shadow-card">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full min-w-[880px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-brand-border/50 bg-brand-bg/50">
                   <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">

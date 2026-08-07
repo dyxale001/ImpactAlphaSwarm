@@ -92,9 +92,9 @@ export default function WatchedAssetCard({ asset, onRemove, isRemoving }: Props)
 
         <div className="flex items-center gap-1.5 shrink-0">
           {asset.universe && (
-            <div className={`flex items-center gap-1 chip bg-brand-border/20 ${sc.text} text-[10px]`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-              {asset.universe}
+            <div className={`flex items-center gap-1 chip bg-brand-border/20 ${sc.text} text-[10px] min-w-0`}>
+              <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${sc.dot}`} />
+              <span className="truncate max-w-[7rem]">{asset.universe}</span>
             </div>
           )}
           <button

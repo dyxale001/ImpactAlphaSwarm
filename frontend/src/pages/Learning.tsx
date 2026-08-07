@@ -300,19 +300,19 @@ export default function LearningPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto pt-10 px-8 pb-16 space-y-8">
+      <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-8">
         {/* Header band. Forest ground with sprouting leaf blades bottom-right —
             growth for the learning centre. Content sits on a relative layer so
             it clears the SVG. */}
-        <div className="hero-card overflow-hidden px-7 pt-8 pb-16">
+        <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
           <SproutMotif className="h-full" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
                 Learning Centre
               </p>
-              <h1 className="text-3xl font-bold text-brand-bg flex items-center gap-3">
-                <BookOpen className="w-7 h-7 text-brand-accent" />
+              <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
+                <BookOpen className="w-7 h-7 shrink-0 text-brand-accent" />
                 Build confidence with guided investing lessons
               </h1>
               <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
@@ -322,7 +322,7 @@ export default function LearningPage() {
               </p>
             </div>
 
-            <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
+            <div className="lg:shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
               <p className="text-xs uppercase tracking-widest text-brand-bg/60">
                 Learning XP
               </p>
@@ -371,7 +371,7 @@ export default function LearningPage() {
                         key={article.id}
                         className="w-full px-4 py-3 transition-colors hover:bg-brand-bg/60"
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="min-w-0 space-y-1">
                             <p className="font-semibold text-brand-fg">
                               {article.title}
@@ -383,7 +383,7 @@ export default function LearningPage() {
                               {article.summary}
                             </p>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2">
+                          <div className="flex flex-wrap sm:shrink-0 items-center gap-2">
                             <button
                               type="button"
                               onMouseDown={(event) => event.preventDefault()}

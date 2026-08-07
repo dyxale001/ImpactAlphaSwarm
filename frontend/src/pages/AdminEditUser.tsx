@@ -11,10 +11,10 @@ export default function AdminEditUser() {
   if (loading) return <AdminEditUserSkeleton />;
 
   return (
-    <div className="p-8 min-h-screen bg-brand-bg text-brand-fg">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
       <div className="max-w-xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Edit User Detail</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">Edit User Detail</h1>
           <button
             onClick={() => navigate("/admin")}
             className="text-brand-muted-fg hover:text-brand-fg"

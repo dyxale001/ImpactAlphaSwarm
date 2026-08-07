@@ -73,8 +73,8 @@ export function SourcePageHeader({
         <ArrowLeft className="w-4 h-4" /> Back to {ticker}
       </Link>
       <div>
-        <h1 className="text-3xl font-bold text-brand-fg flex items-center gap-3">
-          <Icon className="w-7 h-7 text-brand-primary" />
+        <h1 className="text-2xl lg:text-3xl font-bold text-brand-fg flex items-center gap-3">
+          <Icon className="w-7 h-7 shrink-0 text-brand-primary" />
           {title}
         </h1>
         <p className="text-sm text-brand-muted-fg mt-1">{subtitle}</p>
@@ -211,7 +211,7 @@ export function SortToggle({
   onChange: (key: SortKey) => void;
 }) {
   return (
-    <div className="inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5">
+    <div className="inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap">
       {SORT_OPTIONS.map((opt) => (
         <button
           key={opt.key}
@@ -232,7 +232,7 @@ export function SortToggle({
 // Bordered list container shared by both pages' source rows.
 export function SourceList({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-hidden">
+    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-x-auto">
       {children}
     </ul>
   );

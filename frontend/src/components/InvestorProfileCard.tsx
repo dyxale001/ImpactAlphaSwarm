@@ -65,9 +65,9 @@ export default function InvestorProfileCard({
           {name}
         </h4>
 
-        <div className={`grid grid-cols-3 ${compact ? 'mb-4 gap-3' : 'mb-[22px] gap-4'}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-3 ${compact ? 'mb-4 gap-2 sm:gap-3' : 'mb-[22px] gap-3 sm:gap-4'}`}>
           {facts.map((fact) => (
-            <div key={fact.label}>
+            <div key={fact.label} className="min-w-0">
               <p className={`font-semibold uppercase tracking-[0.12em] text-neutral-100/45 ${compact ? 'mb-[3px] text-[9px]' : 'mb-1 text-[10px]'}`}>
                 {fact.label}
               </p>

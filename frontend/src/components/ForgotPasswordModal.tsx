@@ -28,11 +28,11 @@ export default function ForgotPasswordModal({ onClose }: ForgotPasswordModalProp
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/50"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-forest-900/50 p-4"
       onClick={handleClose}
     >
       <div
-        className="animate-fade-up relative mx-4 w-full max-w-[420px] rounded-2xl bg-white p-8 shadow-xl"
+        className="animate-fade-up relative my-auto w-full max-w-[420px] rounded-2xl bg-white p-6 sm:p-8 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button

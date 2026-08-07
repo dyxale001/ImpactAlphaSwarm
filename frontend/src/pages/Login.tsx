@@ -83,7 +83,7 @@ export default function Login() {
         <form onSubmit={handleLogin} className="animate-fade-up flex flex-col gap-6">
           <div>
             <p className="mb-2.5 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Welcome Back</p>
-            <h1 className="mb-2.5 text-[40px] font-medium leading-[1.1] tracking-tight text-forest-700">
+            <h1 className="mb-2.5 text-[30px] sm:text-[34px] lg:text-[40px] font-medium leading-[1.1] tracking-tight text-forest-700">
               Sign In to Your Swarm
             </h1>
             <p className="text-[15px] leading-relaxed text-muted">Your ranked, explained picks are waiting.</p>

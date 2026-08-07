@@ -20,7 +20,7 @@ function SwitcherTab({ to, active, children }: { to: string; active: boolean; ch
   return (
     <Link
       to={to}
-      className={`whitespace-nowrap rounded-full px-[18px] py-2 text-[13px] font-semibold transition-colors ${
+      className={`whitespace-nowrap rounded-full px-3 py-2 text-xs sm:px-[18px] sm:text-[13px] font-semibold transition-colors ${
         active ? 'bg-forest-700 text-white' : 'text-forest-900'
       }`}
     >

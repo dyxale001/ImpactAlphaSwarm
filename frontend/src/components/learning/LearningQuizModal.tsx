@@ -157,10 +157,10 @@ export default function LearningQuizModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-brand-border/60 bg-brand-card shadow-2xl"
+        className="flex w-full max-w-3xl max-h-[90dvh] flex-col overflow-hidden rounded-3xl border border-brand-border/60 bg-brand-card shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-brand-border/60 bg-brand-bg/70 px-6 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-brand-border/60 bg-brand-bg/70 px-4 sm:px-6 py-4 sm:py-5">
           <div className="min-w-0 space-y-2">
             <span className="inline-flex items-center rounded-full border border-brand-primary/15 bg-brand-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-primary">
               Quiz Mode
@@ -176,14 +176,14 @@ export default function LearningQuizModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-brand-border/60 bg-brand-card px-3 py-2 text-sm text-brand-muted-fg transition-colors hover:text-brand-fg"
+            className="shrink-0 rounded-full border border-brand-border/60 bg-brand-card px-3 py-2 text-sm text-brand-muted-fg transition-colors hover:text-brand-fg"
             aria-label="Close quiz"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="px-6 py-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 sm:py-6">
           {loadingQuestions ? (
             <div className="space-y-4 py-8 text-center text-sm text-brand-muted-fg">
               Loading quiz questions...
@@ -237,7 +237,11 @@ export default function LearningQuizModal({
                 <div
                   className="h-2 rounded-full bg-brand-primary transition-all"
                   style={{
-                    width: `${((currentQuestionIndex + 1) / questions.length) * 100}%`,
+                    width: `${
+                      questions.length
+                        ? ((currentQuestionIndex + 1) / questions.length) * 100
+                        : 0
+                    }%`,
                   }}
                 />
               </div>

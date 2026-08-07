@@ -55,13 +55,13 @@ export function SocialPostRow({
   const row = (
     <div className={clamp ? "px-3 py-2.5" : "px-4 py-3.5"}>
       <p
-        className={`text-sm text-brand-fg ${clamp ? "line-clamp-3" : "leading-relaxed"}`}
+        className={`text-sm text-brand-fg break-words ${clamp ? "line-clamp-3" : "leading-relaxed"}`}
       >
         <PostText text={p.text} ticker={ticker} />
       </p>
       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-brand-muted-fg">
         <span className="font-mono">{p.date || "—"}</span>
-        <span className="truncate">
+        <span className="min-w-0 truncate">
           {p.author ? `@${p.author}` : "StockTwits"}
         </span>
         <SentimentSignals score={p.sentiment_score} influence={p.influence} />
