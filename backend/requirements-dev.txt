@@ -1,0 +1,4 @@
+# Test-only dependencies. Deliberately NOT in requirements.txt so the deployed
+# container image stays unchanged.
+#   pip install -r requirements.txt -r requirements-dev.txt
+pytest>=8.0
