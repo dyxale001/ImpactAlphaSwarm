@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
 import { reactivateOwnAccount } from '../services/api/analysis'
 
 export function useLogin() {
@@ -9,6 +10,7 @@ export function useLogin() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [needsReactivation, setNeedsReactivation] = useState(false)
+  const setRecovery = useAuthStore((state) => state.setRecovery)
   const navigate = useNavigate()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -34,6 +36,10 @@ export function useLogin() {
     }
 
     if (authData.user) {
+      // Signing in with a password settles any recovery left hanging by a tab
+      // that was closed mid reset, so it cannot strand this session.
+      setRecovery(false)
+
       const { data: profile } = await supabase
         .from('users')
         .select('*')

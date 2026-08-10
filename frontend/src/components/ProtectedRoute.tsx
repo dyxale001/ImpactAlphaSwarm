@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore'
 
 export default function ProtectedRoute() {
 
-  const { session, profile, analysis, isLoading, isProfileLoading } = useAuthStore()
+  const { session, profile, analysis, isLoading, isProfileLoading, isRecovery } = useAuthStore()
   const location = useLocation()
 
  
@@ -14,7 +14,13 @@ export default function ProtectedRoute() {
   if (!session) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
-  
+
+  // Clicking a reset link creates a real session. Until the new password is
+  // saved, that session only unlocks the reset page, nothing else.
+  if (isRecovery) {
+    return <Navigate to="/reset-password" replace />
+  }
+
 
   if (!profile && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />

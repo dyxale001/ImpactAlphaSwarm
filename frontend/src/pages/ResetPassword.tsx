@@ -7,8 +7,8 @@ export default function ResetPassword() {
   const {
     password, setPassword,
     confirmPassword, setConfirmPassword,
-    loading, error, success, isRecoverySession,
-    handleReset,
+    loading, error, success, isRecoverySession, leaving,
+    handleReset, cancelReset,
   } = useResetPassword()
 
   const [showPassword, setShowPassword] = useState(false)
@@ -48,6 +48,10 @@ export default function ResetPassword() {
     )
   }
 
+  // Signing out on the way to the login page briefly clears the recovery flag,
+  // so hold the render rather than flashing the expired link screen.
+  if (leaving) return null
+
   if (!isRecoverySession) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-brand-bg auth-bg relative selection:bg-brand-primary selection:text-white">
@@ -59,12 +63,13 @@ export default function ResetPassword() {
           <p className="text-brand-muted-fg leading-relaxed mb-6 font-medium">
             This password reset link is invalid or has expired. Please request a new one.
           </p>
-          <Link
-            to="/login"
+          <button
+            type="button"
+            onClick={cancelReset}
             className="inline-flex items-center justify-center gap-2 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/30 py-3 px-6 rounded-xl font-bold tracking-wide transition-all"
           >
             Back to Login
-          </Link>
+          </button>
         </div>
       </div>
     )
@@ -77,9 +82,13 @@ export default function ResetPassword() {
 
         <div className="w-full max-w-md flex flex-col z-10">
           <div className="mb-4">
-            <Link to="/login" className="text-sm text-brand-muted-fg hover:text-brand-primary transition-colors font-medium">
+            <button
+              type="button"
+              onClick={cancelReset}
+              className="text-sm text-brand-muted-fg hover:text-brand-primary transition-colors font-medium"
+            >
               ← Back to Login
-            </Link>
+            </button>
           </div>
 
           <form onSubmit={handleReset} className="flex flex-col gap-6">
