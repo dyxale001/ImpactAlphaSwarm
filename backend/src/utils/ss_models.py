@@ -1,14 +1,10 @@
 """Sentiment scout: shared data model and ticker helpers.
-
-``SocialMention`` is the single unit every sentiment source is normalized into,
-whether it came from StockTwits, Finnhub or Marketaux. Keeping it here lets the
-collectors, the scorer and the payload builders share one shape without importing
-each other.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -18,22 +14,42 @@ class SocialMention:
 	source: str
 	url: str | None = None
 	engagement: int = 0
-	# Engagement counts for display (social posts only). ``engagement`` stays the
-	# combined total used for GCP prioritization; these are just the numbers shown.
 	likes: int = 0
 	reshares: int = 0
 	replies: int = 0
 	created_at: str | None = None
-	# Author-declared Bullish/Bearish tag (social posts only). Preferred over
-	# VADER when set; None means fall back to the model.
 	declared_sentiment: str | None = None
 	# Original article headline (news only), kept separate from the combined
-	# "headline. summary" ``text`` so display and dedup use the real headline
-	# instead of re-splitting on ". " (which breaks on abbreviations like "Sen.").
 	headline: str | None = None
 	# Reliability weight for the source-tier-weighted average. 1.0 for social
 	# posts; for news it is the publisher's tier weight (tier-1 highest).
 	weight: float = 1.0
+
+	def to_cache(self) -> dict[str, Any]:
+		"""Serialize a news mention to the cache JSON shape (Finnhub and Marketaux
+		share the same fields)."""
+		return {
+			"text": self.text,
+			"headline": self.headline,
+			"source": self.source,
+			"url": self.url,
+			"created_at": self.created_at,
+			"weight": self.weight,
+		}
+
+	@classmethod
+	def from_cache(cls, ticker: str, data: dict[str, Any]) -> "SocialMention":
+		"""Rebuild a news mention from a cached article."""
+		return cls(
+			ticker=ticker,
+			text=data.get("text", ""),
+			headline=data.get("headline"),
+			source=data.get("source", ""),
+			url=data.get("url"),
+			engagement=0,
+			created_at=data.get("created_at"),
+			weight=float(data.get("weight", 1.0)),
+		)
 
 
 def _normalize_tickers(tickers: list[str]) -> list[str]:
