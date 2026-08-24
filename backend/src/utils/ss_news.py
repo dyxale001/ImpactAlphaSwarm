@@ -20,14 +20,12 @@ from __future__ import annotations
 import logging
 import os
 import re
-import threading
-import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from .schemas import parse_finnhub_article, parse_marketaux_article
-from .ss_base import MentionSource
+from .ss_base import MentionSource, RateLimiter
 from .ss_config import SentimentConfig
 from .ss_models import SocialMention, _api_symbol, _normalize_tickers
 from .ss_sources import PublisherRegistry
@@ -42,27 +40,6 @@ logger = logging.getLogger("sentiment-scout")
 FINNHUB_NEWS_URL = "https://finnhub.io/api/v1/company-news"
 MARKETAUX_NEWS_URL = "https://api.marketaux.com/v1/news/all"
 
-
-class RateLimiter:
-	"""Spaces calls out so a shared API budget is not burst through.
-
-	The instance guarding Finnhub is deliberately process-wide (see
-	``FINNHUB_LIMITER``): the nightly union gather and any live refresh top-ups
-	must not be able to collectively exceed the free plan's ceiling, which a
-	per-caller limiter would allow.
-	"""
-
-	def __init__(self, min_interval: float):
-		self.min_interval = min_interval
-		self._lock = threading.Lock()
-		self._last_call = 0.0
-
-	def wait(self) -> None:
-		with self._lock:
-			delay = self.min_interval - (time.monotonic() - self._last_call)
-			if delay > 0:
-				time.sleep(delay)
-			self._last_call = time.monotonic()
 
 FINNHUB_LIMITER = RateLimiter(SentimentConfig.from_env().finnhub_min_interval)
 

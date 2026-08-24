@@ -995,7 +995,15 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     # 3. Personalize + persist per user, reusing the shared signals. The price
     #    cache dedupes yfinance price lookups across users' overlapping top-5s.
     price_cache: dict[str, Any] = {}
-    summary = {"total": len(users), "succeeded": 0, "failed": 0, "tickers": len(union)}
+    # ``union`` is carried out so the caller can roll the night's social history up
+    # over exactly the tickers this batch collected, without re-deriving the scope.
+    summary = {
+        "total": len(users),
+        "succeeded": 0,
+        "failed": 0,
+        "tickers": len(union),
+        "ticker_list": list(union),
+    }
     for user in users:
         try:
             top_5, _ = synthesize_rankings(

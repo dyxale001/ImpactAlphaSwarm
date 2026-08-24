@@ -17,7 +17,6 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..agents.gcp_nlp import score_with_gcp
 from .ss_aggregation import SentimentAggregator
 from .ss_config import SentimentConfig
 from .ss_models import SocialMention
@@ -65,6 +64,11 @@ class GcpNlpModel(SentimentModel):
 	in ``agents.gcp_nlp``."""
 
 	def score(self, text: str) -> float | None:
+		# Imported on call, not at module load: ``agents`` imports the scout, which
+		# imports this module, so a top-level import here makes utils unimportable
+		# unless agents happens to be loaded first.
+		from ..agents.gcp_nlp import score_with_gcp
+
 		return score_with_gcp(text)
 
 
@@ -131,7 +135,12 @@ class MentionScorer:
 		gcp_score = self.gcp.score(cleaned) if use_gcp else None
 		return self.combine_scores(vader_score, gcp_score)
 
-	def _signed_score(self, mention: SocialMention, use_gcp: bool) -> float:
+	def signed_score(self, mention: SocialMention, use_gcp: bool = False) -> float:
+		"""The signed score for one mention, in [-1, 1].
+
+		Public because history scores posts one at a time on ingest, rather than a
+		whole run's worth at once through ``score``.
+		"""
 		if mention.declared_sentiment == "Bullish":
 			return self.DECLARED_SENTIMENT_SIGNED
 		if mention.declared_sentiment == "Bearish":
@@ -166,7 +175,7 @@ class MentionScorer:
 		gcp_indices = self._gcp_indices(mentions, priority)
 
 		for index, mention in enumerate(mentions):
-			signed_score = self._signed_score(mention, use_gcp=index in gcp_indices)
+			signed_score = self.signed_score(mention, use_gcp=index in gcp_indices)
 			if signed_score >= self.BULLISH_THRESHOLD:
 				bullish_posts += 1
 			elif signed_score <= -self.BULLISH_THRESHOLD:
