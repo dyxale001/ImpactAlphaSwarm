@@ -24,7 +24,9 @@ import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
 import SentimentCalculation from "../components/research/SentimentCalculation";
+import { SentimentSparkline } from "../components/research/SentimentTrendChart";
 import { useAssetDetails } from "../hooks/useAssetDetails";
+import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import {
   NEWS_LOOKBACK_DAYS,
   NEWS_WEIGHT_PCT,
@@ -159,6 +161,9 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
+  // Loads independently of the AI run: it reads stored rollups, so it must not
+  // gate the page on its own loading state.
+  const sentimentHistory = useSentimentHistory(ticker);
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -491,6 +496,23 @@ export default function AssetDetailsPage() {
                     value={formatMetric(recommendation.bearish_posts, 0)}
                   />
                 </div>
+
+                {/* A prompt to look closer, not the study itself. Renders nothing
+                    until there are enough days to say something. */}
+                {sentimentHistory.daysWithData >= 3 && (
+                  <Link
+                    to={`/asset/${asset.ticker}/social`}
+                    className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 hover:bg-brand-muted/5 transition-colors"
+                  >
+                    <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+                      Last {sentimentHistory.points.length} days
+                    </span>
+                    <SentimentSparkline
+                      points={sentimentHistory.points}
+                      daysWithData={sentimentHistory.daysWithData}
+                    />
+                  </Link>
+                )}
                 <SocialPosts
                   posts={recommendation.social_posts ?? []}
                   ticker={asset.ticker}

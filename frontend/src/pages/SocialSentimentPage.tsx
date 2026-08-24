@@ -13,14 +13,20 @@ import {
   SourcePageHeader,
   SummaryStrip,
 } from "../components/research/sourcePageControls";
+import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { useAssetDetails } from "../hooks/useAssetDetails";
+import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import { useSentimentSources } from "../hooks/useSentimentSources";
 
+const HISTORY_DAYS = 14;
+
 // Full transparency page for the social side of the sentiment score: every
-// StockTwits post the latest AI run used, with sentiment and sort controls.
+// StockTwits post the latest AI run used, with sentiment and sort controls, plus
+// how the score has moved over the past fortnight.
 export default function SocialSentimentPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const { asset, recommendation, isLoading } = useAssetDetails(ticker);
+  const history = useSentimentHistory(ticker, HISTORY_DAYS);
 
   const posts: SocialPost[] = recommendation?.social_posts ?? [];
   const {
@@ -46,6 +52,15 @@ export default function SocialSentimentPage() {
         title="Social Sentiment"
         subtitle={`Every StockTwits post the latest AI run used to score ${tickerLabel}.`}
       />
+
+      {/* Sits above the run's posts, and outside the empty-state branch below: the
+          stored history is worth showing even on a run that collected nothing. */}
+      <div className="soft-card w-full p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">
+          Sentiment over the last {HISTORY_DAYS} days
+        </h2>
+        <SentimentTrendChart {...history} days={HISTORY_DAYS} />
+      </div>
 
       {!recommendation || posts.length === 0 ? (
         <EmptyStateCard message="No social posts were used in the latest analysis for this asset." />
