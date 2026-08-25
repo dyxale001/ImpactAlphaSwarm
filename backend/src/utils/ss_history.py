@@ -1,22 +1,4 @@
 """Sentiment scout: building and serving 14 days of social sentiment.
-
-The problem this solves is that StockTwits has no historical endpoint. The stream
-gives you the newest posts and nothing else, so a two-week view cannot be fetched;
-it has to be assembled. Two facts make that possible:
-
-  * every post carries its OWN created_at, so a single backward crawl already
-    contains several days of history, ready to be bucketed by date;
-  * every post carries a message id, so once a post is stored we can ask the API
-    for ids above the highest one held and never download it again.
-
-Hence two modes per ticker. A ticker with no stored history is SEEDED: walk
-backwards until the posts predate the window, which populates the chart straight
-away instead of waiting a fortnight. Every run after that is INCREMENTAL: ask only
-for what is new, which is typically a single short page.
-
-Scoring a historical day differs from scoring the live signal in two deliberate
-ways, both handled by injection rather than by branching: see ``BucketAggregator``
-for time decay and ``NullModel`` for the metered call.
 """
 
 from __future__ import annotations
@@ -38,11 +20,11 @@ logger = logging.getLogger("sentiment-scout")
 
 class NullModel(SentimentModel):
 	"""A model with no opinion, used to switch the metered GCP call off.
-
 	Bulk-scoring a backfill through GCP NLP would burn a monthly budget that is
-	deliberately sized for five posts per ticker per run. Passing this as the gcp
-	model leaves ``MentionScorer`` otherwise untouched, so a stored post is scored
-	by exactly the same code as a live one, minus the call we cannot afford.
+	sized for the top ``gcp_top_n`` posts per ticker per run, not for a crawl going
+	back weeks. Passing this as the gcp model leaves ``MentionScorer`` otherwise
+	untouched, so a stored post is scored by exactly the same code as a live one,
+	minus the call we cannot afford.
 	"""
 
 	def score(self, text: str) -> float | None:
@@ -51,12 +33,6 @@ class NullModel(SentimentModel):
 
 class BucketAggregator(SentimentAggregator):
 	"""Aggregator for a single day's posts, with time-decay switched off.
-
-	The live aggregator decays each post against *now*, which is right for a
-	current reading and wrong for a historical one: it would make every past day
-	fade a little more each time the rollup was rebuilt, so yesterday's number
-	would change tomorrow. Inside one day the decay is near flat anyway, so a
-	bucket weights by engagement alone and its score becomes a stable fact.
 	"""
 
 	def recency_weight(self, created_at: str | None) -> float:
@@ -84,14 +60,10 @@ class SocialHistoryCollector:
 		self.messages = messages or MessageRepository(self.config)
 		self.daily = daily or DailySentimentRepository()
 
-	# ── collection ───────────────────────────────────────────────────────────
+	# collection
 
 	def collect(self, tickers: list[str]) -> dict[str, list[SocialMention]]:
 		"""Top storage up for each ticker, then serve the scoring window from it.
-
-		Returning what is stored rather than what the call happened to return is
-		the point: on an incremental run the API may hand back nothing at all, and
-		the live score must still see a full window of posts.
 		"""
 		results: dict[str, list[SocialMention]] = {}
 		window_start = self._now() - datetime.timedelta(days=self.config.social_history_days)
@@ -112,7 +84,7 @@ class SocialHistoryCollector:
 	def _top_up(self, sym: str, window_start: datetime.datetime) -> list[SocialMention]:
 		"""Fetch whatever this ticker is missing, choosing seed or increment.
 
-		The seed runs when, and only when, we hold nothing for the ticker. It is
+		The seed runs when we hold nothing for the ticker. It is
 		tempting to also re-seed whenever the stored history is shallower than the
 		window, but that is wrong: a quiet ticker simply does not HAVE fourteen days
 		of posts, so the gap never closes and the backward crawl would repeat on
@@ -132,9 +104,6 @@ class SocialHistoryCollector:
 
 	def _store(self, sym: str, mentions: list[SocialMention]) -> int:
 		"""Score each post once and write it.
-
-		Scoring on ingest means a rollup rebuild never re-runs a model, and a post
-		keeps the score it was given even after its text ages out of any cache.
 		"""
 		scorer = self._bucket_scorer()
 		rows = []
@@ -149,11 +118,10 @@ class SocialHistoryCollector:
 			logger.info("Stored %d new StockTwits posts for %s", written, sym)
 		return written
 
-	# ── rollups ──────────────────────────────────────────────────────────────
+	# rollups
 
 	def rebuild_rollups(self, tickers: list[str]) -> None:
 		"""Recompute the trailing window of daily buckets from stored posts.
-
 		The whole window is rebuilt, not just today, because a seed crawl and any
 		late-arriving posts both change days that have already been written.
 		"""
@@ -169,7 +137,6 @@ class SocialHistoryCollector:
 	def _buckets(
 		self, sym: str, rows: list[dict[str, Any]], window_start: datetime.datetime
 	) -> list[dict[str, Any]]:
-		"""Group stored posts by calendar day and score each day."""
 		by_day: dict[datetime.date, list[dict[str, Any]]] = defaultdict(list)
 		for row in rows:
 			created = parse_ts(row.get("created_at"))
@@ -181,8 +148,8 @@ class SocialHistoryCollector:
 
 		for day in self._window_days(window_start):
 			day_rows = by_day.get(day, [])
-			# A day with no chatter is written with a null score, not a zero: the
-			# chart must show a gap rather than imply sentiment collapsed to 0.
+			# A day with no chatter is written with a null score, not a zero
+		
 			if not day_rows:
 				out.append(
 					{
@@ -214,11 +181,6 @@ class SocialHistoryCollector:
 		return out
 
 	def _scored_item(self, row: dict[str, Any]) -> dict[str, Any]:
-		"""The shape ``SentimentAggregator`` expects, built from a stored row.
-
-		``tier`` is always None: social posts are never publisher-tiered, which is
-		what routes them down the aggregator's engagement-weighted path.
-		"""
 		mention = SocialMention.from_row(row, self.config.stocktwits_engagement_cap)
 		raw = row.get("sentiment_score")
 		return {
@@ -234,7 +196,7 @@ class SocialHistoryCollector:
 		today = self._now().date()
 		return [start + datetime.timedelta(days=i) for i in range((today - start).days + 1)]
 
-	# ── serving and housekeeping ─────────────────────────────────────────────
+	# serving and housekeeping
 
 	def history(self, ticker: str, days: int | None = None) -> list[dict[str, Any]]:
 		"""The stored daily series for one ticker, oldest first."""
@@ -253,14 +215,11 @@ class SocialHistoryCollector:
 
 	def prune(self) -> None:
 		"""Drop raw posts past the retention window.
-
-		Retention runs a week longer than the chart window so that rebuilding the
-		oldest bucket still has its source rows.
 		"""
 		cutoff = self._now() - datetime.timedelta(days=self.config.social_retention_days)
 		self.messages.prune(cutoff)
 
-	# ── internals ────────────────────────────────────────────────────────────
+	# internals
 
 	def _bucket_scorer(self) -> MentionScorer:
 		"""A scorer that never spends a metered GCP call."""

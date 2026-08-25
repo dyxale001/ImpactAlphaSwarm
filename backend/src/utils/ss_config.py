@@ -34,7 +34,7 @@ def _env_float(name: str, default: float) -> float:
 @dataclass(frozen=True)
 class SentimentConfig:
 	"""Immutable settings shared by every collaborator in the scout."""
-	# --- News collection ----------------------------------------------------
+	# News collection
 	news_lookback_days: int = 7
 	marketaux_limit_per_ticker: int = 10
 	marketaux_max_pages: int = 25
@@ -43,34 +43,26 @@ class SentimentConfig:
 	finnhub_live_topup_max: int = 15
 	finnhub_min_interval: float = 1.1
 
-	# --- Social collection ----------------------------------------------------
+	# Social collection
 	stocktwits_max_pages: int = 2
 	stocktwits_engagement_cap: float = 8.0
-	# Spacing between StockTwits calls. The stream endpoint had no throttle at all
-	# before history collection existed, which only stayed survivable because we
-	# never asked for more than two pages.
 	stocktwits_min_interval: float = 1.0
 
-	# --- Social history -------------------------------------------------------
-	# Off by default: with the flag down, collection takes exactly the pre-history
-	# code path and neither new table is touched.
+	# Social history
 	social_history_enabled: bool = False
-	# How far back the chart reaches, and how deep the one-off seed crawl goes.
 	social_history_days: int = 14
-	# Raw posts are kept a week longer than the window so a rollup rebuild at the
-	# boundary still has its source rows.
+	# Raw posts kept a week longer than the window for the roll-up build up
 	social_retention_days: int = 21
-	# Ceiling on a history walk. One budget covers both the seed and the catch-up,
-	# because both walk backwards and both stop themselves: the seed when it passes
-	# the window edge, the catch-up as soon as it meets a post already stored. A
-	# normal night therefore spends one page no matter how high this is set, and the
-	# rest of the budget is only ever spent on a real gap.
+	# Ceiling on a history walk.
 	stocktwits_history_max_pages: int = 12
 
-	# --- Scoring --------------------------------------------------------------
-	gcp_top_n: int = 5
+	# Scoring
+	gcp_top_n: int = 10
 
-	# --- Aggregation ----------------------------------------------------------
+	# In flight ceiling for those calls. Matching gcp_top_n costs one round trip.
+	gcp_max_workers: int = 10
+
+	# Aggregation
 	news_recency_halflife_days: float = 2.0
 	news_weight: float = 0.7
 
@@ -97,7 +89,8 @@ class SentimentConfig:
 			social_history_days=_env_int("SOCIAL_HISTORY_DAYS", 14),
 			social_retention_days=_env_int("SOCIAL_RETENTION_DAYS", 21),
 			stocktwits_history_max_pages=_env_int("STOCKTWITS_HISTORY_MAX_PAGES", 12),
-			gcp_top_n=_env_int("GCP_SENTIMENT_TOP_N", 5),
+			gcp_top_n=_env_int("GCP_SENTIMENT_TOP_N", 10),
+			gcp_max_workers=max(1, _env_int("GCP_SENTIMENT_MAX_WORKERS", 10)),
 			news_recency_halflife_days=_env_float("NEWS_RECENCY_HALFLIFE_DAYS", 2.0),
 
 			news_weight=min(1.0, max(0.0, _env_float("NEWS_SENTIMENT_WEIGHT", 0.7))),

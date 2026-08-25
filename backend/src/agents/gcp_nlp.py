@@ -1,29 +1,12 @@
 """Google Cloud Natural Language API sentiment scorer (REST).
-
-Purpose: provide a second sentiment signal alongside VADER. The two signals are
-averaged into one score by the sentiment scout. This module is designed to fail
-gracefully: missing credentials, missing libraries, network/API errors, or an
-exhausted monthly quota all return ``None`` so the caller falls back to VADER.
-
-Cost control: the API bills 1 "unit" per 1000 characters. Each call truncates to
-1000 chars (1 unit) and a persisted monthly budget guard (default 500 units)
-stops spending once the cap is hit. Results are cached in-memory so duplicate
-text within a process does not re-spend units.
-
-Auth: prefers an API key (``GOOGLE_NLP_API_KEY``) which works locally and on
-Cloud Run. If no key is set it falls back to Application Default Credentials
-(the Cloud Run service account), which requires the optional ``google-auth``
-package.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import threading
-from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
+
+from .nlp_budget import get_ledger
 
 try:
 	import requests
@@ -44,52 +27,9 @@ except ImportError:
 NL_ENDPOINT = "https://language.googleapis.com/v2/documents:analyzeSentiment"
 MAX_CHARS = 1000  # 1 NLP unit == 1000 chars; keep every call to a single unit.
 
-_CACHE_DIR = Path(os.getenv("ALPHASWARM_CACHE_DIR", "data/cache"))
-_BUDGET_FILE = _CACHE_DIR / "gcp_nlp_budget.json"
-_budget_lock = threading.Lock()
-
 
 class _GcpRetryableError(Exception):
 	"""Raised on transient API errors (429/5xx) to trigger a tenacity retry."""
-
-
-def _monthly_budget() -> int:
-	try:
-		return int(os.getenv("GOOGLE_NLP_MONTHLY_BUDGET", "500"))
-	except ValueError:
-		return 500
-
-
-def _current_month() -> str:
-	return datetime.now(timezone.utc).strftime("%Y-%m")
-
-
-def _read_budget() -> dict:
-	try:
-		data = json.loads(_BUDGET_FILE.read_text(encoding="utf-8"))
-	except (FileNotFoundError, ValueError, OSError):
-		data = {}
-	if data.get("month") != _current_month():
-		# New month (or first run) resets the counter.
-		return {"month": _current_month(), "used": 0}
-	return {"month": data["month"], "used": int(data.get("used", 0))}
-
-
-def _budget_available() -> bool:
-	with _budget_lock:
-		return _read_budget()["used"] < _monthly_budget()
-
-
-def _increment_budget() -> None:
-	with _budget_lock:
-		data = _read_budget()
-		data["used"] += 1
-		try:
-			_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-			_BUDGET_FILE.write_text(json.dumps(data), encoding="utf-8")
-		except OSError:
-			# If we cannot persist the counter, skip silently rather than fail scoring.
-			pass
 
 
 def _get_api_key() -> str | None:
@@ -160,14 +100,18 @@ if retry is not None:
 @lru_cache(maxsize=4096)
 def _cached_score(text: str) -> float | None:
 	# Cache hits never reach here, so the budget is only consumed on real calls.
-	if not _budget_available():
+	ledger = get_ledger()
+	if ledger.take(1) < 1:
 		return None
 	try:
 		score = _request_sentiment(text)
 	except Exception:
-		return None
-	if score is not None:
-		_increment_budget()
+		score = None
+	if score is None:
+		# Nothing was billed for a call that never reached the API or was refused, so
+		# the claim goes back. A 200 that parses to no score IS billed and is
+		# returned here too, but it is rare enough to accept the small under-count.
+		ledger.give_back(1)
 	return score
 
 
