@@ -20,6 +20,7 @@ import AdminLearningArticles from "./pages/AdminLearningArticles";
 import AdminLearningQuestions from "./pages/AdminLearningQuestions";
 import AdminBadges from "./pages/AdminBadges";
 import DashboardPage from "./pages/Dashboard";
+import AssetsPage from "./pages/Assets";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import PortfolioPage from "./pages/Portfolio";
@@ -82,6 +83,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />{" "}
           {/* Changed from "/" to "/dashboard" */}
+          <Route path="/assets" element={<AssetsPage />} />
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
