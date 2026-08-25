@@ -2,12 +2,6 @@
 
 These models act as the gatekeeper at the ingestion boundary: data is validated
 here *before* it is scored, cached, or stored. Two failure modes are handled:
-
-- Reject: structurally broken records (missing id, unparseable timestamp,
-  wrong types) raise a ValidationError and are dropped by the caller.
-- Flag: valid-but-suspicious records (future timestamps, empty text, oversized
-  bodies, negative engagement) are kept but marked ``is_anomalous`` with reasons,
-  so downstream code can audit or down-weight them rather than trust them blindly.
 """
 
 from __future__ import annotations
@@ -21,25 +15,16 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 logger = logging.getLogger("alpha-schemas")
 
-# Generous upper bound on body/summary text; anything beyond is suspicious.
+#Upper bound on body/summary text; anything beyond is suspicious.
 MAX_BODY_LEN = 40_000
 
 
-# ---------------------------------------------------------------------------
 # Social-text cleaning
-# ---------------------------------------------------------------------------
-# StockTwits bodies are raw user posts: emoji, profanity, tracking links and
-# trailing cashtag spam. We produce a cleaned, professional ``display_body`` that
-# is used downstream for both sentiment scoring and display, so the score and the
-# text the user reads come from the same sanitized content. The raw ``body`` is
-# retained only for the ingestion-time anomaly check and ticker-symbol matching.
+
 
 # Links (http/https/www) — dropped entirely; they add no readable value.
 _URL_RE = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 
-# Emoji / pictographs / dingbats / flags / symbol-arrows and their zero-width
-# joiners and variation selectors. Deliberately avoids the general-punctuation
-# block so dashes, quotes and ellipses survive.
 _EMOJI_RE = re.compile(
     "["
     "\U0001F000-\U0001FAFF"  # emoji, pictographs, supplemental & extended
@@ -55,9 +40,6 @@ _EMOJI_RE = re.compile(
 )
 
 # Curated profanity/slur → professional-substitute map. Whole-word,
-# case-insensitive. Each swear is swapped for a mild, meaning-preserving word so
-# the sentence still reads naturally (no "****"). Slurs and words with no clean
-# grammatical substitute map to "" and are removed, then whitespace is collapsed.
 _PROFANITY_REPLACEMENTS = {
     "fucking": "really",
     "fuckin": "really",
@@ -142,23 +124,16 @@ def clean_social_text(text: str) -> str:
     return cleaned.strip()
 
 
-# ---------------------------------------------------------------------------
 # Social-post quality gating
-# ---------------------------------------------------------------------------
-# StockTwits streams are heavy with posts that carry no usable, ticker-specific
-# opinion: bare cashtags ("$META"), watchlist/rotation lists tagging many names,
-# and promo/pump ads. These pollute the sentiment score, so we reject them at
-# ingestion rather than scoring noise. Thresholds are the "balanced" preset.
+
 
 MIN_CONTENT_WORDS = 4  # a post needs at least this many real words to be scored
 MAX_CASHTAGS = 3       # more than this = a list/watchlist, not a view on one name
 
-# A cashtag ($ followed by a letter) — excludes dollar amounts like "$675".
+
 _CASHTAG_RE = re.compile(r"\$[A-Za-z][A-Za-z.\-]*")
 _MENTION_RE = re.compile(r"@\w+")
-# Promotional / solicitation patterns: outsized "%+ gains" claims (3+ digit
-# percentages, so a genuine "up 2%" is not caught), "free ... plays/calls", and
-# channel solicitations. Kept tight to avoid flagging legitimate posts.
+
 _PROMO_RE = re.compile(
     r"([1-9]\d{2,}[\d,]*\s*%"
     r"|\bfree\b[^.\n]*\b(plays?|calls?|picks?|signals?|alerts?)\b"
@@ -189,16 +164,11 @@ def assess_social_quality(body: str) -> tuple[bool, str | None]:
     return True, None
 
 
-# ---------------------------------------------------------------------------
 # StockTwits (current/interim sentiment source)
-# ---------------------------------------------------------------------------
 
 
 class StockTwitsMessage(BaseModel):
     """A validated StockTwits message ready for sentiment scoring.
-
-    Built from the raw StockTwits API message via ``from_raw``, which flattens
-    the nested ``user``/``likes``/``retweets``/``symbols`` structures.
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -219,14 +189,10 @@ class StockTwitsMessage(BaseModel):
     replies: int = 0
     symbols: list[str] = Field(default_factory=list)
     url: str | None = None
-    # Author's own Bullish/Bearish tag on the post (StockTwits
-    # ``entities.sentiment.basic``). Preferred over VADER when present — a
-    # user-declared label reads slang, sarcasm and emoji better than a lexicon.
     declared_sentiment: str | None = None
 
     # Quality gate: whether the post carries a usable, ticker-specific opinion.
-    # Low-quality posts (bare cashtags, watchlist lists, promos) are dropped by
-    # the collector instead of scoring noise. See ``assess_social_quality``.
+  
     passes_quality: bool = True
     quality_reason: str | None = None
 
@@ -293,8 +259,6 @@ class StockTwitsMessage(BaseModel):
 
 
 def parse_stocktwits_message(raw: dict[str, Any]) -> StockTwitsMessage | None:
-    """Validate a raw StockTwits message. Returns a StockTwitsMessage (possibly
-    flagged) or ``None`` if structurally invalid (rejected + logged)."""
     try:
         return StockTwitsMessage.from_raw(raw)
     except ValidationError as exc:
@@ -302,19 +266,10 @@ def parse_stocktwits_message(raw: dict[str, Any]) -> StockTwitsMessage | None:
         return None
 
 
-# ---------------------------------------------------------------------------
 # Finnhub company news (trusted financial-source sentiment)
-# ---------------------------------------------------------------------------
 
 
 class FinnhubArticle(BaseModel):
-    """A validated Finnhub company-news article ready for sentiment scoring.
-
-    Built from the raw Finnhub ``company-news`` payload via ``from_raw``. The
-    article text used downstream is ``headline`` + ``summary``; ``source`` is the
-    publisher name (e.g. "Reuters", "CNBC") used to enforce the trusted-source
-    whitelist before scoring.
-    """
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -347,8 +302,6 @@ class FinnhubArticle(BaseModel):
     @field_validator("created_at", mode="before")
     @classmethod
     def _coerce_timestamp(cls, value: Any) -> Any:
-        # Finnhub gives ``datetime`` as epoch seconds (int). Non-positive values
-        # are treated as missing rather than 1970-01-01.
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             if value <= 0:
                 return None
@@ -376,8 +329,6 @@ class FinnhubArticle(BaseModel):
 
 
 def parse_finnhub_article(raw: dict[str, Any]) -> FinnhubArticle | None:
-    """Validate a raw Finnhub company-news article. Returns a FinnhubArticle
-    (possibly flagged) or ``None`` if structurally invalid (rejected + logged)."""
     try:
         return FinnhubArticle.from_raw(raw)
     except ValidationError as exc:
@@ -385,20 +336,10 @@ def parse_finnhub_article(raw: dict[str, Any]) -> FinnhubArticle | None:
         return None
 
 
-# ---------------------------------------------------------------------------
 # Marketaux news (tier-1-only supplemental news source)
-# ---------------------------------------------------------------------------
 
 
 class MarketauxArticle(BaseModel):
-    """A validated Marketaux ``/v1/news/all`` article ready for sentiment scoring.
-
-    Built from a raw item in the ``data`` array via ``from_raw``. The text used
-    downstream is ``title`` + ``description``; ``source`` is the publisher
-    (domain or name) used to enforce the tier-1 whitelist before scoring;
-    ``symbols`` is the list of tickers Marketaux tagged on the article (from its
-    ``entities`` array), used to fan a single batched response out per ticker.
-    """
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -415,7 +356,6 @@ class MarketauxArticle(BaseModel):
 
     @classmethod
     def from_raw(cls, msg: dict[str, Any]) -> "MarketauxArticle":
-        """Flatten a raw Marketaux news item into the validation schema."""
         symbols: list[str] = []
         for entity in msg.get("entities") or []:
             symbol = (entity.get("symbol") or "").upper().strip()
@@ -424,7 +364,7 @@ class MarketauxArticle(BaseModel):
         return cls(
             uuid=msg.get("uuid") or "",
             title=msg.get("title") or "",
-            # Prefer the fuller description; fall back to the snippet.
+            # Prefer the fuller description; fall back to the snippet if can't get the full description.
             description=msg.get("description") or msg.get("snippet") or "",
             source=msg.get("source") or "",
             url=msg.get("url"),
@@ -453,8 +393,6 @@ class MarketauxArticle(BaseModel):
 
 
 def parse_marketaux_article(raw: dict[str, Any]) -> MarketauxArticle | None:
-    """Validate a raw Marketaux news item. Returns a MarketauxArticle (possibly
-    flagged) or ``None`` if structurally invalid (rejected + logged)."""
     try:
         return MarketauxArticle.from_raw(raw)
     except ValidationError as exc:

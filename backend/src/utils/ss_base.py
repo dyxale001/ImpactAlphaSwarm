@@ -13,13 +13,6 @@ from .ss_sources import PublisherRegistry
 
 
 class RateLimiter:
-	"""Spaces calls out so a shared API budget is not burst through.
-
-	Instances guarding a provider are deliberately process-wide (see
-	``ss_news.FINNHUB_LIMITER``, ``ss_social.STOCKTWITS_LIMITER``): the nightly
-	union gather and any live refresh top-ups must not be able to collectively
-	exceed a plan's ceiling, which a per-caller limiter would allow.
-	"""
 
 	def __init__(self, min_interval: float):
 		self.min_interval = min_interval
@@ -48,5 +41,4 @@ class MentionSource(ABC):
 		"""
 
 	def empty(self, tickers: list[str]) -> dict[str, list[SocialMention]]:
-		"""The no-results shape every collector falls back to."""
 		return {ticker: [] for ticker in tickers}

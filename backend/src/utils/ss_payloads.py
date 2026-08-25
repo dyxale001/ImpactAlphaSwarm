@@ -1,12 +1,4 @@
 """Sentiment scout: per-item transparency payloads for the frontend.
-
-These are what let a user see exactly which articles and posts produced a score.
-Each item carries two deliberately distinct numbers:
-
-  * ``sentiment_score`` -- that item's OWN text sentiment, 0-100, ignoring when it
-    was published and who published it.
-  * ``influence`` -- the share of the rolled-up score the item actually drives,
-    after tier reliability and recency weighting.
 """
 
 from __future__ import annotations

@@ -110,7 +110,7 @@ class PublisherRegistry:
 		except (TypeError, ValueError):
 			return default
 
-	# --- Tier lookups ---------------------------------------------------------
+	# Tier lookups
 
 	def sources_for(self, tier: int) -> tuple[str, ...]:
 		return self._sources[tier]
@@ -138,7 +138,7 @@ class PublisherRegistry:
 				counts[f"tier{tier}"] += 1
 		return counts
 
-	# --- Syndicated wire recovery ---------------------------------------------
+	# Syndicated wire recovery
 	def effective_source(self, headline: str, summary: str, url: str | None, source: str) -> str:
 		if url:
 			host = urllib.parse.urlparse(url).netloc.lower()

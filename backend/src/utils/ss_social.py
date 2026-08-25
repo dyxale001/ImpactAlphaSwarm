@@ -1,14 +1,4 @@
 """Sentiment scout: social chatter collection (StockTwits).
-
-Two filters run before a post is allowed to vote. A quality gate drops bare
-cashtags, watchlist dumps and promos, which carry no ticker-specific opinion; and
-a per-author dedup collapses near-identical reposts, so one person spamming the
-same take cannot stack the sentiment score.
-
-The stream can be walked in either direction, which is what history collection
-rests on. ``max`` pages BACKWARDS into older posts and is used once per ticker to
-seed a window; ``since`` pulls only posts newer than an id already held and is
-what every run after that uses, so the same post is never downloaded twice.
 """
 
 from __future__ import annotations
@@ -145,17 +135,13 @@ class StockTwitsSource(SocialSource):
 	) -> list[SocialMention]:
 		"""Page backwards through one symbol's stream and return what it finds.
 
-		There is only one direction, deliberately. StockTwits always answers with
-		the NEWEST messages matching a filter, so a forward ``since`` walk cannot
-		enumerate a backlog: asking for "newer than X" when a thousand posts have
-		arrived returns the newest page, and advancing the cursor past it just
-		reaches the end of the stream, silently skipping everything in between.
+		Backwards is the only direction that works. StockTwits always answers with
+		the NEWEST messages matching a filter, so a forward ``since`` walk skips
+		whatever sits between the cursor and the head. Walking back from the head
+		enumerates the gap exactly, however large it is.
 
-		Walking back from the head instead, and stopping at the first post already
-		held, enumerates exactly the gap however large it is.
-
-		Whichever stop condition is given, the walk ends early: ``stop_at_id`` when
-		it meets a post we already have, ``until_dt`` when it passes the window edge.
+		The walk stops early at ``stop_at_id`` (a post already held) or ``until_dt``
+		(the window edge).
 		"""
 		api_sym = _api_symbol(sym)
 		url = self.STREAM_URL.format(symbol=api_sym)
@@ -306,12 +292,6 @@ class StockTwitsSource(SocialSource):
 
 class SocialCollector:
 	"""Gathers every social source into one set of mentions per ticker.
-
-	When social history is enabled, StockTwits is served through the history
-	collector instead of being called directly: posts go to storage first and the
-	scoring window is read back out of it. That is a strictly better deal for the
-	live signal too, since a run that fetches nothing new still scores a full
-	window rather than whatever the last call happened to return.
 	"""
 
 	def __init__(

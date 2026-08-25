@@ -1,18 +1,4 @@
 """Sentiment scout: trusted-source news collection.
-
-Two sources, deliberately used differently:
-
-  * Finnhub is queried live on every run and supplies the bulk of the volume.
-  * Marketaux is a tier-1-only top-up on a tight free-plan call budget, so it runs
-    ONCE per night with deep pagination and its results are cached. User refreshes
-    read that cache rather than spending calls.
-
-Anything from a publisher outside the trust tiers is dropped before scoring.
-
-How the two are combined depends on which run this is, so the three modes are
-strategy objects rather than a flag: ``LiveOnlyStrategy`` for a standalone run,
-``FetchAndCacheStrategy`` for the nightly batch, ``CacheFirstStrategy`` for a user
-refresh.
 """
 
 from __future__ import annotations

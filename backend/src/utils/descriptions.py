@@ -1,21 +1,5 @@
 """Plain-English descriptions for the entities Whale Watching shows: the
 companies in ``assets`` and the institutional funds that hold them.
-
-Why this module exists: the asset-discovery agent adds tickers nightly, and each
-new ticker drags in fund holders we have never seen. Both used to arrive
-undescribed, so a novice saw a bare four-letter symbol and a generic "an
-institutional investment firm" line.
-
-Descriptions are generated once by a light LLM (Groq, the same model the
-discovery agent already uses) during the nightly job and cached in Supabase, so
-no page load ever waits on a model and no blurb is paid for twice.
-
-Voice rules are enforced in the prompt and re-checked in ``_clean``: plain
-English a beginner understands, UK spelling, no dashes as punctuation, no advice,
-and no figures that would go stale between generations.
-
-Purely informational, like the rest of whale watching: nothing here reaches the
-Unified Confidence Score.
 """
 
 from __future__ import annotations
@@ -32,29 +16,14 @@ logger = logging.getLogger("alpha-api")
 
 # ── Config (env-tunable; the nightly job is the only caller) ──────────────────
 DESCRIPTIONS_ENABLED = os.getenv("DESCRIPTIONS_ENABLED", "true").lower() == "true"
-# Items per LLM call. Small enough that one bad reply loses little work, large
-# enough that a full backfill is a handful of calls.
 DESCRIPTIONS_BATCH_SIZE = int(os.getenv("DESCRIPTIONS_BATCH_SIZE", "10"))
-# Hard ceiling per nightly run per kind, so a sudden influx of discovered names
-# cannot turn into an unbounded number of LLM calls. Leftovers are picked up the
-# following night.
 DESCRIPTIONS_MAX_PER_RUN = int(os.getenv("DESCRIPTIONS_MAX_PER_RUN", "60"))
 
 MAX_DESCRIPTION_CHARS = 320
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Fund name normalisation
-# ══════════════════════════════════════════════════════════════════════════════
 
-# 13F filer names are messy: "BlackRock Inc.", "Blackrock, Inc", "BLACKROCK INC"
-# are all the same firm. Collapsing them to one key stops us generating (and
-# paying for) three descriptions of the same fund.
-#
-# Deliberately excludes "trust": it is a real part of many firm names, not a
-# legal suffix. Treating it as one turned "Northern Trust Corporation" into
-# "northern", which is both a bad key and one that could collide with an
-# unrelated "Northern <something>".
 _CORPORATE_SUFFIXES = {
     "inc", "incorporated", "corp", "corporation", "co", "company", "llc", "llp",
     "lp", "ltd", "limited", "plc", "sa", "nv", "ag", "gmbh",
@@ -62,14 +31,7 @@ _CORPORATE_SUFFIXES = {
 
 
 def normalise_fund_key(name: str) -> str:
-    """Match key for a fund name: lower-cased, punctuation stripped, corporate
-    suffixes dropped. ``"BlackRock, Inc."`` and ``"BLACKROCK INC"`` both give
-    ``"blackrock"``.
 
-    Suffixes are only stripped from the end, repeatedly, so a suffix word that
-    appears mid-name survives: "Bank of Montreal" keeps its "of", and
-    "Capital Group Companies Inc" loses only the "inc".
-    """
     cleaned = re.sub(r"[^a-z0-9\s&]", " ", (name or "").lower())
     tokens = cleaned.split()
     if tokens and tokens[0] == "the":
@@ -79,20 +41,8 @@ def normalise_fund_key(name: str) -> str:
     return " ".join(tokens)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Curated fund blurbs
-# ══════════════════════════════════════════════════════════════════════════════
 
-# These are the hand-written blurbs Whale Watching shipped with. They now serve
-# two purposes, neither of which is being the final answer:
-#   1. few-shot style examples in the LLM prompt, so generated blurbs sound like
-#      these rather than like a prospectus;
-#   2. a fallback for the biggest names before the nightly backfill has run, so
-#      a fresh deploy is never worse than what was there before.
-# Once a fund has a row in ``fund_descriptions`` that row wins.
-#
-# Match keys are checked against the normalised fund key as whole words, so a
-# generic token cannot swallow unrelated firms. Ordered most specific first.
 FUND_BLURBS: list[tuple[str, str]] = [
     ("blackrock", "The biggest investment manager in the world. It runs the iShares range of ETFs and looks after money for pension funds, governments and ordinary savers."),
     ("vanguard", "Owned by its own funds rather than outside shareholders, and famous for making cheap index funds popular. One of the largest investment managers around."),
@@ -150,14 +100,6 @@ FUND_BLURB_FALLBACK = (
 
 
 def curated_fund_blurb(name: str) -> Optional[str]:
-    """Return the hand-written blurb for a fund, or None if it is not one of the
-    curated names.
-
-    Matches on whole words within the normalised key, so ``"capital research"``
-    matches "Capital Research Global Investors" but a firm merely called
-    "Something Capital Management" falls through to the LLM instead of borrowing
-    the American Funds blurb.
-    """
     key = normalise_fund_key(name)
     if not key:
         return None
@@ -168,9 +110,7 @@ def curated_fund_blurb(name: str) -> Optional[str]:
     return None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Groq (thin and self-contained, so this module has no dependency on the agents)
-# ══════════════════════════════════════════════════════════════════════════════
 
 def _get_llm():
     """A Groq chat client, or None when unconfigured. Mirrors the discovery
@@ -187,14 +127,12 @@ def _get_llm():
             temperature=0.3,
             max_tokens=1200,
         )
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         logger.info("Groq init failed for descriptions: %s", exc)
         return None
 
 
 def _llm_json_object(llm, prompt: str) -> dict:
-    """Invoke the model and pull a JSON object out of the reply. {} on any
-    failure, which the callers treat as "nothing generated this pass"."""
     try:
         from langchain_core.messages import HumanMessage
 
@@ -212,9 +150,7 @@ def _llm_json_object(llm, prompt: str) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Prompting
-# ══════════════════════════════════════════════════════════════════════════════
 
 _VOICE = (
     "Voice rules, follow all of them:\n"
@@ -252,11 +188,6 @@ def _asset_prompt(items: list[dict]) -> str:
 
 
 def _fund_prompt(items: list[dict]) -> str:
-    # Where we have a hand-written blurb for a firm, hand the model the facts in
-    # it. Left to itself the model produces something true but empty ("a US
-    # investment firm that manages money for institutions") for firms we can
-    # describe far more usefully, e.g. that Geode quietly runs Fidelity's index
-    # funds. The model still does the writing, it just is not guessing.
     lines = []
     for it in items:
         known = curated_fund_blurb(it["fund_name"])
@@ -266,8 +197,6 @@ def _fund_prompt(items: list[dict]) -> str:
         )
     listing = "\n".join(lines)
 
-    # Two curated blurbs as style anchors. These set the register far better than
-    # adjectives in the instructions do.
     examples = (
         '{"BlackRock Inc.":"The biggest investment manager in the world. It runs '
         "the iShares range of ETFs and looks after money for pension funds, "
@@ -294,24 +223,17 @@ def _fund_prompt(items: list[dict]) -> str:
 
 def _clean(text: Any) -> Optional[str]:
     """Normalise one generated description, or None if it is unusable.
-
-    Belt and braces on the voice rules: models slip dashes in even when told not
-    to, so we rewrite them rather than reject an otherwise good blurb.
     """
     if not isinstance(text, str):
         return None
     out = text.strip().strip('"').strip()
-    if len(out) < 20:  # empty string (the "not confident" signal) or a stub
+    if len(out) < 20:
         return None
-    # Em dash / en dash used as punctuation becomes a comma; a hyphen with spaces
-    # around it likewise. Hyphens inside words (well-known) are left alone.
     out = re.sub(r"\s*[—–]\s*", ", ", out)
     out = re.sub(r"\s+-\s+", ", ", out)
     out = re.sub(r"\s+", " ", out)
     if len(out) > MAX_DESCRIPTION_CHARS:
         out = out[:MAX_DESCRIPTION_CHARS].rsplit(" ", 1)[0].rstrip(",.")
-    # The model routinely drops the closing full stop, which looks like a
-    # truncated blurb next to the ones that have it.
     if out[-1] not in ".!?":
         out += "."
     return out
@@ -322,13 +244,9 @@ def _batched(items: list, size: int) -> Iterable[list]:
         yield items[i : i + size]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Reads
-# ══════════════════════════════════════════════════════════════════════════════
 
 def read_fund_descriptions() -> dict[str, str]:
-    """All cached fund descriptions as {normalised key: description}. {} on
-    error, which just means callers fall back to the curated blurbs."""
     try:
         res = supabase.table("fund_descriptions").select("fund_key, description").execute()
     except Exception as exc:
@@ -342,8 +260,6 @@ def read_fund_descriptions() -> dict[str, str]:
 
 
 def _assets_missing_descriptions(limit: int) -> list[dict]:
-    """Active assets with no description yet, oldest discoveries first so a big
-    backlog drains in a stable order."""
     try:
         res = (
             supabase.table("assets")
@@ -359,9 +275,7 @@ def _assets_missing_descriptions(limit: int) -> list[dict]:
         return []
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # Backfill
-# ══════════════════════════════════════════════════════════════════════════════
 
 def backfill_asset_descriptions(limit: int = DESCRIPTIONS_MAX_PER_RUN) -> dict:
     """Generate and store descriptions for active assets that lack one.
@@ -437,8 +351,6 @@ def backfill_fund_descriptions(
     written = 0
     for batch in _batched(items, DESCRIPTIONS_BATCH_SIZE):
         generated = _llm_json_object(llm, _fund_prompt(batch))
-        # Map back on the normalised key so minor echo differences in the name
-        # ("Inc." dropped, case changed) still land on the right row.
         by_key = {it["fund_key"]: it for it in batch}
         for raw_name, raw_text in generated.items():
             item = by_key.get(normalise_fund_key(str(raw_name)))
@@ -471,13 +383,6 @@ def _write_fund_description(fund_key: str, fund_name: str, description: str) -> 
 
 
 def backfill_descriptions(fund_names: Optional[list[str]] = None) -> dict:
-    """Nightly entry point: describe anything new that arrived today.
-
-    Called after the discovery agent has refreshed the pool, so the tickers it
-    added tonight are described before anyone opens Whale Watching in the
-    morning. ``fund_names`` comes from the rebuilt fund-holdings aggregation;
-    omit it to do assets only.
-    """
     if not DESCRIPTIONS_ENABLED:
         return {"enabled": False}
     summary: dict[str, Any] = {"enabled": True}

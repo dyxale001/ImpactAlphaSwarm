@@ -1,17 +1,4 @@
 """Sentiment scout: persistence for social posts and their daily rollups.
-
-Two repositories over the two tables migration 015 creates.
-
-``MessageRepository`` holds raw StockTwits posts keyed by the platform's own
-message id. That key is what makes re-fetching impossible: the collector reads the
-highest id it holds for a ticker and asks the API only for what is newer.
-
-``DailySentimentRepository`` holds the per-day scores the chart reads. Those rows
-are derived, never authoritative, so they are always safe to delete and recompute
-from the raw table.
-
-Every method degrades rather than raises, matching the rest of the backend's
-Supabase layer: a history feature must never be able to fail an analysis run.
 """
 
 from __future__ import annotations
@@ -35,7 +22,7 @@ class MessageRepository:
 		"message_id, ticker, created_at, body, username, url, "
 		"likes, reshares, replies, declared_sentiment, sentiment_score"
 	)
-	#: Supabase rejects very large payloads, so inserts go up in batches.
+	#: Supabase rejects large payloads, so inserts go up in batches
 	CHUNK_SIZE = 200
 
 	def __init__(self, config: SentimentConfig | None = None):
@@ -43,10 +30,6 @@ class MessageRepository:
 
 	def high_water_mark(self, ticker: str) -> int | None:
 		"""The highest message id held for a ticker, or None if we hold none.
-
-		This is the whole dedupe mechanism. Derived from the posts themselves
-		rather than kept in a separate cursor table, so it cannot drift out of step
-		with what was actually stored.
 		"""
 		try:
 			res = (
@@ -82,10 +65,6 @@ class MessageRepository:
 
 	def read_window(self, ticker: str, since_dt: datetime.datetime) -> list[SocialMention]:
 		"""Every post held for a ticker since ``since_dt``, newest first.
-
-		This is what the live scorer reads. Serving from storage rather than from
-		whatever the last API call happened to return is what lets a mid-day
-		refresh score a full window even when no new posts have arrived.
 		"""
 		try:
 			res = (
@@ -121,11 +100,6 @@ class MessageRepository:
 
 	def insert_new(self, rows: list[dict[str, Any]]) -> int:
 		"""Insert posts, ignoring any already held.
-
-		Upsert on message_id rather than insert: two tickers can legitimately
-		return the same cross-tagged post within one run, and a conflict simply
-		means we already had it. Returns the number of rows sent, which the caller
-		logs to see how much genuinely new chatter each run picked up.
 		"""
 		usable = [row for row in rows if row.get("message_id") is not None]
 		if not usable:

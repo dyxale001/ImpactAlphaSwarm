@@ -44,11 +44,6 @@ class SocialMention:
 
 	def to_row(self, sentiment_score: float | None = None) -> dict[str, Any]:
 		"""Serialize a social post to its stocktwits_message_cache row.
-
-		Separate from ``to_cache`` because the two stores answer different
-		questions: news is cached as an opaque per-ticker blob keyed by ticker,
-		while a post is a row of its own keyed by ``message_id`` so it can be
-		deduped, bucketed by date and counted.
 		"""
 		return {
 			"message_id": self.message_id,
