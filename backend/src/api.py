@@ -547,7 +547,7 @@ async def get_price_history(ticker: str):
 
 
 @app.get("/api/assets/{ticker}/sentiment-history")
-async def get_sentiment_history(ticker: str, days: int = 14):
+async def get_sentiment_history(ticker: str, days: int = 7):
     """Return the daily social sentiment series for a ticker.
 
     Informational and unauthenticated, mirroring the price-history endpoint. Reads

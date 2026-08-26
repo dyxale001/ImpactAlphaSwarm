@@ -192,7 +192,7 @@ export interface SentimentHistoryResponse {
 
 // Daily social sentiment for the trend chart. Reads pre-computed rollups, so it
 // never touches StockTwits. Informational, so no auth token is needed.
-export async function getSentimentHistory(ticker: string, days = 14) {
+export async function getSentimentHistory(ticker: string, days = 7) {
   const res = await fetch(
     `${BASE}/api/assets/${encodeURIComponent(ticker)}/sentiment-history?days=${days}`,
   );

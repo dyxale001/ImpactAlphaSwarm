@@ -50,9 +50,9 @@ class SentimentConfig:
 
 	# Social history
 	social_history_enabled: bool = False
-	social_history_days: int = 14
-	# Raw posts kept a week longer than the window for the roll-up build up
-	social_retention_days: int = 21
+	social_history_days: int = 7
+	# Raw posts kept a few days longer than the window for the roll-up build up
+	social_retention_days: int = 10
 	# Ceiling on a history walk.
 	stocktwits_history_max_pages: int = 12
 

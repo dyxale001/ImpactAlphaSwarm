@@ -7,7 +7,7 @@ import {
 // Fetches the daily social sentiment series for a ticker. Informational only —
 // it reads rollups the nightly run already wrote, so it loads independently of
 // the AI run and never waits on StockTwits.
-export function useSentimentHistory(ticker: string | undefined, days = 14) {
+export function useSentimentHistory(ticker: string | undefined, days = 7) {
   const [points, setPoints] = useState<SentimentHistoryPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function useSentimentHistory(ticker: string | undefined, days = 14) {
   }, [ticker, days]);
 
   // Days with no chatter carry a null score, so a ticker can return a full
-  // fortnight of rows while still having almost nothing to plot. Callers show
+  // week of rows while still having almost nothing to plot. Callers show
   // the "building history" state off this count, not off points.length.
   const daysWithData = points.filter((p) => p.score !== null).length;
 

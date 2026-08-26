@@ -18,11 +18,11 @@ import { useAssetDetails } from "../hooks/useAssetDetails";
 import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import { useSentimentSources } from "../hooks/useSentimentSources";
 
-const HISTORY_DAYS = 14;
+const HISTORY_DAYS = 7;
 
 // Full transparency page for the social side of the sentiment score: every
 // StockTwits post the latest AI run used, with sentiment and sort controls, plus
-// how the score has moved over the past fortnight.
+// how the score has moved over the past week.
 export default function SocialSentimentPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const { asset, recommendation, isLoading } = useAssetDetails(ticker);

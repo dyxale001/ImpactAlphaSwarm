@@ -1,9 +1,8 @@
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -12,18 +11,31 @@ import {
 } from "recharts";
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
 
-// Score and post volume are different measures on different scales, so they get
-// their own panels rather than a shared plot with two y-axes. A second axis would
-// invite the reader to compare heights that mean nothing to each other, and to
-// read crossings between the line and the bars as events.
+// Score and volume share one plot: the day is the unit, and splitting it across
+// two panels made the reader do the join themselves.
 //
-// The two panels share one x-axis and one hover (Recharts `syncId`), so a day
-// still reads as a single column across both.
+// They are still different measures, so the overlay is built to stop them being
+// compared. Volume is scaled into the bottom third of the plot (VOLUME_HEADROOM)
+// and drawn behind the line in a recessive forest tone, so it reads as ground the
+// line travels over rather than a second series at the same rank. Only the score
+// owns the 0 to 100 axis a reader will actually measure against.
+//
+// The panel is forest, not the page's light card, because the neon line needs a
+// dark ground: on white it is unreadable, and it is the brand's accent precisely
+// against this background.
 
-const LINE_COLOR = "#3e6258"; // forest-500
-const BAR_COLOR = "#6a8b82"; // forest-400
-const AXIS_WIDTH = 34; // identical on both panels, or the dates fall out of step
-const MARGIN = { top: 4, right: 8, left: 0, bottom: 0 };
+const LINE_COLOR = "#c7f269"; // lime-500, the neon accent
+const BAR_COLOR = "#3e6258"; // forest-500, recessive against the forest panel
+const SPARK_COLOR = "#3e6258"; // the sparkline sits on a LIGHT card, so it stays forest
+const AXIS_TEXT = "rgba(255,255,255,0.55)";
+const GRID_LINE = "rgba(255,255,255,0.12)";
+const NEUTRAL_LINE = "rgba(255,255,255,0.28)";
+const AXIS_WIDTH = 34;
+const MARGIN = { top: 8, right: 4, left: 0, bottom: 0 };
+
+// Bars are scaled to a third of the plot height, which is what keeps volume
+// subordinate to the score line no matter how busy the busiest day was.
+const VOLUME_HEADROOM = 3;
 
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
@@ -38,26 +50,39 @@ function formatDay(date: string) {
   });
 }
 
+// One tooltip for the day, not one per series: the bar and the line are two
+// readings of the same column, so Recharts is given a single Tooltip on the
+// composed chart and it renders both from the shared datum.
 function TrendTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const point: SentimentHistoryPoint = payload[0].payload;
 
   return (
     <div
-      className="rounded-lg px-3 py-2 text-xs"
+      className="rounded-xl px-3 py-2 text-xs"
       style={{
-        background: "var(--color-brand-card)",
-        border: "1px solid var(--color-brand-border)",
-        color: "var(--color-brand-fg)",
+        background: "rgba(16, 34, 30, 0.96)",
+        border: "1px solid rgba(255,255,255,0.14)",
+        color: "#f4f7f2",
       }}
     >
       <div className="font-semibold mb-1">{formatDay(point.date)}</div>
       {point.score === null ? (
-        <div className="text-brand-muted-fg">No posts that day</div>
+        <div style={{ color: AXIS_TEXT }}>No posts that day</div>
       ) : (
         <>
-          <div>Sentiment {point.score}</div>
-          <div className="text-brand-muted-fg">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ background: LINE_COLOR }}
+            />
+            Sentiment {point.score}
+          </div>
+          <div className="flex items-center gap-1.5" style={{ color: AXIS_TEXT }}>
+            <span
+              className="inline-block w-2 h-2 rounded-sm"
+              style={{ background: BAR_COLOR }}
+            />
             {point.post_count} {point.post_count === 1 ? "post" : "posts"}
             {" · "}
             {point.bullish} bullish, {point.bearish} bearish
@@ -81,7 +106,7 @@ export function SentimentTrendChart({
   daysWithData,
   isLoading,
   error,
-  days = 14,
+  days = 7,
 }: Props) {
   if (isLoading) {
     return <div className="h-56 rounded-lg bg-brand-muted/10 animate-pulse" />;
@@ -111,85 +136,85 @@ export function SentimentTrendChart({
 
   return (
     <div>
-      {/* Sentiment score, 0 to 100 */}
-      <div className="h-40">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={points} margin={MARGIN} syncId="sentiment-history">
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="var(--color-brand-border)"
-              opacity={0.3}
-              vertical={false}
-            />
-            <XAxis dataKey="date" hide />
-            <YAxis
-              domain={[0, 100]}
-              ticks={[0, 50, 100]}
-              width={AXIS_WIDTH}
-              tick={{ fill: "var(--color-brand-muted-fg)", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            {/* 50 is neutral, so polarity is read by position rather than by
-                colouring the line, which would tie hue to value. */}
-            <ReferenceLine
-              y={50}
-              stroke="var(--color-brand-border)"
-              strokeDasharray="4 4"
-            />
-            <Tooltip
-              content={<TrendTooltip />}
-              cursor={{ stroke: "var(--color-brand-border)", strokeWidth: 1 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="score"
-              stroke={LINE_COLOR}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--color-brand-card)" }}
-              // Quiet days are gaps in the record, not a sentiment of zero, so the
-              // line breaks rather than bridging them.
-              connectNulls={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Post volume: the context that stops a 90 from three posts reading like a
-          90 from three hundred. */}
-      <div className="h-16 mt-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={points} margin={MARGIN} syncId="sentiment-history">
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatDay}
-              tick={{ fill: "var(--color-brand-muted-fg)", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              interval="preserveStartEnd"
-              minTickGap={24}
-            />
-            <YAxis
-              domain={[0, busiestDay]}
-              ticks={[busiestDay]}
-              width={AXIS_WIDTH}
-              tick={{ fill: "var(--color-brand-muted-fg)", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              content={<TrendTooltip />}
-              cursor={{ fill: "var(--color-brand-border)", opacity: 0.25 }}
-            />
-            <Bar dataKey="post_count" fill={BAR_COLOR} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="hero-card overflow-hidden p-4">
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={points} margin={MARGIN}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke={GRID_LINE}
+                vertical={false}
+              />
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatDay}
+                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis
+                yAxisId="score"
+                domain={[0, 100]}
+                ticks={[0, 50, 100]}
+                width={AXIS_WIDTH}
+                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              {/* Volume gets its own scale, headroomed so the tallest bar reaches
+                  a third of the plot. The axis is hidden: a lone unlabelled
+                  number floating beside the plot reads as a stray figure rather
+                  than a scale, and exact counts are on hover anyway. */}
+              <YAxis
+                yAxisId="volume"
+                orientation="right"
+                domain={[0, busiestDay * VOLUME_HEADROOM]}
+                hide
+              />
+              {/* 50 is neutral, so polarity is read by position rather than by
+                  colouring the line, which would tie hue to value. */}
+              <ReferenceLine
+                yAxisId="score"
+                y={50}
+                stroke={NEUTRAL_LINE}
+                strokeDasharray="4 4"
+              />
+              <Tooltip
+                content={<TrendTooltip />}
+                cursor={{ fill: "rgba(255,255,255,0.06)" }}
+              />
+              {/* Bars first: in a ComposedChart, paint order is declaration
+                  order, and the line has to sit on top of the volume. */}
+              <Bar
+                yAxisId="volume"
+                dataKey="post_count"
+                fill={BAR_COLOR}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={38}
+              />
+              <Line
+                yAxisId="score"
+                type="monotone"
+                dataKey="score"
+                stroke={LINE_COLOR}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: "#10221e" }}
+                // Quiet days are gaps in the record, not a sentiment of zero, so the
+                // line breaks rather than bridging them.
+                connectNulls={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <p className="text-xs text-brand-muted-fg mt-2">
-        Daily social sentiment from StockTwits, 0 to 100 with 50 neutral. Bars show
-        how many posts each day's score is based on.
+        The line is the daily social sentiment score from StockTwits, 0 to 100 with
+        50 neutral. The bars behind it show how busy each day was relative to the
+        others; hover any day for its exact post count.
       </p>
     </div>
   );
@@ -250,7 +275,7 @@ export function SentimentSparkline({
           key={index}
           points={run.join(" ")}
           fill="none"
-          stroke={LINE_COLOR}
+          stroke={SPARK_COLOR}
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
