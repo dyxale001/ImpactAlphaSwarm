@@ -115,39 +115,54 @@ def curated_fund_blurb(name: str) -> Optional[str]:
 def _get_llm():
     """A Groq chat client, or None when unconfigured. Mirrors the discovery
     agent's setup so both use one key and one model."""
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        return None
-    try:
-        from langchain_groq import ChatGroq
+    from .llm_client import GroqClient
 
-        return ChatGroq(
-            api_key=key,
-            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-            temperature=0.3,
-            max_tokens=1200,
+    # 4000 because how much this model thinks swings wildly run to run: the same batch
+    # of ten measured 29, 1294 and 1498 reasoning tokens on three consecutive calls.
+    # A ceiling reached mid-thought returns nothing at all rather than a shorter
+    # answer, so the budget has to cover the worst draw and not the average one.
+    # Headroom is free, since billing follows tokens generated rather than the ceiling.
+    return GroqClient.create(purpose="descriptions", max_tokens=4000, temperature=0.3)
+
+
+def _llm_json_object(llm, prompt: str, batch_size: int) -> Optional[dict]:
+    """Parse one batch reply, or None when the batch failed.
+
+    None and an empty dict mean different things: None is "the call did not produce a
+    usable answer", {} is "it answered and described nothing". They used to be the same
+    value, which is why a run could report nothing written against pending rows without
+    a single log line explaining it.
+    """
+    try:
+        raw = llm.complete(prompt)
+    except Exception as exc:
+        logger.warning(
+            "Groq invoke failed for a batch of %d descriptions: %s", batch_size, exc
         )
-    except Exception as exc:
-        logger.info("Groq init failed for descriptions: %s", exc)
         return None
-
-
-def _llm_json_object(llm, prompt: str) -> dict:
-    try:
-        from langchain_core.messages import HumanMessage
-
-        raw = (llm.invoke([HumanMessage(content=prompt)]).content or "").strip()
-    except Exception as exc:
-        logger.info("Groq invoke failed for descriptions: %s", exc)
-        return {}
     start, end = raw.find("{"), raw.rfind("}")
     if start == -1 or end <= start:
-        return {}
+        logger.warning(
+            "Groq returned no JSON object for a batch of %d descriptions", batch_size
+        )
+        return None
     try:
         parsed = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Groq returned unparseable JSON for a batch of %d descriptions: %s",
+            batch_size,
+            exc,
+        )
+        return None
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "Groq returned a %s rather than an object for a batch of %d descriptions",
+            type(parsed).__name__,
+            batch_size,
+        )
+        return None
+    return parsed
 
 
 # Prompting
@@ -229,8 +244,13 @@ def _clean(text: Any) -> Optional[str]:
     out = text.strip().strip('"').strip()
     if len(out) < 20:
         return None
-    out = re.sub(r"\s*[—–]\s*", ", ", out)
+    # Dashes used as punctuation become commas.
+    out = re.sub(r"\s*[—–―‒]\s*", ", ", out)
     out = re.sub(r"\s+-\s+", ", ", out)
+    # Unicode hyphens joining a compound word are legitimate, but the model reaches
+    # for U+2010/U+2011 rather than a plain one ("cloud‑based"), which is invisible
+    # in review and renders inconsistently. Fold them down to ASCII.
+    out = out.replace("‐", "-").replace("‑", "-")
     out = re.sub(r"\s+", " ", out)
     if len(out) > MAX_DESCRIPTION_CHARS:
         out = out[:MAX_DESCRIPTION_CHARS].rsplit(" ", 1)[0].rstrip(",.")
@@ -294,8 +314,12 @@ def backfill_asset_descriptions(limit: int = DESCRIPTIONS_MAX_PER_RUN) -> dict:
         return {"pending": len(pending), "written": 0, "skipped": "no_llm"}
 
     written = 0
+    failed_batches = 0
     for batch in _batched(pending, DESCRIPTIONS_BATCH_SIZE):
-        generated = _llm_json_object(llm, _asset_prompt(batch))
+        generated = _llm_json_object(llm, _asset_prompt(batch), len(batch))
+        if generated is None:
+            failed_batches += 1
+            continue
         by_ticker = {(it.get("ticker") or "").upper(): it for it in batch}
         for raw_ticker, raw_text in generated.items():
             ticker = str(raw_ticker).upper().strip()
@@ -306,7 +330,11 @@ def backfill_asset_descriptions(limit: int = DESCRIPTIONS_MAX_PER_RUN) -> dict:
                 continue
             if _write_asset_description(ticker, text):
                 written += 1
-    return {"pending": len(pending), "written": written}
+    return {
+        "pending": len(pending),
+        "written": written,
+        "failed_batches": failed_batches,
+    }
 
 
 def _write_asset_description(ticker: str, description: str) -> bool:
@@ -349,8 +377,12 @@ def backfill_fund_descriptions(
         return {"pending": len(items), "written": 0, "skipped": "no_llm"}
 
     written = 0
+    failed_batches = 0
     for batch in _batched(items, DESCRIPTIONS_BATCH_SIZE):
-        generated = _llm_json_object(llm, _fund_prompt(batch))
+        generated = _llm_json_object(llm, _fund_prompt(batch), len(batch))
+        if generated is None:
+            failed_batches += 1
+            continue
         by_key = {it["fund_key"]: it for it in batch}
         for raw_name, raw_text in generated.items():
             item = by_key.get(normalise_fund_key(str(raw_name)))
@@ -361,7 +393,11 @@ def backfill_fund_descriptions(
                 continue
             if _write_fund_description(item["fund_key"], item["fund_name"], text):
                 written += 1
-    return {"pending": len(items), "written": written}
+    return {
+        "pending": len(items),
+        "written": written,
+        "failed_batches": failed_batches,
+    }
 
 
 def _write_fund_description(fund_key: str, fund_name: str, description: str) -> bool:

@@ -423,30 +423,22 @@ def _still_quarantined(quarantined_until: Any, now: datetime) -> bool:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _get_groq():
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        return None
-    try:
-        from langchain_groq import ChatGroq
+    # 3000 rather than 600: classifying a whole residue of tickers is the most
+    # demanding prompt here and spends most of its tokens reasoning, which left
+    # nothing for the answer under the old budget. Headroom is not billed, and a
+    # ceiling reached mid-thought produces an empty reply rather than a shorter one.
+    from ..utils.llm_client import GroqClient
 
-        return ChatGroq(
-            api_key=key,
-            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-            temperature=0.2,
-            max_tokens=600,
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.info("Groq init failed: %s", exc)
-        return None
+    return GroqClient.create(purpose="discovery", max_tokens=3000, temperature=0.2)
 
 
 def _groq_text(llm, prompt: str) -> str:
     try:
-        from langchain_core.messages import HumanMessage
-
-        return (llm.invoke([HumanMessage(content=prompt)]).content or "").strip()
+        return llm.complete(prompt)
     except Exception as exc:
-        logger.info("Groq invoke failed: %s", exc)
+        # Warning, not info: at the default LOG_LEVEL an info line is invisible, which
+        # is how a model retirement went unnoticed across a whole run.
+        logger.warning("Groq invoke failed for discovery: %s", exc)
         return ""
 
 

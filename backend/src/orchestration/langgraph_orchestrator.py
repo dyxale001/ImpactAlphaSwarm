@@ -16,13 +16,12 @@ from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
-from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 from langsmith.client import Client
 
 from ..agents.quant_analyst import analyze_tickers as analyze_quant_tickers
 from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_tickers
+from ..utils.llm_client import GroqClient
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
 from ..utils.supabase_client import save_top_assets
 
@@ -41,18 +40,17 @@ else:
     langsmith_client = None
     logger.warning("LangSmith not configured - set LANGSMITH_API_KEY to enable tracing")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if GROQ_API_KEY:
-    groq_llm = ChatGroq(
-        api_key=GROQ_API_KEY,
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        temperature=0.3,
-        max_tokens=300,
-    )
+# 2000 rather than the 300 a non-reasoning model needed. The trace itself measures
+# around 100 tokens; the rest is headroom for the thinking that precedes it, which
+# varies enough run to run that a tight ceiling occasionally truncates the model
+# before it writes anything. Unused headroom is not billed.
+groq_llm = GroqClient.create(
+    purpose="reasoning_trace", max_tokens=2000, temperature=0.3
+)
+if groq_llm:
     logger.info("Groq LLM initialized for reasoning generation")
 else:
-    groq_llm = None
-    logger.warning("GROQ_API_KEY not set - reasoning traces will be basic")
+    logger.warning("Groq not configured - reasoning traces will be basic")
 
 _current_tracer: Optional[Tracer] = None
 
@@ -236,9 +234,10 @@ Risk Adjustments:
 
 Provide a brief, actionable explanation of why this asset ranks where it does. Match the wording to the expertise level, and avoid sounding like an institutional analyst when the user is a retail investor."""
 
-        message = HumanMessage(content=prompt)
-        response = groq_llm.invoke([message])
-        reasoning = response.content.strip()
+        # Raises on a blank or truncated reply, so the fallback below covers a model
+        # that returns nothing as well as one that errors. Those used to differ: an
+        # empty reply was returned as if it were a real trace and stored as "".
+        reasoning = groq_llm.complete(prompt)
 
         logger.debug(f"Generated reasoning for {ticker}: {reasoning}")
         return reasoning
