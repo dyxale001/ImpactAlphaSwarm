@@ -149,20 +149,33 @@ def fetch_stocktwits_trending() -> list[dict[str, Any]]:
     return out
 
 
-def llm_gap_fill(universe: str) -> list[str]:
+def llm_gap_fill(universe: str) -> Optional[list[str]]:
     """Ask Groq for liquid US-listed names in a universe (for quiet universes that
     rarely trend). Hallucination is acceptable — every name still runs the funnel.
-    Best-effort: [] if the LLM is unavailable or returns junk."""
+
+    Returns the tickers, or ``None`` when the call could not be made or produced
+    nothing usable. None and [] must stay distinct: [] is a real answer meaning the
+    model found nothing, while None means we learned nothing at all this run. The
+    caller decays a universe's incumbents on the strength of an empty result, so
+    treating a failure as [] retires assets on the back of a model hiccup.
+    """
     llm = _get_groq()
     if llm is None:
-        return []
+        return None
     prompt = (
         f"List up to {DISCOVERY_LLM_CANDIDATES} large, liquid, US-listed (NYSE or NASDAQ) "
         f"common-stock companies in the '{universe}' sector. Return ONLY a JSON array of "
         f'ticker symbol strings, e.g. ["AAA","BBB"]. No prose.'
     )
     raw = _groq_text(llm, prompt)
+    if not raw:
+        return None
     tickers = _parse_ticker_array(raw)
+    if not tickers:
+        # Well-formed but empty, or unparseable. Either way we cannot tell this
+        # apart from a failure, so do not let it stand in for evidence.
+        logger.warning("Discovery gap fill for %s returned no usable tickers", universe)
+        return None
     return tickers
 
 
@@ -477,9 +490,13 @@ def _parse_json_object(raw: str) -> dict:
 # Orchestration
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _gather_candidates() -> dict[str, Candidate]:
+def _gather_candidates() -> tuple[dict[str, Candidate], set[str]]:
     """Stage 1: merge sources into a deduped {ticker: Candidate}, recording
-    provenance. Trending first; the LLM gap-filler tops up every universe."""
+    provenance. Trending first; the LLM gap-filler tops up every universe.
+
+    Also returns the universes whose gap fill failed, so the caller can tell an
+    empty universe apart from one we simply failed to look at.
+    """
     candidates: dict[str, Candidate] = {}
 
     for entry in fetch_stocktwits_trending():
@@ -489,13 +506,18 @@ def _gather_candidates() -> dict[str, Candidate]:
         if "stocktwits_trending" not in cand.sources:
             cand.sources.append("stocktwits_trending")
 
+    unsurveyed: set[str] = set()
     if DISCOVERY_LLM_FILLER:
         for universe in UNIVERSES:
-            for ticker in llm_gap_fill(universe):
+            tickers = llm_gap_fill(universe)
+            if tickers is None:
+                unsurveyed.add(universe)
+                continue
+            for ticker in tickers:
                 cand = candidates.setdefault(ticker, Candidate(ticker=ticker))
                 if "llm" not in cand.sources:
                     cand.sources.append("llm")
-    return candidates
+    return candidates, unsurveyed
 
 
 def _validate(
@@ -552,7 +574,7 @@ def refresh_discovery(dry_run: bool = False) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     summary: dict[str, Any] = {"universes": {}, "dry_run": dry_run}
 
-    candidates = _gather_candidates()
+    candidates, unsurveyed = _gather_candidates()
     survivors, rejections = _validate(candidates, now)
     _classify(survivors)
 
@@ -580,6 +602,22 @@ def refresh_discovery(dry_run: bool = False) -> dict[str, Any]:
 
     for universe in UNIVERSES:
         cands = by_universe[universe]
+
+        # A universe we failed to survey is not a universe with nothing in it.
+        # Hysteresis reads an absent ticker as "did not show up tonight", decaying it
+        # and retiring the weakest, so running that on a failed gap fill punishes real
+        # assets for a model hiccup (it took DUK out of Green Energy). Anything we did
+        # find is still good evidence and gets recorded; only the penalties are held
+        # back, because those are the half that rests on not having seen a ticker.
+        surveyed = universe not in unsurveyed
+        if not surveyed:
+            logger.warning(
+                "Discovery: %s was not surveyed this run, holding back decay and "
+                "retirement for its %d incumbents",
+                universe,
+                len(incumbents_by_universe[universe]),
+            )
+
         max_watchlist = max((c.watchlist_count for c in cands), default=0)
         for cand in cands:
             cand.score = discovery_score(cand, max_watchlist)
@@ -601,18 +639,19 @@ def refresh_discovery(dry_run: bool = False) -> dict[str, Any]:
                     market_cap_usd=c.market_cap_usd,
                     ipo_date=c.ipo_date,
                 )
-            if plan.score_updates:
+            if plan.score_updates and surveyed:
                 update_discovery_scores(plan.score_updates)
-            if plan.retired:
+            if plan.retired and surveyed:
                 retire_assets(plan.retired)
 
         summary["universes"][universe] = {
             "candidates": len(cands),
             "new_entrants": plan.new_entrants,
             "refreshed": len(plan.refreshed),
-            "decayed": len(plan.score_updates),
-            "retired": plan.retired,
+            "decayed": len(plan.score_updates) if surveyed else 0,
+            "retired": plan.retired if surveyed else [],
             "deferred": len(plan.deferred),
+            **({} if surveyed else {"unsurveyed": "gap_fill_failed"}),
         }
 
     summary["total_candidates"] = len(candidates)
