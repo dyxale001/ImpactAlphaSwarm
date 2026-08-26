@@ -50,9 +50,9 @@ class SentimentConfig:
 
 	# Social history
 	social_history_enabled: bool = False
-	social_history_days: int = 14
-	# Raw posts kept a week longer than the window for the roll-up build up
-	social_retention_days: int = 21
+	social_history_days: int = 7
+	# Raw posts kept a few days longer than the window for the roll-up build up
+	social_retention_days: int = 10
 	# Ceiling on a history walk.
 	stocktwits_history_max_pages: int = 12
 
@@ -86,8 +86,8 @@ class SentimentConfig:
 			stocktwits_engagement_cap=_env_float("STOCKTWITS_ENGAGEMENT_CAP", 8.0),
 			stocktwits_min_interval=_env_float("STOCKTWITS_MIN_INTERVAL_SECONDS", 1.0),
 			social_history_enabled=_env_bool("SOCIAL_HISTORY_ENABLED", False),
-			social_history_days=_env_int("SOCIAL_HISTORY_DAYS", 14),
-			social_retention_days=_env_int("SOCIAL_RETENTION_DAYS", 21),
+			social_history_days=_env_int("SOCIAL_HISTORY_DAYS", 7),
+			social_retention_days=_env_int("SOCIAL_RETENTION_DAYS", 10),
 			stocktwits_history_max_pages=_env_int("STOCKTWITS_HISTORY_MAX_PAGES", 12),
 			gcp_top_n=_env_int("GCP_SENTIMENT_TOP_N", 10),
 			gcp_max_workers=max(1, _env_int("GCP_SENTIMENT_MAX_WORKERS", 10)),

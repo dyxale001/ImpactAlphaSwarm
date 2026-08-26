@@ -18,6 +18,20 @@ from src.utils.supabase_client import (
 )
 from src.utils import whale_watching as ww
 
+# Configure the ROOT logger, once, at import.
+#
+# Nothing configured it before, so every module logger fell through to Python's
+# handler of last resort, which emits WARNING and above and nothing else. That is
+# why the collectors have been silent in Cloud Run: their progress lines are INFO
+# and were being dropped before they ever reached stdout. `force=True` because
+# the server may have installed its own root handlers first, and without it
+# basicConfig would quietly do nothing.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
+)
+
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
 
@@ -547,7 +561,7 @@ async def get_price_history(ticker: str):
 
 
 @app.get("/api/assets/{ticker}/sentiment-history")
-async def get_sentiment_history(ticker: str, days: int = 14):
+async def get_sentiment_history(ticker: str, days: int = 7):
     """Return the daily social sentiment series for a ticker.
 
     Informational and unauthenticated, mirroring the price-history endpoint. Reads

@@ -287,11 +287,17 @@ def test_buckets_cover_every_day_including_quiet_ones(config):
 	collector.rebuild_rollups(["NPN"])
 
 	rows = collector.daily.written["NPN"]
-	assert len(rows) == config.social_history_days + 1, "every day in the window needs a row"
+	# Exactly the window, ending today. Counting inclusively from a rolling
+	# now-minus-N timestamp used to yield N+1 buckets, which surfaced as a 7 day
+	# window drawing 8 columns and labelling itself "last 8 days".
+	assert len(rows) == config.social_history_days, "every day in the window needs a row"
 
 	by_day = {r["as_of_night"]: r for r in rows}
-	today = datetime.datetime.now(UTC).date().isoformat()
-	assert by_day[today]["post_count"] == 2
+	today = datetime.datetime.now(UTC).date()
+	oldest = today - datetime.timedelta(days=config.social_history_days - 1)
+	assert min(by_day) == oldest.isoformat()
+	assert max(by_day) == today.isoformat()
+	assert by_day[today.isoformat()]["post_count"] == 2
 
 	quiet = [r for r in rows if r["post_count"] == 0]
 	assert quiet, "expected quiet days in the window"

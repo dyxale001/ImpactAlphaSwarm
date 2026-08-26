@@ -151,8 +151,12 @@ class DailySentimentRepository:
 			logger.warning("Social daily rollup write failed for %s: %s", ticker, e)
 
 	def read_history(self, ticker: str, days: int) -> list[dict[str, Any]]:
-		"""The trailing ``days`` of rollups for a ticker, oldest first."""
-		cutoff = (_utc_now() - datetime.timedelta(days=days)).date()
+		"""The trailing ``days`` of rollups for a ticker, oldest first.
+
+		``days - 1``, because the cutoff day and today are both included: asking
+		for 7 with a plain ``now - 7`` cutoff returns 8 rows.
+		"""
+		cutoff = (_utc_now() - datetime.timedelta(days=max(0, days - 1))).date()
 		try:
 			res = (
 				supabase.table(self.TABLE)

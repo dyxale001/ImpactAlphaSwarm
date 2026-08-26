@@ -167,9 +167,27 @@ class StockTwitsSource(SocialSource):
 			try:
 				resp = self.session.get(url, params=params, headers=self.HEADERS, timeout=10)
 				if resp.status_code != 200:
+					# Refusals (rate limiting above all) end the walk exactly like
+					# running out of stream does, but they mean the opposite: there
+					# IS more to fetch and we were told no. Silence made the two
+					# indistinguishable, so a throttled night looked like a quiet one.
+					logger.warning(
+						"StockTwits refused %s at page %d with HTTP %s; walk stops early with %d posts",
+						sym,
+						page + 1,
+						resp.status_code,
+						len(mentions),
+					)
 					break
 				payload = resp.json()
-			except Exception:
+			except Exception as e:
+				logger.warning(
+					"StockTwits page %d for %s failed (%s); walk stops early with %d posts",
+					page + 1,
+					sym,
+					e,
+					len(mentions),
+				)
 				break
 
 			messages = payload.get("messages", []) if isinstance(payload, dict) else []
@@ -196,10 +214,16 @@ class StockTwitsSource(SocialSource):
 			if max_id is None:
 				break
 			if page == pages - 1:
-				logger.info(
-					"StockTwits walk for %s hit its %d page ceiling with more to fetch",
+				# WARNING, not INFO: on a catch-up walk this is the one event that
+				# silently drops posts for good, so it has to be findable after
+				# the fact rather than inferred from a thin bar on a chart.
+				logger.warning(
+					"StockTwits walk for %s hit its %d page ceiling with more to fetch "
+					"(%d posts taken, oldest id %s)",
 					sym,
 					pages,
+					len(mentions),
+					max_id,
 				)
 
 		return mentions

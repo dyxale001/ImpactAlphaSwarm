@@ -1,4 +1,6 @@
-"""Sentiment scout: building and serving 14 days of social sentiment.
+"""Sentiment scout: building and serving the social sentiment window.
+
+The window is ``social_history_days`` long (7 by default, SOCIAL_HISTORY_DAYS).
 """
 
 from __future__ import annotations
@@ -191,9 +193,17 @@ class SocialHistoryCollector:
 		}
 
 	def _window_days(self, window_start: datetime.datetime) -> list[datetime.date]:
-		"""Every calendar day in the window, so quiet days are written explicitly."""
-		start = window_start.date()
+		"""Every calendar day in the window, so quiet days are written explicitly.
+
+		Exactly ``social_history_days`` days, ending today. ``window_start`` is a
+		rolling timestamp N*24h back, so its calendar date is the Nth day BEFORE
+		today; counting from it inclusively to today yields N+1 buckets, which is
+		how a 7 day window came to serve 8 columns and label itself "last 8 days".
+		"""
 		today = self._now().date()
+		span = max(1, self.config.social_history_days)
+		earliest = window_start.date()
+		start = max(earliest, today - datetime.timedelta(days=span - 1))
 		return [start + datetime.timedelta(days=i) for i in range((today - start).days + 1)]
 
 	# serving and housekeeping
