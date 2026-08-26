@@ -23,7 +23,6 @@ from langsmith.client import Client
 
 from ..agents.quant_analyst import analyze_tickers as analyze_quant_tickers
 from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_tickers
-from ..utils.llm_defaults import GROQ_DEFAULT_MODEL
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
 from ..utils.supabase_client import save_top_assets
 
@@ -46,12 +45,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     groq_llm = ChatGroq(
         api_key=GROQ_API_KEY,
-        model=os.getenv("GROQ_MODEL", GROQ_DEFAULT_MODEL),
+        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         temperature=0.3,
-        # Headroom over what a two sentence trace needs. gpt-oss spends tokens on
-        # internal reasoning before it writes, and those count against this limit,
-        # so the old 300 risked cutting the visible answer mid-sentence.
-        max_tokens=500,
+        max_tokens=300,
     )
     logger.info("Groq LLM initialized for reasoning generation")
 else:

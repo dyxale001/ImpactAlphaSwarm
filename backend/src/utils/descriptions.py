@@ -121,11 +121,9 @@ def _get_llm():
     try:
         from langchain_groq import ChatGroq
 
-        from .llm_defaults import GROQ_DEFAULT_MODEL
-
         return ChatGroq(
             api_key=key,
-            model=os.getenv("GROQ_MODEL", GROQ_DEFAULT_MODEL),
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
             temperature=0.3,
             max_tokens=1200,
         )
