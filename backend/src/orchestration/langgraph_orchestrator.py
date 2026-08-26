@@ -232,7 +232,9 @@ Risk Adjustments:
 - Risk Penalty: {adjustments.get('risk_penalty', 0)}
 - User Profile: {risk_tolerance}
 
-Provide a brief, actionable explanation of why this asset ranks where it does. Match the wording to the expertise level, and avoid sounding like an institutional analyst when the user is a retail investor."""
+{_ADVICE_PROHIBITION}
+
+Explain briefly why this asset ranks where it does. Match the wording to the expertise level, and avoid sounding like an institutional analyst when the user is a retail investor."""
 
         # Raises on a blank or truncated reply, so the fallback below covers a model
         # that returns nothing as well as one that errors. Those used to differ: an
