@@ -3,6 +3,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  Rectangle,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -10,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
+import { formatDay } from "./postDays";
 
 // Score and volume share one plot: the day is the unit, and splitting it across
 // two panels made the reader do the join themselves.
@@ -37,18 +39,12 @@ const MARGIN = { top: 8, right: 4, left: 0, bottom: 0 };
 // subordinate to the score line no matter how busy the busiest day was.
 const VOLUME_HEADROOM = 3;
 
+// The selected day's bar, lifted out of the recessive tone so the chart shows
+// which day the posts below it belong to.
+const BAR_SELECTED = "#8fb08a";
+
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
-
-function formatDay(date: string) {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
 
 // One tooltip for the day, not one per series: the bar and the line are two
 // readings of the same column, so Recharts is given a single Tooltip on the
@@ -99,6 +95,12 @@ interface Props {
   isLoading: boolean;
   error: string | null;
   days?: number;
+  // The day whose posts are showing below the chart, highlighted here so the
+  // two read as one selection. Null means every day.
+  selectedDay?: string | null;
+  // Supplied by pages that list posts underneath. Absent elsewhere, and the
+  // chart stays inert rather than offering a click that does nothing.
+  onSelectDay?: (day: string) => void;
 }
 
 export function SentimentTrendChart({
@@ -107,6 +109,8 @@ export function SentimentTrendChart({
   isLoading,
   error,
   days = 7,
+  selectedDay = null,
+  onSelectDay,
 }: Props) {
   if (isLoading) {
     return <div className="h-56 rounded-lg bg-brand-muted/10 animate-pulse" />;
@@ -139,7 +143,19 @@ export function SentimentTrendChart({
       <div className="hero-card overflow-hidden p-4">
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={points} margin={MARGIN}>
+            <ComposedChart
+              data={points}
+              margin={MARGIN}
+              // The whole column is the target, not the bar alone: a quiet day's
+              // bar is a few pixels tall, and on those days the click matters
+              // most. `activeLabel` is the date under the pointer.
+              onClick={(state: any) => {
+                if (onSelectDay && state?.activeLabel) {
+                  onSelectDay(state.activeLabel);
+                }
+              }}
+              style={onSelectDay ? { cursor: "pointer" } : undefined}
+            >
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={GRID_LINE}
@@ -193,6 +209,19 @@ export function SentimentTrendChart({
                 fill={BAR_COLOR}
                 radius={[4, 4, 0, 0]}
                 maxBarSize={38}
+                // Per-bar colour through `shape` rather than <Cell>, which this
+                // version of Recharts deprecates.
+                shape={(props: any) => (
+                  <Rectangle
+                    {...props}
+                    radius={[4, 4, 0, 0]}
+                    fill={
+                      props.payload?.date === selectedDay
+                        ? BAR_SELECTED
+                        : BAR_COLOR
+                    }
+                  />
+                )}
               />
               <Line
                 yAxisId="score"
@@ -215,6 +244,7 @@ export function SentimentTrendChart({
         The line is the daily social sentiment score from StockTwits, 0 to 100 with
         50 neutral. The bars behind it show how busy each day was relative to the
         others; hover any day for its exact post count.
+        {onSelectDay ? " Click a day to read that day's posts." : ""}
       </p>
     </div>
   );
