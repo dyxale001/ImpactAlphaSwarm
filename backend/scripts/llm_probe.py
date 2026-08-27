@@ -1,4 +1,4 @@
-"""Exercise all three Groq call sites against the live model and report the token split.
+"""Exercise both Groq call sites against the live model and report the token split.
 
 Run this whenever GROQ_MODEL changes. It is the check that would have caught both the
 llama-3.3 retirement and the reasoning-token overrun in one go, since it reports what
@@ -24,25 +24,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(BACKEND, ".env"))
 from src.utils.llm_client import EmptyCompletionError, GroqClient  # noqa: E402
 
-# The real prompt builders, so this probes what the app actually sends rather than a
-# paraphrase of it. A prompt that drifts is exactly what this should catch.
-from src.utils.descriptions import (  # noqa: E402
-    DESCRIPTIONS_BATCH_SIZE,
-    _asset_prompt,
-    _fund_prompt,
-)
-
 TICKERS = ["AAPL", "MSFT", "TSLA", "NVDA", "JPM", "XOM", "PFE", "KO", "BA", "DIS"]
-NAMES = [
-    "Apple Inc", "Microsoft", "Tesla", "Nvidia", "JPMorgan Chase",
-    "Exxon Mobil", "Pfizer", "Coca-Cola", "Boeing", "Walt Disney",
-]
-FUNDS = [
-    "Berkshire Hathaway", "Bridgewater Associates", "Renaissance Technologies",
-    "Baillie Gifford", "Vanguard Group", "BlackRock", "State Street",
-    "Fidelity Management", "Coatue Management", "Tiger Global",
-]
-
 failures: list[str] = []
 
 
@@ -82,34 +64,7 @@ probe(
     "State what the measurements show. Do not give investment advice.",
 )
 
-# 2. Descriptions, at the batch size the nightly run actually uses. This is the call
-#    that returned zero characters on a full budget before reasoning_effort was set.
-print(f"\ndescriptions (descriptions.py, batch of {DESCRIPTIONS_BATCH_SIZE})")
-desc_client = GroqClient.create(
-    purpose="probe_descriptions", max_tokens=4000, temperature=0.3
-)
-probe(
-    "asset batch",
-    desc_client,
-    _asset_prompt(
-        [
-            {"ticker": t, "name": n}
-            for t, n in zip(TICKERS, NAMES)
-        ][:DESCRIPTIONS_BATCH_SIZE]
-    ),
-)
-probe(
-    "fund batch",
-    desc_client,
-    _fund_prompt(
-        [
-            {"fund_key": f.lower().replace(" ", "_"), "fund_name": f}
-            for f in FUNDS
-        ][:DESCRIPTIONS_BATCH_SIZE]
-    ),
-)
-
-# 3. Discovery. Classify is the demanding one: it spends most of its tokens reasoning
+# 2. Discovery. Classify is the demanding one: it spends most of its tokens reasoning
 #    even at low effort, which is why this budget is 3000 and not the original 600.
 print("\ndiscovery (asset_discovery.py)")
 disc_client = GroqClient.create(

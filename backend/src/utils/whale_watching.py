@@ -64,11 +64,15 @@ class FundDescriber:
             )
         return funds
 
-    def backfill(self, fund_names: list[str]) -> dict:
-        """Describe any fund we have not seen before. Nightly only (LLM calls)."""
+    def backfill(self) -> dict:
+        """Fetch company descriptions for anything missing one. Nightly only.
+
+        Funds are not back-filled: ``attach`` resolves those from the curated list
+        at serve time, so there is nothing to store and no call to make.
+        """
         from . import descriptions as desc
 
-        return desc.backfill_descriptions(fund_names)
+        return desc.backfill_descriptions()
 
 
 class FundHoldingsBuilder:
@@ -195,7 +199,9 @@ class WhaleWatcher:
              here rather than inside the /api/funds request
           2. rebuild the fund-holdings aggregation over the warmed cache
           3. describe any company that still has no blurb
-          4. describe any fund we have not seen before
+
+        Funds used to be a fourth stage. They are resolved from the curated list at
+        serve time now, so there is nothing nightly to do for them.
         """
         loop = asyncio.get_running_loop()
         summary: dict = {}
@@ -221,9 +227,8 @@ class WhaleWatcher:
             summary["funds"] = {"error": str(e)}
 
         try:
-            fund_names = [f["fund"] for f in funds if f.get("fund")]
             summary["descriptions"] = await loop.run_in_executor(
-                None, self.describer.backfill, fund_names
+                None, self.describer.backfill
             )
         except Exception as e:
             logger.warning("Description backfill failed: %s", e)

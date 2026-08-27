@@ -4,19 +4,17 @@ companies in ``assets`` and the institutional funds that hold them.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 from .supabase_client import supabase
 
 logger = logging.getLogger("alpha-api")
 
-# ── Config (env-tunable; the nightly job is the only caller) ──────────────────
+# Config
 DESCRIPTIONS_ENABLED = os.getenv("DESCRIPTIONS_ENABLED", "true").lower() == "true"
-DESCRIPTIONS_BATCH_SIZE = int(os.getenv("DESCRIPTIONS_BATCH_SIZE", "10"))
 DESCRIPTIONS_MAX_PER_RUN = int(os.getenv("DESCRIPTIONS_MAX_PER_RUN", "60"))
 
 MAX_DESCRIPTION_CHARS = 320
@@ -110,132 +108,6 @@ def curated_fund_blurb(name: str) -> Optional[str]:
     return None
 
 
-# Groq (thin and self-contained, so this module has no dependency on the agents)
-
-def _get_llm():
-    """A Groq chat client, or None when unconfigured. Mirrors the discovery
-    agent's setup so both use one key and one model."""
-    from .llm_client import GroqClient
-
-    # 4000 because how much this model thinks swings wildly run to run: the same batch
-    # of ten measured 29, 1294 and 1498 reasoning tokens on three consecutive calls.
-    # A ceiling reached mid-thought returns nothing at all rather than a shorter
-    # answer, so the budget has to cover the worst draw and not the average one.
-    # Headroom is free, since billing follows tokens generated rather than the ceiling.
-    return GroqClient.create(purpose="descriptions", max_tokens=4000, temperature=0.3)
-
-
-def _llm_json_object(llm, prompt: str, batch_size: int) -> Optional[dict]:
-    """Parse one batch reply, or None when the batch failed.
-
-    None and an empty dict mean different things: None is "the call did not produce a
-    usable answer", {} is "it answered and described nothing". They used to be the same
-    value, which is why a run could report nothing written against pending rows without
-    a single log line explaining it.
-    """
-    try:
-        raw = llm.complete(prompt)
-    except Exception as exc:
-        logger.warning(
-            "Groq invoke failed for a batch of %d descriptions: %s", batch_size, exc
-        )
-        return None
-    start, end = raw.find("{"), raw.rfind("}")
-    if start == -1 or end <= start:
-        logger.warning(
-            "Groq returned no JSON object for a batch of %d descriptions", batch_size
-        )
-        return None
-    try:
-        parsed = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError as exc:
-        logger.warning(
-            "Groq returned unparseable JSON for a batch of %d descriptions: %s",
-            batch_size,
-            exc,
-        )
-        return None
-    if not isinstance(parsed, dict):
-        logger.warning(
-            "Groq returned a %s rather than an object for a batch of %d descriptions",
-            type(parsed).__name__,
-            batch_size,
-        )
-        return None
-    return parsed
-
-
-# Prompting
-
-_VOICE = (
-    "Voice rules, follow all of them:\n"
-    "- Two short sentences at most. Aim for 25 to 40 words.\n"
-    "- Plain English that someone with no finance background understands.\n"
-    "- British spelling.\n"
-    "- Never use dashes as punctuation. Use commas, or start a new sentence.\n"
-    "- State facts only. No opinions, no ratings, no advice, no mention of "
-    "whether it is a good investment.\n"
-    "- No share prices, valuations, percentages or other figures that go out of "
-    "date.\n"
-    "- Do not start with the entity name. Do not repeat the name back.\n"
-)
-
-
-def _asset_prompt(items: list[dict]) -> str:
-    listing = "\n".join(
-        f"- {it['ticker']}: {it.get('name') or it['ticker']}"
-        + (f" (sector we file it under: {it['universe']})" if it.get("universe") else "")
-        for it in items
-    )
-    return (
-        "Write a short plain-English description of what each of these listed "
-        "companies actually does, as it would appear under the company name in a "
-        "beginner friendly investing app.\n\n"
-        f"{_VOICE}\n"
-        "If you are not confident what a company does, return an empty string for "
-        "it rather than guessing.\n\n"
-        f"Companies:\n{listing}\n\n"
-        'Return ONLY a JSON object mapping ticker to description, e.g. '
-        '{"AAPL":"Makes the iPhone, Mac and iPad, and runs services like the App '
-        'Store and iCloud. Most of its money comes from selling devices."}. '
-        "No prose outside the JSON."
-    )
-
-
-def _fund_prompt(items: list[dict]) -> str:
-    lines = []
-    for it in items:
-        known = curated_fund_blurb(it["fund_name"])
-        lines.append(
-            f"- {it['fund_name']}"
-            + (f"\n    known facts: {known}" if known else "")
-        )
-    listing = "\n".join(lines)
-
-    examples = (
-        '{"BlackRock Inc.":"The biggest investment manager in the world. It runs '
-        "the iShares range of ETFs and looks after money for pension funds, "
-        'governments and ordinary savers.",'
-        '"Norges Bank Investment Management":"Norway\'s sovereign wealth fund. It '
-        "is one of the largest investors in the world, built from the country's "
-        'oil money."}'
-    )
-    return (
-        "Write a short plain-English description of each of these institutional "
-        "investors, as it would appear under the firm's name in a beginner "
-        "friendly investing app. Say who they are and what kind of money they "
-        "manage.\n\n"
-        f"{_VOICE}\n"
-        "Where a firm lists known facts, base your description on them. "
-        "If a firm has no known facts and you do not recognise it, return an "
-        "empty string for it rather than guessing.\n\n"
-        f"Match this style exactly:\n{examples}\n\n"
-        f"Firms:\n{listing}\n\n"
-        "Return ONLY a JSON object mapping the firm name exactly as given to its "
-        "description. No prose outside the JSON."
-    )
-
-
 def _clean(text: Any) -> Optional[str]:
     """Normalise one generated description, or None if it is unusable.
     """
@@ -259,16 +131,137 @@ def _clean(text: Any) -> Optional[str]:
     return out
 
 
-def _batched(items: list, size: int) -> Iterable[list]:
-    for i in range(0, len(items), size):
-        yield items[i : i + size]
+# Company profiles (the market data provider, not the LLM)
+
+class CompanyProfiles:
+    """Company descriptions taken straight from the market data provider.
+
+    yfinance returns the exchange's own business summary, so the text is factual by
+    construction, costs nothing and spends no tokens. It is already a dependency
+    here, used for prices and for the discovery volume gate.
+
+    The trade is voice. The source is corporate prose rather than the plain English
+    of ``_VOICE``, so this trims it to whole sentences and normalises the
+    punctuation, but it cannot make it sound chatty. Accuracy is worth more, given
+    the alternative was confident and wrong.
+    """
+
+    # Sentence enders that are really abbreviations, so a full stop after them does
+    # not end the sentence. Without this, "Micron Technology, Inc. designs..." gets
+    # cut after "Inc." and the description says nothing at all.
+    _ABBREVIATIONS = (
+        "inc", "corp", "co", "ltd", "llc", "llp", "lp", "plc", "sa", "nv", "ag",
+        "gmbh", "s.a", "u.s", "u.k", "no", "vs", "est", "approx", "dr", "mr", "ms",
+    )
+
+    def fetch(self, ticker: str, name: Optional[str] = None) -> Optional[str]:
+        """The company's business summary, trimmed and cleaned, or None."""
+        summary = self._raw_summary(ticker)
+        if not summary:
+            return None
+        text = " ".join(summary.split())
+        text = self._strip_leading_name(text, name)
+        text = self._first_sentences(text, MAX_DESCRIPTION_CHARS)
+        return _clean(text)
+
+    def _raw_summary(self, ticker: str) -> Optional[str]:
+        try:
+            import yfinance as yf
+
+            info = yf.Ticker(ticker).info or {}
+        except Exception as exc:
+            logger.warning("yfinance profile fetch failed for %s: %s", ticker, exc)
+            return None
+        return (info.get("longBusinessSummary") or "").strip() or None
+
+    def _strip_leading_name(self, text: str, name: Optional[str]) -> str:
+        """Drop a leading company name, since the UI shows it directly above.
+
+        Matching is token by token and must land on a word boundary. A plain prefix
+        test is not safe here: "Corcept Therapeutics Inc" is a prefix of "Corcept
+        Therapeutics Incorporated", so it ate the wrong characters and left the
+        description starting "Orporated, a biopharmaceutical company".
+        """
+        if not name:
+            return text
+        wanted = [t.lower() for t in re.split(r"[^A-Za-z0-9&]+", name) if t]
+        while wanted and wanted[-1] in _CORPORATE_SUFFIXES:
+            wanted.pop()
+        if not wanted:
+            return text
+
+        # Compare word by word. Whole words are the point: "Corcept Therapeutics
+        # Inc" is a string prefix of "Corcept Therapeutics Incorporated", and
+        # matching on that left a description starting "Orporated, a
+        # biopharmaceutical company".
+        words = [
+            (m.group(0).lower(), m.start())
+            for m in re.finditer(r"[A-Za-z0-9&]+", text)
+        ]
+        if len(words) <= len(wanted):
+            return text
+        for i, want in enumerate(wanted):
+            if words[i][0] != want:
+                return text
+
+        # The summary carries its own legal suffix ("Micron Technology, Inc.
+        # designs"), so step over any that follow the name.
+        i = len(wanted)
+        while i < len(words) and words[i][0] in _CORPORATE_SUFFIXES:
+            i += 1
+        if i >= len(words):
+            return text
+
+        rest = text[words[i][1]:]
+        if len(rest) < 40:  # nothing meaningful left; keep the original
+            return text
+        # Re-case the new opening word, which was mid-sentence before.
+        return rest[:1].upper() + rest[1:]
+
+    def _first_sentences(self, text: str, limit: int) -> str:
+        """Whole sentences up to ``limit`` characters, never a part of one."""
+        out = ""
+        for sentence in self._split_sentences(text):
+            if out and len(out) + 1 + len(sentence) > limit:
+                break
+            out = f"{out} {sentence}".strip()
+            if len(out) >= limit:
+                break
+        return out or text[:limit]
+
+    def _split_sentences(self, text: str) -> list[str]:
+        parts: list[str] = []
+        current = ""
+        for token in re.split(r"(?<=[.!?])\s+", text):
+            current = f"{current} {token}".strip()
+            word = current.rsplit(" ", 1)[-1].rstrip(".!?").lower()
+            if word in self._ABBREVIATIONS:
+                continue  # the full stop was an abbreviation, keep going
+            parts.append(current)
+            current = ""
+        if current:
+            parts.append(current)
+        return parts
 
 
 # Reads
 
 def read_fund_descriptions() -> dict[str, str]:
+    """Hand-written fund rows, which override the curated list at serve time.
+
+    Only ``is_manual`` rows are returned. The table also holds rows an earlier LLM
+    back-fill wrote, and those sat in front of the curated blurbs: where a curated
+    blurb existed the model was handed it and paraphrased it back, changing nothing,
+    and where one did not it guessed, which is how American Century came to be
+    described as an insurance company. They stay in the table but are not served.
+    """
     try:
-        res = supabase.table("fund_descriptions").select("fund_key, description").execute()
+        res = (
+            supabase.table("fund_descriptions")
+            .select("fund_key, description")
+            .eq("is_manual", True)
+            .execute()
+        )
     except Exception as exc:
         logger.info("Fund descriptions read failed: %s", exc)
         return {}
@@ -298,42 +291,43 @@ def _assets_missing_descriptions(limit: int) -> list[dict]:
 # Backfill
 
 def backfill_asset_descriptions(limit: int = DESCRIPTIONS_MAX_PER_RUN) -> dict:
-    """Generate and store descriptions for active assets that lack one.
+    """Store descriptions for active assets that lack one, from the market data
+    provider rather than the LLM.
 
-    Best-effort throughout: a failed batch leaves those assets undescribed and
-    they are retried on the next run, which is why the write is per row rather
+    Best-effort throughout: a ticker with no published profile is left undescribed
+    and picked up again on the next run, which is why the write is per row rather
     than one transaction.
     """
     pending = _assets_missing_descriptions(limit)
     if not pending:
         return {"pending": 0, "written": 0}
 
-    llm = _get_llm()
-    if llm is None:
-        logger.info("Skipping asset descriptions: no Groq key configured")
-        return {"pending": len(pending), "written": 0, "skipped": "no_llm"}
-
+    profiles = CompanyProfiles()
     written = 0
-    failed_batches = 0
-    for batch in _batched(pending, DESCRIPTIONS_BATCH_SIZE):
-        generated = _llm_json_object(llm, _asset_prompt(batch), len(batch))
-        if generated is None:
-            failed_batches += 1
+    no_profile: list[str] = []
+    for item in pending:
+        ticker = (item.get("ticker") or "").upper().strip()
+        if not ticker:
             continue
-        by_ticker = {(it.get("ticker") or "").upper(): it for it in batch}
-        for raw_ticker, raw_text in generated.items():
-            ticker = str(raw_ticker).upper().strip()
-            if ticker not in by_ticker:  # model invented a ticker; ignore it
-                continue
-            text = _clean(raw_text)
-            if not text:
-                continue
-            if _write_asset_description(ticker, text):
-                written += 1
+        text = profiles.fetch(ticker, item.get("name"))
+        if not text:
+            no_profile.append(ticker)
+            continue
+        if _write_asset_description(ticker, text):
+            written += 1
+
+    if no_profile:
+        logger.warning(
+            "No published profile for %d of %d pending assets: %s",
+            len(no_profile),
+            len(pending),
+            ", ".join(no_profile),
+        )
     return {
         "pending": len(pending),
         "written": written,
-        "failed_batches": failed_batches,
+        "no_profile": len(no_profile),
+        "source": "yfinance",
     }
 
 
@@ -351,78 +345,10 @@ def _write_asset_description(ticker: str, description: str) -> bool:
         return False
 
 
-def backfill_fund_descriptions(
-    fund_names: list[str], limit: int = DESCRIPTIONS_MAX_PER_RUN
-) -> dict:
-    """Generate and store descriptions for any fund in ``fund_names`` that has no
-    cached row yet. Manually written rows are never touched (the caller only ever
-    passes names, and existing keys are filtered out here).
+def backfill_descriptions() -> dict:
+    """Nightly refresh. Only companies are stored: a fund's blurb is resolved at
+    serve time from the curated list, so there is nothing to back-fill for it.
     """
-    existing = set(read_fund_descriptions().keys())
-    # Dedupe by normalised key while keeping the first display name we saw.
-    pending: dict[str, str] = {}
-    for name in fund_names:
-        key = normalise_fund_key(name)
-        if not key or key in existing or key in pending:
-            continue
-        pending[key] = name
-    if not pending:
-        return {"pending": 0, "written": 0}
-
-    items = [{"fund_key": k, "fund_name": v} for k, v in list(pending.items())[:limit]]
-
-    llm = _get_llm()
-    if llm is None:
-        logger.info("Skipping fund descriptions: no Groq key configured")
-        return {"pending": len(items), "written": 0, "skipped": "no_llm"}
-
-    written = 0
-    failed_batches = 0
-    for batch in _batched(items, DESCRIPTIONS_BATCH_SIZE):
-        generated = _llm_json_object(llm, _fund_prompt(batch), len(batch))
-        if generated is None:
-            failed_batches += 1
-            continue
-        by_key = {it["fund_key"]: it for it in batch}
-        for raw_name, raw_text in generated.items():
-            item = by_key.get(normalise_fund_key(str(raw_name)))
-            if item is None:
-                continue
-            text = _clean(raw_text)
-            if not text:
-                continue
-            if _write_fund_description(item["fund_key"], item["fund_name"], text):
-                written += 1
-    return {
-        "pending": len(items),
-        "written": written,
-        "failed_batches": failed_batches,
-    }
-
-
-def _write_fund_description(fund_key: str, fund_name: str, description: str) -> bool:
-    from datetime import datetime, timezone
-
-    try:
-        supabase.table("fund_descriptions").upsert({
-            "fund_key": fund_key,
-            "fund_name": fund_name,
-            "description": description,
-            "source": "llm",
-            "is_manual": False,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
-        return True
-    except Exception as exc:
-        logger.info("Fund description write failed for %s: %s", fund_key, exc)
-        return False
-
-
-def backfill_descriptions(fund_names: Optional[list[str]] = None) -> dict:
     if not DESCRIPTIONS_ENABLED:
         return {"enabled": False}
-    summary: dict[str, Any] = {"enabled": True}
-    summary["assets"] = backfill_asset_descriptions()
-    if fund_names:
-        summary["funds"] = backfill_fund_descriptions(fund_names)
-    return summary
+    return {"enabled": True, "assets": backfill_asset_descriptions()}
