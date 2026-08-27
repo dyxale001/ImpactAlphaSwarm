@@ -58,10 +58,10 @@ else:
 # its own rate limit, so N keys buy N lanes; a machine holding only GROQ_API_KEY
 # gets a single-lane pool, which is exactly the old sequential behaviour.
 #
-# A trace is now written for EVERY scored asset rather than the top 5, and the calls
-# are blocking, so the lane count is what keeps that affordable. GROQ_API_KEY3 also
-# serves asset discovery, which is safe: the two never run in the same minute, and
-# discovery spends about six calls a night.
+# Measured on a real run: 17 traces across three lanes took 48 seconds, against the
+# same work costing five sequential waits on one account. GROQ_API_KEY3 also serves
+# asset discovery, which is safe: the two never run in the same minute, and discovery
+# spends about six calls a night.
 TRACE_KEY_ENVS = ["GROQ_API_KEY", "GROQ_API_KEY2", "GROQ_API_KEY3"]
 
 groq_trace_clients = GroqClient.create_pool(
@@ -314,10 +314,11 @@ Explain briefly why this asset ranks where it does. Match the wording to the exp
 class ReasoningTracePool:
     """Writes a reasoning trace onto each asset, spread over several Groq accounts.
 
-    Every scored asset gets a trace now, not just the top 5, and each one is a
-    blocking call to a reasoning model. Run end to end that dominates a run, and the
-    nightly repeats it per user, so the calls are spread over the configured accounts
-    instead. Each account carries its own rate limit, so the lanes do not contend.
+    Each trace is a blocking call to a reasoning model, and the nightly repeats the
+    set per user, so the calls are spread over the configured accounts rather than
+    queued behind one. Each account carries its own rate limit, so the lanes do not
+    contend. This is what makes raising REASONING_TRACE_TOP_N cheap when the rest of
+    the run can afford it.
 
     Assets are DEALT alternately into one lane per client, and a lane runs its own
     share sequentially in its own thread. Two properties follow, and both matter:
@@ -438,12 +439,13 @@ DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE",
 UNIFIED_RANKING_ENABLED = os.getenv("UNIFIED_RANKING_ENABLED", "false").lower() == "true"
 UNIFIED_RANKING_SHADOW = os.getenv("UNIFIED_RANKING_SHADOW", "true").lower() == "true"
 
-# How many assets get an LLM-written trace. 0 means every scored asset, which is what
-# the assets page now shows. This is the escape hatch: the traces are the slowest part
-# of a run, so if the nightly grows too long, capping this trades prose for time on the
-# assets nobody scrolls to. Everything past the cap still gets the deterministic trace,
-# so no card is ever left blank.
-REASONING_TRACE_TOP_N = int(os.getenv("REASONING_TRACE_TOP_N", "0"))
+# How many assets get an LLM-written trace. 5 matches what the pages actually show.
+# Writing one for every scored asset was tried and parked: the traces themselves were
+# never the bottleneck (48 seconds of a 15 minute run, measured), but the per-ticker
+# Supabase and yfinance work in save_top_assets that came with keeping 30 assets was,
+# and the resulting insert was large enough that its ranking-v2 columns were dropped.
+# 0 means every scored asset, for when that is revisited.
+REASONING_TRACE_TOP_N = int(os.getenv("REASONING_TRACE_TOP_N", "5"))
 
 
 def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
@@ -897,13 +899,13 @@ def synthesize_rankings(
             logger.exception("Ranking v2 failed, serving legacy order: %s", e)
             top_5 = legacy_order[:5]
 
-    # Every scored asset is now shown on the assets page, so every one needs a
-    # trace. Two tiers, because the LLM calls are the slowest part of a run:
+    # Two tiers, so that no asset is ever stored with an empty trace:
     #
-    # 1. Everything gets the deterministic trace first. It costs nothing, it is
+    # 1. Everything gets the deterministic trace first. It costs nothing and it is
     #    specific to the asset (it names that asset's own agreement, signal strength
-    #    and evidence depth), and pre-filling it means a failed LLM lane below
-    #    degrades the wording rather than leaving a card blank.
+    #    and evidence depth). The graph path persists every ranked asset, and those
+    #    beyond the top 5 used to be saved with reasoning_trace = "", which is what
+    #    left a watchlist card outside the top 5 with nothing to show.
     # 2. The pool then overwrites the first REASONING_TRACE_TOP_N with LLM prose,
     #    fanned out over the configured Groq accounts. 0 means all of them.
     ranked_assets = _all_ranked(top_5, unified_scores)
@@ -1107,9 +1109,9 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
 
     Gathers raw quant + sentiment signals ONCE for the union of every active
     user's tickers, then applies each user's personalization (risk scoring,
-    ranking, reasoning) and persists their whole ranked feed. This avoids
-    re-fetching the same ticker's market data and social posts once per user — the
-    expensive raw gathering is shared, only the cheap per-user layer repeats.
+    ranking, reasoning) and persists their top 5. This avoids re-fetching the
+    same ticker's market data and social posts once per user — the expensive
+    raw gathering is shared, only the cheap per-user layer repeats.
 
     Each user dict must contain: user_id, run_id, universes, risk_tolerance,
     expertise_level (and optionally watchlist). Failures are isolated per user.
@@ -1171,7 +1173,7 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     }
     for user in users:
         try:
-            top_5, unified_scores = synthesize_rankings(
+            top_5, _ = synthesize_rankings(
                 user["tickers"],
                 quant_results,
                 sentiment_results,
@@ -1180,13 +1182,15 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
                 run_id=user["run_id"],
                 user_id=user["user_id"],
             )
-            # Persist the whole ranked feed, as the graph path does. Passing the
-            # truncated top 5 here was why a user whose latest run came from the
-            # nightly had only five rows to show, however many the run scored.
+            # Five rows per user, matching what the pages show. The nightly is the
+            # run with the least headroom (it repeats per user inside one request),
+            # so persisting the whole ranked feed here is the piece to revisit last,
+            # after save_top_assets stops doing a Supabase lookup and a price fetch
+            # per ticker in sequence.
             save_top_assets(
                 run_id=user["run_id"],
                 user_id=user["user_id"],
-                top_5=_all_ranked(top_5, unified_scores),
+                top_5=top_5,
                 quant_results=quant_results,
                 sentiment_results=sentiment_results,
                 price_cache=price_cache,
