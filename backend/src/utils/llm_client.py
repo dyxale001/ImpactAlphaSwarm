@@ -35,15 +35,29 @@ class GroqClient:
 
     @classmethod
     def create(
-        cls, *, purpose: str, max_tokens: int, temperature: float
+        cls,
+        *,
+        purpose: str,
+        max_tokens: int,
+        temperature: float,
+        key_env: str = "GROQ_API_KEY",
+        fallback_key_env: Optional[str] = None,
     ) -> Optional["GroqClient"]:
         """Build a client, or return None when Groq is unconfigured.
 
         ``purpose`` is a short label naming the call site. It appears in every log
         line, which is what makes it possible to tell which of the three consumers is
         failing without reading a stack trace.
+
+        ``key_env`` names the account this consumer draws on. Several Groq accounts
+        are configured so the reasoning traces can be fanned out over them, and each
+        carries its own rate limit; naming the variable rather than always reading
+        GROQ_API_KEY is what lets a consumer be pointed at one of them.
+        ``fallback_key_env`` covers the deployment that has only the original key.
         """
-        key = os.getenv("GROQ_API_KEY")
+        key = os.getenv(key_env)
+        if not key and fallback_key_env:
+            key = os.getenv(fallback_key_env)
         if not key:
             return None
 
@@ -76,6 +90,35 @@ class GroqClient:
             effort or "none",
         )
         return cls(llm, purpose=purpose, model=model)
+
+    @classmethod
+    def create_pool(
+        cls,
+        *,
+        purpose: str,
+        key_envs: list[str],
+        max_tokens: int,
+        temperature: float,
+    ) -> list["GroqClient"]:
+        """One client per configured account, for a caller that fans work out.
+
+        Unset variables are skipped rather than treated as an error, so a machine
+        holding only GROQ_API_KEY gets a single-client pool and behaves exactly as it
+        did before the pool existed. Each client's purpose is suffixed with its
+        position, which makes the per-call log line below name the account that
+        served it.
+        """
+        clients = []
+        for position, key_env in enumerate(key_envs, start=1):
+            client = cls.create(
+                purpose=f"{purpose}[{position}]",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                key_env=key_env,
+            )
+            if client:
+                clients.append(client)
+        return clients
 
     def complete(self, prompt: str) -> str:
         """Return the model's reply, or raise.

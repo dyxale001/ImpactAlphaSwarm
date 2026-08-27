@@ -36,6 +36,13 @@ import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
 
 export default function AssetsPage() {
+  const { profile, analysis, isLoading, isProfileLoading, fetchProfile } =
+    useAuthStore();
+
+  // The whole ranked feed, unlike the dashboard's top 5, narrowed to the sectors
+  // the user picked in Settings. A run also scores their watchlist tickers, which
+  // can sit outside those sectors, so the narrowing happens here rather than being
+  // assumed from the run's own scoping.
   const {
     search,
     setSearch,
@@ -46,7 +53,12 @@ export default function AssetsPage() {
     recommendationError,
     latestRunCreatedAt,
     refreshRecommendations,
-  } = useDashboardStats();
+  } = useDashboardStats({
+    limit: null,
+    universes: Array.isArray(analysis?.investment_universe)
+      ? analysis.investment_universe
+      : undefined,
+  });
 
   // Temporary toggle to hide header controls during this iteration
   const hideHeaderControls = true;
@@ -66,8 +78,6 @@ export default function AssetsPage() {
   const topPickQuantPercentile =
     topPick?.quantLean != null ? ((topPick.quantLean + 1) / 2) * 100 : null;
 
-  const { profile, analysis, isLoading, isProfileLoading, fetchProfile } =
-    useAuthStore();
   const navigate = useNavigate();
 
   const [isRunning, setIsRunning] = useState(false);
@@ -360,9 +370,16 @@ export default function AssetsPage() {
 
       {/* Grid */}
       <div>
-        <h2 className="text-2xl font-semibold text-brand-fg mb-4">
-          Personalized Recommendations
-        </h2>
+        <div className="flex items-baseline gap-3 mb-4 flex-wrap">
+          <h2 className="text-2xl font-semibold text-brand-fg">
+            Personalized Recommendations
+          </h2>
+          {filteredRecs.length > 0 && (
+            <span className="text-sm text-brand-muted-fg">
+              {filteredRecs.length + 1} assets ranked
+            </span>
+          )}
+        </div>
         {recommendationError ? (
           <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-primary">
             <p className="font-semibold text-primary mb-2">
@@ -383,7 +400,9 @@ export default function AssetsPage() {
                   key={asset.ticker}
                   asset={asset}
                   sizeClass={cardSize}
-                  delay={i}
+                  // Capped: the stagger is 0.08s per card, so an uncapped feed of
+                  // ~30 would leave the last one blank for over two seconds.
+                  delay={Math.min(i, 11)}
                 />
               );
             })}

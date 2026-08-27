@@ -442,7 +442,19 @@ def _get_groq():
     # ceiling reached mid-thought produces an empty reply rather than a shorter one.
     from ..utils.llm_client import GroqClient
 
-    return GroqClient.create(purpose="discovery", max_tokens=3000, temperature=0.2)
+    # Discovery names its own account so its usage stays legible in the Groq
+    # dashboards, separate from the reasoning traces. It shares that account with a
+    # trace lane, which is safe on both counts that matter: the two never issue a
+    # call in the same minute (api.run_daily awaits this pass to completion before
+    # the batch, and discovery never runs on the interactive path), and this agent
+    # spends about six calls a night in total against the daily quota.
+    return GroqClient.create(
+        purpose="discovery",
+        max_tokens=3000,
+        temperature=0.2,
+        key_env="GROQ_API_KEY3",
+        fallback_key_env="GROQ_API_KEY",
+    )
 
 
 def _groq_text(llm, prompt: str) -> str:

@@ -17,6 +17,10 @@ export interface AssetRecommendation {
   rank: number;
   isDiscovered: boolean;
   discoverySources: string[] | null;
+  // The investment universe the asset belongs to, from the assets dictionary. Null
+  // for an uncategorized row. Used to narrow the feed to the universes the user has
+  // selected in Settings.
+  universe: string | null;
   // Unified ranking v2 terms (migration 010). Null on legacy rows and whenever the
   // backend ranking is disabled, which is what the legacy display falls back on.
   signalStrength: number | null;
@@ -39,7 +43,22 @@ export interface AssetRecommendation {
 export const SCORECARD_ENABLED =
   (import.meta.env.VITE_UNIFIED_SCORECARD ?? "false") === "true";
 
-export function useDashboardStats() {
+export interface DashboardStatsOptions {
+  /** How many ranked assets to read. Null reads the whole feed. */
+  limit?: number | null;
+  /** Narrow the feed to these investment universes. Empty or absent narrows nothing. */
+  universes?: string[];
+}
+
+/** Ranked assets from the user's latest AI run.
+ *
+ * Defaults to the dashboard's top 5. The assets page passes `limit: null` with the
+ * user's selected universes to show the whole feed for the sectors they picked.
+ */
+export function useDashboardStats({
+  limit = 5,
+  universes,
+}: DashboardStatsOptions = {}) {
   const { profile } = useAuthStore();
   const [recs, setRecs] = useState<AssetRecommendation[]>([]);
   const [isLoadingRecs, setIsLoadingRecs] = useState(true);
@@ -97,8 +116,8 @@ export function useDashboardStats() {
         return;
       }
 
-      // 2. Fetch top 5 assets and join with the dictionary.
-      const { data: recommendations, error: recError } = await supabase
+      // 2. Fetch the ranked assets and join with the dictionary.
+      const recQuery = supabase
         .from("ai_recommendation")
         .select(
           `
@@ -121,8 +140,12 @@ export function useDashboardStats() {
           `,
         )
         .eq("run_id", latestRunId)
-        .order("rank", { ascending: true })
-        .limit(5);
+        .order("rank", { ascending: true });
+
+      // A run scores about 30 tickers, which is well inside PostgREST's default
+      // page size, so the uncapped read needs no pagination.
+      const { data: recommendations, error: recError } =
+        limit == null ? await recQuery : await recQuery.limit(limit);
 
       if (recError) {
         throw recError;
@@ -139,7 +162,7 @@ export function useDashboardStats() {
       const { data: assets, error: assetsError } = assetIds.length
         ? await supabase
             .from("assets")
-            .select("id, ticker, name, origin, discovery_sources")
+            .select("id, ticker, name, universe, origin, discovery_sources")
             .in("id", assetIds)
         : { data: [], error: null };
 
@@ -177,6 +200,7 @@ export function useDashboardStats() {
             rank: rec.rank ?? 0,
             isDiscovered: asset?.origin === "discovered",
             discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
+            universe: (asset?.universe as string | null) ?? null,
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,
             convergence: rec.convergence ?? null,
@@ -219,14 +243,32 @@ export function useDashboardStats() {
   }, [profile?.id, isRunInProgress, fetchRecommendations]);
 
   // Derived State
-  const searchedRecs = recs.filter(
+  //
+  // The run is already scoped to the user's chosen universes, so this is the second
+  // layer: a run also scores the user's watchlist tickers, which can sit outside
+  // those sectors, and a selection changed since the last run leaves rows behind
+  // from the old one. Matched case-insensitively — the DB values equal the tile ids,
+  // but the comparison should not depend on that. An empty selection narrows
+  // nothing, so the page never goes blank on a user who has chosen no universe.
+  const wanted = new Set((universes ?? []).map((u) => u.trim().toLowerCase()));
+  const universeRecs = wanted.size
+    ? recs.filter((r) => r.universe && wanted.has(r.universe.trim().toLowerCase()))
+    : recs;
+
+  const searchedRecs = universeRecs.filter(
     (r) =>
       r.ticker.toLowerCase().includes(search.toLowerCase()) ||
       r.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const topPick = searchedRecs.find((r) => r.rank === 1);
-  const filteredRecs = searchedRecs.filter((r) => r.rank !== 1);
+  // The highest-ranked survivor, not `rank === 1`. Once searching or the universe
+  // filter can remove the run's top asset, keying the hero to rank 1 leaves it
+  // empty while the grid below it still has rows.
+  const topPick = searchedRecs.reduce<AssetRecommendation | undefined>(
+    (best, r) => (!best || r.rank < best.rank ? r : best),
+    undefined,
+  );
+  const filteredRecs = searchedRecs.filter((r) => r.ticker !== topPick?.ticker);
 
   const avgConfidence =
     recs.length > 0
