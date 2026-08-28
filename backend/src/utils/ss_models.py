@@ -37,54 +37,9 @@ class SocialMention:
 	# Reliability weight for the source-tier-weighted average. 1.0 for social
 	# posts; for news it is the publisher's tier weight (tier-1 highest).
 	weight: float = 1.0
-	# The platform's own id for the post (social only). This is the dedupe key that
-	# lets a later collection ask only for posts newer than the highest id already
-	# held, instead of re-downloading the same stream every run.
+	# The platform's own id for the post (social only). Nothing is stored between
+	# runs, so this is only an identity for the post within a run.
 	message_id: int | None = None
-
-	def to_row(self, sentiment_score: float | None = None) -> dict[str, Any]:
-		"""Serialize a social post to its stocktwits_message_cache row.
-		"""
-		return {
-			"message_id": self.message_id,
-			"ticker": self.ticker,
-			"created_at": self.created_at,
-			"body": self.text,
-			"username": self.username,
-			"url": self.url,
-			"likes": self.likes,
-			"reshares": self.reshares,
-			"replies": self.replies,
-			"declared_sentiment": self.declared_sentiment,
-			"sentiment_score": sentiment_score,
-		}
-
-	@classmethod
-	def from_row(cls, data: dict[str, Any], engagement_cap: float = 8.0) -> "SocialMention":
-		"""Rebuild a social post from its stored row.
-
-		The engagement weight is recomputed rather than stored: it is a pure
-		function of the three counts, so persisting it would let the two drift if
-		the cap were ever retuned.
-		"""
-		likes = int(data.get("likes") or 0)
-		reshares = int(data.get("reshares") or 0)
-		replies = int(data.get("replies") or 0)
-		username = data.get("username") or ""
-		return cls(
-			ticker=str(data.get("ticker", "")).upper(),
-			text=data.get("body") or "",
-			source=f"stocktwits:{username}",
-			url=data.get("url"),
-			engagement=likes + reshares + replies,
-			likes=likes,
-			reshares=reshares,
-			replies=replies,
-			created_at=data.get("created_at"),
-			declared_sentiment=data.get("declared_sentiment"),
-			weight=engagement_weight(likes, reshares, replies, engagement_cap),
-			message_id=data.get("message_id"),
-		)
 
 	@property
 	def username(self) -> str | None:

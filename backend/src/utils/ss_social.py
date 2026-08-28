@@ -7,7 +7,6 @@ import logging
 import os
 import re
 from abc import ABC
-from datetime import datetime, timezone
 
 from .schemas import parse_stocktwits_message
 from .ss_base import MentionSource, RateLimiter
@@ -93,55 +92,12 @@ class StockTwitsSource(SocialSource):
 			results[sym] = self._walk(sym, max_pages=self.config.stocktwits_max_pages)
 		return results
 
-	def collect_since(
-		self, ticker: str, since_id: int, max_pages: int | None = None
-	) -> list[SocialMention]:
-		"""Everything posted since ``since_id``, however long ago that was.
-
-		The steady-state path. It walks back from the head of the stream and stops
-		the moment it meets ``since_id``, so a normal night costs one page, while a
-		ticker that went uncollected for a week keeps paging until it reaches
-		familiar ground. Catch-up is automatic and costs only what the gap is worth.
-		"""
-		if self.session is None:
-			return []
-		return self._walk(
-			ticker.upper(),
-			stop_at_id=since_id,
-			max_pages=max_pages if max_pages is not None else self.config.stocktwits_history_max_pages,
-		)
-
-	def collect_backfill(
-		self, ticker: str, until_dt, max_pages: int | None = None
-	) -> list[SocialMention]:
-		"""Walk backwards through the stream until posts predate ``until_dt``.
-
-		Runs once per ticker, to seed the history window from posts' own timestamps.
-		"""
-		if self.session is None:
-			return []
-		return self._walk(
-			ticker.upper(),
-			until_dt=until_dt,
-			max_pages=max_pages if max_pages is not None else self.config.stocktwits_history_max_pages,
-		)
-
-	def _walk(
-		self,
-		sym: str,
-		stop_at_id: int | None = None,
-		until_dt=None,
-		max_pages: int = 2,
-	) -> list[SocialMention]:
+	def _walk(self, sym: str, max_pages: int = 2) -> list[SocialMention]:
 		"""Page backwards through one symbol's stream and return what it finds.
 
 		Backwards is the only direction that works. StockTwits always answers with
 		the NEWEST messages matching a filter, so a forward ``since`` walk skips
-		whatever sits between the cursor and the head. Walking back from the head
-		enumerates the gap exactly, however large it is.
-
-		The walk stops early at ``stop_at_id`` (a post already held) or ``until_dt``
-		(the window edge).
+		whatever sits between the cursor and the head.
 		"""
 		api_sym = _api_symbol(sym)
 		url = self.STREAM_URL.format(symbol=api_sym)
@@ -194,61 +150,16 @@ class StockTwitsSource(SocialSource):
 			if not messages:
 				break
 
-			caught_up = False
 			for msg in messages:
-				msg_id = msg.get("id")
-				if stop_at_id is not None and isinstance(msg_id, int) and msg_id <= stop_at_id:
-					# Reached posts we already hold; everything older is known too.
-					caught_up = True
-					break
 				mention = self._parse_message(msg, sym, api_sym, seen_author_posts)
 				if mention is not None:
 					mentions.append(mention)
 
-			if caught_up:
-				break
-			if until_dt is not None and self._reached_back_to(messages, until_dt):
-				break
-
 			max_id = self._next_cursor(payload, messages)
 			if max_id is None:
 				break
-			if page == pages - 1:
-				# WARNING, not INFO: on a catch-up walk this is the one event that
-				# silently drops posts for good, so it has to be findable after
-				# the fact rather than inferred from a thin bar on a chart.
-				logger.warning(
-					"StockTwits walk for %s hit its %d page ceiling with more to fetch "
-					"(%d posts taken, oldest id %s)",
-					sym,
-					pages,
-					len(mentions),
-					max_id,
-				)
 
 		return mentions
-
-	@staticmethod
-	def _reached_back_to(messages: list, until_dt: datetime) -> bool:
-		"""Whether this page has reached past ``until_dt``.
-
-		Read off the raw payload rather than the parsed mentions: the quality gate
-		can drop every post on a page, and that must not be mistaken for the walk
-		running out of history. Messages arrive newest-first, so the last one with a
-		usable timestamp is the oldest on the page.
-		"""
-		for msg in reversed(messages):
-			raw = msg.get("created_at")
-			if not raw:
-				continue
-			try:
-				created = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-			except (TypeError, ValueError):
-				continue
-			if created.tzinfo is None:
-				created = created.replace(tzinfo=timezone.utc)
-			return created < until_dt
-		return False
 
 	def _parse_message(
 		self,
@@ -323,27 +234,13 @@ class SocialCollector:
 		config: SentimentConfig | None = None,
 		registry: PublisherRegistry | None = None,
 		sources: list[SocialSource] | None = None,
-		history=None,
 	):
 		self.config = config or SentimentConfig.from_env()
 		self.registry = registry or PublisherRegistry()
 		self.sources = sources if sources is not None else [StockTwitsSource(self.config, self.registry)]
-		self.history = history
-		if self.history is None and self.config.social_history_enabled:
-			from .ss_history import SocialHistoryCollector
-
-			self.history = SocialHistoryCollector(self.config, self.registry)
 
 	def collect(self, tickers: list[str]) -> dict[str, list[SocialMention]]:
 		normalized_tickers = _normalize_tickers(tickers)
-		if self.history is not None:
-			try:
-				return self.history.collect(normalized_tickers)
-			except Exception as e:
-				# Never let history cost us the live signal: fall through to the
-				# direct path, which is what runs with the flag off anyway.
-				logger.warning("Social history collection failed, using direct fetch: %s", e)
-
 		combined: dict[str, list[SocialMention]] = {ticker: [] for ticker in normalized_tickers}
 		for source in self.sources:
 			collected = source.collect(normalized_tickers)

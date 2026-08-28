@@ -41,23 +41,6 @@ DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
 # Only refresh users whose last run is within this many days.
 DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
 
-_social_history_collector = None
-
-
-def _social_history():
-    """The social history collector, built once on first use.
-
-    Imported lazily, as the discovery and batch entry points are, so that a cold
-    start does not pay for the sentiment stack before a request needs it.
-    """
-    global _social_history_collector
-    if _social_history_collector is None:
-        from src.utils.ss_history import SocialHistoryCollector
-
-        _social_history_collector = SocialHistoryCollector()
-    return _social_history_collector
-
-
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
 
@@ -525,27 +508,6 @@ async def get_price_history(ticker: str):
         return {"ticker": ticker.upper(), "closes": [], "dates": []}
 
 
-@app.get("/api/assets/{ticker}/sentiment-history")
-async def get_sentiment_history(ticker: str, days: int = 7):
-    """Return the daily social sentiment series for a ticker.
-
-    Informational and unauthenticated, mirroring the price-history endpoint. Reads
-    the pre-computed rollups written by the nightly run, so it never calls
-    StockTwits. Quiet days come back with a null score and a zero count, which the
-    chart renders as a gap rather than a drop to zero.
-    """
-    symbol = ticker.upper()
-    window = max(1, min(days, 90))
-    try:
-        collector = _social_history()
-        loop = asyncio.get_running_loop()
-        points = await loop.run_in_executor(None, collector.history, symbol, window)
-        return {"ticker": symbol, "points": points}
-    except Exception as exc:
-        logger.warning("Sentiment history fetch failed for %s: %s", symbol, exc)
-        return {"ticker": symbol, "points": []}
-
-
 @app.post("/api/analysis/run-daily")
 async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
@@ -629,22 +591,6 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     loop = asyncio.get_running_loop()
     batch = await loop.run_in_executor(None, run_daily_batch, users)
 
-    # Roll the night's StockTwits posts up into daily buckets and drop anything past
-    # retention. Runs AFTER the batch, because the batch is what collected them.
-    # Best-effort in its own guard: history is a read-only view on work already
-    # done and persisted, so a failure here must never mark the nightly run failed.
-    history_summary = None
-    if os.getenv("SOCIAL_HISTORY_ENABLED", "false").lower() == "true":
-        try:
-            collector = _social_history()
-            tickers = batch.get("ticker_list") or []
-            await loop.run_in_executor(None, collector.rebuild_rollups, tickers)
-            await loop.run_in_executor(None, collector.prune)
-            history_summary = {"tickers": len(tickers)}
-            logger.info("Social sentiment history rebuilt: %s", history_summary)
-        except Exception as e:
-            logger.exception("Social history rollup failed (serving existing rows): %s", e)
-
     summary = {
         "active_days": DAILY_ACTIVE_DAYS,
         "total": len(user_ids),
@@ -654,7 +600,6 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
         "unique_tickers": batch.get("tickers", 0),
         "discovery": discovery_summary,
         "whales": whales_summary,
-        "social_history": history_summary,
     }
     logger.info("Daily run finished: %s", summary)
     return summary

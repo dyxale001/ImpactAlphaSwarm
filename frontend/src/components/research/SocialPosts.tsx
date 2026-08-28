@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ExternalLink, Heart, MessageSquare, Repeat2 } from "lucide-react";
 import PostText from "./PostText";
 import SentimentSignals from "./SentimentSignals";
-import { dayLabel, latestPostDay, postsOnDay } from "./postDays";
 
 export type SocialPost = {
   platform?: string;
@@ -92,15 +91,9 @@ export function SocialPostRow({
   );
 }
 
-// Per-post transparency list: the five most influential posts from the most
-// recent day, with a link to the full social sentiment page for the rest.
-// Mirrors NewsArticles so users can see exactly which posts fed the score.
-//
-// One day rather than the whole scoring window. The window is a week long, so
-// ranking all of it by influence buried today's chatter under whichever older
-// post happened to carry the most engagement, and the card read as a digest of
-// the week when what a reader wants from an asset page is what is being said
-// now. The week is still one click away, a day at a time.
+// Per-post transparency list: the five posts that drive the social score most,
+// with a link to the full social sentiment page for the rest. Mirrors
+// NewsArticles so users can see exactly which posts fed the sentiment score.
 export default function SocialPosts({
   posts,
   ticker,
@@ -110,16 +103,13 @@ export default function SocialPosts({
 }) {
   if (!posts || posts.length === 0) return null;
 
-  const day = latestPostDay(posts);
-  const dayPosts = postsOnDay(posts, day);
-  const shown = sortPostsByInfluence(dayPosts).slice(0, 5);
-  const hasMoreThatDay = dayPosts.length > shown.length;
+  const shown = sortPostsByInfluence(posts).slice(0, 5);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-          Top posts{day ? ` · ${dayLabel(day)}` : ""}
+          Top posts by influence
         </span>
         <span className="text-[11px] text-brand-muted-fg font-medium">
           StockTwits
@@ -132,16 +122,14 @@ export default function SocialPosts({
           </li>
         ))}
       </ul>
-      {/* Always offered, even on a quiet day: the link is now the way through to
-          the rest of the week, not just to a longer version of this list. */}
-      <Link
-        to={`/asset/${ticker}/social`}
-        className="inline-block text-xs text-brand-primary font-medium hover:underline"
-      >
-        {hasMoreThatDay
-          ? `Show all ${dayPosts.length} posts from ${day ? dayLabel(day).toLowerCase() : "that day"}`
-          : `Browse all ${posts.length} posts from the last 7 days`}
-      </Link>
+      {posts.length > 5 && (
+        <Link
+          to={`/asset/${ticker}/social`}
+          className="inline-block text-xs text-brand-primary font-medium hover:underline"
+        >
+          Show all {posts.length} posts
+        </Link>
+      )}
     </div>
   );
 }
