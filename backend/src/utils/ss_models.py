@@ -1,14 +1,23 @@
 """Sentiment scout: shared data model and ticker helpers.
-
-``SocialMention`` is the single unit every sentiment source is normalized into,
-whether it came from StockTwits, Finnhub or Marketaux. Keeping it here lets the
-collectors, the scorer and the payload builders share one shape without importing
-each other.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Any
+
+
+def engagement_weight(likes: int, reshares: int, replies: int, cap: float) -> float:
+	"""Log-dampened, capped weight in [1.0, cap] from a post's engagement. A post
+	with no engagement weighs 1.0; a heavily engaged one weighs more but with
+	sharply diminishing returns, so a single viral post cannot dominate.
+
+	Lives here rather than on the collector because a post rebuilt from storage has
+	to arrive at the same weight as one straight off the wire.
+	"""
+	raw = max(0, likes) + 2 * max(0, reshares) + max(0, replies)
+	return min(cap, 1.0 + math.log1p(raw))
 
 
 @dataclass(frozen=True)
@@ -18,22 +27,53 @@ class SocialMention:
 	source: str
 	url: str | None = None
 	engagement: int = 0
-	# Engagement counts for display (social posts only). ``engagement`` stays the
-	# combined total used for GCP prioritization; these are just the numbers shown.
 	likes: int = 0
 	reshares: int = 0
 	replies: int = 0
 	created_at: str | None = None
-	# Author-declared Bullish/Bearish tag (social posts only). Preferred over
-	# VADER when set; None means fall back to the model.
 	declared_sentiment: str | None = None
 	# Original article headline (news only), kept separate from the combined
-	# "headline. summary" ``text`` so display and dedup use the real headline
-	# instead of re-splitting on ". " (which breaks on abbreviations like "Sen.").
 	headline: str | None = None
 	# Reliability weight for the source-tier-weighted average. 1.0 for social
 	# posts; for news it is the publisher's tier weight (tier-1 highest).
 	weight: float = 1.0
+	# The platform's own id for the post (social only). Nothing is stored between
+	# runs, so this is only an identity for the post within a run.
+	message_id: int | None = None
+
+	@property
+	def username(self) -> str | None:
+		"""The author, recovered from the ``stocktwits:<user>`` source tag."""
+		prefix = "stocktwits:"
+		if self.source.startswith(prefix):
+			return self.source[len(prefix):] or None
+		return None
+
+	def to_cache(self) -> dict[str, Any]:
+		"""Serialize a news mention to the cache JSON shape (Finnhub and Marketaux
+		share the same fields)."""
+		return {
+			"text": self.text,
+			"headline": self.headline,
+			"source": self.source,
+			"url": self.url,
+			"created_at": self.created_at,
+			"weight": self.weight,
+		}
+
+	@classmethod
+	def from_cache(cls, ticker: str, data: dict[str, Any]) -> "SocialMention":
+		"""Rebuild a news mention from a cached article."""
+		return cls(
+			ticker=ticker,
+			text=data.get("text", ""),
+			headline=data.get("headline"),
+			source=data.get("source", ""),
+			url=data.get("url"),
+			engagement=0,
+			created_at=data.get("created_at"),
+			weight=float(data.get("weight", 1.0)),
+		)
 
 
 def _normalize_tickers(tickers: list[str]) -> list[str]:

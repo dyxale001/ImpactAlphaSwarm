@@ -12,17 +12,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
-from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 from langsmith.client import Client
 
 from ..agents.quant_analyst import analyze_tickers as analyze_quant_tickers
 from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_tickers
+from ..utils.gr_reasoningtracestyle import HOUSE_STYLE
+from ..utils.llm_client import GroqClient
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
 from ..utils.supabase_client import save_top_assets
 
@@ -41,18 +42,40 @@ else:
     langsmith_client = None
     logger.warning("LangSmith not configured - set LANGSMITH_API_KEY to enable tracing")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if GROQ_API_KEY:
-    groq_llm = ChatGroq(
-        api_key=GROQ_API_KEY,
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        temperature=0.3,
-        max_tokens=300,
-    )
+# 2000 rather than the 300 a non-reasoning model needed. The trace itself measures
+# around 100 tokens; the rest is headroom for the thinking that precedes it, which
+# varies enough run to run that a tight ceiling occasionally truncates the model
+# before it writes anything. Unused headroom is not billed.
+groq_llm = GroqClient.create(
+    purpose="reasoning_trace", max_tokens=2000, temperature=0.3
+)
+if groq_llm:
     logger.info("Groq LLM initialized for reasoning generation")
 else:
-    groq_llm = None
-    logger.warning("GROQ_API_KEY not set - reasoning traces will be basic")
+    logger.warning("Groq not configured - reasoning traces will be basic")
+
+# The accounts the reasoning traces are fanned out over, listed here because this is
+# the one place the allocation is stated. Each key is a separate Groq account with
+# its own rate limit, so N keys buy N lanes; a machine holding only GROQ_API_KEY
+# gets a single-lane pool, which is exactly the old sequential behaviour.
+#
+# Measured on a real run: 17 traces across three lanes took 48 seconds, against the
+# same work costing five sequential waits on one account. GROQ_API_KEY3 also serves
+# asset discovery, which is safe: the two never run in the same minute, and discovery
+# spends about six calls a night.
+TRACE_KEY_ENVS = ["GROQ_API_KEY", "GROQ_API_KEY2", "GROQ_API_KEY3"]
+
+groq_trace_clients = GroqClient.create_pool(
+    purpose="reasoning_trace",
+    key_envs=TRACE_KEY_ENVS,
+    max_tokens=2000,
+    temperature=0.3,
+)
+logger.info(
+    "Reasoning trace pool: %d of %d Groq accounts configured",
+    len(groq_trace_clients),
+    len(TRACE_KEY_ENVS),
+)
 
 _current_tracer: Optional[Tracer] = None
 
@@ -95,19 +118,24 @@ _QUANT_STATE_WORDS = {
 # advice. The trace may explain WHY something ranks where it does; it may never
 # say what to do about it.
 _ADVICE_PROHIBITION = (
-    "HARD RULES — the product is legally not allowed to give advice:\n"
+    "HARD RULES (the product is legally not allowed to give advice):\n"
     "- NEVER use: buy, sell, hold, should, must, recommend, advise, target price, "
     "undervalued, overvalued, opportunity, bargain, avoid.\n"
-    "- NEVER look forward. No predictions and no forward-looking nouns either — "
+    "- NEVER look forward. No predictions, and no forward-looking nouns either: "
     "not 'outlook', 'prospects', 'potential', 'poised to', 'set to rebound'.\n"
     "- Describe only what the measurements SAY and why that places the asset where "
     "it is in the list. Present tense, factual, no verdict on quality.\n"
-    "STYLE — this is read by a retail investor, not a quant desk:\n"
+    "STYLE (this is read by a retail investor, not a quant desk):\n"
     "- Name only the ONE or TWO factors that actually drove the placement. Do not "
     "recite all four, and do not list a factor that had no effect (a fit of 1.00 "
-    "changed nothing — say nothing about it).\n"
+    "changed nothing, so say nothing about it).\n"
     "- Quote at most one number, and only if it helps. Prefer plain words "
-    "('the two signals disagree') over scores ('agreement 0.51')."
+    "('the two signals disagree') over scores ('agreement 0.51').\n"
+    "VOICE (a person wrote this, not a machine):\n"
+    "- NEVER use a dash as punctuation. No em dashes, no en dashes, and no hyphen "
+    "standing in for a comma. Join or separate clauses with commas, full stops, "
+    "'and', 'but' or brackets instead. Hyphens inside a compound word are fine.\n"
+    "- Plain sentences. No colon-then-list constructions, no bullet points."
 )
 
 
@@ -118,11 +146,11 @@ def _describe_terms(terms: dict) -> str:
     lines = [
         f"- Signal strength: {terms.get('signal_strength'):.2f} of 1.00 "
         f"(direction: {terms.get('signal_direction')})",
-        f"- Agreement between the two signals: {terms.get('convergence'):.2f} of 1.00 — "
+        f"- Agreement between the two signals: {terms.get('convergence'):.2f} of 1.00, "
         f"{_CONVERGENCE_WORDS.get(terms.get('convergence_state'), 'partly agree')}",
         f"- Depth of available evidence: {terms.get('data_sufficiency'):.2f} of 1.00",
         f"- Fit with the user's stated risk preference: {terms.get('profile_fit'):.2f} of 1.00 "
-        f"(1.00 = no mismatch; lower = more volatile than they asked for)",
+        f"(1.00 means no mismatch; lower means more volatile than they asked for)",
         f"- Price-data status: {_QUANT_STATE_WORDS.get(quant_state, quant_state)}",
     ]
     if weights:
@@ -155,7 +183,25 @@ def _reasoning_fallback(ticker: str, terms: Optional[dict], expertise_level: str
                 "not a view on whether to invest."
             )
         return detail
-    return f"{ticker}: ranking inputs were unavailable for this run."
+
+    # No v2 terms: ranking v2 is off, or this asset was never scored by it. State the
+    # two measurements that do exist rather than a bare apology — with a trace now
+    # written for every asset, the old line would repeat verbatim down the whole feed
+    # and say nothing about any of them. Same rule as above: describe, never judge.
+    quant = terms.get("quant_score") if terms else None
+    sentiment = terms.get("sentiment_score") if terms else None
+    if quant is None and sentiment is None:
+        return f"{ticker}: ranking inputs were unavailable for this run."
+    detail = (
+        f"{ticker} places here on a quant score of {quant if quant is not None else 'N/A'} "
+        f"and a sentiment score of {sentiment if sentiment is not None else 'N/A'} for this run."
+    )
+    if expertise_level == "novice":
+        return (
+            f"{detail} These are measurements of what the data currently shows, "
+            "not a view on whether to invest."
+        )
+    return detail
 
 
 def generate_reasoning_trace(
@@ -166,16 +212,22 @@ def generate_reasoning_trace(
     risk_tolerance: str,
     expertise_level: str,
     terms: Optional[dict] = None,
+    client: Optional[GroqClient] = None,
 ) -> str:
     """Explain why an asset placed where it did.
 
     When ``terms`` carries the ranking-v2 breakdown the trace describes those four
     disclosed factors, so what the user READS matches what ordered the feed. Without
     it (v2 disabled) the legacy penalty-based prompt is used unchanged.
+
+    ``client`` names which Groq account serves this call. ReasoningTracePool passes
+    the lane's own client so no two threads share one; left unset the module-level
+    client is used, which is the single-lane path.
     """
     use_v2 = bool(terms and terms.get("rank_score") is not None)
+    llm = client or groq_llm
 
-    if not groq_llm:
+    if not llm:
         if use_v2:
             return _reasoning_fallback(ticker, terms, expertise_level)
         return f"Quant Score: {quant_data.get('raw_quant_score', 'N/A')}, Sentiment: {sentiment_data.get('sentiment_score', 'N/A')}"
@@ -201,14 +253,14 @@ Audience guidance:
 The list is ordered by four disclosed factors, multiplied together. For {ticker}:
 {_describe_terms(terms)}
 
-Supporting measurements (facts, for colour — do not re-score them):
+Supporting measurements (facts, for colour, do not re-score them):
 - Sentiment score: {sentiment_data.get('sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted articles and {sentiment_data.get('mention_count', 0)} social posts
-- RSI: {quant_data.get('rsi', 'N/A')} · Sharpe: {quant_data.get('sharpe_ratio', 'N/A')} · Beta: {beta_text}
+- RSI: {quant_data.get('rsi', 'N/A')}, Sharpe: {quant_data.get('sharpe_ratio', 'N/A')}, Beta: {beta_text}
 - The user's stated risk preference: {risk_tolerance}
 
 {_ADVICE_PROHIBITION}
 
-Write it so the user can see WHICH factor drove the placement — above all when the
+Write it so the user can see WHICH factor drove the placement, above all when the
 two signals disagree, the evidence is thin, or it clashes with their risk
 preference. Those three are the things worth telling them about."""
         else:
@@ -234,11 +286,20 @@ Risk Adjustments:
 - Risk Penalty: {adjustments.get('risk_penalty', 0)}
 - User Profile: {risk_tolerance}
 
-Provide a brief, actionable explanation of why this asset ranks where it does. Match the wording to the expertise level, and avoid sounding like an institutional analyst when the user is a retail investor."""
+{_ADVICE_PROHIBITION}
 
-        message = HumanMessage(content=prompt)
-        response = groq_llm.invoke([message])
-        reasoning = response.content.strip()
+Explain briefly why this asset ranks where it does. Match the wording to the expertise level, and avoid sounding like an institutional analyst when the user is a retail investor."""
+
+        # Raises on a blank or truncated reply, so the fallback below covers a model
+        # that returns nothing as well as one that errors. Those used to differ: an
+        # empty reply was returned as if it were a real trace and stored as "".
+        reasoning = HOUSE_STYLE.apply(llm.complete(prompt))
+        # The prompt bans dash punctuation, but a 20b model obeys style rules
+        # unevenly, so the reply is normalised rather than trusted. An empty result
+        # here means the reply was punctuation only; treat it like any other
+        # unusable reply and fall through to the fallback.
+        if not reasoning:
+            raise ValueError(f"{ticker}: nothing usable left after style cleanup")
 
         logger.debug(f"Generated reasoning for {ticker}: {reasoning}")
         return reasoning
@@ -260,6 +321,97 @@ Provide a brief, actionable explanation of why this asset ranks where it does. M
                 "shows, not a view on whether to invest."
             )
         return base_reasoning
+
+
+class ReasoningTracePool:
+    """Writes a reasoning trace onto each asset, spread over several Groq accounts.
+
+    Each trace is a blocking call to a reasoning model, and the nightly repeats the
+    set per user, so the calls are spread over the configured accounts rather than
+    queued behind one. Each account carries its own rate limit, so the lanes do not
+    contend. This is what makes raising REASONING_TRACE_TOP_N cheap when the rest of
+    the run can afford it.
+
+    Assets are DEALT alternately into one lane per client, and a lane runs its own
+    share sequentially in its own thread. Two properties follow, and both matter:
+    a given ChatGroq instance is only ever invoked from the single thread that owns
+    it, and the lanes come out within one asset of each other in length, which is
+    what decides the wall clock since the slowest lane ends the phase.
+
+    Dealing is positional rather than by universe on purpose. Universe lanes would be
+    lopsided (a user weighted to Technology would leave one lane idle while another
+    worked through twelve), and a user who picked a single universe would get no
+    parallelism at all.
+    """
+
+    def __init__(self, clients: list[GroqClient]) -> None:
+        self._clients = clients
+
+    def generate(
+        self,
+        assets: list[dict[str, Any]],
+        *,
+        quant_results: dict[str, dict],
+        sentiment_results: dict[str, dict],
+        risk_tolerance: str,
+        expertise_level: str,
+    ) -> None:
+        """Set ``asset["reasoning"]`` on every asset given. Never raises.
+
+        A lane that dies takes only its own share with it: those assets keep whatever
+        reasoning they already carry, which the caller has pre-filled with the
+        deterministic trace, so a failed lane degrades the wording rather than the run.
+        """
+        if not assets:
+            return
+
+        # No accounts configured. generate_reasoning_trace handles a missing client on
+        # its own, and doing it here in one lane keeps that path unchanged.
+        lanes = max(1, len(self._clients))
+        shares = [assets[offset::lanes] for offset in range(lanes)]
+
+        def run_lane(index: int) -> None:
+            client = self._clients[index] if index < len(self._clients) else None
+            for asset in shares[index]:
+                ticker = asset["ticker"]
+                asset["reasoning"] = generate_reasoning_trace(
+                    ticker=ticker,
+                    quant_data=quant_results.get(ticker, {}),
+                    sentiment_data=sentiment_results.get(ticker, {}),
+                    adjustments=asset["adjustments"],
+                    risk_tolerance=risk_tolerance,
+                    expertise_level=expertise_level,
+                    # Only describe the v2 factors when they ACTUALLY ordered the
+                    # feed. In shadow mode the terms are computed and attached (for
+                    # logging) while the legacy score still decides placement, so
+                    # using them here would have the trace explain a placement it did
+                    # not cause.
+                    terms=(
+                        asset
+                        if asset.get("rank_score") is not None
+                        and not UNIFIED_RANKING_SHADOW
+                        else None
+                    ),
+                    client=client,
+                )
+
+        if lanes == 1:
+            run_lane(0)
+            return
+
+        with ThreadPoolExecutor(max_workers=lanes) as pool:
+            futures = [pool.submit(run_lane, index) for index in range(lanes)]
+            for index, future in enumerate(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.exception(
+                        "Reasoning trace lane %d failed, %d assets keep their "
+                        "deterministic trace: %s",
+                        index + 1,
+                        len(shares[index]),
+                        e,
+                    )
 
 
 class AnalysisState(TypedDict):
@@ -298,6 +450,14 @@ DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE",
 # convergence questions answerable from data rather than argument.
 UNIFIED_RANKING_ENABLED = os.getenv("UNIFIED_RANKING_ENABLED", "false").lower() == "true"
 UNIFIED_RANKING_SHADOW = os.getenv("UNIFIED_RANKING_SHADOW", "true").lower() == "true"
+
+# How many assets get an LLM-written trace. 5 matches what the pages actually show.
+# Writing one for every scored asset was tried and parked: the traces themselves were
+# never the bottleneck (48 seconds of a 15 minute run, measured), but the per-ticker
+# Supabase and yfinance work in save_top_assets that came with keeping 30 assets was,
+# and the resulting insert was large enough that its ranking-v2 columns were dropped.
+# 0 means every scored asset, for when that is revisited.
+REASONING_TRACE_TOP_N = int(os.getenv("REASONING_TRACE_TOP_N", "5"))
 
 
 def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
@@ -639,6 +799,27 @@ def _apply_ranking_v2(
     ]
 
 
+def _all_ranked(
+    top_5: list[dict[str, Any]], unified_scores: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Every analysed asset, with the authoritative top 5 held at the FRONT.
+
+    Both persistence paths save all of them, not just the survivors: the assets page
+    shows the whole ranked feed, and watchlist cards need scores for assets outside
+    the top 5 (main's behaviour, PR #16).
+
+    The ordering is the point. ``rank`` is written as nothing more than the list
+    position, so whatever leads this list becomes the top of the feed. Keeping the
+    chosen five ahead of the score-sorted remainder is what stops ranking v2's
+    selection being silently overwritten by the legacy score order.
+    """
+    chosen = {asset["ticker"] for asset in top_5}
+    return list(top_5) + sorted(
+        (a for a in unified_scores.values() if a["ticker"] not in chosen),
+        key=lambda x: (-x["unified_score"], x["ticker"]),
+    )
+
+
 def synthesize_rankings(
     tickers: list[str],
     quant_results: dict[str, dict],
@@ -730,27 +911,33 @@ def synthesize_rankings(
             logger.exception("Ranking v2 failed, serving legacy order: %s", e)
             top_5 = legacy_order[:5]
 
-    # Generate the LLM reasoning trace only for the final top 5. Doing it for
-    # every ticker (then discarding all but 5) wasted ~25 calls per run.
-    for asset in top_5:
-        asset_ticker = asset["ticker"]
-        asset["reasoning"] = generate_reasoning_trace(
-            ticker=asset_ticker,
-            quant_data=quant_results.get(asset_ticker, {}),
-            sentiment_data=sentiment_results.get(asset_ticker, {}),
-            adjustments=asset["adjustments"],
-            risk_tolerance=risk_tolerance,
-            expertise_level=expertise_level,
-            # Only describe the v2 factors when they ACTUALLY ordered the feed. In
-            # shadow mode the terms are computed and attached (for logging) while
-            # the legacy score still decides placement, so using them here would
-            # have the trace explain a placement it did not cause.
-            terms=(
-                asset
-                if asset.get("rank_score") is not None and not UNIFIED_RANKING_SHADOW
-                else None
-            ),
+    # Two tiers, so that no asset is ever stored with an empty trace:
+    #
+    # 1. Everything gets the deterministic trace first. It costs nothing and it is
+    #    specific to the asset (it names that asset's own agreement, signal strength
+    #    and evidence depth). The graph path persists every ranked asset, and those
+    #    beyond the top 5 used to be saved with reasoning_trace = "", which is what
+    #    left a watchlist card outside the top 5 with nothing to show.
+    # 2. The pool then overwrites the first REASONING_TRACE_TOP_N with LLM prose,
+    #    fanned out over the configured Groq accounts. 0 means all of them.
+    ranked_assets = _all_ranked(top_5, unified_scores)
+    for asset in ranked_assets:
+        asset["reasoning"] = _reasoning_fallback(
+            asset["ticker"], asset, expertise_level
         )
+
+    written = (
+        ranked_assets
+        if REASONING_TRACE_TOP_N <= 0
+        else ranked_assets[:REASONING_TRACE_TOP_N]
+    )
+    ReasoningTracePool(groq_trace_clients).generate(
+        written,
+        quant_results=quant_results,
+        sentiment_results=sentiment_results,
+        risk_tolerance=risk_tolerance,
+        expertise_level=expertise_level,
+    )
 
     return top_5, unified_scores
 
@@ -768,18 +955,9 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
         user_id=state.get("user_id"),
     )
 
-    # Persist EVERY analysed asset, not just the survivors, so watchlist cards for
-    # assets outside the top 5 still carry scores (main's behaviour, PR #16). The
-    # `rank` column is simply the list position and the dashboard orders by it with
-    # .limit(5), so the authoritative top 5 must stay at the FRONT — otherwise the
-    # legacy five would be served even with ranking v2 live.
-    chosen = {asset["ticker"] for asset in top_5}
-    all_ranked = list(top_5) + sorted(
-        (a for a in unified_scores.values() if a["ticker"] not in chosen),
-        key=lambda x: (-x["unified_score"], x["ticker"]),
-    )
+    all_ranked = _all_ranked(top_5, unified_scores)
 
-    print(f"Generated rankings for {len(all_ranked)} assets (saving all, top 5 displayed)")
+    print(f"Generated rankings for {len(all_ranked)} assets (saving all)")
     for i, asset in enumerate(top_5, 1):
         print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
 
@@ -811,8 +989,9 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
 
     print("Output ready for frontend:")
     print(json.dumps(output, indent=2))
-    # Persist ALL ranked assets to Supabase so watchlist cards can show scores
-    # for assets that didn't make the top 5. Dashboard still shows top 5 via .limit(5).
+    # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
+    # and watchlist cards need scores for assets outside the top 5. The dashboard
+    # still shows five, capped on its own read.
     try:
         save_res = save_top_assets(
             run_id=state["run_id"],
@@ -995,7 +1174,15 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     # 3. Personalize + persist per user, reusing the shared signals. The price
     #    cache dedupes yfinance price lookups across users' overlapping top-5s.
     price_cache: dict[str, Any] = {}
-    summary = {"total": len(users), "succeeded": 0, "failed": 0, "tickers": len(union)}
+    # ``union`` is carried out so the caller can roll the night's social history up
+    # over exactly the tickers this batch collected, without re-deriving the scope.
+    summary = {
+        "total": len(users),
+        "succeeded": 0,
+        "failed": 0,
+        "tickers": len(union),
+        "ticker_list": list(union),
+    }
     for user in users:
         try:
             top_5, _ = synthesize_rankings(
@@ -1007,6 +1194,11 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
                 run_id=user["run_id"],
                 user_id=user["user_id"],
             )
+            # Five rows per user, matching what the pages show. The nightly is the
+            # run with the least headroom (it repeats per user inside one request),
+            # so persisting the whole ranked feed here is the piece to revisit last,
+            # after save_top_assets stops doing a Supabase lookup and a price fetch
+            # per ticker in sequence.
             save_top_assets(
                 run_id=user["run_id"],
                 user_id=user["user_id"],
