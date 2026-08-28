@@ -8,6 +8,8 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 import yfinance as yf
 
+from .gr_reasoningtracestyle import HOUSE_STYLE
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -469,7 +471,10 @@ def save_top_assets(
             "asset_id": asset_id,
             "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
             "confidence_score": float(asset.get("unified_score") or 0),
-            "reasoning_trace": asset.get("reasoning") or "",
+            # Normalised on the way in as well as where it is generated, so a trace
+            # written by any other path still lands in house style (no dash used as
+            # punctuation).
+            "reasoning_trace": HOUSE_STYLE.apply(asset.get("reasoning") or ""),
             "hype_penalty": int(asset.get("adjustments", {}).get("hype_penalty", 0)),
             "created_at": now,
             "run_id": run_id,

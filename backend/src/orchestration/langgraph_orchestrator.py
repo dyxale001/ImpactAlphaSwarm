@@ -22,6 +22,7 @@ from langsmith.client import Client
 
 from ..agents.quant_analyst import analyze_tickers as analyze_quant_tickers
 from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_tickers
+from ..utils.gr_reasoningtracestyle import HOUSE_STYLE
 from ..utils.llm_client import GroqClient
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
 from ..utils.supabase_client import save_top_assets
@@ -117,19 +118,24 @@ _QUANT_STATE_WORDS = {
 # advice. The trace may explain WHY something ranks where it does; it may never
 # say what to do about it.
 _ADVICE_PROHIBITION = (
-    "HARD RULES — the product is legally not allowed to give advice:\n"
+    "HARD RULES (the product is legally not allowed to give advice):\n"
     "- NEVER use: buy, sell, hold, should, must, recommend, advise, target price, "
     "undervalued, overvalued, opportunity, bargain, avoid.\n"
-    "- NEVER look forward. No predictions and no forward-looking nouns either — "
+    "- NEVER look forward. No predictions, and no forward-looking nouns either: "
     "not 'outlook', 'prospects', 'potential', 'poised to', 'set to rebound'.\n"
     "- Describe only what the measurements SAY and why that places the asset where "
     "it is in the list. Present tense, factual, no verdict on quality.\n"
-    "STYLE — this is read by a retail investor, not a quant desk:\n"
+    "STYLE (this is read by a retail investor, not a quant desk):\n"
     "- Name only the ONE or TWO factors that actually drove the placement. Do not "
     "recite all four, and do not list a factor that had no effect (a fit of 1.00 "
-    "changed nothing — say nothing about it).\n"
+    "changed nothing, so say nothing about it).\n"
     "- Quote at most one number, and only if it helps. Prefer plain words "
-    "('the two signals disagree') over scores ('agreement 0.51')."
+    "('the two signals disagree') over scores ('agreement 0.51').\n"
+    "VOICE (a person wrote this, not a machine):\n"
+    "- NEVER use a dash as punctuation. No em dashes, no en dashes, and no hyphen "
+    "standing in for a comma. Join or separate clauses with commas, full stops, "
+    "'and', 'but' or brackets instead. Hyphens inside a compound word are fine.\n"
+    "- Plain sentences. No colon-then-list constructions, no bullet points."
 )
 
 
@@ -140,11 +146,11 @@ def _describe_terms(terms: dict) -> str:
     lines = [
         f"- Signal strength: {terms.get('signal_strength'):.2f} of 1.00 "
         f"(direction: {terms.get('signal_direction')})",
-        f"- Agreement between the two signals: {terms.get('convergence'):.2f} of 1.00 — "
+        f"- Agreement between the two signals: {terms.get('convergence'):.2f} of 1.00, "
         f"{_CONVERGENCE_WORDS.get(terms.get('convergence_state'), 'partly agree')}",
         f"- Depth of available evidence: {terms.get('data_sufficiency'):.2f} of 1.00",
         f"- Fit with the user's stated risk preference: {terms.get('profile_fit'):.2f} of 1.00 "
-        f"(1.00 = no mismatch; lower = more volatile than they asked for)",
+        f"(1.00 means no mismatch; lower means more volatile than they asked for)",
         f"- Price-data status: {_QUANT_STATE_WORDS.get(quant_state, quant_state)}",
     ]
     if weights:
@@ -247,14 +253,14 @@ Audience guidance:
 The list is ordered by four disclosed factors, multiplied together. For {ticker}:
 {_describe_terms(terms)}
 
-Supporting measurements (facts, for colour — do not re-score them):
+Supporting measurements (facts, for colour, do not re-score them):
 - Sentiment score: {sentiment_data.get('sentiment_score', 'N/A')}/100 from {sentiment_data.get('news_count', 0)} trusted articles and {sentiment_data.get('mention_count', 0)} social posts
-- RSI: {quant_data.get('rsi', 'N/A')} · Sharpe: {quant_data.get('sharpe_ratio', 'N/A')} · Beta: {beta_text}
+- RSI: {quant_data.get('rsi', 'N/A')}, Sharpe: {quant_data.get('sharpe_ratio', 'N/A')}, Beta: {beta_text}
 - The user's stated risk preference: {risk_tolerance}
 
 {_ADVICE_PROHIBITION}
 
-Write it so the user can see WHICH factor drove the placement — above all when the
+Write it so the user can see WHICH factor drove the placement, above all when the
 two signals disagree, the evidence is thin, or it clashes with their risk
 preference. Those three are the things worth telling them about."""
         else:
@@ -287,7 +293,13 @@ Explain briefly why this asset ranks where it does. Match the wording to the exp
         # Raises on a blank or truncated reply, so the fallback below covers a model
         # that returns nothing as well as one that errors. Those used to differ: an
         # empty reply was returned as if it were a real trace and stored as "".
-        reasoning = llm.complete(prompt)
+        reasoning = HOUSE_STYLE.apply(llm.complete(prompt))
+        # The prompt bans dash punctuation, but a 20b model obeys style rules
+        # unevenly, so the reply is normalised rather than trusted. An empty result
+        # here means the reply was punctuation only; treat it like any other
+        # unusable reply and fall through to the fallback.
+        if not reasoning:
+            raise ValueError(f"{ticker}: nothing usable left after style cleanup")
 
         logger.debug(f"Generated reasoning for {ticker}: {reasoning}")
         return reasoning
