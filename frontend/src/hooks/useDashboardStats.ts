@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
+import { isRecentlyDiscovered } from "../utils/discovery";
 import type { ConvergenceState } from "../data/signalCopy";
 
 export interface AssetRecommendation {
@@ -150,7 +151,9 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
       const { data: assets, error: assetsError } = assetIds.length
         ? await supabase
             .from("assets")
-            .select("id, ticker, name, origin, discovery_sources")
+            .select(
+              "id, ticker, name, origin, discovery_sources, first_discovered_at",
+            )
             .in("id", assetIds)
         : { data: [], error: null };
 
@@ -186,7 +189,10 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
             // CSV "Hype Flag" column have always read false regardless of the data.
             isHype: (rec.hype_penalty ?? 0) < 0,
             rank: rec.rank ?? 0,
-            isDiscovered: asset?.origin === "discovered",
+            // Recently discovered, not "ever discovered". `origin` is set once
+            // and never cleared, so testing it alone kept the badge on names the
+            // agent surfaced months ago (MU, GOOG) as though they were fresh.
+            isDiscovered: isRecentlyDiscovered(asset ?? {}),
             discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,

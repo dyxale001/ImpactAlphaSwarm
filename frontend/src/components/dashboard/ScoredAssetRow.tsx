@@ -35,9 +35,14 @@ export default function ScoredAssetRow({
     (asset.convergenceState ? CONVERGENCE_DETAIL[asset.convergenceState] : "");
 
   return (
-    <li className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 hover:bg-brand-bg/40 transition-colors">
-      <div className="md:col-span-4 flex items-start gap-3 min-w-0">
-        <span className="chip bg-primary/10 text-primary font-mono shrink-0 mt-0.5">
+    <li className="grid grid-cols-1 md:grid-cols-12 gap-y-5 p-5 md:divide-x md:divide-brand-border/40 hover:bg-brand-bg/40 transition-colors">
+      {/* Identity. Narrower than the other two: a ticker, a name and a price do
+          not need a third of the row, and the width it was taking pushed the
+          signals column away from it. */}
+      <div className="md:col-span-3 flex items-start gap-3 min-w-0 md:pr-5">
+        {/* Solid forest, number knocked out in the page background, matching the
+            universe tiles on Whale Watching. A tinted circle read as grey. */}
+        <span className="w-7 h-7 shrink-0 rounded-full bg-brand-primary flex items-center justify-center text-[11px] font-mono font-semibold text-brand-bg">
           {asset.rank}
         </span>
         <div className="min-w-0">
@@ -48,7 +53,7 @@ export default function ScoredAssetRow({
           <p className="text-sm font-mono text-primary mt-1">
             R {asset.currentPrice.toFixed(2)}
           </p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          <div className="flex flex-wrap gap-1.5 mt-2 empty:hidden">
             {asset.isDiscovered ? (
               <span
                 className="chip bg-brand-accent text-brand-fg"
@@ -66,21 +71,30 @@ export default function ScoredAssetRow({
         </div>
       </div>
 
-      <div className="md:col-span-4">
-        <DualBar
-          sentimentScore={asset.sentimentScore}
-          quantitativeScore={asset.fundamentalsScore}
-          quantPercentile={quantPercentile}
-        />
+      {/* Signals. DualBar puts its label and value at opposite ends of whatever
+          width it is given, so it is capped here: across a full row column the
+          two drifted so far apart they stopped reading as one measurement. */}
+      <div className="md:col-span-4 md:px-5">
+        <div className="max-w-xs">
+          <DualBar
+            sentimentScore={asset.sentimentScore}
+            quantitativeScore={asset.fundamentalsScore}
+            quantPercentile={quantPercentile}
+          />
+        </div>
       </div>
 
-      <div className="md:col-span-4 flex flex-col justify-between gap-2 min-w-0">
+      {/* Reasoning and actions. Takes the width freed from identity, so the
+          trace clamps at three genuine lines instead of truncating early. */}
+      <div className="md:col-span-5 flex flex-col gap-3 min-w-0 md:pl-5">
+        {/* Same dark forest the rank chips use. As muted grey this was the
+            least readable text on the page, and it is the row's only prose. */}
         {reasoning ? (
-          <p className="text-xs text-brand-muted-fg leading-relaxed line-clamp-3">
+          <p className="text-xs text-brand-fg leading-relaxed line-clamp-3">
             {reasoning}
           </p>
         ) : null}
-        <div className="flex items-center justify-between gap-3 mt-auto">
+        <div className="flex items-center justify-between gap-3 mt-auto pt-1">
           <Link
             to={`/asset/${asset.ticker}`}
             className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold shrink-0"

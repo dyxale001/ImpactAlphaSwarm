@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-
-// How long a discovered company keeps its "New" badge after the asset-discovery
-// agent first picked it up.
-const NEW_COMPANY_DAYS = 7;
+import { isRecentlyDiscovered } from "../utils/discovery";
 
 export interface UniverseAsset {
   ticker: string;
@@ -16,16 +13,6 @@ export interface UniverseAsset {
   first_discovered_at: string | null;
   /** Discovered by the asset-discovery agent within the last week. */
   isNew: boolean;
-}
-
-function isRecentlyDiscovered(row: {
-  origin?: string | null;
-  first_discovered_at?: string | null;
-}): boolean {
-  if (row.origin !== "discovered" || !row.first_discovered_at) return false;
-  const days =
-    (Date.now() - new Date(row.first_discovered_at).getTime()) / 86_400_000;
-  return days >= 0 && days <= NEW_COMPANY_DAYS;
 }
 
 // Loads every asset once and groups them by investment universe, so the whale

@@ -44,7 +44,10 @@ export default function RecommendationCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-brand-bg/70 border border-brand-border/60 flex items-center justify-center text-[10px] font-bold font-mono">
+          {/* Solid forest with the ticker knocked out in the page background,
+              matching the universe tiles on Whale Watching. The tinted version
+              read as grey. */}
+          <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center text-[10px] font-bold font-mono text-brand-bg">
             {asset.ticker.slice(0, 3)}
           </div>
 
@@ -60,9 +63,9 @@ export default function RecommendationCard({
             </p>
           </div>
         </div>
-        <div
-          className={`chip ${asset.rank === 1 ? "bg-brand-primary/15 text-brand-primary" : "bg-primary/15 text-primary"}`}
-        >
+        {/* Accent green behind dark text, the same fill the Discovered chip
+            uses. The tinted versions read as grey. */}
+        <div className="chip bg-brand-accent text-brand-fg">
           Rank {asset.rank}
         </div>
       </div>
@@ -128,7 +131,7 @@ export default function RecommendationCard({
         ) : null}
       </div>
 
-      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50">
+      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-accent">
         <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold flex items-center gap-1.5">
           <BrainCircuit className="w-3 h-3 text-brand-primary" />
           Why it ranks here

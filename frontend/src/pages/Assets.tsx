@@ -204,7 +204,7 @@ export default function AssetsPage() {
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
-              AI Recommendations
+              Personalized Recommendations
             </p>
             <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
               <CandlestickChart className="w-7 h-7 shrink-0 text-brand-accent" />
@@ -212,6 +212,12 @@ export default function AssetsPage() {
             </h1>
             <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
               Everything your AI Investment Committee ranked in the latest run.
+              {recommendations.length > 0 ? (
+                <span className="font-medium text-brand-bg">
+                  {" "}
+                  {recommendations.length} assets scored.
+                </span>
+              ) : null}
             </p>
             {/* Market and FX footing for every price on the page, so it reads
                 as part of the run rather than a stray note below the header. */}
@@ -381,18 +387,9 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* The rest of the shortlist, ranks 2 to 5. Headed by the block above,
+          alongside the hero it continues. */}
       <div>
-        <div className="flex items-baseline justify-between gap-3 mb-4 flex-wrap">
-          <h2 className="text-2xl font-semibold text-brand-fg">
-            Personalized Recommendations
-          </h2>
-          {recommendations.length > 0 ? (
-            <span className="text-xs text-brand-muted-fg">
-              {recommendations.length} assets scored this run
-            </span>
-          ) : null}
-        </div>
         {recommendationError ? (
           <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-primary">
             <p className="font-semibold text-primary mb-2">
