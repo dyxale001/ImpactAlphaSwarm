@@ -39,7 +39,16 @@ export interface AssetRecommendation {
 export const SCORECARD_ENABLED =
   (import.meta.env.VITE_UNIFIED_SCORECARD ?? "false") === "true";
 
-export function useDashboardStats() {
+export interface DashboardStatsOptions {
+  /** How many ranked assets to read. Null reads the whole feed. */
+  limit?: number | null;
+}
+
+/** Defaults to five, so the dashboard keeps its top five by calling this with no
+ * arguments. The assets page passes `limit: null` to read everything the run
+ * scored. A run scores about thirty tickers, well inside PostgREST's default page
+ * size, so the uncapped read needs no pagination. */
+export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
   const { profile } = useAuthStore();
   const [recs, setRecs] = useState<AssetRecommendation[]>([]);
   const [isLoadingRecs, setIsLoadingRecs] = useState(true);
@@ -97,8 +106,8 @@ export function useDashboardStats() {
         return;
       }
 
-      // 2. Fetch top 5 assets and join with the dictionary.
-      const { data: recommendations, error: recError } = await supabase
+      // 2. Fetch the ranked assets and join with the dictionary.
+      const recQuery = supabase
         .from("ai_recommendation")
         .select(
           `
@@ -121,8 +130,10 @@ export function useDashboardStats() {
           `,
         )
         .eq("run_id", latestRunId)
-        .order("rank", { ascending: true })
-        .limit(5);
+        .order("rank", { ascending: true });
+
+      const { data: recommendations, error: recError } =
+        limit == null ? await recQuery : await recQuery.limit(limit);
 
       if (recError) {
         throw recError;
@@ -202,7 +213,7 @@ export function useDashboardStats() {
     } finally {
       setIsLoadingRecs(false);
     }
-  }, [profile?.id]);
+  }, [profile?.id, limit]);
 
   useEffect(() => {
     fetchRecommendations();

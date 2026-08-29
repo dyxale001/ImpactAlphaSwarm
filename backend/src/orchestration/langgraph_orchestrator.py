@@ -25,7 +25,7 @@ from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_ticker
 from ..utils.gr_reasoningtracestyle import HOUSE_STYLE
 from ..utils.llm_client import GroqClient
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
-from ..utils.supabase_client import save_top_assets
+from ..utils.supabase_client import save_top_assets, update_ai_run_status
 
 load_dotenv()
 
@@ -1001,8 +1001,15 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
             sentiment_results=state.get("sentiment_results", {}),
         )
         logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
+        # Mark the run complete the moment its data exists, rather than waiting for
+        # the pipeline to unwind back to the API layer. A run whose worker died
+        # between the insert and that later update stayed 'running' forever, and the
+        # page polled a status that would never change, which is why a completed run
+        # looked like nothing had happened. api.py still marks it too; the update is
+        # idempotent.
+        update_ai_run_status(state["run_id"], "complete")
     except Exception as e:
-        logger.error(f"Failed to save top-5 to Supabase: {e}")
+        logger.error(f"Failed to save ranked assets to Supabase: {e}")
 
     print("Output formatted and ready")
     return {"status": "complete"}
@@ -1185,7 +1192,7 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
     }
     for user in users:
         try:
-            top_5, _ = synthesize_rankings(
+            top_5, unified_scores = synthesize_rankings(
                 user["tickers"],
                 quant_results,
                 sentiment_results,
@@ -1194,15 +1201,17 @@ def run_daily_batch(users: list[dict[str, Any]]) -> dict[str, Any]:
                 run_id=user["run_id"],
                 user_id=user["user_id"],
             )
-            # Five rows per user, matching what the pages show. The nightly is the
-            # run with the least headroom (it repeats per user inside one request),
-            # so persisting the whole ranked feed here is the piece to revisit last,
-            # after save_top_assets stops doing a Supabase lookup and a price fetch
-            # per ticker in sequence.
+            # The whole ranked feed, as the graph path does. Passing the truncated
+            # top 5 here was why a user whose latest run came from the nightly had
+            # only five rows to show, however many the run scored, so the assets
+            # page collapsed back to five every morning. Affordable now that
+            # save_top_assets batches its per-ticker lookups: the extra rows cost a
+            # couple of seconds a user, and the shared price cache means only the
+            # first user pays for the union's prices.
             save_top_assets(
                 run_id=user["run_id"],
                 user_id=user["user_id"],
-                top_5=top_5,
+                top_5=_all_ranked(top_5, unified_scores),
                 quant_results=quant_results,
                 sentiment_results=sentiment_results,
                 price_cache=price_cache,
