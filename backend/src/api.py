@@ -3,7 +3,8 @@ import asyncio
 import datetime
 import logging
 import secrets
-from typing import List, Optional
+import time
+from typing import Dict, List, Optional
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
@@ -478,6 +479,587 @@ async def search_assets(q: str = ""):
         })
 
     return {"results": results}
+
+
+
+# ---------------------------------------------------------------------------
+# Ask AlphaSwarm — controlled natural-language interface over existing
+# AlphaSwarm data. The LLM never invents facts, scores, or predictions; it only
+# (a) classifies intent, and (b) narrates data the backend already retrieved
+# deterministically from Supabase. See spec for the full contract.
+# ---------------------------------------------------------------------------
+
+ASK_INTENTS = (
+    "ASSET_SEARCH",
+    "USER_DATA_SEARCH",
+    "ANALYSIS_EXPLANATION",
+    "LEARNING_QUESTION",
+    "PLATFORM_QUESTION",
+    "UNSUPPORTED_FINANCIAL_ADVICE",
+    "UNKNOWN",
+)
+
+_ASK_BLOCKLIST = (
+    "should i buy",
+    "should i sell",
+    "should i invest",
+    "what should i",
+    "will it go up",
+    "will it go down",
+    "is it a good time",
+    "what will happen",
+    "predict",
+    "should i hold",
+    "price target",
+    "when to buy",
+    "when to sell",
+)
+
+_ASK_REDIRECT_SUGGESTIONS = [
+    "Show me technology assets in my universe",
+    "Tell me about NVDA",
+    "How does AlphaSwarm calculate Signal Score?",
+]
+
+_ASK_NO_ADVICE_MESSAGE = (
+    "AlphaSwarm can't answer that — it doesn't give investment advice or "
+    "predictions. Try asking about specific assets, your watchlist, or how "
+    "AlphaSwarm's analysis works instead."
+)
+
+_ASK_NO_DATA_MESSAGE = (
+    "AlphaSwarm cannot answer this reliably because it could not find "
+    "supporting data in its own analysis. This is informational only — not "
+    "financial advice."
+)
+
+# Hardcoded methodology text — actual AlphaSwarm implementation only, never
+# LLM-generated. Mirrors ranking.py's disclosed four-term composite.
+_PLATFORM_METHODOLOGY = (
+    "AlphaSwarm ranks assets using four disclosed, measured factors, "
+    "multiplied together: (1) Signal strength — how strongly the price data "
+    "and news/social tone lean, (2) Convergence — how much those two signals "
+    "agree with each other, (3) Data sufficiency — how much evidence (news "
+    "articles, social posts, price history) backs the read, and (4) Profile "
+    "fit — how well the asset's volatility matches your stated risk "
+    "tolerance. None of these factors is a prediction or a recommendation — "
+    "they describe what the current data shows. This is informational only "
+    "— not financial advice."
+)
+
+# Simple in-memory per-user rate limiter (process-local; see spec — no Redis).
+_ASK_RATE_LIMIT = 10
+_ASK_RATE_WINDOW_SECONDS = 60
+_ask_rate_state: Dict[str, List[float]] = {}
+
+
+def _check_ask_rate_limit(user_id: str) -> bool:
+    """Return True if this request is allowed; False if the user is over the
+    limit. Sliding window using timestamps kept in memory per user_id."""
+    now = time.time()
+    window_start = now - _ASK_RATE_WINDOW_SECONDS
+    timestamps = [t for t in _ask_rate_state.get(user_id, []) if t > window_start]
+    if len(timestamps) >= _ASK_RATE_LIMIT:
+        _ask_rate_state[user_id] = timestamps
+        return False
+    timestamps.append(now)
+    _ask_rate_state[user_id] = timestamps
+    return True
+
+
+def _ask_blocklist_hit(query: str) -> bool:
+    q = query.lower()
+    return any(phrase in q for phrase in _ASK_BLOCKLIST)
+
+
+def _get_ask_groq():
+    """Lazy Groq client for the intent classifier / narrator.
+
+    TEMPORARY: pinned to its own model (ASK_GROQ_MODEL, default
+    llama-3.1-8b-instant) instead of the shared GROQ_MODEL the orchestrator/
+    agents use, because that shared default is currently returning 404 on
+    this Groq account. Scoped to /api/ask only so the rest of the app's model
+    configuration is untouched — revert to GROQ_MODEL once that's fixed."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    from langchain_groq import ChatGroq
+
+    model = os.getenv("ASK_GROQ_MODEL", "llama-3.1-8b-instant")
+    return ChatGroq, api_key, model
+
+
+def _classify_ask_intent(query: str) -> str:
+    """Small Groq call: classify into exactly one of ASK_INTENTS. Falls back to
+    UNKNOWN if Groq is unavailable or returns something unrecognised."""
+    client = _get_ask_groq()
+    if client is None:
+        return "UNKNOWN"
+    ChatGroq, api_key, model = client
+    try:
+        from langchain_core.messages import HumanMessage
+
+        llm = ChatGroq(api_key=api_key, model=model, temperature=0, max_tokens=10)
+        prompt = (
+            "Classify the user question into exactly one label, output ONLY the "
+            "label, nothing else:\n"
+            "ASSET_SEARCH - looking for a LIST of assets/tickers by sector or universe\n"
+            "USER_DATA_SEARCH - asking about their own watchlist or latest analysis run\n"
+            "ANALYSIS_EXPLANATION - asking about ONE specific asset: its ranking, score, "
+            "sentiment, risk, quant metrics, or general info ('tell me about X', 'why does "
+            "X rank high', 'sentiment on X', 'is X risky')\n"
+            "LEARNING_QUESTION - asking what a financial term/concept means\n"
+            "PLATFORM_QUESTION - asking how AlphaSwarm itself works/calculates things\n"
+            "UNSUPPORTED_FINANCIAL_ADVICE - asking for a prediction or buy/sell/hold advice\n"
+            "UNKNOWN - anything else\n\n"
+            f"Question: {query}\nLabel:"
+        )
+        response = llm.invoke([HumanMessage(content=prompt)])
+        label = (response.content or "").strip().upper()
+        for intent in ASK_INTENTS:
+            if intent in label:
+                return intent
+        return "UNKNOWN"
+    except Exception as e:
+        logger.warning("Ask intent classification failed: %s", e)
+        return "UNKNOWN"
+
+
+def _narrate_ask(question: str, data_summary: str) -> Optional[str]:
+    """Small Groq call: narrate the ALREADY-RETRIEVED data. Returns None (never
+    call narrator) if Groq is unavailable — caller must handle that case."""
+    client = _get_ask_groq()
+    if client is None:
+        return None
+    ChatGroq, api_key, model = client
+    try:
+        from langchain_core.messages import HumanMessage
+
+        llm = ChatGroq(api_key=api_key, model=model, temperature=0, max_tokens=120)
+        system = (
+            "You are AlphaSwarm.\n\n"
+            "Explain only the AlphaSwarm data provided to you.\n\n"
+            "Rules:\n"
+            "1. Never invent financial data.\n"
+            "2. Never invent scores, rankings, prices, metrics, or analysis.\n"
+            "3. Never make predictions.\n"
+            "4. Never provide personalised financial advice.\n"
+            "5. Never tell the user what to buy, sell, or hold.\n"
+            "6. If the retrieved data only partially answers the question, explain the "
+            "relevant information that IS available rather than refusing.\n"
+            "7. Do not claim unavailable information exists.\n"
+            "8. Do not use external knowledge.\n"
+            "9. Keep the answer concise.\n"
+            '10. End with:\n"This is informational only — not financial advice."'
+        )
+        prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM DATA:\n{data_summary}"
+        response = llm.invoke([HumanMessage(content=prompt)])
+        return (response.content or "").strip()
+    except Exception as e:
+        logger.warning("Ask narration failed: %s", e)
+        return None
+
+
+def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
+    """Deterministic asset search. Respects the user's investment universe when
+    it can be inferred from their saved preferences (user_analysis)."""
+    prefs_resp = (
+        supabase.table("user_analysis")
+        .select("investment_universe")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    prefs_rows = prefs_resp.data or []
+    universes = []
+    if prefs_rows:
+        raw = prefs_rows[0].get("investment_universe")
+        if isinstance(raw, str):
+            import json as _json
+            try:
+                raw = _json.loads(raw)
+            except Exception:
+                raw = []
+        universes = raw or []
+
+    q = supabase.table("assets").select("ticker,name,universe,current_price")
+    matched_universe = next((u for u in universes if u.lower() in query.lower()), None)
+    if matched_universe:
+        q = q.eq("universe", matched_universe)
+    elif universes:
+        q = q.in_("universe", universes)
+    resp = q.limit(5).execute()
+    rows = resp.data or []
+    return {"assets": rows}, "asset_search"
+
+
+def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
+    """Deterministic retrieval of the user's own watchlist + latest run top picks."""
+    watchlist_resp = (
+        supabase.table("user_watchlist_assets")
+        .select("ticker")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    watchlist = [r["ticker"] for r in (watchlist_resp.data or []) if r.get("ticker")]
+
+    run_resp = (
+        supabase.table("ai_runs")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("status", "complete")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    run_rows = run_resp.data or []
+    top_picks = []
+    if run_rows:
+        run_id = run_rows[0]["id"]
+        recs_resp = (
+            supabase.table("ai_recommendation")
+            .select("asset_id,rank,confidence_score")
+            .eq("run_id", run_id)
+            .order("rank", desc=False)
+            .limit(5)
+            .execute()
+        )
+        recs = recs_resp.data or []
+        asset_ids = [r["asset_id"] for r in recs if r.get("asset_id")]
+        asset_map = {}
+        if asset_ids:
+            assets_resp = supabase.table("assets").select("id,ticker").in_("id", asset_ids).execute()
+            asset_map = {a["id"]: a["ticker"] for a in (assets_resp.data or [])}
+        top_picks = [
+            {"ticker": asset_map.get(r["asset_id"], ""), "rank": r["rank"]}
+            for r in recs
+            if asset_map.get(r["asset_id"])
+        ]
+
+    return {"watchlist": watchlist, "top_picks": top_picks}, "user_data"
+
+
+def _resolve_asset(query: str) -> Optional[dict]:
+    """Deterministically resolve the asset a query is about — by ticker symbol
+    or company-name substring, against the actual `assets` table. No LLM: this
+    is the same data the discovery agent and asset search already use, just
+    matched against the free-text question."""
+    import re
+
+    resp = supabase.table("assets").select("id,ticker,name,universe,current_price").execute()
+    assets = resp.data or []
+    if not assets:
+        return None
+
+    tokens = set(re.findall(r"\b[A-Za-z]{1,5}\b", query.upper()))
+    for asset in assets:
+        ticker = (asset.get("ticker") or "").upper()
+        if ticker and ticker in tokens:
+            return asset
+
+    # Company-name substring match, longest name first so "NVIDIA Corp" beats a
+    # shorter unrelated name that happens to also match part of the query.
+    q_lower = query.lower()
+    for asset in sorted(assets, key=lambda a: -len(a.get("name") or "")):
+        name = (asset.get("name") or "").lower()
+        if len(name) > 2 and name in q_lower:
+            return asset
+    return None
+
+
+# Fields already persisted per recommendation by save_top_assets — quant,
+# sentiment and ranking-v2 outputs from the existing agents. Selected together
+# so ANALYSIS_EXPLANATION can answer ranking, sentiment and risk questions from
+# the same stored row without re-running any agent.
+_REC_FIELDS_V2 = (
+    "rank,confidence_score,sentiment_score,quant_score,reasoning_trace,"
+    "rsi,sharpe_ratio,volatility,beta,macd,"
+    "news_sentiment_score,social_sentiment_score,"
+    "signal_strength,convergence,convergence_state,data_sufficiency,profile_fit,"
+    "created_at"
+)
+_REC_FIELDS_BASE = (
+    "rank,confidence_score,sentiment_score,quant_score,reasoning_trace,"
+    "rsi,sharpe_ratio,volatility,beta,macd,"
+    "news_sentiment_score,social_sentiment_score,created_at"
+)
+
+
+def _fetch_recommendation(run_id: str, asset_id: str) -> Optional[dict]:
+    """One recommendation row for (run_id, asset_id), reusing the ranking-v2
+    columns when present and falling back to the base set (mirrors
+    save_top_assets' own fallback for deployments without migration 010)."""
+    resp = (
+        supabase.table("ai_recommendation")
+        .select(_REC_FIELDS_V2)
+        .eq("run_id", run_id)
+        .eq("asset_id", asset_id)
+        .maybe_single()
+        .execute()
+    )
+    if resp and resp.data:
+        return resp.data
+    resp = (
+        supabase.table("ai_recommendation")
+        .select(_REC_FIELDS_BASE)
+        .eq("run_id", run_id)
+        .eq("asset_id", asset_id)
+        .maybe_single()
+        .execute()
+    )
+    return resp.data if resp else None
+
+
+def _ask_analysis_explanation(query: str, user_id: str) -> tuple[dict, str]:
+    """Retrieve existing agent outputs for one asset — ranking, quant and
+    sentiment fields already stored on `ai_recommendation` — with a
+    deterministic broadening fallback so a real question rarely comes back
+    empty:
+
+      1. the asset's row in the user's own latest completed run
+      2. the asset's most recent recommendation from ANY run (still real,
+         already-computed AlphaSwarm output — just not this user's last run)
+      3. bare asset info (ticker/name/universe/price) if no analysis exists yet
+    """
+    asset = _resolve_asset(query)
+    if not asset:
+        return {}, "analysis_explanation"
+
+    base = {
+        "ticker": asset["ticker"],
+        "name": asset.get("name"),
+        "universe": asset.get("universe"),
+        "current_price": asset.get("current_price"),
+    }
+
+    # 1. This user's latest completed run.
+    run_resp = (
+        supabase.table("ai_runs")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("status", "complete")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    run_rows = run_resp.data or []
+    if run_rows:
+        rec = _fetch_recommendation(run_rows[0]["id"], asset["id"])
+        if rec:
+            return {**base, **rec, "run_scope": "latest_user_run"}, "ai_recommendation"
+
+    # 2. Broaden: this asset's most recent recommendation from any run —
+    #    still an existing, already-computed agent output, not a new one.
+    fallback_resp = (
+        supabase.table("ai_recommendation")
+        .select(_REC_FIELDS_BASE)
+        .eq("asset_id", asset["id"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    fallback_rows = fallback_resp.data or []
+    if fallback_rows:
+        return {**base, **fallback_rows[0], "run_scope": "most_recent_available"}, "ai_recommendation"
+
+    # 3. No analysis exists for this asset yet — still return what IS known
+    #    (asset info) instead of an empty "no data" response.
+    return {**base, "run_scope": "asset_info_only"}, "assets"
+
+
+# Deterministic fallback glossary for terms AlphaSwarm's own agents already
+# define/compute (see quant_analyst.py, ranking.py) but that may not have a
+# matching Learning Centre article. Not invented content — each definition
+# mirrors how the metric is actually implemented.
+_ASK_GLOSSARY = {
+    "beta": "Beta measures how much an asset's price has moved relative to the market (SPY) over the analysis window. Below 0.8 is labelled 'low', 0.8–1.2 'market', above 1.2 'high', and negative beta is 'inverse' (it moved opposite to the market).",
+    "rsi": "RSI (Relative Strength Index) is a momentum measure over the last 14 periods. Below 30 is labelled 'oversold', 30–70 'neutral', above 70 'overbought'.",
+    "sharpe": "The Sharpe ratio measures risk-adjusted return: annualised return in excess of a risk-free rate, divided by annualised volatility. Higher means more return per unit of risk taken.",
+    "sharpe ratio": "The Sharpe ratio measures risk-adjusted return: annualised return in excess of a risk-free rate, divided by annualised volatility. Higher means more return per unit of risk taken.",
+    "volatility": "Volatility is the annualised standard deviation of an asset's daily returns — how much its price has swung, not a prediction of future moves.",
+    "macd": "MACD (Moving Average Convergence Divergence) compares a 12-period and 26-period moving average of price. A positive histogram is labelled a bullish crossover, negative a bearish crossover.",
+    "signal strength": "Signal strength is how strongly AlphaSwarm's price data and news/social tone lean in one direction, on a 0-1 scale.",
+    "convergence": "Convergence measures how much the quantitative (price) signal and the sentiment (news/social) signal agree with each other. Higher means the two signals point the same way.",
+    "data sufficiency": "Data sufficiency reflects how much evidence — news articles, social posts, price history — backs an asset's analysis. Thin coverage lowers this term.",
+    "profile fit": "Profile fit reflects how well an asset's market exposure (beta) matches your stated risk tolerance. It only ever demotes a mismatch, never boosts a score.",
+    "sentiment score": "The sentiment score blends news sentiment (weighted higher) and social sentiment (StockTwits) into a single 0-100 reading of tone, not a price forecast.",
+}
+
+
+def _ask_learning_question(query: str) -> tuple[dict, str]:
+    """Deterministic search: Learning Centre articles first (title/summary
+    match), then a hardcoded glossary of terms AlphaSwarm's own agents already
+    define. No LLM involved in the lookup itself."""
+    q_lower = query.lower()
+    words = [w for w in q_lower.split() if len(w) > 3]
+
+    if words:
+        resp = supabase.table("learning_articles").select("title,summary,content").execute()
+        articles = resp.data or []
+        for article in articles:
+            haystack = f"{article.get('title', '')} {article.get('summary', '')}".lower()
+            if any(w in haystack for w in words):
+                snippet = article.get("summary") or (article.get("content") or "")[:400]
+                return {"title": article.get("title"), "summary": snippet}, "learning_centre"
+
+    # Fall back to the deterministic glossary (longest term first, so "sharpe
+    # ratio" is preferred over the shorter "sharpe" when both would match).
+    for term in sorted(_ASK_GLOSSARY, key=len, reverse=True):
+        if term in q_lower:
+            return {"term": term, "definition": _ASK_GLOSSARY[term]}, "methodology_glossary"
+
+    return {}, "learning_centre"
+
+
+class AskRequest(BaseModel):
+    query: str
+
+
+class AskResponse(BaseModel):
+    intent: str
+    narration: str
+    data: dict
+    source: str
+    is_blocked: bool = False
+    redirect_suggestions: List[str] = []
+
+
+@app.post("/api/ask", response_model=AskResponse)
+async def ask_alphaswarm(
+    req: AskRequest,
+    authorization: Optional[str] = Header(None),
+):
+    user_id = await _get_user_id_from_bearer(authorization)
+
+    if not _check_ask_rate_limit(user_id):
+        raise HTTPException(status_code=429, detail="Too many requests — please wait a moment.")
+
+    query = (req.query or "").strip()
+    if not query:
+        return AskResponse(
+            intent="UNKNOWN",
+            narration="Ask a question about assets, your watchlist, or how AlphaSwarm works.",
+            data={},
+            source="none",
+            is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # 1. Local blocklist — before any LLM call.
+    if _ask_blocklist_hit(query):
+        return AskResponse(
+            intent="UNSUPPORTED_FINANCIAL_ADVICE",
+            narration=_ASK_NO_ADVICE_MESSAGE,
+            data={},
+            source="blocklist",
+            is_blocked=True,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # 2. Intent classification (small Groq call).
+    intent = _classify_ask_intent(query)
+
+    if intent == "UNSUPPORTED_FINANCIAL_ADVICE":
+        return AskResponse(
+            intent=intent,
+            narration=_ASK_NO_ADVICE_MESSAGE,
+            data={},
+            source="classifier",
+            is_blocked=True,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    if intent == "UNKNOWN":
+        return AskResponse(
+            intent=intent,
+            narration=(
+                "I can help you explore AlphaSwarm's assets, analysis, metrics, "
+                "Learning Centre, and methodology. Try asking one of these:"
+            ),
+            data={},
+            source="none",
+            is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    if intent == "PLATFORM_QUESTION":
+        # Deterministic, hardcoded — no narration LLM call needed.
+        return AskResponse(
+            intent=intent,
+            narration=_PLATFORM_METHODOLOGY,
+            data={},
+            source="platform_methodology",
+            is_blocked=False,
+            redirect_suggestions=[],
+        )
+
+    # 3. Deterministic retrieval per intent.
+    try:
+        if intent == "ASSET_SEARCH":
+            data, source = _ask_asset_search(query, user_id)
+        elif intent == "USER_DATA_SEARCH":
+            data, source = _ask_user_data_search(user_id)
+        elif intent == "ANALYSIS_EXPLANATION":
+            data, source = _ask_analysis_explanation(query, user_id)
+        elif intent == "LEARNING_QUESTION":
+            data, source = _ask_learning_question(query)
+        else:
+            data, source = {}, "none"
+    except Exception as e:
+        logger.warning("Ask retrieval failed for intent %s: %s", intent, e)
+        data, source = {}, "none"
+
+    # No-data rule: never call the narrator if retrieval found nothing.
+    has_data = bool(
+        data.get("assets") if intent == "ASSET_SEARCH"
+        else data.get("watchlist") or data.get("top_picks") if intent == "USER_DATA_SEARCH"
+        else data.get("ticker") if intent == "ANALYSIS_EXPLANATION"
+        else (data.get("title") or data.get("term")) if intent == "LEARNING_QUESTION"
+        else False
+    )
+    if not has_data:
+        return AskResponse(
+            intent=intent,
+            narration=_ASK_NO_DATA_MESSAGE,
+            data={},
+            source=source,
+            is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # Glossary hits are already clean, grounded deterministic text — narrating
+    # them would just spend a call rephrasing, so render directly (mirrors the
+    # PLATFORM_QUESTION shortcut above).
+    if source == "methodology_glossary":
+        return AskResponse(
+            intent=intent,
+            narration=f"{data['definition']} This is informational only — not financial advice.",
+            data=data,
+            source=source,
+            is_blocked=False,
+            redirect_suggestions=[],
+        )
+
+    # 4. Narration (small Groq call) over the minimum relevant retrieved data.
+    narration = _narrate_ask(query, str(data))
+    if narration is None:
+        return AskResponse(
+            intent=intent,
+            narration=_ASK_NO_DATA_MESSAGE,
+            data={},
+            source=source,
+            is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    return AskResponse(
+        intent=intent,
+        narration=narration,
+        data=data,
+        source=source,
+        is_blocked=False,
+        redirect_suggestions=[],
+    )
 
 
 @app.get("/api/assets/{ticker}/history")

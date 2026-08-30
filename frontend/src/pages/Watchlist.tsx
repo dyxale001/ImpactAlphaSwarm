@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Eye, RefreshCw, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { Eye, RefreshCw, ArrowUpDown, TrendingUp, Search, Sparkles } from 'lucide-react'
 import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
+import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
 import { Link } from 'react-router-dom'
 import WatchlistSearch from '../components/watchlist/WatchlistSearch'
+import AskAlphaSwarm from '../components/watchlist/AskAlphaSwarm'
 import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
 import RadarMotif from '../components/watchlist/RadarMotif'
 
@@ -93,6 +95,8 @@ export default function WatchlistPage() {
   } = useWatchlistData()
 
   const [showSortMenu, setShowSortMenu] = useState(false)
+  const [searchMode, setSearchMode] = useState<'ticker' | 'ask'>('ticker')
+  const ask = useAskAlphaSwarm()
 
   const sortLabels: Record<SortOption, string> = {
     added:    'Recently added',
@@ -131,14 +135,51 @@ export default function WatchlistPage() {
 
       {/* ── Search + Browse ─────────────────────────────────────────── */}
       <div className="space-y-4">
-        <WatchlistSearch
-          search={search}
-          setSearch={setSearch}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
-          onAdd={addToWatchlist}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSearchMode('ticker')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              searchMode === 'ticker'
+                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
+                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            Search by ticker
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchMode('ask')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              searchMode === 'ask'
+                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
+                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Ask AlphaSwarm
+          </button>
+        </div>
 
+        {searchMode === 'ticker' ? (
+          <WatchlistSearch
+            search={search}
+            setSearch={setSearch}
+            searchResults={searchResults}
+            searchLoading={searchLoading}
+            onAdd={addToWatchlist}
+          />
+        ) : (
+          <AskAlphaSwarm
+            query={ask.query}
+            setQuery={ask.setQuery}
+            result={ask.result}
+            loading={ask.loading}
+            error={ask.error}
+            onAsk={ask.ask}
+          />
+        )}
       </div>
 
       {/* ── Error ───────────────────────────────────────────────────── */}
