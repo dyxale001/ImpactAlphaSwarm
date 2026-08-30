@@ -10,8 +10,6 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 import yfinance as yf
 
-from .gr_reasoningtracestyle import HOUSE_STYLE
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -516,154 +514,24 @@ def save_top_assets(
     sentiment_results: Dict[str, Dict[str, Any]],
     price_cache: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    rows = []
-    now = datetime.datetime.utcnow().isoformat()
-    for rank, asset in enumerate(top_5, start=1):
-        ticker = asset.get("ticker")
-        asset_id = get_or_create_asset_id(ticker)
-        quant = quant_results.get(ticker, {})
-        sentiment = sentiment_results.get(ticker, {})
+    """Persist a run's ranked assets. Rank is the caller's list position.
 
-        raw_sources = sentiment.get("sources")
-        normalized_sources = None
-        if isinstance(raw_sources, dict):
-            # Display names for each signal source; news is listed first since it
-            # is weighted higher in the blended score.
-            source_labels = {"finnhub": "News", "stocktwits": "Stocktwits"}
-            present = [
-                source_labels[key]
-                for key in ("finnhub", "stocktwits")
-                if raw_sources.get(key)
-            ]
-            # Include any other present sources not in the ordered list above.
-            present.extend(
-                key.capitalize()
-                for key, value in raw_sources.items()
-                if value and key not in source_labels
-            )
-            normalized_sources = ", ".join(present) if present else None
-        else:
-            normalized_sources = raw_sources if raw_sources not in ("", []) else None
+    The body lives in ``RecommendationWriter`` (rec_writer.py), which batches the
+    asset-id, price and carried-forward-news lookups that used to run once per
+    ticker in sequence. That per-ticker cost, about three seconds an asset, is
+    what made keeping the whole ranked feed unaffordable. The parameter name
+    ``top_5`` is historical: both callers now pass every ranked asset.
+    """
+    from .rec_writer import RecommendationWriter
 
-        if price_cache is not None and ticker in price_cache:
-            price_at_run = price_cache[ticker]
-        else:
-            price_at_run = fetch_price_at_run_in_zar(ticker)
-            if price_cache is not None:
-                price_cache[ticker] = price_at_run
-
-        # News sub-signal. If this run collected no news at all (empty cache or a
-        # transient Finnhub failure), don't persist zeros over the last good news
-        # we stored -- carry the most recent non-empty news forward instead, so one
-        # blip can't blank out an asset's news until the next nightly run.
-        news_articles = sentiment.get("news_articles") or []
-        news_count = int(sentiment.get("news_count") or 0)
-        news_sentiment_score = sentiment.get("news_sentiment_score")
-        news_bullish = int(sentiment.get("news_bullish") or 0)
-        news_bearish = int(sentiment.get("news_bearish") or 0)
-        if news_count == 0 and not news_articles:
-            prior = get_last_news_for_asset(asset_id)
-            if prior:
-                news_articles = prior.get("news_articles") or []
-                news_count = int(prior.get("news_count") or 0)
-                news_sentiment_score = prior.get("news_sentiment_score")
-                news_bullish = int(prior.get("news_bullish") or 0)
-                news_bearish = int(prior.get("news_bearish") or 0)
-
-        row = {
-            "asset_id": asset_id,
-            "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
-            "confidence_score": float(asset.get("unified_score") or 0),
-            # Normalised on the way in as well as where it is generated, so a trace
-            # written by any other path still lands in house style (no dash used as
-            # punctuation).
-            "reasoning_trace": HOUSE_STYLE.apply(asset.get("reasoning") or ""),
-            "hype_penalty": int(asset.get("adjustments", {}).get("hype_penalty", 0)),
-            "created_at": now,
-            "run_id": run_id,
-            "rank": rank,
-            "price_at_run": price_at_run,
-            "quant_score": int(asset.get("quant_score") or 0),
-            "beta": float(quant.get("beta")) if quant.get("beta") is not None else None,
-            "risk_penalty": int(asset.get("adjustments", {}).get("risk_penalty", 0)),
-            "macd": quant.get("macd"),
-            "macd_histogram": quant.get("macd_histogram"),
-            "rsi": quant.get("rsi"),
-            "sharpe_ratio": quant.get("sharpe_ratio"),
-            "volatility": quant.get("volatility"),
-            # Objective cross-sectional quant sub-dimensions + context bands
-            # (see migrations/004). Null when the candidate universe was too
-            # small to rank (quant_normalisation = 'insufficient_universe').
-            "momentum_pctile": (quant.get("sub_dimensions") or {}).get("momentum"),
-            "risk_adj_pctile": (quant.get("sub_dimensions") or {}).get("risk_adjusted_return"),
-            "stability_pctile": (quant.get("sub_dimensions") or {}).get("stability"),
-            "rsi_band": (quant.get("bands") or {}).get("rsi"),
-            "beta_band": (quant.get("bands") or {}).get("beta"),
-            "quant_normalisation": quant.get("quant_normalisation"),
-            "sources": normalized_sources,
-            "bullish_posts": int(sentiment.get("bullish_posts") or 0),
-            "bearish_posts": int(sentiment.get("bearish_posts") or 0),
-            # News sub-signal (blended into sentiment_score, weighted higher than
-            # social). Defaults to the blended score / 0 when no news was found.
-            # Uses the carried-forward values above so a blank run keeps the last
-            # good news instead of overwriting it with zeros.
-            "news_sentiment_score": int(
-                news_sentiment_score
-                if news_sentiment_score is not None
-                else (sentiment.get("sentiment_score") or 0)
-            ),
-            "social_sentiment_score": int(
-                sentiment.get("social_sentiment_score")
-                or sentiment.get("sentiment_score")
-                or 0
-            ),
-            "news_count": news_count,
-            "news_bullish": news_bullish,
-            "news_bearish": news_bearish,
-            # Per-article transparency list: publisher, tier, date, headline, link.
-            "news_articles": news_articles,
-            # Per-post transparency list: author, date, text, link, sentiment.
-            "social_posts": sentiment.get("social_posts") or [],
-        }
-
-        # Unified ranking v2 terms (migration 010), present only when the ranking
-        # module ran. Written for disclosure: the UI and the reasoning trace need
-        # to say WHY an asset placed where it did, not just where.
-        for key in RANKING_V2_COLUMNS:
-            if key in asset:
-                row[key] = asset[key]
-
-        rows.append(row)
-
-    if not rows:
-        return {"status": "no_rows"}
-
-    # Make the write idempotent for this run. create_ai_run clears the PREVIOUS
-    # run's rows, but two analyses for the same user can race (observed 26ms
-    # apart: both deletes landed before either insert, leaving two full sets of 5
-    # under one run_id). Duplicates then broke the asset page, whose single-row
-    # lookup errors on multiple matches. Clearing by run_id here means the last
-    # writer wins with exactly one set, whatever the ordering.
-    try:
-        supabase.table("ai_recommendation").delete().eq("run_id", run_id).execute()
-    except Exception as e:
-        print(f"Warning: could not clear existing rows for run {run_id}: {e}")
-
-    try:
-        resp = supabase.table("ai_recommendation").insert(rows).execute()
-        return {"status": "inserted", "response": resp.data}
-    except Exception as e:
-        # Most likely migration 010 has not been applied yet, so the v2 columns
-        # don't exist. The recommendations themselves matter far more than the
-        # disclosure fields, so drop those and retry rather than lose the run.
-        if not any(key in row for row in rows for key in RANKING_V2_COLUMNS):
-            raise
-        print(f"Insert with ranking v2 columns failed ({e}); retrying without them")
-        legacy_rows = [
-            {k: v for k, v in row.items() if k not in RANKING_V2_COLUMNS} for row in rows
-        ]
-        resp = supabase.table("ai_recommendation").insert(legacy_rows).execute()
-        return {"status": "inserted_without_v2", "response": resp.data}
+    return RecommendationWriter().write(
+        run_id=run_id,
+        user_id=user_id,
+        assets=top_5,
+        quant_results=quant_results,
+        sentiment_results=sentiment_results,
+        price_cache=price_cache,
+    )
 
 
 # ---------------------------------------------------------------------------

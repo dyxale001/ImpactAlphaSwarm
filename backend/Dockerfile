@@ -20,5 +20,12 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Single worker keeps memory low; raise --workers if the revision has more RAM/CPU.
+#
+# The timeout is generous because an analysis runs as a background task after its
+# response has been sent, and a run over thirty tickers takes minutes by design. At
+# 120s gunicorn was SIGABRTing the worker mid-run: on one observed run the
+# recommendations were written at 22:35:14 and the worker died at 22:36:40, before
+# the run could be marked complete, so the page polled a status that never changed.
+# Cloud Run's own request timeout is 3600s, so this is the binding limit, not that.
 CMD exec gunicorn -k uvicorn.workers.UvicornWorker src.api:app \
-    --bind 0.0.0.0:${PORT} --workers 1 --timeout 120
+    --bind 0.0.0.0:${PORT} --workers 1 --timeout 1800
