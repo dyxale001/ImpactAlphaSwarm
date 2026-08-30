@@ -1,18 +1,12 @@
-"""Whale-watching data access: insider dealings (Finnhub) and institutional
-ownership (yfinance), each backed by a Supabase read-through cache.
-
-Purely informational — none of this feeds the Unified Confidence Score. Kept out
-of ``api.py`` so the route handlers there stay thin (parse request, call here,
-shape response).
+"""Whale-watching: insider dealings (Finnhub) and institutional ownership
+(yfinance), each backed by a Supabase read-through cache.
 """
 
-import asyncio
-import datetime
-import logging
-import math
-from typing import Optional
+from __future__ import annotations
 
-import httpx
+import asyncio
+import logging
+from typing import Optional
 
 from .descriptions import (
     FUND_BLURB_FALLBACK,
@@ -20,434 +14,224 @@ from .descriptions import (
     normalise_fund_key,
     read_fund_descriptions,
 )
-from .supabase_client import supabase
+from .ww_config import WhaleConfig
+from .ww_sources import FinnhubInsiderSource, YFinanceInstitutionalSource
+from .ww_store import (
+    AssetRepository,
+    FundsCache,
+    InsiderCache,
+    InstitutionsCache,
+    ReadThroughCache,
+    WhaleDataUnavailable,
+)
 
 logger = logging.getLogger("alpha-api")
 
-FINNHUB_INSIDER_URL = "https://finnhub.io/api/v1/stock/insider-transactions"
+__all__ = [
+    "AssetRepository",
+    "FundDescriber",
+    "FundHoldingsBuilder",
+    "FundsCache",
+    "InsiderCache",
+    "InstitutionsCache",
+    "ReadThroughCache",
+    "WhaleConfig",
+    "WhaleDataUnavailable",
+    "WhaleWatcher",
+    "INSIDER_CACHE_TTL",
+    "INSTITUTIONS_CACHE_TTL",
+    "FUNDS_CACHE_TTL",
+]
 
-# Insider data (SEC Form 4) lands within ~2 business days of a trade and is
-# sporadic per ticker, so we serve from cache and refetch only when stale. Bump
-# to hours=72 for a 3-day window.
-INSIDER_CACHE_TTL = datetime.timedelta(hours=48)
-# 13F institutional ownership updates only quarterly — cache it for far longer.
-INSTITUTIONS_CACHE_TTL = datetime.timedelta(days=7)
-# The fund-holdings aggregation (inverted institutional data across all tracked
-# assets) is expensive to build, so cache the whole thing for a week.
-FUNDS_CACHE_TTL = datetime.timedelta(days=7)
-
-
-def cache_is_fresh(row: dict, ttl: datetime.timedelta = INSIDER_CACHE_TTL) -> bool:
-    """Shared freshness check for both caches."""
-    ts = row.get("fetched_at")
-    if not ts:
-        return False
-    try:
-        fetched = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return datetime.datetime.now(datetime.timezone.utc) - fetched < ttl
+_DEFAULTS = WhaleConfig()
+INSIDER_CACHE_TTL = _DEFAULTS.insider_ttl
+INSTITUTIONS_CACHE_TTL = _DEFAULTS.institutions_ttl
+FUNDS_CACHE_TTL = _DEFAULTS.funds_ttl
 
 
-# ── Insider dealings (Finnhub, enriched with yfinance roles) ──────────────────
-
-def _normalize_name_key(name: str) -> str:
-    """Match key for an insider name: SURNAME + given name, upper-cased with
-    punctuation/hyphens stripped. Finnhub and yfinance both use LAST-FIRST order
-    but disagree on middle initials, so keying on the first two tokens matches most."""
-    cleaned = name.upper().replace("-", " ").replace(".", " ").replace(",", " ")
-    tokens = [tok for tok in cleaned.split() if tok]
-    return " ".join(tokens[:2])
-
-
-def _fetch_insider_roles(symbol: str) -> dict:
-    """Return {normalized_name_key: job title} from the yfinance insider roster.
-    Finnhub's transaction feed carries names only, so we enrich with roles here.
-    Best-effort and blocking (call via run_in_executor); returns {} on any failure."""
-    try:
-        import yfinance as yf
-        df = yf.Ticker(symbol).insider_roster_holders
-    except Exception as e:
-        logger.info("Insider roster lookup failed for %s: %s", symbol, e)
-        return {}
-    if df is None or getattr(df, "empty", True):
-        return {}
-    if "Name" not in df.columns or "Position" not in df.columns:
-        return {}
-    roles: dict[str, str] = {}
-    for _, row in df.iterrows():
-        name = row.get("Name")
-        position = row.get("Position")
-        if name and position:
-            roles[_normalize_name_key(str(name))] = str(position)
-    return roles
-
-
-async def fetch_fresh_insider(symbol: str, api_key: str) -> tuple[list, Optional[str]]:
-    """Fetch + normalize insider dealings from Finnhub, enriched with yfinance roles.
-
-    Returns ``([], None)`` for uncovered symbols (e.g. JSE tickers, which Finnhub
-    403s). Raises on genuine network / server errors so the caller can fall back
-    to stale cache instead of caching a failure.
+class FundDescriber:
+    """Attaches a fund's blurb at serve time.
     """
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            FINNHUB_INSIDER_URL,
-            params={"symbol": symbol, "token": api_key},
-            timeout=10.0,
-        )
 
-    # Free-tier / uncovered symbols return 401/403/404 — "no coverage", not an error.
-    if resp.status_code in (401, 403, 404):
-        logger.info("Finnhub has no insider coverage for %s (HTTP %s)", symbol, resp.status_code)
-        return [], None
-    resp.raise_for_status()
-
-    payload = resp.json() or {}
-    transactions = []
-    for row in payload.get("data") or []:
-        change = row.get("change") or 0
-        if change == 0:  # rows that net to zero (paired same-day entries)
-            continue
-        shares = abs(change)
-        price = row.get("transactionPrice")
-        transactions.append({
-            "name": row.get("name") or "Unknown insider",
-            "type": "buy" if change > 0 else "sell",
-            "shares": shares,
-            "price": price,
-            "value": round(shares * price, 2) if price else None,
-            "transaction_date": row.get("transactionDate"),
-            "filing_date": row.get("filingDate"),
-            "transaction_code": row.get("transactionCode"),
-            "role": None,
-        })
-
-    transactions.sort(key=lambda t: t.get("filing_date") or "", reverse=True)
-    transactions = transactions[:25]
-
-    # Enrich names with job titles from the yfinance insider roster (Finnhub's feed
-    # has names only). Best-effort; run off the event loop since yfinance blocks.
-    loop = asyncio.get_running_loop()
-    roles = await loop.run_in_executor(None, _fetch_insider_roles, symbol)
-    if roles:
-        for txn in transactions:
-            txn["role"] = roles.get(_normalize_name_key(txn["name"]))
-
-    return transactions, "Finnhub"
-
-
-def read_insider_cache(symbol: str) -> Optional[dict]:
-    """Return the cached insider row for a ticker, or None if absent / on error."""
-    try:
-        res = (
-            supabase.table("insider_transactions_cache")
-            .select("ticker, transactions, source, fetched_at")
-            .eq("ticker", symbol)
-            .maybe_single()
-            .execute()
-        )
-        return res.data
-    except Exception as e:
-        logger.info("Insider cache read failed for %s: %s", symbol, e)
-        return None
-
-
-def insider_cache_payload(symbol: str, row: dict) -> dict:
-    """Shape a cached insider row into the API response."""
-    return {
-        "ticker": symbol,
-        "transactions": row.get("transactions") or [],
-        "source": row.get("source"),
-        "cached": True,
-        "fetched_at": row.get("fetched_at"),
-    }
-
-
-def write_insider_cache(symbol: str, transactions: list, source: Optional[str]) -> str:
-    fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        supabase.table("insider_transactions_cache").upsert({
-            "ticker": symbol,
-            "transactions": transactions,
-            "source": source,
-            "fetched_at": fetched_at,
-        }).execute()
-    except Exception as e:
-        logger.warning("Insider cache write failed for %s: %s", symbol, e)
-    return fetched_at
-
-
-# ── Institutional ownership (yfinance 13F) ────────────────────────────────────
-
-def _clean_num(value):
-    """Coerce a pandas/np scalar to a plain float, or None for NaN/missing."""
-    if value is None:
-        return None
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if math.isnan(f) else f
-
-
-def fetch_institutional(symbol: str) -> dict:
-    """Institutional ownership from yfinance (major_holders + institutional_holders).
-    Blocking — call via run_in_executor. Returns a payload dict; empty holders and
-    null percentages on any failure or non-US ticker with no coverage."""
-    payload = {
-        "institutions_pct": None,
-        "insiders_pct": None,
-        "institutions_count": None,
-        "holders": [],
-        "source": None,
-    }
-    try:
-        import yfinance as yf
-        tk = yf.Ticker(symbol)
-        major = tk.major_holders
-        holders_df = tk.institutional_holders
-    except Exception as e:
-        logger.info("Institutional lookup failed for %s: %s", symbol, e)
-        return payload
-
-    # major_holders: DataFrame indexed by breakdown label, single "Value" column.
-    try:
-        if major is not None and not major.empty and "Value" in major.columns:
-            def _breakdown(label):
-                return _clean_num(major.loc[label, "Value"]) if label in major.index else None
-            payload["institutions_pct"] = _breakdown("institutionsPercentHeld")
-            payload["insiders_pct"] = _breakdown("insidersPercentHeld")
-            count = _breakdown("institutionsCount")
-            payload["institutions_count"] = int(count) if count is not None else None
-    except Exception as e:
-        logger.info("major_holders parse failed for %s: %s", symbol, e)
-
-    # institutional_holders: top fund holders table.
-    try:
-        if holders_df is not None and not holders_df.empty:
-            holders = []
-            for _, row in holders_df.head(15).iterrows():
-                date = row.get("Date Reported")
-                shares = _clean_num(row.get("Shares"))
-                holders.append({
-                    "holder": str(row.get("Holder") or "Unknown"),
-                    "pct_held": _clean_num(row.get("pctHeld")),
-                    "shares": int(shares) if shares is not None else None,
-                    "value": _clean_num(row.get("Value")),
-                    "pct_change": _clean_num(row.get("pctChange")),
-                    "date_reported": str(date)[:10] if date is not None else None,
-                })
-            payload["holders"] = holders
-    except Exception as e:
-        logger.info("institutional_holders parse failed for %s: %s", symbol, e)
-
-    if payload["holders"] or payload["institutions_pct"] is not None:
-        payload["source"] = "yfinance"
-    return payload
-
-
-def read_institutions_cache(symbol: str) -> Optional[dict]:
-    try:
-        res = (
-            supabase.table("institutional_holders_cache")
-            .select("ticker, payload, fetched_at")
-            .eq("ticker", symbol)
-            .maybe_single()
-            .execute()
-        )
-        return res.data
-    except Exception as e:
-        logger.info("Institutions cache read failed for %s: %s", symbol, e)
-        return None
-
-
-def write_institutions_cache(symbol: str, payload: dict) -> str:
-    fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        supabase.table("institutional_holders_cache").upsert({
-            "ticker": symbol,
-            "payload": payload,
-            "fetched_at": fetched_at,
-        }).execute()
-    except Exception as e:
-        logger.warning("Institutions cache write failed for %s: %s", symbol, e)
-    return fetched_at
-
-
-# ── Fund holdings (institutional data inverted: fund → its positions) ──────────
-
-def with_descriptions(funds: list[dict]) -> list[dict]:
-    """Attach a fresh ``description`` to each fund, applied at serve time so a
-    newly generated blurb shows up without rebuilding the holdings cache.
-
-    Resolution order per fund:
-      1. the cached row in ``fund_descriptions`` (written by the nightly LLM
-         backfill, or hand-edited with is_manual set)
-      2. a curated blurb for one of the big names, covering the window before the
-         first backfill has run
-      3. the generic fallback
-
-    One bulk read serves the whole list. Mutates and returns ``funds``.
-    """
-    cached = read_fund_descriptions()
-    for f in funds:
-        name = f.get("fund", "")
-        f["description"] = (
-            cached.get(normalise_fund_key(name))
-            or curated_fund_blurb(name)
-            or FUND_BLURB_FALLBACK
-        )
-    return funds
-
-
-def read_all_institutions_cache(fresh_only: bool = False) -> dict[str, dict]:
-    """Bulk-read the per-ticker institutional cache as {ticker: payload}.
-
-    ``fresh_only`` restricts to rows inside INSTITUTIONS_CACHE_TTL. The nightly
-    warm wants that, since it only refetches what has gone stale; serving wants
-    everything, because a stale 13F snapshot still beats showing nothing.
-    """
-    out: dict[str, dict] = {}
-    try:
-        res = (
-            supabase.table("institutional_holders_cache")
-            .select("ticker, payload, fetched_at")
-            .execute()
-        )
-    except Exception as e:
-        logger.info("Bulk institutions cache read failed: %s", e)
-        return out
-    for row in res.data or []:
-        if fresh_only and not cache_is_fresh(row, INSTITUTIONS_CACHE_TTL):
-            continue
-        out[row["ticker"]] = row.get("payload") or {}
-    return out
-
-
-def refresh_institutions_cache(assets: list[dict]) -> dict:
-    """Warm the institutional cache: refetch every tracked asset whose row is
-    missing or past INSTITUTIONS_CACHE_TTL. Blocking and slow (one yfinance call
-    per stale ticker), so this belongs in the nightly job.
-
-    Doing it here is what keeps ``build_fund_holdings`` a pure in-memory
-    aggregation. Left inside the /api/funds request, the first call after the
-    weekly TTL expired paid for the whole pool while the user waited, and that
-    bill grows every night the discovery agent adds tickers.
-    """
-    fresh = read_all_institutions_cache(fresh_only=True)
-    refreshed, failed = 0, 0
-    for asset in assets:
-        ticker = (asset.get("ticker") or "").upper()
-        if not ticker or ticker in fresh:
-            continue
-        try:
-            write_institutions_cache(ticker, fetch_institutional(ticker))
-            refreshed += 1
-        except Exception as e:
-            logger.info("Institutional refresh failed for %s: %s", ticker, e)
-            failed += 1
-    return {"refreshed": refreshed, "failed": failed, "already_fresh": len(fresh)}
-
-
-def build_fund_holdings(assets: list[dict]) -> list[dict]:
-    """Invert per-ticker institutional data into per-fund holdings across the given
-    tracked assets ([{ticker, universe}, ...]).
-
-    Scoped to the companies we cover, so a fund's positions here are only in our
-    tracked assets, not its whole portfolio. Pure aggregation over whatever the
-    institutional cache already holds: an uncached ticker is skipped rather than
-    fetched, which is what makes this safe to run inside a request.
-    ``refresh_institutions_cache`` (nightly) is what fills that cache.
-
-    Returns funds sorted by total value held, each with its positions (biggest
-    first).
-    """
-    cache = read_all_institutions_cache()
-
-    funds: dict[str, dict] = {}
-    for asset in assets:
-        ticker = (asset.get("ticker") or "").upper()
-        if not ticker:
-            continue
-        payload = cache.get(ticker)
-        if payload is None:
-            continue  # not fetched yet; the nightly warm will pick it up
-        for holder in payload.get("holders") or []:
-            name = holder.get("holder")
-            if not name:
-                continue
-            entry = funds.setdefault(
-                name, {"fund": name, "total_value": 0.0, "positions": []}
+    def attach(self, funds: list[dict]) -> list[dict]:
+        cached = read_fund_descriptions()
+        for f in funds:
+            name = f.get("fund", "")
+            f["description"] = (
+                cached.get(normalise_fund_key(name))
+                or curated_fund_blurb(name)
+                or FUND_BLURB_FALLBACK
             )
-            entry["total_value"] += holder.get("value") or 0
-            entry["positions"].append({
-                "ticker": ticker,
-                "universe": asset.get("universe"),
-                "pct_held": holder.get("pct_held"),
-                "value": holder.get("value"),
-                "pct_change": holder.get("pct_change"),
-            })
+        return funds
 
-    result = list(funds.values())
-    for entry in result:
-        entry["positions"].sort(key=lambda p: p.get("value") or 0, reverse=True)
-    result.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
-    # Descriptions are attached by with_descriptions() at serve time, not baked
-    # into the cached payload, so a blurb generated after this build still shows.
-    return result
+    def backfill(self) -> dict:
+        """Fetch company descriptions for anything missing one. Nightly only.
+
+        Funds are not back-filled: ``attach`` resolves those from the curated list
+        at serve time, so there is nothing to store and no call to make.
+        """
+        from . import descriptions as desc
+
+        return desc.backfill_descriptions()
 
 
-def read_funds_cache() -> Optional[dict]:
-    try:
-        res = (
-            supabase.table("fund_holdings_cache")
-            .select("id, payload, fetched_at")
-            .eq("id", "ALL")
-            .maybe_single()
-            .execute()
+class FundHoldingsBuilder:
+    """Inverts per-ticker institutional ownership into per-fund holdings."""
+
+    def __init__(self, institutions_cache: Optional[InstitutionsCache] = None):
+        self.institutions_cache = institutions_cache or InstitutionsCache()
+
+    def read_all(self, fresh_only: bool = False) -> dict[str, dict]:
+        return self.institutions_cache.read_all(fresh_only=fresh_only)
+
+    def refresh(self, assets: list[dict]) -> dict:
+        source = YFinanceInstitutionalSource(self.institutions_cache.config)
+        fresh = self.read_all(fresh_only=True)
+        refreshed, failed = 0, 0
+        for asset in assets:
+            ticker = (asset.get("ticker") or "").upper()
+            if not ticker or ticker in fresh:
+                continue
+            try:
+                self.institutions_cache.write(ticker, source.fetch_blocking(ticker))
+                refreshed += 1
+            except Exception as e:
+                logger.info("Institutional refresh failed for %s: %s", ticker, e)
+                failed += 1
+        return {"refreshed": refreshed, "failed": failed, "already_fresh": len(fresh)}
+
+    def build(self, assets: list[dict]) -> list[dict]:
+        cache = self.read_all()
+
+        funds: dict[str, dict] = {}
+        for asset in assets:
+            ticker = (asset.get("ticker") or "").upper()
+            if not ticker:
+                continue
+            payload = cache.get(ticker)
+            if payload is None:
+                continue  # not fetched yet; the nightly warm will pick it up
+            for holder in payload.get("holders") or []:
+                name = holder.get("holder")
+                if not name:
+                    continue
+                entry = funds.setdefault(
+                    name, {"fund": name, "total_value": 0.0, "positions": []}
+                )
+                entry["total_value"] += holder.get("value") or 0
+                entry["positions"].append({
+                    "ticker": ticker,
+                    "universe": asset.get("universe"),
+                    "pct_held": holder.get("pct_held"),
+                    "value": holder.get("value"),
+                    "pct_change": holder.get("pct_change"),
+                })
+
+        result = list(funds.values())
+        for entry in result:
+            entry["positions"].sort(key=lambda p: p.get("value") or 0, reverse=True)
+        result.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
+        return result
+
+
+class WhaleWatcher:
+
+    def __init__(
+        self,
+        config: Optional[WhaleConfig] = None,
+        insider_cache: Optional[InsiderCache] = None,
+        institutions_cache: Optional[InstitutionsCache] = None,
+        funds_cache: Optional[FundsCache] = None,
+        assets: Optional[AssetRepository] = None,
+        insider_source: Optional[FinnhubInsiderSource] = None,
+        institutional_source: Optional[YFinanceInstitutionalSource] = None,
+        holdings: Optional[FundHoldingsBuilder] = None,
+        describer: Optional[FundDescriber] = None,
+    ):
+        self.config = config or WhaleConfig.from_env()
+        self.describer = describer or FundDescriber()
+        self.insider_cache = insider_cache or InsiderCache(self.config)
+        self.institutions_cache = institutions_cache or InstitutionsCache(self.config)
+        self.funds_cache = funds_cache or FundsCache(self.config, self.describer)
+        self.assets = assets or AssetRepository()
+        self.insider_source = insider_source or FinnhubInsiderSource(self.config)
+        self.institutional_source = institutional_source or YFinanceInstitutionalSource(self.config)
+        self.holdings = holdings or FundHoldingsBuilder(self.institutions_cache)
+
+    async def insider(self, ticker: str) -> dict:
+        symbol = ticker.upper()
+
+        api_key = self.insider_source.api_key()
+        if not api_key:
+            # No key: serve whatever we cached before, else an honest empty state.
+            row = self.insider_cache.read(symbol)
+            if row:
+                return self.insider_cache.shape(
+                    symbol, self.insider_cache.value_of(row), True, row.get("fetched_at")
+                )
+            return {"ticker": symbol, "transactions": [], "source": None}
+
+        return await self.insider_cache.serve(
+            symbol, lambda: self.insider_source.fetch(symbol, api_key=api_key)
         )
-        return res.data
-    except Exception as e:
-        logger.info("Funds cache read failed: %s", e)
-        return None
 
-
-def write_funds_cache(funds: list) -> str:
-    fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        supabase.table("fund_holdings_cache").upsert({
-            "id": "ALL",
-            "payload": funds,
-            "fetched_at": fetched_at,
-        }).execute()
-    except Exception as e:
-        logger.warning("Funds cache write failed: %s", e)
-    return fetched_at
-
-
-ACTIVE_ASSET_COLUMNS = "ticker, name, universe, origin, first_discovered_at, description"
-
-
-def read_active_assets() -> list[dict]:
-    """The assets whale watching should show: active, and not currently benched.
-
-    The discovery agent soft-retires and quarantines rows rather than deleting
-    them (migration 009), so an unfiltered read of ``assets`` keeps surfacing
-    companies the agent has already dropped. Every whale-watching read goes
-    through here so that cannot happen in one place and not another.
-    """
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        res = (
-            supabase.table("assets")
-            .select(ACTIVE_ASSET_COLUMNS)
-            .eq("is_active", True)
-            .or_(f"quarantined_until.is.null,quarantined_until.lt.{now}")
-            .order("ticker")
-            .execute()
+    async def institutional(self, ticker: str) -> dict:
+        """Institutional ownership for a ticker, via yfinance."""
+        symbol = ticker.upper()
+        return await self.institutions_cache.serve(
+            symbol, lambda: self.institutional_source.fetch(symbol)
         )
-        return res.data or []
-    except Exception as e:
-        logger.info("Active assets read failed: %s", e)
-        return []
+
+    async def funds(self) -> dict:
+        return await self.funds_cache.serve_all(self._rebuild_funds)
+
+    async def _rebuild_funds(self) -> list[dict]:
+        loop = asyncio.get_running_loop()
+        assets = await loop.run_in_executor(None, self.assets.read_active)
+        return await loop.run_in_executor(None, self.holdings.build, assets)
+
+    async def refresh_nightly(self) -> dict:
+        """Nightly whale-watching maintenance, run after the discovery agent.
+
+        Four stages, each isolated so one failing does not cost the others:
+          1. warm the institutional cache for tickers that are missing or stale —
+             the slow part (one yfinance call each), which is exactly why it lives
+             here rather than inside the /api/funds request
+          2. rebuild the fund-holdings aggregation over the warmed cache
+          3. describe any company that still has no blurb
+
+        Funds used to be a fourth stage. They are resolved from the curated list at
+        serve time now, so there is nothing nightly to do for them.
+        """
+        loop = asyncio.get_running_loop()
+        summary: dict = {}
+
+        assets = await loop.run_in_executor(None, self.assets.read_active)
+        summary["assets"] = len(assets)
+
+        try:
+            summary["institutions"] = await loop.run_in_executor(
+                None, self.holdings.refresh, assets
+            )
+        except Exception as e:
+            logger.warning("Institutional cache warm failed: %s", e)
+            summary["institutions"] = {"error": str(e)}
+
+        funds: list = []
+        try:
+            funds = await loop.run_in_executor(None, self.holdings.build, assets)
+            self.funds_cache.write(FundsCache.ALL_KEY, funds)
+            summary["funds"] = len(funds)
+        except Exception as e:
+            logger.warning("Fund holdings rebuild failed: %s", e)
+            summary["funds"] = {"error": str(e)}
+
+        try:
+            summary["descriptions"] = await loop.run_in_executor(
+                None, self.describer.backfill
+            )
+        except Exception as e:
+            logger.warning("Description backfill failed: %s", e)
+            summary["descriptions"] = {"error": str(e)}
+
+        return summary

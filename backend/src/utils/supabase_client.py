@@ -2,11 +2,15 @@ import os
 import uuid
 import datetime
 import json
+import threading
+import time
 from supabase import create_client
 from typing import List, Dict, Any, Optional
 
 import pandas as pd
 import yfinance as yf
+
+from .gr_reasoningtracestyle import HOUSE_STYLE
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -28,70 +32,171 @@ def _latest_close_from_history(history: pd.DataFrame | None) -> float | None:
     return float(close_values.iloc[-1])
 
 
-def _ticker_currency(ticker: str) -> str | None:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        fast_info = getattr(ticker_obj, "fast_info", None)
-        if fast_info and fast_info.get("currency"):
-            return str(fast_info.get("currency")).upper()
+_MISS = object()
 
-        info = getattr(ticker_obj, "info", None) or {}
-        currency = info.get("currency") or info.get("financialCurrency")
-        return str(currency).upper() if currency else None
-    except Exception:
+
+class _TtlCache:
+    """Values that expire, shared safely between threads.
+
+    Small on purpose: the two things cached here are a handful of currency codes
+    and a handful of exchange rates, so there is nothing to evict.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: Dict[str, tuple] = {}
+
+    def get(self, key: str) -> Any:
+        """The stored value, or ``_MISS`` when absent or expired."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return _MISS
+            expires_at, value = entry
+            if expires_at <= time.monotonic():
+                self._entries.pop(key, None)
+                return _MISS
+            return value
+
+    def set(self, key: str, value: Any, ttl_seconds: float) -> None:
+        with self._lock:
+            self._entries[key] = (time.monotonic() + ttl_seconds, value)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
+class ZarPriceConverter:
+    """A ticker's latest close, expressed in rand.
+
+    The exchange rate is the same for every asset in a run and the currency a
+    ticker trades in changes about never, but both used to be fetched per asset.
+    Saving 17 assets therefore paid for 17 USD/ZAR lookups, and each of those is a
+    pair of yfinance calls, because the direct ``USDZAR=X`` pair returns nothing
+    and it falls back to the inverted one. Yahoo answers cloud IPs slowly, which
+    made the save loop cost around a minute an asset.
+
+    Both lookups are cached here, so a run pays for one rate rather than one per
+    asset. The price itself is never cached: that is the number being recorded.
+    """
+
+    # Shorter than a run takes, so a rate is fetched once per run and a quote
+    # served to a user is never more than this old.
+    FX_TTL_SECONDS = 900
+    # A failed lookup is held briefly, only so a broken pair does not get retried
+    # once per asset. Holding it for the full TTL would spoil a whole run.
+    FX_FAILURE_TTL_SECONDS = 60
+    CURRENCY_TTL_SECONDS = 86_400
+
+    # Rand cents, quoted by the JSE for some instruments.
+    _SUBUNIT_CURRENCIES = {"ZAC", "ZA CENT", "ZACP"}
+
+    def __init__(self) -> None:
+        self._fx_rates = _TtlCache()
+        self._currencies = _TtlCache()
+
+    def fx_rate(self, currency: str) -> float | None:
+        """Units of rand per unit of ``currency``, or None if unavailable."""
+        code = (currency or "").upper()
+        if not code:
+            return None
+        if code == "ZAR":
+            return 1.0
+
+        cached = self._fx_rates.get(code)
+        if cached is not _MISS:
+            return cached
+
+        rate = self._lookup_fx_rate(code)
+        self._fx_rates.set(
+            code,
+            rate,
+            self.FX_TTL_SECONDS if rate else self.FX_FAILURE_TTL_SECONDS,
+        )
+        return rate
+
+    def currency_of(self, ticker: str) -> str | None:
+        """The currency a ticker trades in, cached for the day."""
+        cached = self._currencies.get(ticker)
+        if cached is not _MISS:
+            return cached
+
+        currency = self._lookup_currency(ticker)
+        self._currencies.set(ticker, currency, self.CURRENCY_TTL_SECONDS)
+        return currency
+
+    def price_in_zar(self, ticker: str) -> float | None:
+        try:
+            history = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False)
+            latest_close = _latest_close_from_history(history)
+            if latest_close is None:
+                return None
+
+            currency = self.currency_of(ticker)
+            if not currency or currency == "ZAR":
+                return latest_close
+
+            if currency in self._SUBUNIT_CURRENCIES:
+                return latest_close / 100.0
+
+            rate = self.fx_rate(currency)
+            if rate is None:
+                return latest_close
+
+            return latest_close * rate
+        except Exception as e:
+            print(f"Failed to fetch yfinance price for {ticker}: {e}")
+            return None
+
+    def clear(self) -> None:
+        """Drop both caches. For tests, and for a caller that wants a fresh rate."""
+        self._fx_rates.clear()
+        self._currencies.clear()
+
+    def _lookup_currency(self, ticker: str) -> str | None:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            fast_info = getattr(ticker_obj, "fast_info", None)
+            if fast_info and fast_info.get("currency"):
+                return str(fast_info.get("currency")).upper()
+
+            info = getattr(ticker_obj, "info", None) or {}
+            currency = info.get("currency") or info.get("financialCurrency")
+            return str(currency).upper() if currency else None
+        except Exception:
+            return None
+
+    def _lookup_fx_rate(self, currency: str) -> float | None:
+        pair_candidates = (
+            (f"{currency}ZAR=X", False),
+            (f"ZAR{currency}=X", True),
+        )
+
+        for pair_symbol, invert_rate in pair_candidates:
+            try:
+                pair_history = yf.Ticker(pair_symbol).history(period="5d", interval="1d", auto_adjust=False)
+                rate = _latest_close_from_history(pair_history)
+                if rate is None or rate <= 0:
+                    continue
+                return 1 / rate if invert_rate else rate
+            except Exception:
+                continue
+
         return None
 
 
-def _fx_rate_to_zar(currency: str) -> float | None:
-    normalized_currency = (currency or "").upper()
-    if not normalized_currency or normalized_currency == "ZAR":
-        return 1.0
-
-    pair_candidates = (
-        (f"{normalized_currency}ZAR=X", False),
-        (f"ZAR{normalized_currency}=X", True),
-    )
-
-    for pair_symbol, invert_rate in pair_candidates:
-        try:
-            pair_history = yf.Ticker(pair_symbol).history(period="5d", interval="1d", auto_adjust=False)
-            rate = _latest_close_from_history(pair_history)
-            if rate is None or rate <= 0:
-                continue
-            return 1 / rate if invert_rate else rate
-        except Exception:
-            continue
-
-    return None
+# One converter for the process, so its caches are shared by the save loop and by
+# the endpoint that quotes the rate.
+zar_prices = ZarPriceConverter()
 
 
 def fetch_fx_rate_to_zar(currency: str) -> float | None:
-    return _fx_rate_to_zar(currency)
+    return zar_prices.fx_rate(currency)
 
 
 def fetch_price_at_run_in_zar(ticker: str) -> float | None:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        history = ticker_obj.history(period="5d", interval="1d", auto_adjust=False)
-        latest_close = _latest_close_from_history(history)
-        if latest_close is None:
-            return None
-
-        currency = _ticker_currency(ticker)
-        if not currency or currency == "ZAR":
-            return latest_close
-
-        if currency in {"ZAC", "ZA CENT", "ZACP"}:
-            return latest_close / 100.0
-
-        fx_rate = _fx_rate_to_zar(currency)
-        if fx_rate is None:
-            return latest_close
-
-        return latest_close * fx_rate
-    except Exception as e:
-        print(f"Failed to fetch yfinance price for {ticker}: {e}")
-        return None
+    return zar_prices.price_in_zar(ticker)
 
 
 # ---------------------------------------------------------------------------
@@ -469,7 +574,10 @@ def save_top_assets(
             "asset_id": asset_id,
             "sentiment_score": int(sentiment.get("sentiment_score") or asset.get("sentiment_score") or 0),
             "confidence_score": float(asset.get("unified_score") or 0),
-            "reasoning_trace": asset.get("reasoning") or "",
+            # Normalised on the way in as well as where it is generated, so a trace
+            # written by any other path still lands in house style (no dash used as
+            # punctuation).
+            "reasoning_trace": HOUSE_STYLE.apply(asset.get("reasoning") or ""),
             "hype_penalty": int(asset.get("adjustments", {}).get("hype_penalty", 0)),
             "created_at": now,
             "run_id": run_id,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
+  CandlestickChart,
   BookOpen,
   Search,
   Eye,
@@ -41,6 +42,7 @@ export default function AppLayout() {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { name: "Assets", path: "/assets", icon: CandlestickChart },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
@@ -52,6 +54,7 @@ export default function AppLayout() {
   const visibleNavItems = navItems.filter(
     (i) =>
       i.name === "Dashboard" ||
+      i.name === "Assets" ||
       i.name === "Watchlist" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||

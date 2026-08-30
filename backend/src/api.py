@@ -19,6 +19,20 @@ from src.utils.supabase_client import (
 )
 from src.utils import whale_watching as ww
 
+# Configure the ROOT logger, once, at import.
+#
+# Nothing configured it before, so every module logger fell through to Python's
+# handler of last resort, which emits WARNING and above and nothing else. That is
+# why the collectors have been silent in Cloud Run: their progress lines are INFO
+# and were being dropped before they ever reached stdout. `force=True` because
+# the server may have installed its own root handlers first, and without it
+# basicConfig would quietly do nothing.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
+)
+
 logger = logging.getLogger("alpha-api")
 app = FastAPI(title="AlphaSwarm API")
 
@@ -112,8 +126,10 @@ async def usd_zar_fx_rate():
 
 # Whale watching — insider dealings + institutional ownership. Purely
 # informational: never part of the analysis pipeline / Unified Confidence Score.
-# All data access and caching lives in utils/whale_watching.py; these handlers
-# stay thin (read cache → fetch if stale → shape response).
+# All data access, caching and fallback logic lives in the WhaleWatcher facade;
+# these handlers only translate a missing-data failure into a 502.
+
+whales = ww.WhaleWatcher()
 
 
 @app.get("/api/whales/{ticker}")
@@ -124,51 +140,20 @@ async def whale_activity(ticker: str):
     only refetches when stale. Returns an empty ``transactions`` list (not an
     error) when no API key is configured or the ticker has no coverage.
     """
-    symbol = ticker.upper()
-
-    cached = ww.read_insider_cache(symbol)
-    if cached and ww.cache_is_fresh(cached):
-        return ww.insider_cache_payload(symbol, cached)
-
-    api_key = os.getenv("FINNHUB_API_KEY", "").strip()
-    if not api_key:
-        # No key: serve whatever we cached before, else an honest empty state.
-        return ww.insider_cache_payload(symbol, cached) if cached else {"ticker": symbol, "transactions": [], "source": None}
-
     try:
-        transactions, source = await ww.fetch_fresh_insider(symbol, api_key)
-    except Exception as e:
-        # Network / server error: prefer stale cache over failing the request.
-        logger.warning("Finnhub insider fetch failed for %s: %s", symbol, e)
-        if cached:
-            return ww.insider_cache_payload(symbol, cached)
-        raise HTTPException(status_code=502, detail="Unable to load insider transactions")
-
-    fetched_at = ww.write_insider_cache(symbol, transactions, source)
-    return {"ticker": symbol, "transactions": transactions, "source": source, "cached": False, "fetched_at": fetched_at}
+        return await whales.insider(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.get("/api/institutions/{ticker}")
 async def institutional_ownership(ticker: str):
     """Institutional ownership for a ticker, via yfinance. Read-through cache with
     a 7-day TTL (13F data only changes quarterly)."""
-    symbol = ticker.upper()
-
-    cached = ww.read_institutions_cache(symbol)
-    if cached and ww.cache_is_fresh(cached, ww.INSTITUTIONS_CACHE_TTL):
-        return {"ticker": symbol, **(cached.get("payload") or {}), "cached": True, "fetched_at": cached.get("fetched_at")}
-
-    loop = asyncio.get_running_loop()
     try:
-        payload = await loop.run_in_executor(None, ww.fetch_institutional, symbol)
-    except Exception as e:
-        logger.warning("Institutional fetch failed for %s: %s", symbol, e)
-        if cached:
-            return {"ticker": symbol, **(cached.get("payload") or {}), "cached": True, "fetched_at": cached.get("fetched_at")}
-        raise HTTPException(status_code=502, detail="Unable to load institutional ownership")
-
-    fetched_at = ww.write_institutions_cache(symbol, payload)
-    return {"ticker": symbol, **payload, "cached": False, "fetched_at": fetched_at}
+        return await whales.institutional(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.get("/api/funds")
@@ -177,22 +162,16 @@ async def top_funds():
     (for the Top Funds / Notable Investors views).
 
     Weekly read-through cache. A miss is still cheap because the rebuild is pure
-    aggregation over the institutional cache, which the nightly job warms
-    (ww.refresh_institutions_cache); this request never calls yfinance.
+    aggregation over the institutional cache, which the nightly job warms; this
+    request never calls yfinance.
 
     Scoped to active assets, so tickers the discovery agent has retired or
     benched no longer contribute holdings.
     """
-    cached = ww.read_funds_cache()
-    if cached and ww.cache_is_fresh(cached, ww.FUNDS_CACHE_TTL):
-        funds = ww.with_descriptions(cached.get("payload") or [])
-        return {"funds": funds, "cached": True, "fetched_at": cached.get("fetched_at")}
-
-    loop = asyncio.get_running_loop()
-    assets = await loop.run_in_executor(None, ww.read_active_assets)
-    funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
-    fetched_at = ww.write_funds_cache(funds)
-    return {"funds": ww.with_descriptions(funds), "cached": False, "fetched_at": fetched_at}
+    try:
+        return await whales.funds()
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.post("/api/analysis/start")
@@ -1111,58 +1090,6 @@ async def get_price_history(ticker: str):
         return {"ticker": ticker.upper(), "closes": [], "dates": []}
 
 
-async def _refresh_whale_data() -> dict:
-    """Nightly whale-watching maintenance, run after the discovery agent.
-
-    Four stages, each isolated so one failing does not cost the others:
-      1. warm the institutional cache for tickers that are missing or stale —
-         the slow part (one yfinance call each), which is exactly why it lives
-         here rather than inside the /api/funds request
-      2. rebuild the fund-holdings aggregation over the warmed cache
-      3. describe any company that still has no blurb
-      4. describe any fund we have not seen before
-
-    Stages 3 and 4 are the reason this exists: the discovery agent adds tickers
-    every night, each new ticker brings unfamiliar fund holders, and both would
-    otherwise show up undescribed.
-    """
-    from src.utils import descriptions as desc
-
-    loop = asyncio.get_running_loop()
-    summary: dict = {}
-
-    assets = await loop.run_in_executor(None, ww.read_active_assets)
-    summary["assets"] = len(assets)
-
-    try:
-        summary["institutions"] = await loop.run_in_executor(
-            None, ww.refresh_institutions_cache, assets
-        )
-    except Exception as e:
-        logger.warning("Institutional cache warm failed: %s", e)
-        summary["institutions"] = {"error": str(e)}
-
-    funds: list = []
-    try:
-        funds = await loop.run_in_executor(None, ww.build_fund_holdings, assets)
-        ww.write_funds_cache(funds)
-        summary["funds"] = len(funds)
-    except Exception as e:
-        logger.warning("Fund holdings rebuild failed: %s", e)
-        summary["funds"] = {"error": str(e)}
-
-    try:
-        fund_names = [f["fund"] for f in funds if f.get("fund")]
-        summary["descriptions"] = await loop.run_in_executor(
-            None, desc.backfill_descriptions, fund_names
-        )
-    except Exception as e:
-        logger.warning("Description backfill failed: %s", e)
-        summary["descriptions"] = {"error": str(e)}
-
-    return summary
-
-
 @app.post("/api/analysis/run-daily")
 async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     """Scheduled nightly refresh, triggered by Cloud Scheduler at 22:00 UTC
@@ -1201,7 +1128,7 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     # informational, so a failure here must never stop the recommendation batch.
     whales_summary = None
     try:
-        whales_summary = await _refresh_whale_data()
+        whales_summary = await whales.refresh_nightly()
         logger.info("Whale data refresh complete: %s", whales_summary)
     except Exception as e:
         logger.exception("Whale data refresh failed (serving existing caches): %s", e)
