@@ -367,7 +367,15 @@ class RecommendationWriter:
             # Per-article transparency list: publisher, tier, date, headline, link.
             "news_articles": news["news_articles"],
             # Per-post transparency list: author, date, text, link, sentiment.
-            "social_posts": sentiment.get("social_posts") or [],
+            #
+            # Capped, because this row already carries every news article as JSON and
+            # its insert is at the edge of what Supabase accepts: a ~30 row insert has
+            # been seen to fail with "Server disconnected" and silently retry without
+            # the ranking v2 columns, which is why _insert_chunks exists at all. The
+            # asset card only ever rendered five posts, and the full per-day lists now
+            # live on social_sentiment_daily, so keeping more here would grow the row
+            # that is already breaking to feed a view nothing reads.
+            "social_posts": self._top_social_posts(sentiment.get("social_posts")),
         }
 
         # Unified ranking v2 terms (migration 010), present only when the ranking
@@ -403,6 +411,27 @@ class RecommendationWriter:
             "news_bullish": int(sentiment.get("news_bullish") or 0),
             "news_bearish": int(sentiment.get("news_bearish") or 0),
         }
+
+    @staticmethod
+    def _top_social_posts(posts: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """The most influential posts, for the asset card's preview list.
+
+        The number comes from SentimentConfig so it sits with the other social settings
+        rather than as a bare literal here, and it is read per call so an env override
+        takes effect without a restart of anything that imported this module early.
+
+        Sorted by influence rather than truncated in place: the payload arrives newest
+        first, so a plain slice would keep the most recent posts rather than the ones
+        that actually moved the score.
+        """
+        if not posts:
+            return []
+        from .ss_config import SentimentConfig
+
+        keep = SentimentConfig.from_env().social_recommendation_posts
+        if len(posts) <= keep:
+            return posts
+        return sorted(posts, key=lambda p: p.get("influence") or 0, reverse=True)[:keep]
 
     @staticmethod
     def _source_labels(raw_sources: Any) -> Optional[str]:

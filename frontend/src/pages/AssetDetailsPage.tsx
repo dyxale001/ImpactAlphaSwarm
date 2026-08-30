@@ -24,10 +24,13 @@ import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
 import SentimentCalculation from "../components/research/SentimentCalculation";
+import { SentimentSparkline } from "../components/research/SentimentTrendChart";
 import { useAssetDetails } from "../hooks/useAssetDetails";
+import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import {
   NEWS_LOOKBACK_DAYS,
   NEWS_WEIGHT_PCT,
+  SOCIAL_LOOKBACK_DAYS,
   SOCIAL_WEIGHT_PCT,
 } from "../data/sentimentMethodology";
 
@@ -159,6 +162,10 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
+  // Called before the early returns below, as every hook must be. It loads
+  // independently of the AI run, so the card renders without waiting on it and the
+  // sparkline simply appears when the series arrives.
+  const sentimentHistory = useSentimentHistory(ticker);
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -402,14 +409,14 @@ export default function AssetDetailsPage() {
         <>
           <SectionCard
             title="Sentiment Data"
-            description={`A blend of trusted financial news and social posts from the past ${NEWS_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
+            description={`A blend of trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
             icon={MessageSquare}
             badge={
               <span
                 className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium"
-                title={`Every score in this card is calculated from news and posts published in the last ${NEWS_LOOKBACK_DAYS} days. Older items are not counted.`}
+                title={`News from the last ${NEWS_LOOKBACK_DAYS} days and social posts from the last ${SOCIAL_LOOKBACK_DAYS} days. Older items are not counted at all. The trend chart covers a longer window than the score does, because history is filled in outside the run.`}
               >
-                Last {NEWS_LOOKBACK_DAYS} days
+                News {NEWS_LOOKBACK_DAYS}d · social {SOCIAL_LOOKBACK_DAYS}d
               </span>
             }
             action={
@@ -473,14 +480,25 @@ export default function AssetDetailsPage() {
 
               {/* Social sub-signal. */}
               <div className="space-y-2">
-                <SignalBar
-                  label="Social"
-                  weightPct={SOCIAL_WEIGHT_PCT}
-                  score={
-                    recommendation.social_sentiment_score ??
-                    recommendation.sentiment_score
-                  }
-                />
+                <div className="flex items-end justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <SignalBar
+                      label="Social"
+                      weightPct={SOCIAL_WEIGHT_PCT}
+                      score={
+                        recommendation.social_sentiment_score ??
+                        recommendation.sentiment_score
+                      }
+                    />
+                  </div>
+                  {/* A prompt to look closer rather than the thing being studied.
+                      Renders nothing until there are a few days to compare, so a
+                      fresh ticker shows the bar alone instead of a stub. */}
+                  <SentimentSparkline
+                    points={sentimentHistory.points}
+                    daysWithData={sentimentHistory.daysWithData}
+                  />
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <MetricPill
                     label="Bullish posts"

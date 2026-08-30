@@ -602,6 +602,52 @@ def get_asset_universes(tickers: List[str]) -> Dict[str, str]:
     return {r["ticker"]: r["universe"] for r in rows if r.get("ticker")}
 
 
+def get_recently_ranked_tickers(days: int = 3) -> List[str]:
+    """Tickers that reached someone's ranked feed in the last ``days``.
+
+    The backfill's ticker source. Anything here is something a user can open and expect
+    a chart for, which is a tighter set than every row in ``assets`` and a wider one
+    than any single user's watchlist.
+
+    Read from the database rather than handed over by the nightly batch on purpose.
+    ``run_daily_batch`` does return its ticker union, but coupling the two scheduler
+    jobs that way means the backfill is only correct when it runs after a successful
+    nightly; a query is correct whether it runs on schedule, by hand, or twice.
+
+    Returns ``[]`` on any failure, so a backfill that cannot see the database does
+    nothing rather than crawling a guess.
+    """
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max(1, days))
+    ).isoformat()
+    try:
+        rows = (
+            supabase.table("ai_recommendation")
+            .select("asset_id,created_at")
+            .gte("created_at", cutoff)
+            .execute()
+            .data
+            or []
+        )
+        asset_ids = sorted({row["asset_id"] for row in rows if row.get("asset_id")})
+        if not asset_ids:
+            return []
+
+        # One round trip for the symbols, matching the batching rule in rec_writer.
+        assets = (
+            supabase.table("assets")
+            .select("id,ticker")
+            .in_("id", asset_ids)
+            .execute()
+            .data
+            or []
+        )
+        return sorted({a["ticker"].upper() for a in assets if a.get("ticker")})
+    except Exception as e:
+        print(f"Error listing recently ranked tickers: {e}")
+        return []
+
+
 def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
     """Return ``{ticker: v2_rank}`` from this run's most recent EARLIER night.
 

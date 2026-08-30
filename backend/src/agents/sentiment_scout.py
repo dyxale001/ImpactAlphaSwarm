@@ -36,6 +36,7 @@ warnings.filterwarnings("ignore")
 
 from ..utils.ss_aggregation import SentimentAggregator
 from ..utils.ss_config import SentimentConfig
+from ..utils.ss_daily import SocialHistory
 from ..utils.ss_models import SocialMention, _normalize_tickers
 from ..utils.ss_news import NewsCollector, NewsMode, collect_news
 from ..utils.ss_payloads import NewsPayloadBuilder, SocialPayloadBuilder
@@ -44,6 +45,12 @@ from ..utils.ss_social import SocialCollector, collect_mentions
 from ..utils.ss_sources import PublisherRegistry
 
 logger = logging.getLogger("sentiment-scout")
+
+#: Where ``_combine_signals`` parks the scored social posts for the daily history.
+#: Underscored and popped before the payload is returned, because that payload is fed to
+#: the reasoning tracer and the LLM prompts and written to ai_recommendation, none of
+#: which should ever see the scout's own bookkeeping.
+_SCORED_KEY = "_social_scored"
 
 __all__ = [
 	"NewsMode",
@@ -74,6 +81,7 @@ class SentimentScout:
 		aggregator: SentimentAggregator | None = None,
 		news_payload: NewsPayloadBuilder | None = None,
 		social_payload: SocialPayloadBuilder | None = None,
+		history: SocialHistory | None = None,
 	):
 		self.config = config or SentimentConfig.from_env()
 		self.registry = registry or PublisherRegistry()
@@ -83,6 +91,7 @@ class SentimentScout:
 		self.scorer = scorer or MentionScorer(self.config, self.registry, self.aggregator)
 		self.news_payload = news_payload or NewsPayloadBuilder(self.aggregator, self.registry)
 		self.social_payload = social_payload or SocialPayloadBuilder(self.aggregator, self.registry)
+		self.history = history or SocialHistory(self.config, self.registry)
 
 		self.news_priority = RecencyPriority()
 		self.social_priority = EngagementPriority()
@@ -112,6 +121,9 @@ class SentimentScout:
 			"mention_count": social["mention_count"],
 			# Per-post transparency list (author, date, text, link, sentiment).
 			"social_posts": self.social_payload.build(social.get("scored", [])),
+			# Bookkeeping for the daily history, popped off before this payload is
+			# returned to anyone. It must not reach a trace, a prompt or the database.
+			_SCORED_KEY: social.get("scored", []),
 			# News sub-signal.
 			"news_sentiment_score": news["sentiment_score"],
 			"news_bullish": news["bullish_posts"],
@@ -133,7 +145,9 @@ class SentimentScout:
 		sym = ticker.upper()
 		social_mentions = self.social_collector.collect([sym]).get(sym, [])
 		news_mentions = self.news_collector.collect([sym], marketaux).get(sym, [])
-		return self._combine_signals(sym, social_mentions, news_mentions)
+		results = {sym: self._combine_signals(sym, social_mentions, news_mentions)}
+		self._record_history(results)
+		return results[sym]
 
 	def analyze_tickers(
 		self, tickers: list[str], marketaux: NewsMode | str = NewsMode.OFF
@@ -150,7 +164,30 @@ class SentimentScout:
 				news_by_ticker.get(ticker, []),
 			)
 
+		self._record_history(results)
 		return results
+
+	def _record_history(self, results: dict[str, dict[str, Any]]) -> None:
+		"""Write the day rows for this run, then strip the bookkeeping key.
+
+		The pop happens whether or not the history is enabled, so the payload leaving
+		the scout is the same shape either way and no caller has to know this ran.
+
+		Note what is NOT here: any check for whether a ticker has stored history, and
+		any branch that behaves differently for one that does not. That conditional is
+		what made a new ticker expensive inside the run in the build that was reverted,
+		and it is why filling a ticker's history lives in ss_backfill, on a scheduler
+		job and behind a GET, where nothing waits on it.
+
+		One write for the whole run, not one per ticker. Failure is swallowed inside
+		``SocialHistory.record``, because the history is a view on work that has already
+		been done and must never cost the run its scores.
+		"""
+		scored_by_ticker = {
+			ticker: payload.pop(_SCORED_KEY, []) for ticker, payload in results.items()
+		}
+		if self.history.enabled:
+			self.history.record(scored_by_ticker)
 
 
 def analyze_ticker(ticker: str, marketaux: str = "off") -> dict[str, Any]:

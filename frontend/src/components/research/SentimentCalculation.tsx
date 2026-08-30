@@ -137,11 +137,18 @@ export default function SentimentCalculation({
     : typeof newsScore === "number"
       ? newsScore
       : 0;
-  const socialSub = social.reconstructable
-    ? social.avg
-    : typeof socialScore === "number"
+  // News is still reconstructed from what is on screen, because every article that
+  // fed the score is listed. Social is not, and must not be: the row now keeps only
+  // the most influential handful of posts, with the full per-day lists on the social
+  // page, so rebuilding the average from what is visible would quietly show a wrong
+  // number in the one panel whose entire purpose is showing the real working.
+  // The stored sub-score is the one computed from every post.
+  const socialSub =
+    typeof socialScore === "number"
       ? socialScore
-      : 0;
+      : social.reconstructable
+        ? social.avg
+        : 0;
 
   // Mirror backend _blend_sentiment: fall back to whichever source has data.
   let blended: number;
@@ -234,9 +241,7 @@ export default function SentimentCalculation({
               </p>
               <div className="flex items-center justify-between gap-3 text-[12px] font-semibold text-brand-fg">
                 <span className="font-normal text-brand-muted-fg">
-                  Engagement- and recency-weighted average of{" "}
-                  {socialPosts.length}{" "}
-                  {socialPosts.length === 1 ? "post" : "posts"}
+                  Engagement-weighted average of every post scored in the window
                 </span>
                 <span className="font-mono tabular-nums">
                   {Math.round(socialSub)} / 100
@@ -244,9 +249,11 @@ export default function SentimentCalculation({
               </div>
               <p className="text-[11px] text-brand-muted-fg">
                 Posts with more likes and reshares pull the average harder, on a
-                log-dampened scale so one viral post cannot dominate. Newer posts
-                also count for more. Both are already baked into each post's
-                Influence in the list below.
+                log-dampened scale so one viral post cannot dominate. That is already
+                baked into each post's Influence in the list below. Only the most
+                influential posts are listed here, so they will not add up to the
+                number above on their own; the full day by day lists are on the social
+                sentiment page.
               </p>
             </div>
           )}

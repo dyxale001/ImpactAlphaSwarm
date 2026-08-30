@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import type { SocialPost } from "../../components/research/SocialPosts";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -174,4 +175,38 @@ export async function reactivateOwnAccount() {
 
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+export interface SentimentHistoryPoint {
+  date: string;
+  /** 0-100, or null on a day with no posts. Null is a gap, not a zero. */
+  score: number | null;
+  post_count: number;
+  bullish: number;
+  bearish: number;
+  /** That day's most influential posts, same shape as SocialPost. */
+  top_posts: SocialPost[];
+  /** Reserved. The written overview is not built yet. */
+  summary: string | null;
+}
+
+export interface SentimentHistoryResponse {
+  ticker: string;
+  points: SentimentHistoryPoint[];
+  /**
+   * True when this ticker has never had its history walked and the backend has just
+   * started doing so, having already answered this request. The walk takes a few
+   * seconds; poll again rather than concluding there is no data.
+   */
+  seeding?: boolean;
+}
+
+// Daily social sentiment for the trend chart. Reads rows the runs already wrote, so
+// it never touches StockTwits on the way to a response and never waits on an AI run.
+// Informational, so no auth token is needed.
+export async function getSentimentHistory(ticker: string, days = 7) {
+  const res = await fetch(
+    `${BASE}/api/assets/${encodeURIComponent(ticker)}/sentiment-history?days=${days}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<SentimentHistoryResponse>;
 }
