@@ -432,7 +432,7 @@ export async function submitLearningQuiz({
       id: previousProgress?.id ?? article.id,
       user_id: userId,
       article_id: article.id,
-      status,
+      status: status as LearningProgress["status"],
       quiz_score: savedQuizScore,
     },
   };
