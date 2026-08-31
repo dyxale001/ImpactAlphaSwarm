@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Eye, RefreshCw, ArrowUpDown, TrendingUp, Search, Sparkles } from 'lucide-react'
 import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
 import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
@@ -95,7 +95,25 @@ export default function WatchlistPage() {
   } = useWatchlistData()
 
   const [showSortMenu, setShowSortMenu] = useState(false)
-  const [searchMode, setSearchMode] = useState<'ticker' | 'ask'>('ticker')
+  // Session-scoped, same reasoning as useAskAlphaSwarm's history persistence:
+  // this page unmounts on route navigation, so plain useState reset the tab
+  // choice back to 'ticker' every time the user came back. sessionStorage
+  // survives that unmount/remount within the same browser tab.
+  const [searchMode, setSearchMode] = useState<'ticker' | 'ask'>(() => {
+    try {
+      const stored = window.sessionStorage.getItem('watchlist.searchMode')
+      return stored === 'ask' ? 'ask' : 'ticker'
+    } catch {
+      return 'ticker'
+    }
+  })
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem('watchlist.searchMode', searchMode)
+    } catch {
+      // best-effort (private browsing / storage disabled)
+    }
+  }, [searchMode])
   const ask = useAskAlphaSwarm()
 
   const sortLabels: Record<SortOption, string> = {

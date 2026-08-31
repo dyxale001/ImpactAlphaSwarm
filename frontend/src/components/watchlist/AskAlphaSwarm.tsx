@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, Loader2, Sparkles, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { type AskResult } from '../../hooks/useAskAlphaSwarm'
 
 interface Props {
@@ -57,6 +57,13 @@ export default function AskAlphaSwarm({ query, setQuery, result, loading, error,
         </button>
       </form>
 
+      {/* Persistent, subtle disclaimer — shown once for the feature rather
+          than appended to every individual answer. */}
+      <p className="text-[10px] text-brand-muted-fg/70">
+        Ask AlphaSwarm explains AlphaSwarm's own data and general financial
+        education — it's informational only, not personalised financial advice.
+      </p>
+
       {/* Safe suggested questions */}
       {!result && !loading && (
         <div className="flex flex-wrap gap-2">
@@ -85,10 +92,35 @@ export default function AskAlphaSwarm({ query, setQuery, result, loading, error,
         <div className="soft-card p-4 space-y-3" style={{ animation: 'slide-up 0.3s ease-out forwards' }}>
           <p className="text-sm text-brand-fg leading-relaxed whitespace-pre-line">{result.narration}</p>
 
-          {result.source && result.source !== 'none' && (
-            <p className="text-[10px] uppercase tracking-wider text-brand-muted-fg font-semibold">
-              Source: {result.source.replace(/_/g, ' ')}
-            </p>
+          {/* Exact, structured source(s) — used for externally-grounded
+              Learning Centre answers so the user can verify the claim
+              themselves, not just see a short internal label. */}
+          {result.sources.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wider text-brand-muted-fg font-semibold">Source</p>
+              {result.sources.map(s => (
+                <a
+                  key={s.url}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-1.5 text-xs text-brand-primary hover:underline"
+                >
+                  <ExternalLink className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">{s.publisher}</span>
+                    {' — '}
+                    <span className="italic">{s.title}</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            result.source && result.source !== 'none' && (
+              <p className="text-[10px] uppercase tracking-wider text-brand-muted-fg font-semibold">
+                Source: {result.source.replace(/_/g, ' ')}
+              </p>
+            )
           )}
 
           {hasDataToShow && (
