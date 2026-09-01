@@ -438,3 +438,253 @@ class TestUniverses:
     def test_every_industry_keyword_maps_to_a_real_universe(self):
         for universe, _keywords in ad.INDUSTRY_KEYWORDS:
             assert universe in ad.UNIVERSES
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# The funnel, the chain and the pool
+# ═════════════════════════════════════════════════════════════════════════════
+# These exercise the orchestration that used to be unreachable from a test: every
+# stage reached the network directly, so there was no seam to stand in front of.
+# Each stage now names a collaborator, which is what lets these run offline.
+
+from src.agents.asset_discovery import (  # noqa: E402
+    CandidatePool,
+    CandidateSource,
+    ClassificationChain,
+    Classifier,
+    DiscoveryRun,
+    Gate,
+    IndustryClassifier,
+    LiquidityGate,
+    ProfileGate,
+    ResearchabilityGate,
+    SourceFactory,
+    SymbolDirectoryGate,
+    ValidationFunnel,
+)
+
+
+class FakeFinnhub:
+    """Stands in for FinnhubClient with canned answers."""
+
+    def __init__(self, directory=None, profiles=None, news=None):
+        self._directory = directory if directory is not None else set()
+        self._profiles = profiles or {}
+        self._news = news or {}
+        self.profile_calls = []
+
+    def us_common_stock_set(self):
+        return self._directory
+
+    def profile(self, ticker):
+        self.profile_calls.append(ticker)
+        return self._profiles.get(ticker, a_profile())
+
+    def trusted_news_count(self, ticker, now=None):
+        return self._news.get(ticker, 5)
+
+
+class FakeLiquidity:
+    def __init__(self, volumes=None):
+        self._volumes = volumes or {}
+
+    def avg_dollar_volume(self, ticker):
+        return self._volumes.get(ticker, 5e8)
+
+
+def a_funnel(finnhub=None, liquidity=None):
+    finnhub = finnhub or FakeFinnhub()
+    return ValidationFunnel(
+        gates=[
+            SymbolDirectoryGate(),
+            ProfileGate(finnhub),
+            LiquidityGate(liquidity or FakeLiquidity()),
+            ResearchabilityGate(finnhub),
+        ],
+        finnhub=finnhub,
+    )
+
+
+class TestValidationFunnel:
+    def test_a_clean_candidate_survives_every_gate(self):
+        survivors, rejections = a_funnel().run({"AAA": a_candidate("AAA")}, NOW)
+        assert [c.ticker for c in survivors] == ["AAA"]
+        assert rejections == []
+
+    def test_a_ticker_outside_the_directory_is_rejected_at_the_first_gate(self):
+        finnhub = FakeFinnhub(directory={"BBB"})
+        survivors, rejections = a_funnel(finnhub).run({"AAA": a_candidate("AAA")}, NOW)
+        assert survivors == []
+        assert rejections == [
+            {"ticker": "AAA", "stage": "symbol_directory", "reason": "not_us_common_stock"}
+        ]
+
+    def test_an_empty_directory_stands_the_gate_down_rather_than_failing_everything(self):
+        # An empty set means the directory fetch failed, not that nothing is listed.
+        survivors, _ = a_funnel(FakeFinnhub(directory=set())).run({"AAA": a_candidate("AAA")}, NOW)
+        assert len(survivors) == 1
+
+    def test_the_first_gate_to_object_stops_the_candidate(self):
+        finnhub = FakeFinnhub(directory={"AAA"}, profiles={"AAA": a_profile(ipo="2026-08-01")})
+        _survivors, rejections = a_funnel(finnhub).run({"AAA": a_candidate("AAA")}, NOW)
+        assert [r["stage"] for r in rejections] == ["profile"]
+
+    def test_a_rejected_candidate_costs_nothing_downstream(self):
+        # Rejected at the directory, so its profile is never fetched.
+        finnhub = FakeFinnhub(directory={"BBB"})
+        a_funnel(finnhub).run({"AAA": a_candidate("AAA")}, NOW)
+        assert finnhub.profile_calls == []
+
+    def test_an_illiquid_candidate_is_rejected(self):
+        liquidity = FakeLiquidity({"AAA": 1e6})
+        _survivors, rejections = a_funnel(liquidity=liquidity).run({"AAA": a_candidate("AAA")}, NOW)
+        assert rejections[0]["stage"] == "liquidity"
+        assert rejections[0]["reason"].startswith("illiquid")
+
+    def test_an_unmeasurable_volume_fails_open(self):
+        # A data hiccup must not drop a validated large cap.
+        liquidity = FakeLiquidity({"AAA": None})
+        survivors, rejections = a_funnel(liquidity=liquidity).run({"AAA": a_candidate("AAA")}, NOW)
+        assert len(survivors) == 1 and rejections == []
+
+    def test_an_uncovered_candidate_is_rejected(self):
+        finnhub = FakeFinnhub(news={"AAA": 0})
+        _survivors, rejections = a_funnel(finnhub).run({"AAA": a_candidate("AAA")}, NOW)
+        assert rejections[0] == {
+            "ticker": "AAA", "stage": "researchability", "reason": "no_trusted_news"
+        }
+
+    def test_surviving_candidates_carry_the_facts_the_gates_fetched(self):
+        finnhub = FakeFinnhub(news={"AAA": 4})
+        liquidity = FakeLiquidity({"AAA": 2.5e8})
+        survivors, _ = a_funnel(finnhub, liquidity).run({"AAA": a_candidate("AAA")}, NOW)
+        cand = survivors[0]
+        assert cand.name == "Example Corp"
+        assert cand.industry == "Semiconductors"
+        assert cand.dollar_volume == 2.5e8
+        assert cand.news_count == 4
+
+    def test_candidates_are_processed_in_ticker_order(self):
+        finnhub = FakeFinnhub()
+        candidates = {t: a_candidate(t) for t in ("CCC", "AAA", "BBB")}
+        a_funnel(finnhub).run(candidates, NOW)
+        assert finnhub.profile_calls == ["AAA", "BBB", "CCC"]
+
+    def test_an_extra_gate_needs_no_change_to_the_funnel(self):
+        class AlwaysRejects(Gate):
+            stage = "custom"
+
+            def check(self, candidate, ctx):
+                return "nope"
+
+        funnel = ValidationFunnel(gates=[AlwaysRejects()], finnhub=FakeFinnhub())
+        survivors, rejections = funnel.run({"AAA": a_candidate("AAA")}, NOW)
+        assert survivors == []
+        assert rejections[0]["stage"] == "custom"
+
+
+class TestClassificationChain:
+    def test_the_static_map_places_what_it_can(self):
+        cands = [a_candidate("AAA", industry="Software")]
+        ClassificationChain(classifiers=[IndustryClassifier()]).apply(cands)
+        assert cands[0].universe == "Technology"
+
+    def test_what_the_map_cannot_place_falls_through_to_the_next_classifier(self):
+        class FakeLlm(Classifier):
+            def classify(self, candidates):
+                return {c.ticker: "AI & Robotics" for c in candidates}
+
+        cands = [a_candidate("AAA", industry="Software"), a_candidate("BBB", industry="Aerospace")]
+        ClassificationChain(classifiers=[IndustryClassifier(), FakeLlm()]).apply(cands)
+        assert cands[0].universe == "Technology"     # placed by the map
+        assert cands[1].universe == "AI & Robotics"  # placed by the fallback
+
+    def test_the_expensive_classifier_only_sees_the_residue(self):
+        seen = []
+
+        class RecordingLlm(Classifier):
+            def classify(self, candidates):
+                seen.extend(c.ticker for c in candidates)
+                return {}
+
+        cands = [a_candidate("AAA", industry="Software"), a_candidate("BBB", industry="Aerospace")]
+        ClassificationChain(classifiers=[IndustryClassifier(), RecordingLlm()]).apply(cands)
+        assert seen == ["BBB"]
+
+    def test_a_candidate_nothing_can_place_is_left_unset(self):
+        cands = [a_candidate("AAA", industry="Aerospace")]
+        ClassificationChain(classifiers=[IndustryClassifier()]).apply(cands)
+        assert cands[0].universe is None
+
+
+class TestCandidatePool:
+    def test_the_same_ticker_from_two_sources_is_one_candidate(self):
+        pool = CandidatePool()
+        pool.add("AAA", "stocktwits_trending", 100)
+        pool.add("AAA", "llm")
+        assert list(pool.candidates) == ["AAA"]
+        assert pool.candidates["AAA"].sources == ["stocktwits_trending", "llm"]
+
+    def test_a_repeated_source_is_recorded_once(self):
+        pool = CandidatePool()
+        pool.add("AAA", "llm")
+        pool.add("AAA", "llm")
+        assert pool.candidates["AAA"].sources == ["llm"]
+
+    def test_the_highest_watchlist_count_wins(self):
+        pool = CandidatePool()
+        pool.add("AAA", "stocktwits_trending", 50)
+        pool.add("AAA", "stocktwits_trending", 120)
+        pool.add("AAA", "stocktwits_trending", 10)
+        assert pool.candidates["AAA"].watchlist_count == 120
+
+    def test_an_unsurveyed_universe_is_recorded(self):
+        pool = CandidatePool()
+        pool.mark_unsurveyed("Green Energy")
+        assert pool.unsurveyed == {"Green Energy"}
+
+
+class TestGathering:
+    def test_every_source_contributes_to_one_pool(self):
+        class FakeSource(CandidateSource):
+            def __init__(self, name, tickers):
+                self.name = name
+                self.tickers = tickers
+
+            def contribute(self, pool):
+                for t in self.tickers:
+                    pool.add(t, self.name)
+
+        run = DiscoveryRun(sources=[FakeSource("a", ["AAA"]), FakeSource("b", ["BBB", "AAA"])])
+        pool = run.gather()
+        assert set(pool.candidates) == {"AAA", "BBB"}
+        assert pool.candidates["AAA"].sources == ["a", "b"]
+
+    def test_the_factory_always_includes_trending(self):
+        names = [s.name for s in SourceFactory.from_config()]
+        assert "stocktwits_trending" in names
+
+    def test_the_factory_respects_the_gap_fill_switch(self, monkeypatch):
+        monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", False)
+        assert [s.name for s in SourceFactory.from_config()] == ["stocktwits_trending"]
+        monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", True)
+        assert "llm" in [s.name for s in SourceFactory.from_config()]
+
+
+class TestGroupByUniverse:
+    def test_candidates_are_grouped_under_their_universe(self):
+        cands = [a_candidate("AAA", universe="Technology"), a_candidate("BBB", universe="Finance")]
+        grouped = DiscoveryRun(sources=[]).group_by_universe(cands, [])
+        assert [c.ticker for c in grouped["Technology"]] == ["AAA"]
+        assert [c.ticker for c in grouped["Finance"]] == ["BBB"]
+
+    def test_an_unclassified_candidate_is_rejected_rather_than_dropped_silently(self):
+        rejections = []
+        DiscoveryRun(sources=[]).group_by_universe([a_candidate("AAA", universe=None)], rejections)
+        assert rejections == [
+            {"ticker": "AAA", "stage": "classification", "reason": "no_universe"}
+        ]
+
+    def test_every_universe_is_present_even_when_empty(self):
+        grouped = DiscoveryRun(sources=[]).group_by_universe([], [])
+        assert set(grouped) == set(ad.UNIVERSES)
