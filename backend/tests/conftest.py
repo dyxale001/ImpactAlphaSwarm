@@ -51,6 +51,23 @@ _PINNED_DEFAULTS = {
     "NEWS_TIER1_SHARE": "0.6",
     "NEWS_TIER2_SHARE": "0.3",
     "NEWS_TIER3_SHARE": "0.1",
+    # asset_discovery.py — the funnel gates, the score blend and the hysteresis
+    # constants. `.env` sets DISCOVERY_ENABLED / DISCOVERY_SHADOW_MODE, which this
+    # module never reads, but pin the rest so a later addition to `.env` cannot
+    # move a threshold underneath these expectations.
+    "DISCOVERY_MAX_NEW_PER_NIGHT": "5",
+    "DISCOVERY_MIN_MARKET_CAP_USD": "2e9",
+    "DISCOVERY_MIN_IPO_AGE_DAYS": "180",
+    "DISCOVERY_MIN_AVG_DOLLAR_VOL": "1e7",
+    "DISCOVERY_MIN_NEWS_ARTICLES": "1",
+    "DISCOVERY_NEWS_LOOKBACK_DAYS": "7",
+    "DISCOVERY_DECAY_FACTOR": "0.7",
+    "DISCOVERY_RETIRE_THRESHOLD": "0.1",
+    "DISCOVERY_W_TREND": "0.5",
+    "DISCOVERY_W_NEWS": "0.3",
+    "DISCOVERY_W_LIQ": "0.2",
+    "DISCOVERY_NEWS_SCORE_CAP": "10",
+    "DISCOVERY_LIQ_SCORE_CAP": "5e8",
 }
 
 for _key, _value in _PINNED_DEFAULTS.items():
