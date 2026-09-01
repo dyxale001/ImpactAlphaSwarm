@@ -95,6 +95,7 @@ export default function SocialSentimentPage() {
       ) : (
         <>
           <SummaryStrip
+            accent
             pills={[
               {
                 label: "Social score",

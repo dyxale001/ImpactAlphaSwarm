@@ -86,20 +86,37 @@ export function SourcePageHeader({
 // Grid of stat pills so the page stands alone without going back.
 export function SummaryStrip({
   pills,
+  accent = false,
 }: {
   pills: { label: string; value: React.ReactNode }[];
+  // Colours the figures brand forest green, on a soft tint of the same. Opt in rather
+  // than the default: it belongs on the page that carries the trend chart, and on the
+  // news page there is nothing for it to agree with.
+  //
+  // forest-700 rather than the forest-500 the chart draws its bars in. The bars are
+  // deliberately recessive against a dark panel; the same tone on a light card at text
+  // size reads washed out, and these are the figures the page is about.
+  accent?: boolean;
 }) {
   return (
     <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
       {pills.map((pill) => (
         <div
           key={pill.label}
-          className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
+          className={`rounded-2xl border px-4 py-3 ${
+            accent
+              ? "border-brand-primary/25 bg-brand-primary/5"
+              : "border-brand-border/60 bg-brand-bg/55"
+          }`}
         >
           <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
             {pill.label}
           </div>
-          <div className="text-sm font-semibold text-brand-fg">
+          <div
+            className={`text-sm font-semibold ${
+              accent ? "text-brand-primary" : "text-brand-fg"
+            }`}
+          >
             {pill.value}
           </div>
         </div>
@@ -216,9 +233,13 @@ export function SortToggle({
         <button
           key={opt.key}
           onClick={() => onChange(opt.key)}
+          // Selected uses the accent green as a fill behind dark text, the same way
+          // the Discovered chip and the Watched chip do. A washed 15% tint of the
+          // primary read as disabled next to those, which is the opposite of what a
+          // selected control should say.
           className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
             value === opt.key
-              ? "bg-brand-primary/15 text-brand-primary"
+              ? "bg-brand-accent text-brand-fg"
               : "text-brand-muted-fg hover:text-brand-fg"
           }`}
         >
@@ -230,9 +251,13 @@ export function SortToggle({
 }
 
 // Bordered list container shared by both pages' source rows.
+//
+// brand-accent, the same outline the Reasoning Trace and Why It Ranks Here panels use,
+// so a list of evidence is framed the way the conclusions drawn from it are. Kept in
+// step with those: if they move, this moves.
 export function SourceList({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-x-auto">
+    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-accent bg-brand-bg/40 overflow-x-auto">
       {children}
     </ul>
   );

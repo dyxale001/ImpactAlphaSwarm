@@ -22,6 +22,20 @@ export function formatDay(date: string): string {
   });
 }
 
+// Whether a day key falls on a Saturday or Sunday, in UTC.
+//
+// Parsed as UTC midnight rather than through the local timezone, for the same reason
+// the keys themselves are UTC: `new Date("2026-08-29")` is already UTC, but
+// `getDay()` would read it back in local time and shift the answer by a day for
+// anyone far enough east or west. `getUTCDay()` keeps the question and the answer in
+// the same timezone the bucket was built in.
+export function isWeekend(date: string): boolean {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const day = parsed.getUTCDay();
+  return day === 0 || day === 6;
+}
+
 // The same, but naming the day when it is one the reader thinks of by name.
 export function dayLabel(date: string): string {
   if (date === todayKey()) return "Today";

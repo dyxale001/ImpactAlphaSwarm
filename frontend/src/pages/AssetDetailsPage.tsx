@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -24,12 +25,13 @@ import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import NewsArticles from "../components/research/NewsArticles";
 import SocialPosts from "../components/research/SocialPosts";
 import SentimentCalculation from "../components/research/SentimentCalculation";
-import { SentimentSparkline } from "../components/research/SentimentTrendChart";
+import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import {
   NEWS_LOOKBACK_DAYS,
   NEWS_WEIGHT_PCT,
+  SOCIAL_HISTORY_DAYS,
   SOCIAL_LOOKBACK_DAYS,
   SOCIAL_WEIGHT_PCT,
 } from "../data/sentimentMethodology";
@@ -63,7 +65,7 @@ function SignalBar({
         <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-2 min-w-0 flex-wrap">
           {label}
           {weightPct != null && (
-            <span className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium">
+            <span className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-fg font-medium">
               {weightPct}% weight
             </span>
           )}
@@ -95,13 +97,62 @@ function ExplainerLink({
   return (
     <Link
       to={`/asset/${ticker}/how-it-works#${section}`}
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-primary/90"
       title="How is this calculated?"
     >
       <HelpCircle className="w-3.5 h-3.5" />
       <span className="hidden sm:inline">How is this calculated?</span>
       <span className="sm:hidden">How?</span>
     </Link>
+  );
+}
+
+type AnalysisTab = "ranking" | "sentiment" | "quant";
+
+// The page carried three unrelated arguments stacked vertically: why the asset placed
+// where it did, what the sentiment sources say, and what the price history measures.
+// Read end to end that is a long scroll in which the reader loses which question they
+// were answering, so each gets its own panel and only one is on screen at a time.
+function AnalysisTabs({
+  value,
+  onChange,
+  rankingLabel,
+}: {
+  value: AnalysisTab;
+  onChange: (tab: AnalysisTab) => void;
+  rankingLabel: string;
+}) {
+  const tabs: { key: AnalysisTab; label: string }[] = [
+    { key: "ranking", label: rankingLabel },
+    { key: "sentiment", label: "Sentiment" },
+    { key: "quant", label: "Quant" },
+  ];
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Analysis sections"
+      // self-start, not just inline-flex: the parent is a flex column, and a flex
+      // child stretches to the full line width unless told otherwise, which turned
+      // the pill into a full page-width bar.
+      className="self-start inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          role="tab"
+          aria-selected={value === tab.key}
+          onClick={() => onChange(tab.key)}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            value === tab.key
+              ? "bg-brand-accent text-brand-fg"
+              : "text-brand-muted-fg hover:text-brand-fg"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -131,7 +182,10 @@ function SectionCard({
             {title}
             {badge}
           </p>
-          <p className="text-sm text-brand-muted-fg">{description}</p>
+          {/* Same weight as the body text in the panels below, not the muted grey the
+              label above it uses. It is a sentence the reader is meant to read, and at
+              muted it sat closer to the eyebrow label than to the prose it introduces. */}
+          <p className="text-sm text-brand-fg/90">{description}</p>
         </div>
         {action}
       </div>
@@ -162,10 +216,21 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
-  // Called before the early returns below, as every hook must be. It loads
-  // independently of the AI run, so the card renders without waiting on it and the
-  // sparkline simply appears when the series arrives.
-  const sentimentHistory = useSentimentHistory(ticker);
+
+  // Both called before the early returns below, as every hook must be. The history
+  // loads independently of the AI run, so the card renders without waiting on it and
+  // the chart fills itself in when the series arrives.
+  const history = useSentimentHistory(ticker);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [tab, setTab] = useState<AnalysisTab>("ranking");
+
+  // Default to the most recent day that actually carries posts, not simply the last
+  // day in the window: if the last run was two days ago there is nothing under today's
+  // key, and defaulting there would show an empty list and read as no chatter at all.
+  const defaultDay = useMemo(() => {
+    const withPosts = history.points.filter((p) => (p.top_posts?.length ?? 0) > 0);
+    return withPosts[withPosts.length - 1]?.date ?? null;
+  }, [history.points]);
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -188,6 +253,20 @@ export default function AssetDetailsPage() {
   const reasoningTrace = recommendation?.reasoning_trace ?? "";
   const hypePenalty = recommendation?.hype_penalty ?? 0;
   const riskPenalty = recommendation?.risk_penalty ?? 0;
+
+  // The day the social block is describing. Selecting a bar swaps the counts and the
+  // posts under it, so the chart and the list always refer to the same day rather than
+  // sitting together describing different ones.
+  const activeDay = selectedDay ?? defaultDay;
+  const dayPoint = history.points.find((p) => p.date === activeDay) ?? null;
+
+  // Falls back to the latest run's posts when there is no stored day yet, so a ticker
+  // whose history is still being walked shows the posts it does have rather than an
+  // empty list under a "building history" chart.
+  const dayPosts =
+    dayPoint?.top_posts?.length
+      ? dayPoint.top_posts
+      : (recommendation?.social_posts ?? []);
 
   // Disclosed ranking factors (migration 010). Absent on legacy rows, which keep
   // the confidence-score display.
@@ -278,6 +357,19 @@ export default function AssetDetailsPage() {
         </div>
 
         {recommendation ? (
+          <AnalysisTabs
+            value={tab}
+            onChange={setTab}
+            rankingLabel={showScorecard ? "Why it ranks here" : "Assessment"}
+          />
+        ) : null}
+      </div>
+
+      {/* The three panels are siblings at page level so the gap under the tab bar is
+          the same whichever one is showing. Nested one level deeper, ranking sat in
+          the header's flex gap and the other two in the page's, and the spacing
+          jumped as you switched tabs. */}
+      {recommendation && tab === "ranking" ? (
           <div className="soft-card w-full p-5 space-y-5">
             {/* The top card had no explainer of its own, even though it carries the
                 headline judgement. It gets the ranking walkthrough. */}
@@ -319,7 +411,7 @@ export default function AssetDetailsPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4">
+                  <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
                     <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
                       <BrainCircuit className="w-3 h-3 text-brand-primary" />
                       Reasoning Trace
@@ -334,7 +426,7 @@ export default function AssetDetailsPage() {
                       penalties — the mechanism convergence replaced — so it
                       described arithmetic that no longer happens. */}
                   {showScorecard ? (
-                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Scale className="w-3 h-3 text-brand-primary" />
                         What moved this asset
@@ -364,7 +456,7 @@ export default function AssetDetailsPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Flame className="w-3 h-3 text-brand-primary" />
                         Risk and Hype
@@ -396,16 +488,17 @@ export default function AssetDetailsPage() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="soft-card w-full p-5">
-            <p className="text-brand-muted-fg text-sm italic">
-              No recent AI analysis found for this asset.
-            </p>
-          </div>
-        )}
-      </div>
+        ) : null}
 
-      {recommendation && (
+      {!recommendation && (
+        <div className="soft-card w-full p-5">
+          <p className="text-brand-muted-fg text-sm italic">
+            No recent AI analysis found for this asset.
+          </p>
+        </div>
+      )}
+
+      {recommendation && tab === "sentiment" && (
         <>
           <SectionCard
             title="Sentiment Data"
@@ -413,7 +506,7 @@ export default function AssetDetailsPage() {
             icon={MessageSquare}
             badge={
               <span
-                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium"
+                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-fg font-medium"
                 title={`News from the last ${NEWS_LOOKBACK_DAYS} days and social posts from the last ${SOCIAL_LOOKBACK_DAYS} days. Older items are not counted at all. The trend chart covers a longer window than the score does, because history is filled in outside the run.`}
               >
                 News {NEWS_LOOKBACK_DAYS}d · social {SOCIAL_LOOKBACK_DAYS}d
@@ -478,40 +571,45 @@ export default function AssetDetailsPage() {
                 />
               </div>
 
-              {/* Social sub-signal. */}
+              {/* Social sub-signal.
+                  Unlike news, this one has a shape over time, so the card shows the
+                  week rather than a single bar. The bullish and bearish counts that
+                  used to sit here are gone: the chart already carries polarity in the
+                  score line, and two totals for a different window than the one on
+                  screen was the part that made this block misdescribe itself.
+                  The header score covers the last SOCIAL_LOOKBACK_DAYS days; the chart
+                  covers SOCIAL_HISTORY_DAYS. */}
               <div className="space-y-2">
-                <div className="flex items-end justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <SignalBar
-                      label="Social"
-                      weightPct={SOCIAL_WEIGHT_PCT}
-                      score={
-                        recommendation.social_sentiment_score ??
-                        recommendation.sentiment_score
-                      }
-                    />
-                  </div>
-                  {/* A prompt to look closer rather than the thing being studied.
-                      Renders nothing until there are a few days to compare, so a
-                      fresh ticker shows the bar alone instead of a stub. */}
-                  <SentimentSparkline
-                    points={sentimentHistory.points}
-                    daysWithData={sentimentHistory.daysWithData}
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <MetricPill
-                    label="Bullish posts"
-                    value={formatMetric(recommendation.bullish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Bearish posts"
-                    value={formatMetric(recommendation.bearish_posts, 0)}
-                  />
-                </div>
+                <SignalBar
+                  label="Social"
+                  weightPct={SOCIAL_WEIGHT_PCT}
+                  score={
+                    recommendation.social_sentiment_score ??
+                    recommendation.sentiment_score
+                  }
+                />
+                {/* The bar and the chart are different windows, and without saying so
+                    the bar reads as a summary of the week below it. It is not: it is
+                    the latest run's score, from the couple of days the run reaches
+                    back. */}
+                <p className="text-[11px] text-brand-muted-fg">
+                  Score is from posts in the last {SOCIAL_LOOKBACK_DAYS} days. The chart
+                  below shows {SOCIAL_HISTORY_DAYS}.
+                </p>
+                <SentimentTrendChart
+                  points={history.points}
+                  daysWithData={history.daysWithData}
+                  isLoading={history.isLoading}
+                  isSeeding={history.isSeeding}
+                  error={history.error}
+                  selectedDay={activeDay}
+                  onSelectDay={setSelectedDay}
+                />
                 <SocialPosts
-                  posts={recommendation.social_posts ?? []}
+                  posts={dayPosts}
                   ticker={asset.ticker}
+                  dayLabel={dayPoint ? dayPoint.date : undefined}
+                  dayTotal={dayPoint?.post_count}
                 />
               </div>
             </div>
@@ -526,16 +624,18 @@ export default function AssetDetailsPage() {
               </span>
             </div>
           </SectionCard>
-
-          <SectionCard
-            title="Quantitative Data"
-            description="What the price history shows: measurements and peer context, not a recommendation."
-            icon={BarChart3}
-            action={<ExplainerLink ticker={asset.ticker} section="quant" />}
-          >
-            <QuantMetricsPanel recommendation={recommendation} />
-          </SectionCard>
         </>
+      )}
+
+      {recommendation && tab === "quant" && (
+        <SectionCard
+          title="Quantitative Data"
+          description="What the price history shows: measurements and peer context, not a recommendation."
+          icon={BarChart3}
+          action={<ExplainerLink ticker={asset.ticker} section="quant" />}
+        >
+          <QuantMetricsPanel recommendation={recommendation} />
+        </SectionCard>
       )}
 
       {/* This page had no disclaimer of its own — the only not-advice statement on

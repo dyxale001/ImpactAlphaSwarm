@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
 import { SOCIAL_HISTORY_DAYS } from "../../data/sentimentMethodology";
-import { formatDay } from "./sentimentDays";
+import { formatDay, isWeekend } from "./sentimentDays";
 
 // Score and volume share one plot: the day is the unit, and splitting it across two
 // panels made the reader do the join themselves.
@@ -29,7 +29,6 @@ import { formatDay } from "./sentimentDays";
 
 const LINE_COLOR = "#c7f269"; // lime-500, the neon accent
 const BAR_COLOR = "#3e6258"; // forest-500, recessive against the forest panel
-const SPARK_COLOR = "#3e6258"; // the sparkline sits on a LIGHT card, so it stays forest
 const AXIS_TEXT = "rgba(255,255,255,0.55)";
 const GRID_LINE = "rgba(255,255,255,0.12)";
 const NEUTRAL_LINE = "rgba(255,255,255,0.28)";
@@ -44,6 +43,16 @@ const VOLUME_HEADROOM = 3;
 // day the posts below it belong to.
 const BAR_SELECTED = "#8fb08a";
 
+// Weekend columns, when the market is shut.
+//
+// Since the window became seven consecutive days rather than five trading ones, two
+// of every seven bars are Saturday and Sunday, and they are reliably the quietest.
+// Without saying why, a reader reasonably concludes interest collapsed. It is drawn
+// as ground rather than as a series: a wash behind the whole column, dimmer than the
+// volume bars in front of it, so it reads as "nothing was open here" rather than as a
+// fourth thing to measure.
+const WEEKEND_BAND = "rgba(255,255,255,0.055)";
+
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
 
@@ -54,6 +63,7 @@ function TrendTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const point: SentimentHistoryPoint = payload[0].payload;
   const loudest = point.top_posts?.[0];
+  const closed = isWeekend(point.date);
 
   return (
     <div
@@ -64,9 +74,26 @@ function TrendTooltip({ active, payload }: any) {
         color: "#f4f7f2",
       }}
     >
-      <div className="font-semibold mb-1">{formatDay(point.date)}</div>
+      <div className="font-semibold mb-1 flex items-center gap-1.5">
+        {formatDay(point.date)}
+        {closed ? (
+          <span
+            className="font-normal rounded-full px-1.5 py-px text-[10px]"
+            style={{ background: "rgba(255,255,255,0.1)", color: AXIS_TEXT }}
+          >
+            Market closed
+          </span>
+        ) : null}
+      </div>
       {point.score === null ? (
-        <div style={{ color: AXIS_TEXT }}>No posts that day</div>
+        // On a weekday an empty day is genuinely no chatter. On a weekend it is
+        // mostly just the market being shut, and saying only "no posts" invites the
+        // reader to read a collapse in interest into a public holiday.
+        <div style={{ color: AXIS_TEXT }}>
+          {closed
+            ? "No posts. Chatter usually thins out while the market is closed."
+            : "No posts that day"}
+        </div>
       ) : (
         <>
           <div className="flex items-center gap-1.5">
@@ -157,15 +184,31 @@ export function SentimentTrendChart({
   }
 
   const busiestDay = Math.max(...points.map((p) => p.post_count), 1);
+  const volumeCeiling = busiestDay * VOLUME_HEADROOM;
+  // The band is a full height value on the volume scale, so it reaches the top of the
+  // plot whatever the busiest day was. Weekdays carry 0, which draws nothing.
+  const plotted = points.map((point) => ({
+    ...point,
+    weekendBand: isWeekend(point.date) ? volumeCeiling : 0,
+  }));
 
   return (
     <div>
       <div className="hero-card overflow-hidden p-4">
-        <div className="h-56">
+        {/* Recharts 3 makes the chart and its bars keyboard focusable, so clicking a
+            day focused them and the browser drew its default outline: a box around the
+            whole plot and another around the bar. Suppressed for pointer focus only.
+            Keyboard focus still shows a ring, because a chart you can tab into and
+            operate needs to say where you are. */}
+        <div className="h-56 [&_*:focus:not(:focus-visible)]:outline-none">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
-              data={points}
+              data={plotted}
               margin={MARGIN}
+              // The weekend wash is meant to read as the whole column being shut, so
+              // it fills its band edge to edge. The volume bars keep their shape
+              // regardless, because maxBarSize caps them well below the band width.
+              barCategoryGap={0}
               // The whole column is the target, not the bar alone: a quiet day's bar
               // is a few pixels tall, and on those days the click matters most.
               // `activeLabel` is the date under the pointer.
@@ -176,6 +219,18 @@ export function SentimentTrendChart({
               }}
               style={onSelectDay ? { cursor: "pointer" } : undefined}
             >
+              {/* First child, because paint order is declaration order and this is
+                  the backdrop: the grid, the bars and the line all sit on top of it. */}
+              <Bar
+                xAxisId="weekend"
+                yAxisId="volume"
+                dataKey="weekendBand"
+                fill={WEEKEND_BAND}
+                isAnimationActive={false}
+                // Wide enough that the band always fills its column however the plot
+                // is resized. maxBarSize is a ceiling, not a width.
+                maxBarSize={9999}
+              />
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={GRID_LINE}
@@ -190,6 +245,12 @@ export function SentimentTrendChart({
                 interval="preserveStartEnd"
                 minTickGap={24}
               />
+              {/* A second, hidden category axis carrying the same days, purely so the
+                  weekend band is its own bar group. Two Bar series on one x-axis are
+                  laid out side by side, which would halve the volume bars to make room
+                  for a backdrop. On its own axis the band gets the full column and the
+                  volume bars are left exactly as they were. */}
+              <XAxis xAxisId="weekend" dataKey="date" hide />
               <YAxis
                 yAxisId="score"
                 domain={[0, 100]}
@@ -206,7 +267,7 @@ export function SentimentTrendChart({
               <YAxis
                 yAxisId="volume"
                 orientation="right"
-                domain={[0, busiestDay * VOLUME_HEADROOM]}
+                domain={[0, volumeCeiling]}
                 hide
               />
               {/* 50 is neutral, so polarity is read by position rather than by
@@ -231,10 +292,18 @@ export function SentimentTrendChart({
                 maxBarSize={38}
                 // Per-bar colour through `shape` rather than <Cell>, which this
                 // version of Recharts deprecates.
+                //
+                // Only geometry is passed through, never the whole prop bag: spreading
+                // it forwards Recharts' own stroke and layout props into the Rectangle,
+                // which is a standing invitation for a stray outline.
                 shape={(props: any) => (
                   <Rectangle
-                    {...props}
+                    x={props.x}
+                    y={props.y}
+                    width={props.width}
+                    height={props.height}
                     radius={[4, 4, 0, 0]}
+                    stroke="none"
                     fill={
                       props.payload?.date === selectedDay
                         ? BAR_SELECTED
@@ -258,79 +327,69 @@ export function SentimentTrendChart({
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+
+        {/* A key, not a paragraph. It sits inside the panel rather than under it so
+            each swatch is the colour actually drawn: the lime is unreadable on the
+            light page behind this card, and the neutral line is white at 28%, which
+            on white is nothing at all. */}
+        <div
+          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-[11px]"
+          style={{ color: AXIS_TEXT }}
+        >
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-3.5 rounded-full"
+              style={{ height: 2.5, background: LINE_COLOR }}
+            />
+            Sentiment
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ background: BAR_COLOR }}
+            />
+            Posts per day
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-3.5"
+              style={{ borderTop: `1px dashed ${NEUTRAL_LINE}` }}
+            />
+            Neutral 50
+          </span>
+          {/* The gap is the one thing here that has no swatch, and it is the thing
+              most easily misread: a break means nobody posted, not a score of zero. */}
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-[3px]">
+              <span
+                className="inline-block w-1.5 rounded-full"
+                style={{ height: 2.5, background: LINE_COLOR }}
+              />
+              <span
+                className="inline-block w-1.5 rounded-full"
+                style={{ height: 2.5, background: LINE_COLOR, opacity: 0.35 }}
+              />
+            </span>
+            Gap means no posts
+          </span>
+          {/* Without this the two quietest columns of every week look like collapsing
+              interest rather than a shut market. The swatch is bordered because the
+              wash alone is too faint to identify at legend size. */}
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{
+                background: WEEKEND_BAND,
+                border: "1px solid rgba(255,255,255,0.18)",
+              }}
+            />
+            Market closed
+          </span>
+          {onSelectDay ? (
+            <span className="sm:ml-auto">Click a day to read its posts</span>
+          ) : null}
+        </div>
       </div>
-
-      <p className="text-xs text-brand-muted-fg mt-2">
-        The line is the daily social sentiment score from StockTwits, 0 to 100 with 50
-        neutral. The bars behind it show how busy each day was relative to the others;
-        hover any day for its exact post count.
-        {onSelectDay ? " Click a day to read that day's posts." : ""}
-      </p>
     </div>
-  );
-}
-
-// Compact form for the asset page, where the trend is a prompt to look closer rather
-// than the thing being studied. Deliberately no axes or tooltip: at this size they
-// would be unreadable, and the full chart is one click away.
-export function SentimentSparkline({
-  points,
-  daysWithData,
-}: {
-  points: SentimentHistoryPoint[];
-  daysWithData: number;
-}) {
-  if (daysWithData < MIN_DAYS_TO_PLOT) return null;
-
-  const plotted = points.filter((p) => p.score !== null);
-  const first = plotted[0]?.score ?? 50;
-  const last = plotted[plotted.length - 1]?.score ?? 50;
-  const width = 120;
-  const height = 28;
-
-  const step = points.length > 1 ? width / (points.length - 1) : width;
-  // One polyline per unbroken run, so a quiet day leaves a gap here too.
-  const runs: string[][] = [];
-  let current: string[] = [];
-  points.forEach((point, index) => {
-    if (point.score === null) {
-      if (current.length) runs.push(current);
-      current = [];
-      return;
-    }
-    const x = index * step;
-    const y = height - (point.score / 100) * height;
-    current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  });
-  if (current.length) runs.push(current);
-
-  return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-label={`Social sentiment moved from ${Math.round(first)} to ${Math.round(last)} over the last ${points.length} days`}
-    >
-      <line
-        x1={0}
-        x2={width}
-        y1={height / 2}
-        y2={height / 2}
-        stroke="var(--color-brand-border)"
-        strokeDasharray="3 3"
-      />
-      {runs.map((run, index) => (
-        <polyline
-          key={index}
-          points={run.join(" ")}
-          fill="none"
-          stroke={SPARK_COLOR}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
-    </svg>
   );
 }

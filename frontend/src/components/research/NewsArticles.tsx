@@ -105,7 +105,7 @@ export default function NewsArticles({
           <span className="text-slate-500 font-medium">T3 {counts[3] ?? 0}</span>
         </span>
       </div>
-      <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-hidden">
+      <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-accent bg-brand-bg/40 overflow-hidden">
         {shown.map((a, i) => (
           <li key={i}>
             <NewsArticleRow article={a} />

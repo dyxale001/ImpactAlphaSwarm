@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ExternalLink, Heart, MessageSquare, Repeat2 } from "lucide-react";
 import PostText from "./PostText";
 import SentimentSignals from "./SentimentSignals";
+import { dayLabel as formatDayLabel } from "./sentimentDays";
 
 export type SocialPost = {
   platform?: string;
@@ -97,11 +98,34 @@ export function SocialPostRow({
 export default function SocialPosts({
   posts,
   ticker,
+  dayLabel: day,
+  dayTotal,
 }: {
   posts: SocialPost[];
   ticker: string;
+  // The day these posts belong to, when they came from a selected bar on the trend
+  // chart rather than from the latest run. Named, because a list that changes when you
+  // click a chart has to say what it changed to.
+  dayLabel?: string;
+  // That day's real post count, which is not the same as how many are kept. A busy day
+  // can score 143 posts while the row holds the top few, and showing the kept number
+  // beside a bar of 143 makes the chart look broken rather than the list look trimmed.
+  dayTotal?: number;
 }) {
-  if (!posts || posts.length === 0) return null;
+  // No posts in the latest run does not mean no history. The run reaches back a couple
+  // of days; the trend page reads a stored week, so a ticker that was quiet since the
+  // last run can still have a chart worth opening. Returning null here would leave the
+  // card with no way through to it, which is why this is a link rather than nothing.
+  if (!posts || posts.length === 0) {
+    return (
+      <Link
+        to={`/asset/${ticker}/social`}
+        className="inline-block text-xs text-brand-primary font-medium hover:underline"
+      >
+        See the daily sentiment trend
+      </Link>
+    );
+  }
 
   const shown = sortPostsByInfluence(posts).slice(0, 5);
 
@@ -109,27 +133,35 @@ export default function SocialPosts({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-          Top posts by influence
+          {day ? `Top posts · ${formatDayLabel(day)}` : "Top posts by influence"}
         </span>
         <span className="text-[11px] text-brand-muted-fg font-medium">
-          StockTwits
+          {dayTotal != null && dayTotal > shown.length
+            ? `${shown.length} of ${dayTotal} · StockTwits`
+            : "StockTwits"}
         </span>
       </div>
-      <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-hidden">
+      <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-accent bg-brand-bg/40 overflow-hidden">
         {shown.map((p, i) => (
           <li key={i}>
             <SocialPostRow post={p} ticker={ticker} />
           </li>
         ))}
       </ul>
-      {posts.length > 5 && (
-        <Link
-          to={`/asset/${ticker}/social`}
-          className="inline-block text-xs text-brand-primary font-medium hover:underline"
-        >
-          Show all {posts.length} posts
-        </Link>
-      )}
+      {/* Always shown, never conditional on how many posts this card happens to hold.
+          It used to render only when there were more than five, which stopped working
+          the moment the stored list was capped at exactly five: the condition could no
+          longer be true, and this was the only route to the trend chart.
+
+          The label no longer counts posts either. This row holds the top few of the
+          latest run; the page it links to holds a daily chart and each day's posts, so
+          a count taken from here would describe neither. */}
+      <Link
+        to={`/asset/${ticker}/social`}
+        className="inline-block text-xs text-brand-primary font-medium hover:underline"
+      >
+        See the daily trend and every post
+      </Link>
     </div>
   );
 }
