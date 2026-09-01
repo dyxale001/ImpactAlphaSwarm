@@ -70,6 +70,82 @@ def scored(day: str, message_id: int, raw: float = 0.5, weight: float = 1.0, hou
 	}
 
 
+# ── the message id survives scoring ──────────────────────────────────────────
+
+
+class NoGcp:
+	"""Stands in for the metered API, so nothing here reaches the network."""
+
+	def score(self, text):
+		return None
+
+	def score_many(self, texts):
+		return {}
+
+
+def test_the_scorer_carries_the_message_id_onto_the_scored_entry():
+	"""The regression that broke this feature in production, at its source.
+
+	``scored()`` above is a fixture, and it has carried message_id since the day it was
+	written. ``MentionScorer.score`` did not: it copied ten other fields off the mention
+	and quietly dropped this one. So every test in this file passed against a shape the
+	real code never produced, while every day row written in production carried a high
+	water mark of zero, and the accumulate RPC discarded every write after the first for
+	a given day. Nothing raised, anywhere.
+
+	This asserts against the real scorer for exactly that reason. A fixture cannot
+	defend a shape it invents.
+	"""
+	from src.utils.ss_models import SocialMention
+	from src.utils.ss_scoring import EngagementPriority
+
+	scorer = MentionScorer(cfg(gcp_top_n=0), gcp=NoGcp())
+	mentions = [
+		SocialMention(ticker="AAPL", text="calls printing", source="stocktwits:a", message_id=770),
+		SocialMention(ticker="AAPL", text="heading to zero", source="stocktwits:b", message_id=771),
+	]
+
+	result = scorer.score(mentions, EngagementPriority())
+	assert [item["message_id"] for item in result["scored"]] == [770, 771]
+
+
+def test_a_news_mention_scores_with_a_null_id_rather_than_no_key():
+	"""News carries no id and nothing dedupes it. The key still has to be present and
+	None: the day builder asks ``is not None``, and an absent key would make that a
+	KeyError on the one code path news and social share."""
+	from src.utils.ss_models import SocialMention
+	from src.utils.ss_scoring import RecencyPriority
+
+	scorer = MentionScorer(cfg(gcp_top_n=0), gcp=NoGcp())
+	article = SocialMention(ticker="AAPL", text="Apple beats estimates", source="finnhub:reuters")
+
+	result = scorer.score([article], RecencyPriority())
+	assert result["scored"][0]["message_id"] is None
+
+
+def test_a_day_row_built_from_real_scorer_output_carries_a_real_mark():
+	"""The two halves joined up. A zero mark here is what froze every day in production,
+	so this walks the actual seam rather than trusting either side alone."""
+	from src.utils.ss_models import SocialMention
+	from src.utils.ss_scoring import EngagementPriority
+
+	scorer = MentionScorer(cfg(gcp_top_n=0), gcp=NoGcp())
+	mentions = [
+		SocialMention(
+			ticker="AAPL",
+			text=f"post {i}",
+			source=f"stocktwits:u{i}",
+			created_at="2026-08-28T12:00:00+00:00",
+			message_id=i,
+		)
+		for i in (704, 705, 706)
+	]
+
+	result = scorer.score(mentions, EngagementPriority())
+	row = SocialDayBuilder(cfg()).build("AAPL", result["scored"])[0]
+	assert row["last_message_id"] == 706
+
+
 # ── the window ───────────────────────────────────────────────────────────────
 
 
@@ -267,6 +343,84 @@ def test_a_later_sample_adds_to_the_day_rather_than_replacing_it():
 	assert row["last_message_id"] == 3
 
 
+# ── a full walk replaces, a run adds ─────────────────────────────────────────
+
+
+def test_a_full_walk_replaces_a_day_a_shallow_run_got_wrong():
+	"""The failure this fix exists for, restated as a test.
+
+	A nightly run skims six pages of the head and stores the little it saw. The backfill
+	then reads the same day thirty pages deep and finds the truth. The walk's older ids
+	are far BELOW the mark the run left behind, so it can never satisfy a "newer than"
+	guard, and before migrations/020 its write was discarded in silence: production held
+	6 posts for an ORCL day a live walk found 110 in.
+
+	A walk does not offer an increment. It states the total.
+	"""
+	builder = SocialDayBuilder(cfg())
+	repo = InMemoryRepository()
+
+	repo.accumulate(builder.build("ORCL", [scored("2026-08-28", i) for i in range(105, 111)]))
+	assert repo.rows[("ORCL", "2026-08-28")]["post_count"] == 6
+
+	whole_day = builder.build("ORCL", [scored("2026-08-28", i) for i in range(1, 111)])
+	whole_day[0]["seeded"] = True
+	repo.accumulate(whole_day)
+
+	row = repo.rows[("ORCL", "2026-08-28")]
+	assert row["post_count"] == 110, "the walk read the whole day; its count is the day"
+	assert row["last_message_id"] == 110
+	assert row["seeded_at"] == "now"
+
+
+def test_a_walk_cut_short_never_drags_a_good_day_down():
+	"""Replace mode has to be incapable of losing data, or it is just a different bug.
+
+	A walk stopped by its page ceiling covers only part of a very busy day, and taking
+	its total wholesale would turn 458 posts into 200. The count comparison sends that
+	sample down the ordinary path instead, where its ids sit at or below the stored mark
+	and it becomes a no-op.
+	"""
+	builder = SocialDayBuilder(cfg())
+	repo = InMemoryRepository()
+
+	full = builder.build("MU", [scored("2026-08-28", i) for i in range(1, 459)])
+	full[0]["seeded"] = True
+	repo.accumulate(full)
+
+	partial = builder.build("MU", [scored("2026-08-28", i) for i in range(259, 459)])
+	partial[0]["seeded"] = True
+	repo.accumulate(partial)
+
+	assert repo.rows[("MU", "2026-08-28")]["post_count"] == 458
+
+
+def test_a_run_after_a_walk_still_adds_rather_than_replacing():
+	"""Only a walk replaces. A run that skimmed the head knows a slice of the day, and
+	if it overwrote with that slice the chart would fall back to the shallow count every
+	night at 22:00."""
+	builder = SocialDayBuilder(cfg())
+	repo = InMemoryRepository()
+
+	walked = builder.build("ORCL", [scored("2026-08-28", i) for i in range(1, 111)])
+	walked[0]["seeded"] = True
+	repo.accumulate(walked)
+
+	# The run's own filter has already removed everything at or below the stored mark,
+	# so what reaches the store is the two posts written since the walk.
+	repo.accumulate(
+		builder.build(
+			"ORCL",
+			[scored("2026-08-28", i) for i in range(109, 113)],
+			marks={"2026-08-28": 110},
+		)
+	)
+
+	row = repo.rows[("ORCL", "2026-08-28")]
+	assert row["post_count"] == 112
+	assert row["last_message_id"] == 112
+
+
 # ── top posts ────────────────────────────────────────────────────────────────
 
 
@@ -400,12 +554,13 @@ class FakeRepository:
 	def __init__(self):
 		self.calls: list[list[dict]] = []
 		self.marked: list[str] = []
+		self.marks: dict[tuple[str, str], int] = {}
 		self.reads = 0
 		self.pruned = 0
 
 	def read_marks(self, tickers, since):
 		self.reads += 1
-		return {}
+		return self.marks
 
 	def accumulate(self, rows):
 		self.calls.append(rows)
@@ -450,6 +605,42 @@ def test_recording_is_a_no_op_while_the_flag_is_off():
 	history = SocialHistory(SentimentConfig(social_history_enabled=False), repository=repo)
 	assert history.record({"AAPL": [scored("2026-08-28", 1)]}) == 0
 	assert repo.calls == [] and repo.reads == 0
+
+
+def test_a_seed_is_never_filtered_against_the_stored_mark():
+	"""Carrying message_id is not on its own a fix, and this is the trap it walks into.
+
+	A seed reads backwards from the head, so its ids DESCEND into whatever a run stored
+	rather than climbing past it. Filter a seed against that mark and the whole sample is
+	dropped: the guard stops rejecting the write for being "not new" and starts rejecting
+	it for being "too old", which looks identical from the outside.
+
+	The mark read is skipped outright rather than merely ignored, which also spares the
+	round trip on the path a page load waits behind.
+	"""
+	repo = FakeRepository()
+	repo.marks = {("AAPL", "2026-08-28"): 500}
+	history = SocialHistory(cfg(), repository=repo)
+
+	history.record({"AAPL": [scored("2026-08-28", i) for i in (11, 12, 13)]}, seeded=True)
+
+	assert repo.reads == 0, "a seed must not spend a round trip on a mark it cannot use"
+	row = repo.calls[0][0]
+	assert row["post_count"] == 3
+	assert row["seeded"] is True
+
+
+def test_a_run_is_still_filtered_against_the_stored_mark():
+	"""The other half of the pair. A run walks forwards from what it last saw, so the
+	mark is exactly right for it and dropping the filter would double count a refresh."""
+	repo = FakeRepository()
+	repo.marks = {("AAPL", "2026-08-28"): 12}
+	history = SocialHistory(cfg(), repository=repo)
+
+	history.record({"AAPL": [scored("2026-08-28", i) for i in (11, 12, 13)]})
+
+	assert repo.reads == 1
+	assert repo.calls[0][0]["post_count"] == 1
 
 
 def test_a_silent_seed_still_records_that_it_walked():
@@ -520,9 +711,10 @@ class InMemoryRepository:
 	"""A whole store in a dict, keyed the way the real table is keyed.
 
 	:meth:`accumulate` is a faithful Python restatement of what
-	``accumulate_social_day`` in migrations/019 does: add the running sums, take the
-	greater high water mark, replace top_posts, and reject outright any sample whose
-	newest message id is not above what is already counted.
+	``accumulate_social_day`` does after migrations/020: a seeded sample that saw at
+	least as much as is stored replaces the day outright, and anything else adds the
+	running sums, takes the greater high water mark, replaces top_posts, and is rejected
+	outright if its newest message id is not above what is already counted.
 
 	It exists because the merge lives in Postgres now and there is no local Postgres in
 	this repo to run it against. So this is the specification the SQL has to satisfy,
@@ -550,6 +742,27 @@ class InMemoryRepository:
 				if row.get("seeded"):
 					merged["seeded_at"] = "now"
 				self.rows[key] = merged
+				continue
+
+			# A complete walk of the day that saw at least as much as is on record states
+			# the day's total rather than offering an increment, so it overwrites. The
+			# count comparison is what stops a walk cut short by its page ceiling from
+			# dragging a good day down; such a sample falls through to the mark guard
+			# below, which turns it into a no-op.
+			if row.get("seeded") and row["post_count"] >= stored["post_count"]:
+				stored.update(
+					post_count=row["post_count"],
+					bullish_posts=row["bullish_posts"],
+					bearish_posts=row["bearish_posts"],
+					weight_sum=row["weight_sum"],
+					weighted_score_sum=row["weighted_score_sum"],
+					social_sentiment_score=score_from_sums(
+						row["weighted_score_sum"], row["weight_sum"]
+					),
+					last_message_id=max(stored["last_message_id"], row["last_message_id"]),
+					top_posts=row.get("top_posts", stored.get("top_posts")),
+					seeded_at="now",
+				)
 				continue
 
 			if int(row.get("last_message_id") or 0) <= int(stored.get("last_message_id") or 0):

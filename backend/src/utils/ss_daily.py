@@ -389,8 +389,11 @@ class SocialHistory:
 		merges under a row lock so that two writers who read the same marks cannot both
 		apply the same increment. Both are needed and neither covers the other's case.
 
-		``seeded`` marks these rows as the product of a history walk rather than a run,
-		which is how a ticker stops being re-crawled once it has been done.
+		``seeded`` marks these rows as the product of a history walk rather than a run.
+		That is how a ticker stops being re-crawled once it has been done, and it is also
+		what puts the write into replace mode: a walk has read each day end to end, so it
+		states the day's total rather than offering an increment. Only SocialBackfiller
+		sets it. Nothing reachable from a run can.
 		"""
 		if not self.enabled or not scored_by_ticker:
 			return 0
@@ -408,7 +411,17 @@ class SocialHistory:
 		tickers = sorted(scored_by_ticker)
 		window = window_days(self.config.social_display_days)
 		since = window[0] if window else utc_now().date()
-		marks = self.repository.read_marks(tickers, since)
+		# A seed reads each day end to end, so it has nothing to filter and filtering it
+		# would be actively wrong. The mark answers "which of these posts have I already
+		# counted?", which only means something to a reader walking FORWARDS from what it
+		# last saw. A seed walks backwards from the head, so its ids descend into the
+		# stored mark rather than climbing past it, and the filter would drop the whole
+		# sample. It does not need the guard either: it replaces the day outright in the
+		# accumulate RPC (migrations/020) instead of adding to it.
+		#
+		# It also saves the read. A seed is one ticker, so this is one fewer round trip on
+		# the path a page load waits behind.
+		marks = {} if seeded else self.repository.read_marks(tickers, since)
 
 		rows: list[dict[str, Any]] = []
 		for ticker in tickers:
