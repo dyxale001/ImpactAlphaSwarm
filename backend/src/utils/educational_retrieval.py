@@ -283,6 +283,36 @@ _LOCAL_REFERENCE_CACHE: list[SourceResult] = [
             "traditional mutual fund which is priced once daily."
         ),
     ),
+    # Broad "where do I start" overview — verified live (2026-08-31, via
+    # fetch, unlike most /glossary/ slugs which render via client-side JS
+    # and return a blank template to a plain fetch, see module docstring).
+    # Deliberately the ONLY beginner-overview source added in this pass:
+    # several other glossary slugs (e.g. /glossary/stocks) were checked and
+    # found to be blank templates, so no content was fabricated for them —
+    # they simply aren't cited here. Content below mirrors what the live
+    # page actually said (investing definition, saving-vs-investing,
+    # risk/return, diversification, asset allocation), not invented.
+    SourceResult(
+        title="Investor.gov: Introduction to Investing",
+        publisher="U.S. Securities and Exchange Commission — Investor.gov",
+        url="https://www.investor.gov/introduction-investing",
+        content=(
+            "Investing means putting your money into assets such as stocks or "
+            "bonds, with the expectation of a return over time through value "
+            "appreciation or dividend payments. Investing is different from "
+            "saving: a savings account suits short-term goals and preserves "
+            "the money you put in, while investing targets longer-term wealth "
+            "building and carries the risk that value can go down as well as up "
+            "— all investments carry some degree of risk because markets "
+            "fluctuate, so understanding personal risk tolerance and time "
+            "horizon matters before investing. Diversification — spreading "
+            "money across different assets and sectors rather than one company "
+            "— and asset allocation — dividing money among stocks, bonds, and "
+            "cash according to risk tolerance — are two of the basic tools "
+            "investors use to manage that risk. Investing regularly over long "
+            "periods lets returns compound over time."
+        ),
+    ),
     # ── South African terms ──────────────────────────────────────────────
     # Cited to the FSCA, not jse.co.za directly — see the JSE domain-approval
     # comment above for why (jse.co.za 403'd every plain-HTTP fetch tried
@@ -446,6 +476,55 @@ def search_authoritative_education(query: str) -> Optional[SourceResult]:
     except Exception as e:
         logger.warning("Local educational reference lookup failed: %s", e)
         return None
+
+
+# ── Broad "I don't understand investing" style overview ────────────────────
+# A single-term query ("what is diversification") is well served by
+# search_authoritative_education's one-best-match scoring. A genuinely broad
+# beginner question ("I don't understand investing", "give me beginner
+# staple knowledge for investing") isn't ABOUT one term — it's a request for
+# orientation across several — so scoring it against the user's own terse
+# wording (which often shares almost no vocabulary with any single glossary
+# entry) finds nothing. This is a separate RETRIEVAL SHAPE (several sources,
+# not one), not a new intent or a new safety policy: still the same approved
+# cache, same relevance scoring, same SourceResult shape.
+_BROAD_BEGINNER_PATTERN = re.compile(
+    r"\b(don'?t understand investing|new to investing|beginner|"
+    r"staple knowledge|investing basics|basics of investing|"
+    r"where (do|should) i start|getting started|how does investing work|"
+    r"i don'?t know (anything |much )?about investing)\b",
+    re.IGNORECASE,
+)
+
+# Fixed stand-in query covering the foundational concepts a beginner
+# overview should be able to draw from — used to RANK the approved cache
+# for a broad question, instead of the user's own (often vocabulary-thin)
+# wording, which is why this is scored separately from the single-source
+# path above rather than just calling _search_local_cache(query) again.
+_BEGINNER_OVERVIEW_TOPICS = (
+    "investing saving risk return diversification asset allocation "
+    "dividend capital gains market volatility exchange traded fund"
+)
+
+
+def is_broad_beginner_query(query: str) -> bool:
+    return bool(_BROAD_BEGINNER_PATTERN.search(query))
+
+
+def search_beginner_overview(limit: int = 3) -> list[SourceResult]:
+    """The `limit` most relevant approved sources for a broad beginner
+    question, ranked against the fixed foundational-topics stand-in above.
+    Deterministic and local only (no live-provider call — a live provider is
+    built for single-term lookups, not a curated overview set); never
+    invents a source, and returns [] rather than guessing when the cache
+    somehow has nothing scoreable."""
+    scored = [
+        (entry, _relevance_score(_BEGINNER_OVERVIEW_TOPICS, f"{entry.title} {entry.content}"))
+        for entry in _LOCAL_REFERENCE_CACHE
+    ]
+    scored = [(entry, score) for entry, score in scored if score > 0]
+    scored.sort(key=lambda pair: -pair[1])
+    return [entry for entry, _ in scored[:limit]]
 
 
 # ── Acronym handling ─────────────────────────────────────────────────────

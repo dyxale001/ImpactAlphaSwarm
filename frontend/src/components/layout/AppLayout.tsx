@@ -10,6 +10,7 @@ import {
   Terminal,
   Settings,
   Waves,
+  Sparkles,
   Menu,
   X,
 } from "lucide-react";
@@ -46,6 +47,7 @@ export default function AppLayout() {
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
+    { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
     { name: "Whale Watching", path: "/whale-watching", icon: Waves },
     { name: "Settings", path: "/settings", icon: Settings },
@@ -56,6 +58,7 @@ export default function AppLayout() {
       i.name === "Dashboard" ||
       i.name === "Assets" ||
       i.name === "Watchlist" ||
+      i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
       i.name === "Settings"
