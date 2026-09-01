@@ -46,6 +46,7 @@ BACKFILL_RECENT_DAYS = int(os.getenv("SOCIAL_BACKFILL_RECENT_DAYS", "3"))
 
 _social_history_instance = None
 _social_backfiller_instance = None
+_news_history_instance = None
 
 
 def _social_history():
@@ -60,6 +61,16 @@ def _social_history():
 
         _social_history_instance = SocialHistory()
     return _social_history_instance
+
+
+def _news_history():
+    """The news history reader, built once on first use. Lazy for the same reason."""
+    global _news_history_instance
+    if _news_history_instance is None:
+        from src.utils.ns_daily import NewsHistory
+
+        _news_history_instance = NewsHistory()
+    return _news_history_instance
 
 
 def _social_backfiller():
@@ -573,6 +584,26 @@ async def get_sentiment_history(ticker: str, days: int = 7):
     except Exception as exc:
         logger.warning("Sentiment history fetch failed for %s: %s", symbol, exc)
         return {"ticker": symbol, "points": [], "seeding": False}
+
+    # News is merged onto the days social already laid out, never allowed to define them.
+    # One side owns the window or the two drift apart, and social owns it because it is
+    # the series that pads its own quiet days.
+    #
+    # A failure here costs the news line and nothing else: the social points are already
+    # in hand, and returning them without news is exactly what an older client gets
+    # anyway. That is the whole reason this is a second try block rather than one.
+    try:
+        news_history = _news_history()
+        if news_history.enabled:
+            news_rows = await loop.run_in_executor(
+                None, news_history.history, symbol, window
+            )
+            points = [
+                {**point, **news_history.point(news_rows.get(point["date"]))}
+                for point in points
+            ]
+    except Exception as exc:
+        logger.info("News history merge failed for %s: %s", symbol, exc)
 
     # Scheduled, not awaited. create_task queues the walk on the event loop and this
     # handler returns immediately; the loop only picks the task up once the response is

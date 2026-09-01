@@ -114,6 +114,19 @@ class SentimentConfig:
 	social_day_top_posts: int = 15
 	social_recommendation_posts: int = 5
 
+	# ── news history ─────────────────────────────────────────────────────────
+	# Off means the scout writes no news day rows and the chart falls back to the news
+	# line the frontend derives for itself. Its own flag rather than riding on
+	# social_history_enabled: the two write different tables through different merges,
+	# and being able to turn one off without the other is the whole point of having a
+	# flag at all.
+	news_history_enabled: bool = False
+
+	# How many of a day's articles are kept on its row. Smaller than the social
+	# equivalent because a day's news is measured in single figures where a day's
+	# chatter runs to hundreds, so this is a ceiling that rarely binds.
+	news_day_top_articles: int = 8
+
 	# Scoring
 	gcp_top_n: int = 10
 
@@ -154,6 +167,8 @@ class SentimentConfig:
 			stocktwits_request_timeout=_env_float("STOCKTWITS_REQUEST_TIMEOUT", 6.0),
 			social_day_top_posts=max(1, _env_int("SOCIAL_DAY_TOP_POSTS", 15)),
 			social_recommendation_posts=max(1, _env_int("SOCIAL_RECOMMENDATION_POSTS", 5)),
+			news_history_enabled=_env_bool("NEWS_HISTORY_ENABLED", False),
+			news_day_top_articles=max(1, _env_int("NEWS_DAY_TOP_ARTICLES", 8)),
 			gcp_top_n=_env_int("GCP_SENTIMENT_TOP_N", 10),
 			gcp_max_workers=max(1, _env_int("GCP_SENTIMENT_MAX_WORKERS", 10)),
 			news_recency_halflife_days=_env_float("NEWS_RECENCY_HALFLIFE_DAYS", 2.0),

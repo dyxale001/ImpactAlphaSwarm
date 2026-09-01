@@ -36,6 +36,7 @@ warnings.filterwarnings("ignore")
 
 from ..utils.ss_aggregation import SentimentAggregator
 from ..utils.ss_config import SentimentConfig
+from ..utils.ns_daily import NewsHistory
 from ..utils.ss_daily import SocialHistory
 from ..utils.ss_models import SocialMention, _normalize_tickers
 from ..utils.ss_news import NewsCollector, NewsMode, collect_news
@@ -51,6 +52,10 @@ logger = logging.getLogger("sentiment-scout")
 #: the reasoning tracer and the LLM prompts and written to ai_recommendation, none of
 #: which should ever see the scout's own bookkeeping.
 _SCORED_KEY = "_social_scored"
+#: The same, for the scored news articles the news history groups by day. Kept as its
+#: own key rather than reusing the one above: the two feed different tables and either
+#: history can be switched off without the other, so they must not arrive fused.
+_NEWS_SCORED_KEY = "_news_scored"
 
 __all__ = [
 	"NewsMode",
@@ -82,6 +87,7 @@ class SentimentScout:
 		news_payload: NewsPayloadBuilder | None = None,
 		social_payload: SocialPayloadBuilder | None = None,
 		history: SocialHistory | None = None,
+		news_history: NewsHistory | None = None,
 	):
 		self.config = config or SentimentConfig.from_env()
 		self.registry = registry or PublisherRegistry()
@@ -92,6 +98,7 @@ class SentimentScout:
 		self.news_payload = news_payload or NewsPayloadBuilder(self.aggregator, self.registry)
 		self.social_payload = social_payload or SocialPayloadBuilder(self.aggregator, self.registry)
 		self.history = history or SocialHistory(self.config, self.registry)
+		self.news_history = news_history or NewsHistory(self.config, self.registry)
 
 		self.news_priority = RecencyPriority()
 		self.social_priority = EngagementPriority()
@@ -134,6 +141,9 @@ class SentimentScout:
 			"news_tier_counts": self.registry.tier_counts(news_mentions),
 			# Per-article transparency list (publisher, tier, date, headline, link).
 			"news_articles": self.news_payload.build(news.get("scored", [])),
+			# Bookkeeping for the news daily history, popped off with the social one
+			# before this payload is returned to anyone.
+			_NEWS_SCORED_KEY: news.get("scored", []),
 			"sources": {
 				"stocktwits": sum(1 for m in social_mentions if m.source.startswith("stocktwits:")),
 				"finnhub": sum(1 for m in news_mentions if m.source.startswith("finnhub:")),
@@ -182,12 +192,23 @@ class SentimentScout:
 		One write for the whole run, not one per ticker. Failure is swallowed inside
 		``SocialHistory.record``, because the history is a view on work that has already
 		been done and must never cost the run its scores.
+
+		News is recorded on the same terms and costs even less: its articles were all
+		fetched and scored for the sub-score already, so grouping them by date adds one
+		RPC to the run and no API call at all. It needs no equivalent of the social
+		backfill either, because a run holds the whole lookback at once and so fills the
+		entire window on its first pass.
 		"""
 		scored_by_ticker = {
 			ticker: payload.pop(_SCORED_KEY, []) for ticker, payload in results.items()
 		}
+		news_scored_by_ticker = {
+			ticker: payload.pop(_NEWS_SCORED_KEY, []) for ticker, payload in results.items()
+		}
 		if self.history.enabled:
 			self.history.record(scored_by_ticker)
+		if self.news_history.enabled:
+			self.news_history.record(news_scored_by_ticker)
 
 
 def analyze_ticker(ticker: str, marketaux: str = "off") -> dict[str, Any]:
