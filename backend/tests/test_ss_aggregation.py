@@ -20,16 +20,31 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.utils.ss_aggregation import (
-    NEWS_RECENCY_HALFLIFE_DAYS,
-    NEWS_WEIGHT,
-    SOCIAL_WEIGHT,
-    _aggregate_signed,
-    _blend_sentiment,
-    _influence_weights,
-    _recency_weight,
-    _recency_weighted_avg,
-)
+from src.utils.ss_aggregation import SentimentAggregator
+from src.utils.ss_config import SentimentConfig
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The behaviour under test moved out of module-level functions and into
+# ``SentimentAggregator`` when the scout was rebuilt as classes (cf1505e). Every
+# assertion below is unchanged — these aliases bind the old names to the new
+# methods, so what this file pins is still exactly the two-dimensional weighting
+# property it was written to pin, now reached through the class API.
+#
+# Binding one shared instance also matches how the scout uses it: the aggregator
+# is constructed once and reused, not rebuilt per mention.
+# ─────────────────────────────────────────────────────────────────────────────
+_CONFIG = SentimentConfig.from_env()
+_AGG = SentimentAggregator(_CONFIG)
+
+NEWS_RECENCY_HALFLIFE_DAYS = _CONFIG.news_recency_halflife_days
+NEWS_WEIGHT = _CONFIG.news_weight
+SOCIAL_WEIGHT = _CONFIG.social_weight
+
+_recency_weight = _AGG.recency_weight
+_recency_weighted_avg = _AGG.weighted_average
+_aggregate_signed = _AGG.aggregate_signed
+_influence_weights = _AGG.influence_weights
+_blend_sentiment = _AGG.blend
 
 
 # ─────────────────────────────────────────────────────────────────────────────
