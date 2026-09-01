@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
@@ -460,44 +461,145 @@ UNIFIED_RANKING_SHADOW = os.getenv("UNIFIED_RANKING_SHADOW", "true").lower() == 
 REASONING_TRACE_TOP_N = int(os.getenv("REASONING_TRACE_TOP_N", "5"))
 
 
+class TickerScoper:
+    """Decides WHICH tickers a run looks at — never how they score.
+
+    Two paths, deliberately: the ranked discovered pool when discovery is live,
+    and the legacy seeded list otherwise or whenever the pool read comes back
+    empty. Both are deterministic and watchlist-first.
+
+    Config is read at call time rather than captured, so flipping a discovery flag
+    behaves as it did when these were free functions.
+    """
+
+    def __init__(
+        self,
+        pool_size: int | None = None,
+        max_tickers: int | None = None,
+        seed_baseline: float | None = None,
+    ):
+        self._pool_size = pool_size
+        self._max_tickers = max_tickers
+        self._seed_baseline = seed_baseline
+
+    @property
+    def pool_size(self) -> int:
+        return DISCOVERY_POOL_SIZE if self._pool_size is None else self._pool_size
+
+    @property
+    def max_tickers(self) -> int:
+        return MAX_SCOPED_TICKERS if self._max_tickers is None else self._max_tickers
+
+    @property
+    def seed_baseline(self) -> float:
+        return DISCOVERY_SEED_BASELINE_SCORE if self._seed_baseline is None else self._seed_baseline
+
+    def is_quarantined(self, quarantined_until: Any, now: datetime) -> bool:
+        """True if a discovered row is still benched. Unparseable timestamps fail
+        open (treated as not quarantined) so a bad value can't silently shrink the
+        pool below the quant crowd."""
+        if not quarantined_until:
+            return False
+        try:
+            until = datetime.fromisoformat(str(quarantined_until).replace("Z", "+00:00"))
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            return until > now
+        except (ValueError, TypeError):
+            return False
+
+    def rank_universe(self, rows: list[dict], now: datetime) -> list[str]:
+        """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
+
+        Seeds are always eligible at the fixed baseline score; discovered rows must
+        be active and not currently quarantined. Ties break on ticker so the order
+        is deterministic run-to-run (keeps the cap and quant crowd stable)."""
+        scored: list[tuple[float, str]] = []
+        for row in rows:
+            ticker = row.get("ticker")
+            if not ticker:
+                continue
+            if row.get("origin") == "seed":
+                score = self.seed_baseline
+            else:
+                if not row.get("is_active"):
+                    continue
+                if self.is_quarantined(row.get("quarantined_until"), now):
+                    continue
+                raw = row.get("discovery_score")
+                score = float(raw) if raw is not None else 0.0
+            scored.append((score, ticker))
+        scored.sort(key=lambda pair: (-pair[0], pair[1]))
+        return [ticker for _, ticker in scored[:self.pool_size]]
+
+    def select_from_pool(
+        self,
+        pool_rows: list[dict],
+        universes: list[str],
+        watchlist: list[str],
+        now: datetime,
+    ) -> list[str]:
+        """Assemble the scoped list from the discovered pool: watchlist first (kept
+        even if inactive/quarantined — personalization outranks pool hygiene), then a
+        round-robin across the user's universes by rank so each universe is fairly
+        represented under the cap. Deduped, capped at ``MAX_SCOPED_TICKERS``."""
+        by_universe: dict[str, list[dict]] = {u: [] for u in universes}
+        for row in pool_rows:
+            universe = row.get("universe")
+            if universe in by_universe:
+                by_universe[universe].append(row)
+        ranked = {u: self.rank_universe(by_universe[u], now) for u in universes}
+
+        ordered = list(watchlist)
+        depth = max((len(names) for names in ranked.values()), default=0)
+        for rank in range(depth):
+            for universe in universes:
+                names = ranked[universe]
+                if rank < len(names):
+                    ordered.append(names[rank])
+        return list(dict.fromkeys(ordered))[:self.max_tickers]
+
+    def scope(self, universes: list[str], watchlist: list[str] | None = None) -> list[str]:
+        """Resolve a user's investment universes (+ watchlist) to a capped, deduped
+        ticker list. Shared by the per-user graph and the batched daily run.
+
+        When discovery is enabled and live, the set is drawn from the ranked
+        discovered pool (top ``DISCOVERY_POOL_SIZE`` per universe from discovered ∪
+        seeds); otherwise — and whenever the pool read is empty (migration not
+        applied, discovery never ran, or a read failure) — it falls back to the
+        legacy seeded path. Both paths are deterministic and watchlist-first: a
+        user's watchlisted tickers come first so the cap can never drop them.
+        """
+        watchlist = list(dict.fromkeys(watchlist or []))
+
+        if DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE:
+            from ..utils.supabase_client import get_discovery_pool_rows
+
+            pool_rows = get_discovery_pool_rows(universes)
+            if pool_rows:
+                return self.select_from_pool(
+                    pool_rows, universes, watchlist, datetime.now(timezone.utc)
+                )
+            # Empty pool → degrade to the seeded path rather than starve the run.
+
+        from ..utils.supabase_client import get_assets_by_universes
+
+        universe_tickers = get_assets_by_universes(universes)
+        # dict.fromkeys dedups while preserving first-seen order: watchlist entries
+        # win their slot, then universe tickers (sorted) fill the remainder.
+        ordered = list(dict.fromkeys([*watchlist, *sorted(universe_tickers)]))
+        return ordered[:self.max_tickers]
+
+
+_SCOPER = TickerScoper()
+
+
 def _is_quarantined(quarantined_until: Any, now: datetime) -> bool:
-    """True if a discovered row is still benched. Unparseable timestamps fail
-    open (treated as not quarantined) so a bad value can't silently shrink the
-    pool below the quant crowd."""
-    if not quarantined_until:
-        return False
-    try:
-        until = datetime.fromisoformat(str(quarantined_until).replace("Z", "+00:00"))
-        if until.tzinfo is None:
-            until = until.replace(tzinfo=timezone.utc)
-        return until > now
-    except (ValueError, TypeError):
-        return False
+    return _SCOPER.is_quarantined(quarantined_until, now)
 
 
 def _rank_universe(rows: list[dict], now: datetime) -> list[str]:
-    """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
-
-    Seeds are always eligible at the fixed baseline score; discovered rows must
-    be active and not currently quarantined. Ties break on ticker so the order
-    is deterministic run-to-run (keeps the cap and quant crowd stable)."""
-    scored: list[tuple[float, str]] = []
-    for row in rows:
-        ticker = row.get("ticker")
-        if not ticker:
-            continue
-        if row.get("origin") == "seed":
-            score = DISCOVERY_SEED_BASELINE_SCORE
-        else:
-            if not row.get("is_active"):
-                continue
-            if _is_quarantined(row.get("quarantined_until"), now):
-                continue
-            raw = row.get("discovery_score")
-            score = float(raw) if raw is not None else 0.0
-        scored.append((score, ticker))
-    scored.sort(key=lambda pair: (-pair[0], pair[1]))
-    return [ticker for _, ticker in scored[:DISCOVERY_POOL_SIZE]]
+    return _SCOPER.rank_universe(rows, now)
 
 
 def _select_from_pool(
@@ -506,149 +608,255 @@ def _select_from_pool(
     watchlist: list[str],
     now: datetime,
 ) -> list[str]:
-    """Assemble the scoped list from the discovered pool: watchlist first (kept
-    even if inactive/quarantined — personalization outranks pool hygiene), then a
-    round-robin across the user's universes by rank so each universe is fairly
-    represented under the cap. Deduped, capped at ``MAX_SCOPED_TICKERS``."""
-    by_universe: dict[str, list[dict]] = {u: [] for u in universes}
-    for row in pool_rows:
-        universe = row.get("universe")
-        if universe in by_universe:
-            by_universe[universe].append(row)
-    ranked = {u: _rank_universe(by_universe[u], now) for u in universes}
-
-    ordered = list(watchlist)
-    depth = max((len(names) for names in ranked.values()), default=0)
-    for rank in range(depth):
-        for universe in universes:
-            names = ranked[universe]
-            if rank < len(names):
-                ordered.append(names[rank])
-    return list(dict.fromkeys(ordered))[:MAX_SCOPED_TICKERS]
+    return _SCOPER.select_from_pool(pool_rows, universes, watchlist, now)
 
 
 def scope_tickers(universes: list[str], watchlist: list[str] | None = None) -> list[str]:
-    """Resolve a user's investment universes (+ watchlist) to a capped, deduped
-    ticker list. Shared by the per-user graph and the batched daily run.
+    return _SCOPER.scope(universes, watchlist)
 
-    When discovery is enabled and live, the set is drawn from the ranked
-    discovered pool (top ``DISCOVERY_POOL_SIZE`` per universe from discovered ∪
-    seeds); otherwise — and whenever the pool read is empty (migration not
-    applied, discovery never ran, or a read failure) — it falls back to the
-    legacy seeded path. Both paths are deterministic and watchlist-first: a
-    user's watchlisted tickers come first so the cap can never drop them.
+
+
+class Phase(ABC):
+    """One node in the analysis graph.
+
+    A phase reads the shared ``AnalysisState`` and returns only the keys it
+    changes; LangGraph merges them. Instances are callable so a phase can be
+    handed straight to ``add_node`` — the graph does not need to know it is
+    talking to an object rather than a function.
+
+    The two gathering phases (quant, sentiment) swallow their own failures and
+    return an empty result on purpose: they run in parallel and either one coming
+    back empty is a degraded run, not a failed one.
     """
-    watchlist = list(dict.fromkeys(watchlist or []))
 
-    if DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE:
-        from ..utils.supabase_client import get_discovery_pool_rows
+    name: str = "phase"
+    label: str = "Phase"
 
-        pool_rows = get_discovery_pool_rows(universes)
-        if pool_rows:
-            return _select_from_pool(
-                pool_rows, universes, watchlist, datetime.now(timezone.utc)
+    @abstractmethod
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        """Do this phase's work and return the state keys it changed."""
+
+    def __call__(self, state: AnalysisState) -> dict[str, Any]:
+        return self.run(state)
+
+
+class InitializePhase(Phase):
+    """Scope the run: which tickers are we looking at tonight?"""
+
+    name = "phase_1_init"
+    label = "Phase 1"
+
+    def __init__(self, scoper: TickerScoper | None = None):
+        self.scoper = scoper or _SCOPER
+
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        print("- Phase 1: Initializing session and scoping data...")
+
+        tickers = self.scoper.scope(state["universes"], state["watchlist"])
+
+        print(f"Curated {len(tickers)} tickers for analysis")
+        tracer = get_tracer()
+        if tracer:
+            tracer.tickers = tickers
+            tracer.log_step(
+                self.name,
+                {
+                    "tickers_count": len(tickers),
+                    "universes": state["universes"],
+                    "watchlist_count": len(state["watchlist"]),
+                    # Whether this scope came from the discovered pool or the legacy
+                    # seeded path (observability for the shadow/live rollout).
+                    "discovery_enabled": DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE,
+                },
             )
-        # Empty pool → degrade to the seeded path rather than starve the run.
+        return {
+            "tickers": tickers,
+            "status": "initialized",
+            "quant_results": {},
+            "sentiment_results": {},
+        }
 
-    from ..utils.supabase_client import get_assets_by_universes
 
-    universe_tickers = get_assets_by_universes(universes)
-    # dict.fromkeys dedups while preserving first-seen order: watchlist entries
-    # win their slot, then universe tickers (sorted) fill the remainder.
-    ordered = list(dict.fromkeys([*watchlist, *sorted(universe_tickers)]))
-    return ordered[:MAX_SCOPED_TICKERS]
+class QuantPhase(Phase):
+    """Measure the market data. Runs in parallel with the sentiment phase."""
 
+    name = "phase_2_quant"
+    label = "Phase 2A"
+
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        print("- Phase 2A: Quant Analyst analyzing market data...")
+        tracer = get_tracer()
+        try:
+            quant_results = analyze_quant_tickers(state["tickers"])
+
+            if tracer:
+                for ticker, metrics in quant_results.items():
+                    tracer.add_quant_metrics(ticker, self._trace_metrics(ticker, metrics))
+                tracer.log_step(self.name, {"count": len(quant_results), "tickers": list(quant_results.keys())})
+
+            print(f"  ✓ Computed metrics for {len(quant_results)} assets")
+            return {"quant_results": quant_results}
+
+        except Exception as e:
+            logger.warning("Quant analyst failed: %s", e)
+            print("Quant analyst failed; no quant results available")
+            return {"quant_results": {}}
+
+    @staticmethod
+    def _trace_metrics(ticker: str, metrics: dict) -> QuantMetrics:
+        return QuantMetrics(
+            ticker=ticker,
+            rsi=metrics.get("rsi"),
+            macd_signal=metrics.get("macd"),
+            sharpe_ratio=metrics.get("sharpe_ratio"),
+            beta=metrics.get("beta"),
+            volatility=metrics.get("volatility"),
+            raw_quant_score=metrics.get("raw_quant_score"),
+            trailing_return=metrics.get("trailing_return"),
+            data_points=metrics.get("data_points"),
+            sub_dimensions=metrics.get("sub_dimensions"),
+            bands=metrics.get("bands"),
+            percentiles=metrics.get("percentiles"),
+            quant_normalisation=metrics.get("quant_normalisation"),
+        )
+
+
+class SentimentPhase(Phase):
+    """Read the news and social tone. Runs in parallel with the quant phase."""
+
+    name = "phase_2_sentiment"
+    label = "Phase 2B"
+
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        print("- Phase 2B: Sentiment Scout scraping social signals...")
+        tracer = get_tracer()
+        try:
+            # User refresh: read tier-1 from the nightly Marketaux cache (no API call),
+            # so tier-1 articles remain visible without spending the call budget. The
+            # API is only hit by the nightly batch (run_daily_batch, marketaux="fetch").
+            sentiment_results = analyze_sentiment_tickers(state["tickers"], marketaux="cache")
+        except Exception as e:
+            logger.warning("Sentiment scout failed: %s", e)
+            print("Sentiment scout failed; no sentiment results available")
+            sentiment_results = {}
+
+        if tracer:
+            for ticker, sentiment_data in sentiment_results.items():
+                tracer.add_sentiment_output(ticker, sentiment_data)
+            tracer.log_step(
+                self.name,
+                {
+                    "count": len(sentiment_results),
+                    "tickers": list(sentiment_results.keys()),
+                },
+            )
+
+        print(f"  ✓ Analyzed sentiment for {len(sentiment_results)} assets")
+        return {"sentiment_results": sentiment_results}
+
+
+class SynthesizePhase(Phase):
+    """Rank the candidates and write the reasoning traces for the top few."""
+
+    name = "phase_3_synthesis"
+    label = "Phase 3"
+
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        print("- Phase 3: Synthesizing results and applying business logic...")
+
+        top_5, unified_scores = synthesize_rankings(
+            state["tickers"],
+            state["quant_results"],
+            state["sentiment_results"],
+            state["risk_tolerance"],
+            state["expertise_level"],
+            run_id=state.get("run_id"),
+            user_id=state.get("user_id"),
+        )
+
+        all_ranked = _all_ranked(top_5, unified_scores)
+
+        print(f"Generated rankings for {len(all_ranked)} assets (saving all)")
+        for i, asset in enumerate(top_5, 1):
+            print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
+
+        tracer = get_tracer()
+        if tracer:
+            tracer.add_aggregates(top_5, unified_scores)
+            tracer.log_step(
+                self.name,
+                {
+                    "top_5": [asset["ticker"] for asset in top_5],
+                    "all_ranked": [asset["ticker"] for asset in all_ranked],
+                    "unified_scores": {t: unified_scores[t]["unified_score"] for t in unified_scores},
+                },
+            )
+
+        return {"final_rankings": all_ranked, "status": "synthesized"}
+
+
+class OutputPhase(Phase):
+    """Persist the run and hand the payload back to the caller."""
+
+    name = "phase_4_output"
+    label = "Phase 4"
+
+    def run(self, state: AnalysisState) -> dict[str, Any]:
+        print("- Phase 4: Formatting output with reasoning traces...")
+
+        output = {
+            "run_id": state["run_id"],
+            "user_id": state["user_id"],
+            "risk_tolerance": state["risk_tolerance"],
+            "expertise_level": state["expertise_level"],
+            "top_5": state["final_rankings"],
+        }
+
+        print("Output ready for frontend:")
+        print(json.dumps(output, indent=2))
+        # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
+        # and watchlist cards need scores for assets outside the top 5. The dashboard
+        # still shows five, capped on its own read.
+        try:
+            save_res = save_top_assets(
+                run_id=state["run_id"],
+                user_id=state["user_id"],
+                top_5=state["final_rankings"],  # now contains all ranked assets
+                quant_results=state.get("quant_results", {}),
+                sentiment_results=state.get("sentiment_results", {}),
+            )
+            logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
+            # Mark the run complete the moment its data exists, rather than waiting for
+            # the pipeline to unwind back to the API layer. A run whose worker died
+            # between the insert and that later update stayed 'running' forever, and the
+            # page polled a status that would never change, which is why a completed run
+            # looked like nothing had happened. api.py still marks it too; the update is
+            # idempotent.
+            update_ai_run_status(state["run_id"], "complete")
+        except Exception as e:
+            logger.error(f"Failed to save ranked assets to Supabase: {e}")
+
+        print("Output formatted and ready")
+        return {"status": "complete"}
+
+
+# The phases the graph is wired from, in the order they appear in it.
+_PHASES: dict[str, Phase] = {
+    p.name: p
+    for p in (InitializePhase(), QuantPhase(), SentimentPhase(), SynthesizePhase(), OutputPhase())
+}
 
 
 def phase_1_initialize(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 1: Initializing session and scoping data...")
-
-    tickers = scope_tickers(state["universes"], state["watchlist"])
-
-    print(f"Curated {len(tickers)} tickers for analysis")
-    tracer = get_tracer()
-    if tracer:
-        tracer.tickers = tickers
-        tracer.log_step(
-            "phase_1_init",
-            {
-                "tickers_count": len(tickers),
-                "universes": state["universes"],
-                "watchlist_count": len(state["watchlist"]),
-                # Whether this scope came from the discovered pool or the legacy
-                # seeded path (observability for the shadow/live rollout).
-                "discovery_enabled": DISCOVERY_ENABLED and not DISCOVERY_SHADOW_MODE,
-            },
-        )
-    return {
-        "tickers": tickers,
-        "status": "initialized",
-        "quant_results": {},
-        "sentiment_results": {},
-    }
+    return _PHASES["phase_1_init"].run(state)
 
 
 def phase_2_quant_analyst(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 2A: Quant Analyst analyzing market data...")
-    tracer = get_tracer()
-    try:
-        quant_results = analyze_quant_tickers(state["tickers"])
-
-        if tracer:
-            for ticker, metrics in quant_results.items():
-                quant_metrics = QuantMetrics(
-                    ticker=ticker,
-                    rsi=metrics.get("rsi"),
-                    macd_signal=metrics.get("macd"),
-                    sharpe_ratio=metrics.get("sharpe_ratio"),
-                    beta=metrics.get("beta"),
-                    volatility=metrics.get("volatility"),
-                    raw_quant_score=metrics.get("raw_quant_score"),
-                    trailing_return=metrics.get("trailing_return"),
-                    data_points=metrics.get("data_points"),
-                    sub_dimensions=metrics.get("sub_dimensions"),
-                    bands=metrics.get("bands"),
-                    percentiles=metrics.get("percentiles"),
-                    quant_normalisation=metrics.get("quant_normalisation"),
-                )
-                tracer.add_quant_metrics(ticker, quant_metrics)
-            tracer.log_step("phase_2_quant", {"count": len(quant_results), "tickers": list(quant_results.keys())})
-
-        print(f"  ✓ Computed metrics for {len(quant_results)} assets")
-        return {"quant_results": quant_results}
-
-    except Exception as e:
-        logger.warning("Quant analyst failed: %s", e)
-        print("Quant analyst failed; no quant results available")
-        return {"quant_results": {}}
+    return _PHASES["phase_2_quant"].run(state)
 
 
 def phase_2_sentiment_scout(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 2B: Sentiment Scout scraping social signals...")
-    tracer = get_tracer()
-    try:
-        # User refresh: read tier-1 from the nightly Marketaux cache (no API call),
-        # so tier-1 articles remain visible without spending the call budget. The
-        # API is only hit by the nightly batch (run_daily_batch, marketaux="fetch").
-        sentiment_results = analyze_sentiment_tickers(state["tickers"], marketaux="cache")
-    except Exception as e:
-        logger.warning("Sentiment scout failed: %s", e)
-        print("Sentiment scout failed; no sentiment results available")
-        sentiment_results = {}
-
-    if tracer:
-        for ticker, sentiment_data in sentiment_results.items():
-            tracer.add_sentiment_output(ticker, sentiment_data)
-        tracer.log_step(
-            "phase_2_sentiment",
-            {
-                "count": len(sentiment_results),
-                "tickers": list(sentiment_results.keys()),
-            },
-        )
-
-    print(f"  ✓ Analyzed sentiment for {len(sentiment_results)} assets")
-    return {"sentiment_results": sentiment_results}
+    return _PHASES["phase_2_sentiment"].run(state)
 
 
 def _apply_ranking_v2(
@@ -943,86 +1151,24 @@ def synthesize_rankings(
 
 
 def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 3: Synthesizing results and applying business logic...")
-
-    top_5, unified_scores = synthesize_rankings(
-        state["tickers"],
-        state["quant_results"],
-        state["sentiment_results"],
-        state["risk_tolerance"],
-        state["expertise_level"],
-        run_id=state.get("run_id"),
-        user_id=state.get("user_id"),
-    )
-
-    all_ranked = _all_ranked(top_5, unified_scores)
-
-    print(f"Generated rankings for {len(all_ranked)} assets (saving all)")
-    for i, asset in enumerate(top_5, 1):
-        print(f"    {i}. {asset['ticker']}: {asset['unified_score']:.0f}")
-
-    tracer = get_tracer()
-    if tracer:
-        tracer.add_aggregates(top_5, unified_scores)
-        tracer.log_step(
-            "phase_3_synthesis",
-            {
-                "top_5": [asset["ticker"] for asset in top_5],
-                "all_ranked": [asset["ticker"] for asset in all_ranked],
-                "unified_scores": {t: unified_scores[t]["unified_score"] for t in unified_scores},
-            },
-        )
-
-    return {"final_rankings": all_ranked, "status": "synthesized"}
+    return _PHASES["phase_3_synthesis"].run(state)
 
 
 def phase_4_output(state: AnalysisState) -> dict[str, Any]:
-    print("- Phase 4: Formatting output with reasoning traces...")
-
-    output = {
-        "run_id": state["run_id"],
-        "user_id": state["user_id"],
-        "risk_tolerance": state["risk_tolerance"],
-        "expertise_level": state["expertise_level"],
-        "top_5": state["final_rankings"],
-    }
-
-    print("Output ready for frontend:")
-    print(json.dumps(output, indent=2))
-    # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
-    # and watchlist cards need scores for assets outside the top 5. The dashboard
-    # still shows five, capped on its own read.
-    try:
-        save_res = save_top_assets(
-            run_id=state["run_id"],
-            user_id=state["user_id"],
-            top_5=state["final_rankings"],  # now contains all ranked assets
-            quant_results=state.get("quant_results", {}),
-            sentiment_results=state.get("sentiment_results", {}),
-        )
-        logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
-        # Mark the run complete the moment its data exists, rather than waiting for
-        # the pipeline to unwind back to the API layer. A run whose worker died
-        # between the insert and that later update stayed 'running' forever, and the
-        # page polled a status that would never change, which is why a completed run
-        # looked like nothing had happened. api.py still marks it too; the update is
-        # idempotent.
-        update_ai_run_status(state["run_id"], "complete")
-    except Exception as e:
-        logger.error(f"Failed to save ranked assets to Supabase: {e}")
-
-    print("Output formatted and ready")
-    return {"status": "complete"}
+    return _PHASES["phase_4_output"].run(state)
 
 
-def build_graph():
+def build_graph(phases: dict[str, Phase] | None = None):
+    """Wire the phases into the analysis graph.
+
+    The two gathering phases both hang off phase 1 and both feed phase 3, which is
+    what makes quant and sentiment run in parallel.
+    """
+    phases = phases or _PHASES
     graph = StateGraph(AnalysisState)
 
-    graph.add_node("phase_1_init", phase_1_initialize)
-    graph.add_node("phase_2_quant", phase_2_quant_analyst)
-    graph.add_node("phase_2_sentiment", phase_2_sentiment_scout)
-    graph.add_node("phase_3_synthesis", phase_3_synthesizer)
-    graph.add_node("phase_4_output", phase_4_output)
+    for name, phase in phases.items():
+        graph.add_node(name, phase)
 
     graph.add_edge(START, "phase_1_init")
     graph.add_edge("phase_1_init", "phase_2_quant")
