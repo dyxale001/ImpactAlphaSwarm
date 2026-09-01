@@ -92,9 +92,13 @@ export function SocialPostRow({
   );
 }
 
-// Per-post transparency list: the five posts that drive the social score most,
-// with a link to the full social sentiment page for the rest. Mirrors
-// NewsArticles so users can see exactly which posts fed the sentiment score.
+// Kept in step with NewsArticles: the two render as a pair of columns on the asset
+// card, and different row counts either side would leave one column hanging.
+const ROWS_SHOWN = 4;
+
+// Per-post transparency list: the posts that drive the social score most, with a link
+// to the full social sentiment page for the rest. Mirrors NewsArticles so users can
+// see exactly which posts fed the sentiment score.
 export default function SocialPosts({
   posts,
   ticker,
@@ -127,21 +131,24 @@ export default function SocialPosts({
     );
   }
 
-  const shown = sortPostsByInfluence(posts).slice(0, 5);
+  const shown = sortPostsByInfluence(posts).slice(0, ROWS_SHOWN);
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+      {/* Sentence case at footnote weight, matching NewsArticles: both lists are
+          evidence under their signal bar, not sections in their own right. */}
+      <div className="flex items-center justify-between gap-2 text-[11px] text-brand-muted-fg">
+        <span>
           {day ? `Top posts · ${formatDayLabel(day)}` : "Top posts by influence"}
         </span>
-        <span className="text-[11px] text-brand-muted-fg font-medium">
+        <span className="font-medium">
           {dayTotal != null && dayTotal > shown.length
             ? `${shown.length} of ${dayTotal} · StockTwits`
             : "StockTwits"}
         </span>
       </div>
-      <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-accent bg-brand-bg/40 overflow-hidden">
+      {/* Hairlines, not a filled panel. See the same change in NewsArticles. */}
+      <ul className="divide-y divide-brand-border/40 border-y border-brand-border/40">
         {shown.map((p, i) => (
           <li key={i}>
             <SocialPostRow post={p} ticker={ticker} />

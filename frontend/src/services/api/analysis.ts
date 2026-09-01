@@ -1,5 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import type { SocialPost } from "../../components/research/SocialPosts";
+import type { NewsArticle } from "../../components/research/NewsArticles";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -187,6 +188,26 @@ export interface SentimentHistoryPoint {
   top_posts: SocialPost[];
   /** Reserved. The written overview is not built yet. */
   summary: string | null;
+
+  // ── news, present only when NEWS_HISTORY_ENABLED is on ──────────────────
+  // Optional rather than required, because the field decides the question at the
+  // point of use: absent means this deployment stores no news history and the chart
+  // draws no news line, while null on a present field means this particular day had
+  // no coverage. Collapsing the two would make a switched-off feature look like a
+  // universally silent one.
+  //
+  // This is NOT the news sub-score per day. The sub-score decays across the whole
+  // window; a day's score has decay switched off within the day, exactly as the
+  // social series does. See backend/src/utils/ns_daily.py.
+  /** 0-100, or null on a day with no articles. */
+  news_score?: number | null;
+  news_count?: number;
+  news_bullish?: number;
+  news_bearish?: number;
+  /** That day's article counts by reliability tier, keyed "1" | "2" | "3". */
+  news_tier_counts?: Record<string, number>;
+  /** That day's most influential articles, same shape as NewsArticle. */
+  top_articles?: NewsArticle[];
 }
 
 export interface SentimentHistoryResponse {

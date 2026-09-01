@@ -32,11 +32,19 @@ import {
 } from "../services/api/analysis";
 import { pollUntilComplete } from "../services/api/poll";
 import { useAnalysisRefresh } from "../hooks/useAnalysisRefresh";
+import { rememberHubPage } from "../utils/lastHubPage";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
 
 export default function DashboardPage() {
+  // Names this as the page an asset's "Back to X" link should return to. See
+  // lastHubPage.ts: every route into /asset/:ticker shares this without being
+  // threaded through individually.
+  useEffect(() => {
+    rememberHubPage("/dashboard");
+  }, []);
+
   const {
     search,
     setSearch,

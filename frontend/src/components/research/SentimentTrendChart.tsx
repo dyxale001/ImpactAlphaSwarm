@@ -13,6 +13,7 @@ import {
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
 import { SOCIAL_HISTORY_DAYS } from "../../data/sentimentMethodology";
 import { formatDay, isWeekend } from "./sentimentDays";
+import { newsDaysWithData, type NewsDay } from "./newsDaily";
 
 // Score and volume share one plot: the day is the unit, and splitting it across two
 // panels made the reader do the join themselves.
@@ -28,6 +29,17 @@ import { formatDay, isWeekend } from "./sentimentDays";
 // this background.
 
 const LINE_COLOR = "#c7f269"; // lime-500, the neon accent
+// The news line, drawn only when the caller supplies per-day news. forest-100: a white
+// carrying the brand's green cast rather than a flat white, which reads as a palette
+// colour on this panel instead of an absence of one. Its green is cool, where the
+// lime's is yellow, so the two separate by hue as well as by lightness.
+//
+// Both lines are still light on a dark ground, so this one is dashed and dotted while
+// the social line is solid and undotted. Shape carries the distinction where lightness
+// alone is thin, and it doubles as a signal that this series is the sparser, derived
+// one. The tooltip names both outright.
+const NEWS_LINE_COLOR = "#e4ece9";
+const NEWS_LINE_DASH = "5 3";
 const BAR_COLOR = "#3e6258"; // forest-500, recessive against the forest panel
 const AXIS_TEXT = "rgba(255,255,255,0.55)";
 const GRID_LINE = "rgba(255,255,255,0.12)";
@@ -56,14 +68,27 @@ const WEEKEND_BAND = "rgba(255,255,255,0.055)";
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
 
+// What the chart actually plots: a history point plus the fields derived here. The
+// news pair is optional and present only when the caller passed newsDays, which is how
+// every news addition below stays invisible to callers that did not ask for one.
+type PlottedPoint = SentimentHistoryPoint & {
+  weekendBand: number;
+  newsScore?: number | null;
+  newsCount?: number;
+};
+
 // One tooltip for the day, not one per series: the bar and the line are two readings
 // of the same column, so Recharts is given a single Tooltip on the composed chart and
 // it renders both from the shared datum.
 function TrendTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
-  const point: SentimentHistoryPoint = payload[0].payload;
+  const point: PlottedPoint = payload[0].payload;
   const loudest = point.top_posts?.[0];
   const closed = isWeekend(point.date);
+  // Undefined, not null: a day with news enabled but no articles carries null, and
+  // that still earns a "no articles" line. Only an absent field means this chart has
+  // no news series at all.
+  const hasNews = point.newsCount !== undefined;
 
   return (
     <div
@@ -101,7 +126,10 @@ function TrendTooltip({ active, payload }: any) {
               className="inline-block w-2 h-2 rounded-full"
               style={{ background: LINE_COLOR }}
             />
-            Sentiment {point.score}
+            {/* Named "Social" only where there is a news line to tell it apart from.
+                On its own it is the only sentiment in the panel, and qualifying it
+                there would invite the reader to look for the other one. */}
+            {hasNews ? "Social" : "Sentiment"} {point.score}
           </div>
           <div className="flex items-center gap-1.5" style={{ color: AXIS_TEXT }}>
             <span
@@ -112,17 +140,37 @@ function TrendTooltip({ active, payload }: any) {
             {" · "}
             {point.bullish} bullish, {point.bearish} bearish
           </div>
-          {loudest?.text ? (
-            <div
-              className="mt-1.5 pt-1.5 border-t leading-snug"
-              style={{ borderColor: "rgba(255,255,255,0.14)", color: AXIS_TEXT }}
-            >
-              Loudest: "{loudest.text.slice(0, 90)}
-              {loudest.text.length > 90 ? "…" : ""}"
-            </div>
-          ) : null}
         </>
       )}
+
+      {/* News sits outside the branch above, because a day can carry coverage while
+          nobody posted about it. Nesting it under the social score is what would hide
+          the news reading on exactly the quiet days it is most worth having. */}
+      {hasNews &&
+        (typeof point.newsScore === "number" ? (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ background: NEWS_LINE_COLOR }}
+            />
+            News {Math.round(point.newsScore)}
+            {" · "}
+            {point.newsCount}{" "}
+            {point.newsCount === 1 ? "article" : "articles"}
+          </div>
+        ) : (
+          <div style={{ color: AXIS_TEXT }}>No articles that day</div>
+        ))}
+
+      {loudest?.text ? (
+        <div
+          className="mt-1.5 pt-1.5 border-t leading-snug"
+          style={{ borderColor: "rgba(255,255,255,0.14)", color: AXIS_TEXT }}
+        >
+          Loudest: "{loudest.text.slice(0, 90)}
+          {loudest.text.length > 90 ? "…" : ""}"
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -142,6 +190,10 @@ interface Props {
   // Supplied by pages that list posts underneath. Absent elsewhere, and the chart
   // stays inert rather than offering a click that does nothing.
   onSelectDay?: (day: string) => void;
+  // Per-day news, keyed by the same YYYY-MM-DD as the points. Optional on purpose:
+  // this chart is also the whole of the social sentiment page, where a news line
+  // would be off-topic, so every news element below renders only when this is passed.
+  newsDays?: Map<string, NewsDay>;
 }
 
 export function SentimentTrendChart({
@@ -153,6 +205,7 @@ export function SentimentTrendChart({
   days = SOCIAL_HISTORY_DAYS,
   selectedDay = null,
   onSelectDay,
+  newsDays,
 }: Props) {
   if (isLoading) {
     return <div className="h-56 rounded-lg bg-brand-muted/10 animate-pulse" />;
@@ -166,7 +219,13 @@ export function SentimentTrendChart({
   // plainly rather than drawing an empty grid that looks like a failure, and separate
   // the two reasons it can be empty: a walk that is happening right now is a wait, and
   // a ticker nobody posts about is not.
-  if (daysWithData < MIN_DAYS_TO_PLOT) {
+  const newsPlottable = newsDays ? newsDaysWithData(newsDays) : 0;
+
+  // The panel needs a few real days before a line says anything. Where news is
+  // supplied that test counts news days too: a ticker with a week of coverage and no
+  // chatter has a chart well worth drawing, and gating on social alone would hide the
+  // news line on exactly the tickers nobody posts about.
+  if (daysWithData < MIN_DAYS_TO_PLOT && newsPlottable < MIN_DAYS_TO_PLOT) {
     return (
       <div className="py-8 text-center">
         <p className="text-sm text-brand-fg font-medium">
@@ -187,10 +246,23 @@ export function SentimentTrendChart({
   const volumeCeiling = busiestDay * VOLUME_HEADROOM;
   // The band is a full height value on the volume scale, so it reaches the top of the
   // plot whatever the busiest day was. Weekdays carry 0, which draws nothing.
-  const plotted = points.map((point) => ({
-    ...point,
-    weekendBand: isWeekend(point.date) ? volumeCeiling : 0,
-  }));
+  const plotted: PlottedPoint[] = points.map((point) => {
+    const base = {
+      ...point,
+      weekendBand: isWeekend(point.date) ? volumeCeiling : 0,
+    };
+    // Left off entirely rather than set to null when there is no news series, so the
+    // tooltip can tell "this chart has no news" from "this day had no articles".
+    if (!newsDays) return base;
+    const day = newsDays.get(point.date);
+    return {
+      ...base,
+      newsScore: day?.score ?? null,
+      // The day's real total, not the length of the articles it carries: a stored day
+      // keeps only its most influential few.
+      newsCount: day?.count ?? 0,
+    };
+  });
 
   return (
     <div>
@@ -312,6 +384,26 @@ export function SentimentTrendChart({
                   />
                 )}
               />
+              {/* News before social, so the established lime line stays on top where
+                  the two cross. Drawn at all only when the caller supplied news. */}
+              {newsDays && (
+                <Line
+                  yAxisId="score"
+                  type="monotone"
+                  dataKey="newsScore"
+                  stroke={NEWS_LINE_COLOR}
+                  strokeWidth={2}
+                  strokeDasharray={NEWS_LINE_DASH}
+                  // Dotted, unlike the social line. Coverage is sparse for most
+                  // tickers, so a day flanked by two days without articles is a
+                  // segment of zero length: with dot={false} it would draw nothing at
+                  // all and the day would look like no news rather than one article.
+                  // The dot is what makes gapping viable on a series this patchy.
+                  dot={{ r: 2, fill: NEWS_LINE_COLOR, strokeWidth: 0 }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: "#10221e" }}
+                  connectNulls={false}
+                />
+              )}
               <Line
                 yAxisId="score"
                 type="monotone"
@@ -341,8 +433,25 @@ export function SentimentTrendChart({
               className="inline-block w-3.5 rounded-full"
               style={{ height: 2.5, background: LINE_COLOR }}
             />
-            Sentiment
+            {/* Same rule as the tooltip: only qualified as "social" where there is a
+                news line to distinguish it from. */}
+            {newsDays ? "Social sentiment" : "Sentiment"}
           </span>
+          {newsDays && (
+            <span
+              className="flex items-center gap-1.5"
+              title="The influence-weighted average sentiment of that day's articles. Not the news sub-score, which weights reliability tiers across the whole window rather than day by day."
+            >
+              {/* Dashed swatch, because the line is dashed. A solid swatch for a
+                  dashed series is the legend quietly misdescribing the one thing it
+                  exists to identify. */}
+              <span
+                className="inline-block w-3.5"
+                style={{ borderTop: `2px dashed ${NEWS_LINE_COLOR}` }}
+              />
+              News sentiment
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-2.5 h-2.5 rounded-sm"
@@ -370,7 +479,7 @@ export function SentimentTrendChart({
                 style={{ height: 2.5, background: LINE_COLOR, opacity: 0.35 }}
               />
             </span>
-            Gap means no posts
+            {newsDays ? "Gap means no posts or news" : "Gap means no posts"}
           </span>
           {/* Without this the two quietest columns of every week look like collapsing
               interest rather than a shut market. The swatch is bordered because the
@@ -386,7 +495,11 @@ export function SentimentTrendChart({
             Market closed
           </span>
           {onSelectDay ? (
-            <span className="sm:ml-auto">Click a day to read its posts</span>
+            <span className="sm:ml-auto">
+              {newsDays
+                ? "Click a day to read its news and posts"
+                : "Click a day to read its posts"}
+            </span>
           ) : null}
         </div>
       </div>
