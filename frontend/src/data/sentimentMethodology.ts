@@ -13,6 +13,24 @@ export const RECENCY_HALFLIFE_DAYS = 2;
 // Lookback window for the news pull.
 export const NEWS_LOOKBACK_DAYS = 7;
 
+// How far back the posts feeding the card's social score reach. Mirrors
+// SOCIAL_ACCUMULATE_DAYS on the backend.
+//
+// Social used to have no bound at all, so a quiet ticker's score could rest on a post
+// from months ago while the Sentiment Data card's badge claimed both halves came from
+// the last few days. The two windows are genuinely different lengths, so the card
+// names each rather than one number standing for both.
+export const SOCIAL_LOOKBACK_DAYS = 2;
+
+// How many days the trend chart shows. Mirrors SOCIAL_DISPLAY_DAYS on the backend.
+//
+// Deliberately not the same number as SOCIAL_LOOKBACK_DAYS above. A run only fetches
+// far enough back to build today's bar, because a deep walk on the run's path is what
+// cost the first version of this feature ten minutes of an eighteen minute run. The
+// chart's depth is filled in out of band instead, so it can be as long as is useful
+// without the run paying for it.
+export const SOCIAL_HISTORY_DAYS = 7;
+
 export type NewsTier = {
   tier: 1 | 2 | 3;
   label: string;

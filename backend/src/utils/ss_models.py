@@ -37,8 +37,10 @@ class SocialMention:
 	# Reliability weight for the source-tier-weighted average. 1.0 for social
 	# posts; for news it is the publisher's tier weight (tier-1 highest).
 	weight: float = 1.0
-	# The platform's own id for the post (social only). Nothing is stored between
-	# runs, so this is only an identity for the post within a run.
+	# The platform's own id for the post (social only). StockTwits ids are monotonic,
+	# which is what lets the daily history dedupe with a single stored integer instead
+	# of a raw post table: see last_message_id in migrations/019. It therefore has to
+	# survive scoring, so MentionScorer.score copies it onto the scored entry.
 	message_id: int | None = None
 
 	@property

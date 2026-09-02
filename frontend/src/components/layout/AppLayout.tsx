@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { readLastHubPage } from "../../utils/lastHubPage";
 import {
   LayoutDashboard,
   CandlestickChart,
@@ -61,12 +62,22 @@ export default function AppLayout() {
       i.name === "Settings"
   );
 
-  const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-3 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${
-      isActive
-        ? "bg-brand-fg text-brand-bg shadow-sm" // Active state mimics the white pill in your screenshot
-        : "text-brand-muted-fg hover:text-brand-fg hover:bg-brand-bg/50"
-    }`;
+  // An asset's pages (/asset/:ticker and its How it works / News / Social
+  // sub-pages) live under a different path prefix than the /assets or /dashboard
+  // list they were opened from, so NavLink's own isActive goes false for every
+  // sidebar item while you're reading one. Keep the owning hub lit using the same
+  // "which page did we come from" record the "Back to X" link reads.
+  const onAssetPage = location.pathname.startsWith("/asset/");
+  const owningHubPage = onAssetPage ? readLastHubPage() : null;
+
+  const navLinkClassesFor =
+    (path: string) =>
+    ({ isActive }: { isActive: boolean }) =>
+      `flex items-center gap-3 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${
+        isActive || owningHubPage === path
+          ? "bg-brand-fg text-brand-bg shadow-sm" // Active state mimics the white pill in your screenshot
+          : "text-brand-muted-fg hover:text-brand-fg hover:bg-brand-bg/50"
+      }`;
 
   return (
     <div className="flex h-dvh bg-brand-bg text-brand-fg overflow-hidden">
@@ -96,7 +107,7 @@ export default function AppLayout() {
                 key={item.name}
                 to={item.path}
                 onClick={() => setMenuOpen(false)}
-                className={navLinkClasses}
+                className={navLinkClassesFor(item.path)}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
                 {item.name}
@@ -118,7 +129,11 @@ export default function AppLayout() {
         {/* Navigation Items */}
         <nav className="flex-1 px-4 space-y-1">
           {visibleNavItems.map((item) => (
-            <NavLink key={item.name} to={item.path} className={navLinkClasses}>
+            <NavLink
+              key={item.name}
+              to={item.path}
+              className={navLinkClassesFor(item.path)}
+            >
               <item.icon className="w-4 h-4 shrink-0" />
               {item.name}
             </NavLink>
