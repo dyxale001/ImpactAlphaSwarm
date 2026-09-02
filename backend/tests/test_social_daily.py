@@ -444,6 +444,56 @@ def test_top_posts_carry_the_shape_the_frontend_renders():
 		assert field in post, field
 
 
+def test_a_tick_top_up_keeps_the_days_best_posts_not_just_its_own():
+	"""GOOG 1 Sept 2026, restated as a test: 107 scored posts on the row, 3 in top_posts.
+
+	The incremental path is taken by the intraday tick, which fetches only the posts newer
+	than the stored mark -- a handful -- and submits a top_posts built from that slice.
+	Before migrations/023 that slice REPLACED the day's fifteen. Now it is merged by rank,
+	so a tick's quiet posts cannot evict the day's loud ones.
+	"""
+	builder = SocialDayBuilder(cfg())
+	repo = InMemoryRepository()
+
+	# The full day: twenty posts, rank rising with the index (rank = 0.1 * i * i).
+	full = builder.build(
+		"GOOG", [scored("2026-09-01", i, raw=0.1 * i, weight=float(i)) for i in range(1, 21)]
+	)
+	repo.accumulate(full)
+	stored = repo.rows[("GOOG", "2026-09-01")]
+	assert len(stored["top_posts"]) == 15
+	assert stored["top_posts"][0]["url"] == "https://stocktwits.com/20"
+
+	# A tick: two genuinely new posts (ids past the mark) that are near-silent.
+	quiet_tick = builder.build(
+		"GOOG",
+		[scored("2026-09-01", i, raw=0.01, weight=0.1) for i in (21, 22)],
+		marks={"2026-09-01": 20},
+	)
+	repo.accumulate(quiet_tick)
+	stored = repo.rows[("GOOG", "2026-09-01")]
+
+	assert stored["post_count"] == 22, "the count still accrues"
+	assert len(stored["top_posts"]) == 15, "the list is not shrunk to the tick's slice"
+	kept = {post["url"] for post in stored["top_posts"]}
+	assert "https://stocktwits.com/20" in kept, "the day's loudest post survived the tick"
+	assert "https://stocktwits.com/21" not in kept, "a near-silent tick post did not get in"
+
+	# A tick carrying one genuinely loud post displaces the weakest one on the row.
+	loud_tick = builder.build(
+		"GOOG",
+		[scored("2026-09-01", 23, raw=0.9, weight=100.0)],
+		marks={"2026-09-01": 22},
+	)
+	repo.accumulate(loud_tick)
+	stored = repo.rows[("GOOG", "2026-09-01")]
+
+	assert len(stored["top_posts"]) == 15
+	assert stored["top_posts"][0]["url"] == "https://stocktwits.com/23", "loud post ranks first"
+	kept = {post["url"] for post in stored["top_posts"]}
+	assert "https://stocktwits.com/6" not in kept, "the weakest kept post made way for it"
+
+
 # ── the walk: the three cost guards ──────────────────────────────────────────
 
 
@@ -707,14 +757,33 @@ def test_the_recommendation_cap_keeps_the_most_influential_posts():
 # ── end to end ───────────────────────────────────────────────────────────────
 
 
+#: The day's top-post cap. Mirrors ``SentimentConfig.social_day_top_posts`` and the
+#: literal in ``merge_top_posts`` in migrations/023.
+_TOP_POSTS_CAP = 15
+
+
+def _merge_top_posts(existing, incoming):
+	"""Python restatement of ``public.merge_top_posts``: union the two lists, keep the
+	higher-ranked copy of any post in both, return the top ``_TOP_POSTS_CAP`` by rank."""
+	best: dict[str, dict] = {}
+	for post in list(existing or []) + list(incoming or []):
+		key = post.get("url") or f"{post.get('author')}|{post.get('text')}"
+		if key not in best or (post.get("rank") or -1) > (best[key].get("rank") or -1):
+			best[key] = post
+	ranked = sorted(best.values(), key=lambda p: p.get("rank") or -1, reverse=True)
+	return ranked[:_TOP_POSTS_CAP]
+
+
 class InMemoryRepository:
 	"""A whole store in a dict, keyed the way the real table is keyed.
 
 	:meth:`accumulate` is a faithful Python restatement of what
-	``accumulate_social_day`` does after migrations/020: a seeded sample that saw at
+	``accumulate_social_day`` does after migrations/023: a seeded sample that saw at
 	least as much as is stored replaces the day outright, and anything else adds the
-	running sums, takes the greater high water mark, replaces top_posts, and is rejected
-	outright if its newest message id is not above what is already counted.
+	running sums, takes the greater high water mark, MERGES top_posts by rank (a tick
+	submits only its own slice, and replacing with it was evicting the day's real top
+	fifteen), and is rejected outright if its newest message id is not above what is
+	already counted.
 
 	It exists because the merge lives in Postgres now and there is no local Postgres in
 	this repo to run it against. So this is the specification the SQL has to satisfy,
@@ -780,7 +849,7 @@ class InMemoryRepository:
 				weighted_score_sum=score_sum,
 				social_sentiment_score=score_from_sums(score_sum, weight_sum),
 				last_message_id=max(stored["last_message_id"], row["last_message_id"]),
-				top_posts=row.get("top_posts", stored.get("top_posts")),
+				top_posts=_merge_top_posts(stored.get("top_posts"), row.get("top_posts")),
 			)
 			if row.get("seeded"):
 				stored.setdefault("seeded_at", "now")

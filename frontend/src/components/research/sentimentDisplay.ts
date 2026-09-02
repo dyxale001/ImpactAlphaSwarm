@@ -1,17 +1,22 @@
 // Shared display helper for the news transparency list on the full analysis
 // page. Keeps the reliability-tier styling in one place.
 
+// Filled green pills from the brand's own green family: forest-700 for tier 1,
+// then the neon lime-500 accent (the reasoning-trace border, the Discovered tag)
+// for tier 2, and the darker "moss" lime-700 for tier 3. Tier 1's ground is dark
+// enough to need light text; the two limes take forest text, the same treatment
+// every other lime pill in the app uses.
 export function tierMeta(tier: number | null | undefined): {
   label: string;
   cls: string;
 } {
   switch (tier) {
     case 1:
-      return { label: "Tier 1", cls: "bg-emerald-500/10 text-emerald-600" };
+      return { label: "Tier 1", cls: "bg-brand-primary text-white" };
     case 2:
-      return { label: "Tier 2", cls: "bg-amber-500/10 text-amber-600" };
+      return { label: "Tier 2", cls: "bg-brand-accent text-brand-fg" };
     case 3:
-      return { label: "Tier 3", cls: "bg-slate-400/15 text-slate-500" };
+      return { label: "Tier 3", cls: "bg-lime-700 text-brand-fg" };
     default:
       return { label: "Other", cls: "bg-slate-400/15 text-slate-500" };
   }

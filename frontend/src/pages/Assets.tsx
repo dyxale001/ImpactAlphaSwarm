@@ -37,6 +37,8 @@ import { rememberHubPage } from "../utils/lastHubPage";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
+import { MarketClock } from "../components/research/MarketClock";
+import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
 
 /** Assets that got an LLM-written trace, and so are shown as full cards. Mirrors
  *  REASONING_TRACE_TOP_N on the backend; everything below this rank carries the
@@ -127,6 +129,8 @@ export default function AssetsPage() {
   // all — the page looked blank while a multi-minute analysis went on — and the
   // auto-refresh guard could not see its own run.
   const { refresh, isRunning: isAutoRefreshRunning } = useAnalysisRefresh();
+  const { updatedAt: sentimentUpdatedAt, isLoading: isSentimentUpdatedLoading } =
+    useSentimentLastUpdated();
   const anyRunInFlight = isRunning || isAutoRefreshRunning;
   const isStale = isRunStale(latestRunCreatedAt);
 
@@ -228,8 +232,12 @@ export default function AssetsPage() {
               ) : null}
             </p>
             {/* Market and FX footing for every price on the page, so it reads
-                as part of the run rather than a stray note below the header. */}
-            <div className="mt-3 inline-flex w-fit max-w-full flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
+                as part of the run rather than a stray note below the header. The
+                market clock joins it, separated rather than in a pill of its own:
+                both lines are footing for the SAME prices, exchange, currency and
+                now whether the exchange trading them is open, so one strip reads
+                as one fact about the page rather than two competing pills. */}
+            <div className="mt-3 inline-flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
               {exchangeRate !== null ? (
                 <>
                   US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
@@ -242,20 +250,47 @@ export default function AssetsPage() {
                   US Stock Exchanges • Fetching USD/ZAR rate...
                 </span>
               )}
+              <span className="text-brand-bg/30" aria-hidden="true">
+                •
+              </span>
+              <MarketClock tone="dark" bare />
             </div>
           </div>
 
           {/* Run time and its refresh share one pill: the button acts on the
-              timestamp beside it, so they read as a single control. */}
-          <div className="lg:shrink-0 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-1.5 pl-5 pr-1.5">
-            <span className="text-xs text-brand-bg/60">
-              Last AI run{" "}
+              timestamp beside it, so they read as a single control. The sentiment
+              line joins it rather than getting a pill of its own, because "Last AI
+              run" stopped being a sufficient freshness answer the day the intraday
+              tick shipped: a run can be hours old while the sentiment behind it was
+              topped up an hour ago, and a reader needs both dates to know which one
+              answers which question. */}
+          <div className="lg:shrink-0 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-5 pr-1.5">
+            {/* A two-column grid, not two lines of inline text: "Last AI run" and
+                "Sentiment updated" are different lengths, so as plain text the two
+                values started at two different x positions and the pair read as
+                unrelated rather than as one small table of freshness facts. The grid
+                gives both labels one shared column width, sized to the longer of the
+                two, and the divider marks where that column ends: grid items stretch
+                to fill their track by default, so a border on the label spans draws
+                one continuous vertical rule rather than a short underline per row. */}
+            <div className="grid grid-cols-[auto_auto] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
+              <span className="border-r border-brand-bg/15 pr-2 mr-2">Last AI run</span>
               <span className="font-semibold text-brand-bg">
                 {latestRunCreatedAt
                   ? new Date(latestRunCreatedAt).toLocaleString()
                   : "—"}
               </span>
-            </span>
+              <span className="border-r border-brand-bg/15 pr-2 mr-2">
+                Sentiment updated
+              </span>
+              <span className="font-semibold text-brand-bg">
+                {sentimentUpdatedAt
+                  ? new Date(sentimentUpdatedAt).toLocaleString()
+                  : isSentimentUpdatedLoading
+                    ? "…"
+                    : "—"}
+              </span>
+            </div>
             <button
               onClick={handleRefresh}
               disabled={isRunning}

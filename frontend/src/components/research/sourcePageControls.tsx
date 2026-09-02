@@ -99,17 +99,24 @@ export function SummaryStrip({
   accent?: boolean;
 }) {
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-      {pills.map((pill) => (
+    // One strip on the page's own background, no outer border: the only rules are
+    // the neon-lime ones dividing the figures, the same accent the framed panels use.
+    <div className="grid grid-cols-2 sm:grid-cols-4 bg-brand-bg">
+      {pills.map((pill, i) => (
         <div
           key={pill.label}
-          className={`rounded-2xl border px-4 py-3 ${
-            accent
-              ? "border-brand-primary/25 bg-brand-primary/5"
-              : "border-brand-border/60 bg-brand-bg/55"
-          }`}
+          className={[
+            "px-4 py-3 border-brand-accent",
+            // Vertical rule between the two mobile columns, then before every
+            // column on the single desktop row.
+            i % 2 === 1 ? "border-l" : "",
+            i > 0 ? "sm:border-l" : "",
+            // Horizontal rule between the two mobile rows only; the desktop row is
+            // unbroken.
+            i >= 2 ? "border-t sm:border-t-0" : "",
+          ].join(" ")}
         >
-          <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
+          <div className="text-[10px] uppercase tracking-widest text-brand-fg font-semibold mb-1">
             {pill.label}
           </div>
           <div
@@ -255,9 +262,25 @@ export function SortToggle({
 // brand-accent, the same outline the Reasoning Trace and Why It Ranks Here panels use,
 // so a list of evidence is framed the way the conclusions drawn from it are. Kept in
 // step with those: if they move, this moves.
-export function SourceList({ children }: { children: React.ReactNode }) {
+export function SourceList({
+  children,
+  // Set when the list is already inside an accent-outlined panel (the social page
+  // frames the day's posts the way DaySummaryPanel frames its prose). A second
+  // neon border inside the first reads as a mistake, so the nested list drops to
+  // the quiet inner-box treatment the AI summary box uses.
+  nested = false,
+}: {
+  children: React.ReactNode;
+  nested?: boolean;
+}) {
   return (
-    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-accent bg-brand-bg/40 overflow-x-auto">
+    <ul
+      className={`divide-y divide-brand-border/40 overflow-x-auto ${
+        nested
+          ? "rounded-xl border border-brand-border/60 bg-brand-surface/70"
+          : "rounded-2xl border border-brand-accent bg-brand-bg/40"
+      }`}
+    >
       {children}
     </ul>
   );

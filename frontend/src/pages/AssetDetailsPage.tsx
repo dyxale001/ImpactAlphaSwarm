@@ -25,6 +25,8 @@ import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
+import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
+import { MarketClock } from "../components/research/MarketClock";
 import {
   newsDayIndex,
   newsDaysFromHistory,
@@ -392,6 +394,26 @@ export default function AssetDetailsPage() {
       : newsDayIndex(recommendation?.news_articles);
   }, [history.points, recommendation?.news_articles]);
 
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  // Default to the most recent day that carries anything at all, the same rule the
+  // social page uses. Not simply the last day in the window: if nothing has been
+  // collected today the summary panel would open on an empty day and let a reader
+  // conclude the asset has gone quiet.
+  //
+  // Wider than the social page's test, because this panel covers both signals. A day
+  // with five articles and no chatter has plenty to say, and gating on posts alone
+  // would skip past it on exactly the assets nobody posts about.
+  const defaultDay = useMemo(() => {
+    const withData = history.points.filter(
+      (p) => p.post_count > 0 || (newsDays.get(p.date)?.count ?? 0) > 0,
+    );
+    return withData[withData.length - 1]?.date ?? null;
+  }, [history.points, newsDays]);
+
+  const activeDay = selectedDay ?? defaultDay;
+  const activePoint = history.points.find((p) => p.date === activeDay);
+
   if (isLoading) {
     return <AssetDetailsSkeleton />;
   }
@@ -480,6 +502,12 @@ export default function AssetDetailsPage() {
             <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary max-w-full truncate">
               {asset.name}
             </span>
+            {/* Right aligned from sm up, so on a wide header it reads as a status strip
+                opposite the ticker. On a phone it wraps onto its own line under the name
+                instead of being squeezed against it. */}
+            <div className="w-full sm:w-auto sm:ml-auto">
+              <MarketClock />
+            </div>
           </div>
           {/* Guarded: `recommendation` is nullable (see the checks below and the
               optional chaining above), and an asset only has one once it has
@@ -723,12 +751,12 @@ export default function AssetDetailsPage() {
                   The chart covers {SOCIAL_HISTORY_DAYS} days. Its news line is each
                   day's own coverage, not the weighted news score above.
                 </p>
-                {/* No onSelectDay here any more. Selecting a day existed to drive the
-                    article and post lists that used to sit underneath; with those gone
-                    a click would change nothing on screen, and a chart that invites a
-                    click and then does nothing is worse than one that does not. The
-                    social page keeps its own day selection, because it still has the
-                    per-day lists to drive. */}
+                {/* Selecting a day is wired again, and drives the panel below rather
+                    than the article and post lists it used to. Those lists were removed
+                    because the tab was a stack of everything; a written account of one
+                    day is the thing a reader actually wanted from them, and it is one
+                    paragraph rather than forty rows. The full lists still live on the
+                    news and social pages, a click away. */}
                 <SentimentTrendChart
                   points={history.points}
                   daysWithData={history.daysWithData}
@@ -736,7 +764,22 @@ export default function AssetDetailsPage() {
                   isSeeding={history.isSeeding}
                   error={history.error}
                   newsDays={newsDays}
+                  selectedDay={activeDay}
+                  onSelectDay={setSelectedDay}
+                  selectHint="Click a day to read what happened"
                 />
+                {/* Held back until the chart itself has something to show. While the
+                    history is loading or still being built the chart draws its own
+                    waiting state, and a second panel underneath saying the same thing
+                    in different words would read as two separate failures. */}
+                {activeDay && !history.isLoading && !history.error && (
+                  <DaySummaryPanel
+                    ticker={asset.ticker}
+                    day={activeDay}
+                    point={activePoint}
+                    newsDay={newsDays.get(activeDay)}
+                  />
+                )}
               </div>
 
               {/* Sources apply to the whole card, not just one signal. On one line at

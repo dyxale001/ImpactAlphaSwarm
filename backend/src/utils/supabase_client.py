@@ -648,6 +648,45 @@ def get_recently_ranked_tickers(days: int = 3) -> List[str]:
         return []
 
 
+def get_sentiment_last_updated() -> Optional[str]:
+    """When sentiment data was last written, across every ticker.
+
+    The more recent of ``social_sentiment_daily.updated_at`` and
+    ``news_sentiment_daily.updated_at``. Both are touched by more than the nightly run
+    now: the intraday tick and the lazy seed behind a chart write the social table, and a
+    run's own scoring writes the news table, so "last AI run" on the assets header no
+    longer bounds how fresh the sentiment behind those recommendations is. This answers
+    the freshness question the run timestamp can no longer answer by itself.
+
+    Deliberately global rather than scoped to one user's tickers. A tick walks whatever
+    was recently ranked across every user, so a per-user figure would read almost
+    identically to this one on any deployment with more than a handful of users, for the
+    cost of a second parameter and a join this page does not otherwise need.
+
+    Returns ``None`` on any failure or when both tables are empty, which the caller shows
+    as "unknown" rather than a wrong guess.
+    """
+    try:
+        latest: Optional[str] = None
+        for table in ("social_sentiment_daily", "news_sentiment_daily"):
+            rows = (
+                supabase.table(table)
+                .select("updated_at")
+                .order("updated_at", desc=True)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            stamp = rows[0]["updated_at"] if rows else None
+            if stamp and (latest is None or stamp > latest):
+                latest = stamp
+        return latest
+    except Exception as e:
+        print(f"Error reading sentiment last-updated: {e}")
+        return None
+
+
 def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
     """Return ``{ticker: v2_rank}`` from this run's most recent EARLIER night.
 

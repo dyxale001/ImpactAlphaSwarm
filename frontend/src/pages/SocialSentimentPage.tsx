@@ -117,42 +117,59 @@ export default function SocialSentimentPage() {
             ]}
           />
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <SentimentFilterChips
-                total={posts.length}
-                counts={bucketCounts}
-                value={sentimentFilter}
-                onChange={setSentimentFilter}
-              />
-            </div>
-            <SortToggle value={sort} onChange={setSort} />
-          </div>
-
-          <p className="text-xs text-brand-muted-fg">
-            {activeDay ? (
-              <>
-                Showing the {posts.length} most influential{" "}
-                {posts.length === 1 ? "post" : "posts"} from{" "}
-                <span className="text-brand-fg font-medium">
-                  {dayLabel(activeDay)}
+          {/* The day's posts, framed the way DaySummaryPanel frames its prose: an
+              accent-outlined panel with the day as its heading, and the list itself
+              in a quiet inner box under a labelled eyebrow. */}
+          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <h4 className="text-sm font-semibold text-brand-fg">
+                {activeDay ? dayLabel(activeDay) : "Posts"}
+              </h4>
+              {activeDay ? (
+                <span className="text-[11px] text-brand-muted-fg">
+                  {trimmed
+                    ? `${posts.length} of ${dayTotal} scored posts shown`
+                    : `${dayTotal} ${dayTotal === 1 ? "post" : "posts"}`}
                 </span>
-                {trimmed ? ` of ${dayTotal} scored that day` : ""}.
-              </>
-            ) : null}
-          </p>
+              ) : null}
+            </div>
 
-          {shown.length === 0 ? (
-            <EmptyStateCard message="No posts match the selected filters." />
-          ) : (
-            <SourceList>
-              {shown.map((p, i) => (
-                <li key={i}>
-                  <SocialPostRow post={p} ticker={tickerLabel} clamp={false} />
-                </li>
-              ))}
-            </SourceList>
-          )}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <SentimentFilterChips
+                  total={posts.length}
+                  counts={bucketCounts}
+                  value={sentimentFilter}
+                  onChange={setSentimentFilter}
+                />
+              </div>
+              <SortToggle value={sort} onChange={setSort} />
+            </div>
+
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
+                <MessageSquare className="w-3 h-3 text-brand-primary" />
+                Most influential posts
+              </div>
+              {shown.length === 0 ? (
+                <p className="text-sm text-brand-muted-fg italic">
+                  No posts match the selected filters.
+                </p>
+              ) : (
+                <SourceList nested>
+                  {shown.map((p, i) => (
+                    <li key={i}>
+                      <SocialPostRow
+                        post={p}
+                        ticker={tickerLabel}
+                        clamp={false}
+                      />
+                    </li>
+                  ))}
+                </SourceList>
+              )}
+            </div>
+          </div>
         </>
       )}
     </div>

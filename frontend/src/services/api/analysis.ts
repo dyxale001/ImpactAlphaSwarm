@@ -186,7 +186,12 @@ export interface SentimentHistoryPoint {
   bearish: number;
   /** That day's most influential posts, same shape as SocialPost. */
   top_posts: SocialPost[];
-  /** Reserved. The written overview is not built yet. */
+  /**
+   * Always null. A column on social_sentiment_daily that nothing writes.
+   * The generated day summary lives in its own table and is fetched separately,
+   * by getDaySummary below, because it covers news and social together and this
+   * row knows only about social.
+   */
   summary: string | null;
 
   // ── news, present only when NEWS_HISTORY_ENABLED is on ──────────────────
@@ -230,4 +235,48 @@ export async function getSentimentHistory(ticker: string, days = 7) {
   );
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<SentimentHistoryResponse>;
+}
+
+export interface DaySummaryResponse {
+  ticker: string;
+  /** The day asked for, YYYY-MM-DD. */
+  day: string;
+  /**
+   * The generated paragraph, or null when there is nothing to show. Null covers
+   * every uninteresting reason at once: summaries switched off, a day outside the
+   * stored window, a day nothing was collected on, or a generation that failed.
+   * They all render the same quiet fallback, because to a reader they are the same
+   * thing and none of them is an error.
+   */
+  summary: string | null;
+  /**
+   * False while the day is still in progress, so the paragraph describes a partial
+   * day and will be rewritten. True once the day has closed, after which it never
+   * changes again.
+   */
+  is_final: boolean;
+  generated_at: string | null;
+}
+
+// The written summary for one day of the trend chart. Served from a stored row, and
+// generated on the spot only the first time a day is asked for, so this is usually a
+// single indexed read and occasionally a couple of seconds. Informational, so no auth
+// token is needed.
+export async function getDaySummary(ticker: string, day: string) {
+  const res = await fetch(
+    `${BASE}/api/assets/${encodeURIComponent(ticker)}/sentiment-summary?day=${encodeURIComponent(day)}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<DaySummaryResponse>;
+}
+
+// When sentiment was last written, across every ticker. "Last AI run" is a per-user
+// timestamp for a full analysis; this is separate because the intraday tick and the
+// lazy chart seed both write sentiment outside any run, so a run can be hours old while
+// the sentiment behind it was topped up an hour ago. Global rather than per ticker, and
+// unauthenticated like the other informational endpoints.
+export async function getSentimentLastUpdated() {
+  const res = await fetch(`${BASE}/api/sentiment/last-updated`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ updated_at: string | null }>;
 }
