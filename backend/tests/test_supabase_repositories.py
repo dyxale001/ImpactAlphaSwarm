@@ -35,7 +35,9 @@ from src.utils.supabase_client import (  # noqa: E402
     DiscoveryRepository,
     NewsCacheRepository,
     RankingRepository,
+    RecommendationRepository,
     Repository,
+    SentimentHistoryRepository,
     UserRepository,
 )
 
@@ -444,3 +446,73 @@ class TestDiscoveryRepository:
 
     def test_a_failed_audit_does_not_fail_discovery(self):
         DiscoveryRepository(FakeClient(raises=True)).record_run({}, [], "ok")  # must not raise
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Recommendations — the backfill's ticker source
+# ═════════════════════════════════════════════════════════════════════════════
+# Folded in from PR #37 (Ally, 2026-09-02), which added it as a module function
+# reaching the client directly. Same queries, same degrade-to-empty rule.
+
+class TestRecommendationRepository:
+    def test_recently_ranked_tickers_are_resolved_through_the_assets_table(self):
+        client = FakeClient({
+            "ai_recommendation": [{"asset_id": "a1"}, {"asset_id": "a2"}],
+            "assets": [{"id": "a1", "ticker": "nvda"}, {"id": "a2", "ticker": "MSFT"}],
+        })
+        assert RecommendationRepository(client).recently_ranked_tickers() == ["MSFT", "NVDA"]
+
+    def test_tickers_are_upper_cased_and_deduplicated(self):
+        client = FakeClient({
+            "ai_recommendation": [{"asset_id": "a1"}, {"asset_id": "a1"}],
+            "assets": [{"id": "a1", "ticker": "nvda"}, {"id": "a1", "ticker": "NVDA"}],
+        })
+        assert RecommendationRepository(client).recently_ranked_tickers() == ["NVDA"]
+
+    def test_no_recent_recommendations_means_the_assets_table_is_never_queried(self):
+        client = FakeClient({"ai_recommendation": []})
+        assert RecommendationRepository(client).recently_ranked_tickers() == []
+        assert client.tables_touched() == ["ai_recommendation"]
+
+    def test_rows_without_an_asset_id_are_skipped(self):
+        client = FakeClient({
+            "ai_recommendation": [{"asset_id": None}, {}],
+        })
+        assert RecommendationRepository(client).recently_ranked_tickers() == []
+
+    def test_a_failed_read_degrades_to_an_empty_list(self):
+        # A backfill that cannot see the database does nothing rather than crawling a guess.
+        assert RecommendationRepository(FakeClient(raises=True)).recently_ranked_tickers() == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Sentiment history — the freshness read
+# ═════════════════════════════════════════════════════════════════════════════
+# Also folded in from PR #37. The tables themselves are written by ss_daily /
+# ns_daily through their own client; this is the one read the assets header needs.
+
+class TestSentimentHistoryRepository:
+    def test_the_later_of_the_two_tables_wins(self):
+        client = FakeClient({
+            "social_sentiment_daily": [{"updated_at": "2026-09-01T10:00:00Z"}],
+            "news_sentiment_daily": [{"updated_at": "2026-09-02T08:00:00Z"}],
+        })
+        assert SentimentHistoryRepository(client).last_updated() == "2026-09-02T08:00:00Z"
+
+    def test_both_tables_are_consulted(self):
+        client = FakeClient()
+        SentimentHistoryRepository(client).last_updated()
+        assert client.tables_touched() == ["social_sentiment_daily", "news_sentiment_daily"]
+
+    def test_one_empty_table_does_not_hide_the_other(self):
+        client = FakeClient({
+            "social_sentiment_daily": [],
+            "news_sentiment_daily": [{"updated_at": "2026-09-02T08:00:00Z"}],
+        })
+        assert SentimentHistoryRepository(client).last_updated() == "2026-09-02T08:00:00Z"
+
+    def test_both_tables_empty_is_unknown_not_a_guess(self):
+        assert SentimentHistoryRepository(FakeClient()).last_updated() is None
+
+    def test_a_failed_read_degrades_to_unknown(self):
+        assert SentimentHistoryRepository(FakeClient(raises=True)).last_updated() is None
