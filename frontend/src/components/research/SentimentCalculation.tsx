@@ -97,7 +97,7 @@ function BlendRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 font-mono text-[12px] text-brand-fg">
-      <span className="text-brand-muted-fg">{label}</span>
+      <span className="text-forest-500">{label}</span>
       <span className="tabular-nums">
         {Math.round(score)} &times; {weightPct}% ={" "}
         <span className="font-semibold text-brand-fg">
@@ -137,11 +137,18 @@ export default function SentimentCalculation({
     : typeof newsScore === "number"
       ? newsScore
       : 0;
-  const socialSub = social.reconstructable
-    ? social.avg
-    : typeof socialScore === "number"
+  // News is still reconstructed from what is on screen, because every article that
+  // fed the score is listed. Social is not, and must not be: the row now keeps only
+  // the most influential handful of posts, with the full per-day lists on the social
+  // page, so rebuilding the average from what is visible would quietly show a wrong
+  // number in the one panel whose entire purpose is showing the real working.
+  // The stored sub-score is the one computed from every post.
+  const socialSub =
+    typeof socialScore === "number"
       ? socialScore
-      : 0;
+      : social.reconstructable
+        ? social.avg
+        : 0;
 
   // Mirror backend _blend_sentiment: fall back to whichever source has data.
   let blended: number;
@@ -165,7 +172,7 @@ export default function SentimentCalculation({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-primary transition-colors hover:text-brand-primary/80"
+        className="inline-flex items-center gap-1.5 rounded-full border border-forest-200 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-700 transition-colors hover:border-lime-500 hover:bg-lime-100"
       >
         <Sigma className="h-3.5 w-3.5" />
         {open ? "Hide the calculation" : "Show how this score was calculated"}
@@ -174,12 +181,16 @@ export default function SentimentCalculation({
         />
       </button>
 
+      {/* Forest tints rather than the generic card greys this used to borrow. The
+          panel is a quiet aside off the main reading line, and forest-50 on
+          forest-200 sets it back from the white card without turning it into another
+          full-strength surface competing with the lists below. */}
       {open && (
-        <div className="mt-3 space-y-4 rounded-2xl border border-brand-border/60 bg-brand-bg/40 p-4">
+        <div className="mt-3 space-y-4 rounded-2xl border border-forest-200 bg-forest-50 p-4">
           {/* News sub-score: tier-by-tier. */}
           {hasNews && news.reconstructable && (
             <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+              <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
                 News sub-score, by reliability tier
               </p>
               <div className="space-y-1.5">
@@ -196,7 +207,7 @@ export default function SentimentCalculation({
                         >
                           {meta.label}
                         </span>
-                        <span className="text-brand-muted-fg">
+                        <span className="text-forest-500">
                           {t.count} {t.count === 1 ? "article" : "articles"}
                         </span>
                       </span>
@@ -210,13 +221,13 @@ export default function SentimentCalculation({
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between gap-3 border-t border-brand-border/50 pt-1.5 text-[12px] font-semibold text-brand-fg">
+              <div className="flex items-center justify-between gap-3 border-t border-forest-200 pt-1.5 text-[12px] font-semibold text-brand-fg">
                 <span>News sub-score</span>
                 <span className="font-mono tabular-nums">
                   {Math.round(newsSub)} / 100
                 </span>
               </div>
-              <p className="text-[11px] text-brand-muted-fg">
+              <p className="text-[11px] text-forest-500">
                 Each tier contributes its own average at a fixed share, so a few
                 trusted wires are not drowned out by a flood of lower-tier
                 articles. Within a tier, newer articles count for more on a{" "}
@@ -229,31 +240,31 @@ export default function SentimentCalculation({
           {/* Social sub-score. */}
           {hasSocial && (
             <div className="space-y-1.5">
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+              <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
                 Social sub-score
               </p>
               <div className="flex items-center justify-between gap-3 text-[12px] font-semibold text-brand-fg">
-                <span className="font-normal text-brand-muted-fg">
-                  Engagement- and recency-weighted average of{" "}
-                  {socialPosts.length}{" "}
-                  {socialPosts.length === 1 ? "post" : "posts"}
+                <span className="font-normal text-forest-500">
+                  Engagement-weighted average of every post scored in the window
                 </span>
                 <span className="font-mono tabular-nums">
                   {Math.round(socialSub)} / 100
                 </span>
               </div>
-              <p className="text-[11px] text-brand-muted-fg">
+              <p className="text-[11px] text-forest-500">
                 Posts with more likes and reshares pull the average harder, on a
-                log-dampened scale so one viral post cannot dominate. Newer posts
-                also count for more. Both are already baked into each post's
-                Influence in the list below.
+                log-dampened scale so one viral post cannot dominate. That is already
+                baked into each post's Influence in the list below. Only the most
+                influential posts are listed here, so they will not add up to the
+                number above on their own; the full day by day lists are on the social
+                sentiment page.
               </p>
             </div>
           )}
 
           {/* Blend. */}
           <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
+            <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
               Blended score
             </p>
             {hasNews && hasSocial ? (
@@ -271,10 +282,13 @@ export default function SentimentCalculation({
               </div>
             ) : (
               blendNote && (
-                <p className="text-[11px] text-brand-muted-fg">{blendNote}</p>
+                <p className="text-[11px] text-forest-500">{blendNote}</p>
               )
             )}
-            <div className="flex items-center justify-between gap-3 border-t border-brand-border/50 pt-1.5 text-sm font-semibold text-brand-fg">
+            {/* The answer the whole panel is working towards, ruled off in the
+                signature lime rather than the same hairline as the intermediate
+                sub-totals above it. */}
+            <div className="flex items-center justify-between gap-3 border-t-2 border-lime-500 mt-1 pt-2 text-sm font-semibold text-brand-fg">
               <span>Blended Score</span>
               <span className="font-mono tabular-nums">
                 {blendedShown} / 100

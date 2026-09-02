@@ -1029,6 +1029,91 @@ def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, An
     return _rankings.save_shadow(run_id, rows)
 
 
+def get_recently_ranked_tickers(days: int = 3) -> List[str]:
+    """Tickers that reached someone's ranked feed in the last ``days``.
+
+    The backfill's ticker source. Anything here is something a user can open and expect
+    a chart for, which is a tighter set than every row in ``assets`` and a wider one
+    than any single user's watchlist.
+
+    Read from the database rather than handed over by the nightly batch on purpose.
+    ``run_daily_batch`` does return its ticker union, but coupling the two scheduler
+    jobs that way means the backfill is only correct when it runs after a successful
+    nightly; a query is correct whether it runs on schedule, by hand, or twice.
+
+    Returns ``[]`` on any failure, so a backfill that cannot see the database does
+    nothing rather than crawling a guess.
+    """
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max(1, days))
+    ).isoformat()
+    try:
+        rows = (
+            supabase.table("ai_recommendation")
+            .select("asset_id,created_at")
+            .gte("created_at", cutoff)
+            .execute()
+            .data
+            or []
+        )
+        asset_ids = sorted({row["asset_id"] for row in rows if row.get("asset_id")})
+        if not asset_ids:
+            return []
+
+        # One round trip for the symbols, matching the batching rule in rec_writer.
+        assets = (
+            supabase.table("assets")
+            .select("id,ticker")
+            .in_("id", asset_ids)
+            .execute()
+            .data
+            or []
+        )
+        return sorted({a["ticker"].upper() for a in assets if a.get("ticker")})
+    except Exception as e:
+        print(f"Error listing recently ranked tickers: {e}")
+        return []
+
+
+def get_sentiment_last_updated() -> Optional[str]:
+    """When sentiment data was last written, across every ticker.
+
+    The more recent of ``social_sentiment_daily.updated_at`` and
+    ``news_sentiment_daily.updated_at``. Both are touched by more than the nightly run
+    now: the intraday tick and the lazy seed behind a chart write the social table, and a
+    run's own scoring writes the news table, so "last AI run" on the assets header no
+    longer bounds how fresh the sentiment behind those recommendations is. This answers
+    the freshness question the run timestamp can no longer answer by itself.
+
+    Deliberately global rather than scoped to one user's tickers. A tick walks whatever
+    was recently ranked across every user, so a per-user figure would read almost
+    identically to this one on any deployment with more than a handful of users, for the
+    cost of a second parameter and a join this page does not otherwise need.
+
+    Returns ``None`` on any failure or when both tables are empty, which the caller shows
+    as "unknown" rather than a wrong guess.
+    """
+    try:
+        latest: Optional[str] = None
+        for table in ("social_sentiment_daily", "news_sentiment_daily"):
+            rows = (
+                supabase.table(table)
+                .select("updated_at")
+                .order("updated_at", desc=True)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            stamp = rows[0]["updated_at"] if rows else None
+            if stamp and (latest is None or stamp > latest):
+                latest = stamp
+        return latest
+    except Exception as e:
+        print(f"Error reading sentiment last-updated: {e}")
+        return None
+
+
 def get_previous_ranking(run_id: str, before_night: Optional[str] = None) -> Dict[str, int]:
     return _rankings.previous_ranking(run_id, before_night)
 
