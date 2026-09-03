@@ -451,7 +451,7 @@ class TestDiscoveryRepository:
 # ═════════════════════════════════════════════════════════════════════════════
 # Recommendations — the backfill's ticker source
 # ═════════════════════════════════════════════════════════════════════════════
-# Folded in from PR #37 (Ally, 2026-09-02), which added it as a module function
+# Folded in from PR #37 (Sachint, merged 2026-09-02), which added it as a module function
 # reaching the client directly. Same queries, same degrade-to-empty rule.
 
 class TestRecommendationRepository:
