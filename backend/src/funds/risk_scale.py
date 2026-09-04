@@ -53,16 +53,24 @@ _RISK_ALIASES: dict[str, int] = {
     "very low": 1,
     "low to moderate": 2,
     "low to medium": 2,
+    "low to mod": 2,       # abbreviated scale, seen on FundRock sheets
     "moderately low": 2,
     "moderate": 3,
     "medium": 3,
+    "mod": 3,
     "moderate to high": 4,
     "medium to high": 4,
+    "mod to high": 4,
     "moderately high": 4,
     "high": 5,
     "very high": 5,
     "aggressive": 5,
 }
+
+# Words that decorate a label without changing it. Sheets print "Moderate - High
+# Risk" as a heading and abbreviate the scale itself to "Mod-High"; both are the
+# same rating and neither should fall through as unreadable.
+_DECORATION = ("risk profile", "risk", "profile")
 
 # Wordings that explicitly mean "not published". Distinguished from an
 # unrecognised string so a genuinely absent indicator is not mistaken for a
@@ -79,7 +87,14 @@ def _collapse(value: str) -> str:
     text = value.strip().casefold()
     for separator in ("–", "—", "-", "/"):
         text = text.replace(separator, " to ")
-    return " ".join(text.split())
+    text = " ".join(text.split())
+    # Strip a trailing "risk" or "risk profile": "Moderate - High Risk" is the
+    # same rating as "Moderate to High".
+    for decoration in _DECORATION:
+        if text.endswith(" " + decoration):
+            text = text[: -(len(decoration) + 1)].strip()
+            break
+    return text
 
 
 def normalize(value: Any) -> int | None:

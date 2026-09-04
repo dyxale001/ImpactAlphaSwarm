@@ -57,6 +57,17 @@ class TestNormalisingPublishedLabels:
             ("Moderately High", 4),
             ("High", 5),
             ("Very High", 5),
+            # Wordings taken off real sheets. FundRock heads the section
+            # "Moderate - High Risk" and abbreviates its own scale to
+            # "Low-Mod / Mod / Mod-High"; both are the same ratings, and the
+            # first draft of this table read neither.
+            ("Moderate - High Risk", 4),
+            ("Moderate Risk", 3),
+            ("Low Risk", 1),
+            ("High Risk Profile", 5),
+            ("Low-Mod", 2),
+            ("Mod", 3),
+            ("Mod-High", 4),
         ],
     )
     def test_published_wordings_map_to_the_scale(self, raw, expected):

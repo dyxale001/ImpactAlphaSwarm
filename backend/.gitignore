@@ -22,9 +22,18 @@ pip-wheel-metadata/
 *.sqlite3
 *.log
 logs/
-data/
+# Runtime artefacts: traces, reports and caches. Written as `data/*` rather than
+# `data/` so git still descends into the directory and can see the exception
+# below — it cannot re-include anything inside an excluded directory.
+data/*
 data/runs/
 data/reports/
+# The exception: the fund catalogue seed is source, not an artefact. Figures
+# transcribed by hand from published fact sheets, and the golden set an extractor
+# is later measured against. Archived PDFs stay ignored, being copies of the
+# managers' own documents that the loader fetches.
+!data/funds/
+data/funds/mdd/
 .vscode/
 .idea/
 *.swp

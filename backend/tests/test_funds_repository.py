@@ -478,12 +478,24 @@ class TestVehicleConsistency:
         problems = VehicleConsistencyValidator().check(dict(FUND_ROW, yahoo_symbol="EXM40"))
         assert [p.field for p in problems] == ["yahoo_symbol"]
 
-    def test_a_unit_trust_must_not_claim_a_listing(self):
+    def test_a_unit_trust_must_not_claim_a_price_feed(self):
         # The mistake this catches: a fund house that runs both an ETF and its
-        # unit-trust twin, transcribed from the wrong sheet.
+        # unit-trust twin, transcribed from the wrong sheet. A price symbol on a
+        # unit trust is almost always a different instrument — typically an
+        # offshore share class quoted in dollars.
         row = dict(FUND_ROW, vehicle="unit_trust")
         problems = VehicleConsistencyValidator().check(row)
-        assert {p.field for p in problems} == {"jse_code", "yahoo_symbol"}
+        assert {p.field for p in problems} == {"yahoo_symbol"}
+
+    def test_a_unit_trust_may_carry_a_jse_code(self):
+        # REGRESSION GUARD against this validator's first draft, which required
+        # `etf` if and only if a code was present. Real fact sheets disproved it:
+        # FundRock prints "JSE Code: BBBCF" on a unit trust, where the code
+        # identifies the fund for dealing rather than a listing. The stricter
+        # rule would have rejected a large part of the catalogue for looking
+        # wrong.
+        row = dict(FUND_ROW, vehicle="unit_trust", jse_code="BBBCF", yahoo_symbol=None)
+        assert VehicleConsistencyValidator().check(row) == []
 
     def test_a_clean_unit_trust_passes(self):
         row = dict(FUND_ROW, vehicle="unit_trust", jse_code=None, yahoo_symbol=None, is_index_tracker=False)

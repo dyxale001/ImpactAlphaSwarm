@@ -228,12 +228,19 @@ class IsinValidator(RowValidator):
 
 
 class VehicleConsistencyValidator(RowValidator):
-    """A listed fund has listing details; an unlisted one must not.
+    """A listed fund has a price feed; an unlisted one must not claim one.
 
-    This is the rule that keeps the two vehicles honest. A unit trust with a JSE
-    code would suggest a price feed that does not exist, and an ETF without one
-    has no way to be priced at all — and both mistakes are easy to make when
-    transcribing a fund house that runs both versions of the same index.
+    The discriminator is the Yahoo symbol, NOT the presence of a code. That was
+    the first draft of this rule and real fact sheets disproved it: FundRock
+    prints "JSE Code: BBBCF" on a unit trust, where the code identifies the fund
+    for dealing rather than a listing. Rejecting those funds would have thrown
+    out a large part of the catalogue for looking wrong.
+
+    What must hold is narrower and still worth enforcing. An ETF needs a
+    '.JO' symbol or it cannot be priced at all, and a unit trust must not carry
+    one — a symbol found for a unit trust is almost always a different
+    instrument, typically an offshore share class quoted in dollars, which is
+    the mistake that would put a foreign price on a rand fund.
     """
 
     name = "vehicle"
@@ -244,11 +251,10 @@ class VehicleConsistencyValidator(RowValidator):
             return [Problem("vehicle", f"{vehicle!r} is not 'unit_trust' or 'etf'")]
 
         problems: list[Problem] = []
-        jse_code = row.get("jse_code")
         symbol = row.get("yahoo_symbol")
 
         if vehicle == "etf":
-            if is_blank(jse_code):
+            if is_blank(row.get("jse_code")):
                 problems.append(Problem("jse_code", "an ETF is listed and needs its JSE code"))
             if is_blank(symbol):
                 problems.append(
@@ -262,19 +268,14 @@ class VehicleConsistencyValidator(RowValidator):
                         f"rand cents and any other suffix is a different market",
                     )
                 )
-        else:
-            if not is_blank(jse_code):
-                problems.append(
-                    Problem("jse_code", f"a unit trust is not listed, so {jse_code!r} cannot be right")
+        elif not is_blank(symbol):
+            problems.append(
+                Problem(
+                    "yahoo_symbol",
+                    f"a unit trust has no free price feed, so {symbol!r} would be a "
+                    f"different instrument (often an offshore share class in dollars)",
                 )
-            if not is_blank(symbol):
-                problems.append(
-                    Problem(
-                        "yahoo_symbol",
-                        f"a unit trust has no free price feed, so {symbol!r} would be a "
-                        f"different instrument (often an offshore share class)",
-                    )
-                )
+            )
         return problems
 
 
