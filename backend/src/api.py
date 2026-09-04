@@ -135,6 +135,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Funds catalogue ----------------------------------------------------------
+# South African unit trusts and JSE-listed ETFs, matched to the onboarding
+# profile from published fact sheets. Off unless FUNDS_ENABLED is set: with the
+# flag off nothing beyond the flag module is imported and /api/fund-catalogue
+# 404s, so merging this changes no behaviour.
+#
+# Note the path. /api/funds already exists further down and returns 13F
+# institutional holdings — somebody else's holdings, not something to invest in.
+from src.funds.config import FUNDS_ENABLED  # noqa: E402
+
+if FUNDS_ENABLED:
+    from src.funds.routes import mount_fund_catalogue  # noqa: E402
+
+    # Log what happened, not what was attempted. Note that this Starlette
+    # version records an included router as one entry in `app.routes` rather
+    # than copying each path in, so the four funds paths are not visible there
+    # even when they are served — check the responses, not the route list.
+    if mount_fund_catalogue(app):
+        logger.info("Funds catalogue mounted at /api/fund-catalogue")
+    else:
+        logger.warning("FUNDS_ENABLED is set but the funds catalogue did not mount")
+
 
 # --- Orphaned-run guard -------------------------------------------------------
 # An interactive analysis runs as a fire-and-forget background task after the API

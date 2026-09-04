@@ -98,7 +98,28 @@ class FakeQuery:
         self.client.executed.append(self)
         if self.client.raises:
             raise RuntimeError("supabase is down")
-        return FakeResponse(self.client.rows.get(self.table_name, []))
+        return FakeResponse(self._filtered(self.client.rows.get(self.table_name, [])))
+
+    def _filtered(self, rows):
+        """Apply the recorded eq() and in_() filters to the canned rows.
+
+        Enough fidelity that a lookup for a row that is not there comes back
+        empty, which is what lets a 404 path be tested. Deliberately lenient
+        about columns a fixture omits: a row without the filtered key is kept, so
+        a test can supply the three fields it cares about instead of a full
+        table row. Everything else PostgREST does is left to PostgREST.
+        """
+        result = list(rows)
+        for name, args, _kw in self.calls:
+            if len(args) < 2:
+                continue
+            column, value = args[0], args[1]
+            if name == "eq":
+                result = [r for r in result if column not in r or r.get(column) == value]
+            elif name == "in_":
+                wanted = set(value or [])
+                result = [r for r in result if column not in r or r.get(column) in wanted]
+        return result
 
 
 class FakeBucket:
