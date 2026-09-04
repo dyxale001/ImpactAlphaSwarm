@@ -21,6 +21,8 @@ import AdminLearningQuestions from "./pages/AdminLearningQuestions";
 import AdminBadges from "./pages/AdminBadges";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
+import FundsPage from "./pages/Funds";
+import { FUNDS_ENABLED } from "./utils/fundsFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import PortfolioPage from "./pages/Portfolio";
@@ -84,6 +86,9 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />{" "}
           {/* Changed from "/" to "/dashboard" */}
           <Route path="/assets" element={<AssetsPage />} />
+          {/* Funds catalogue. Unrouted unless the flag is set, so with it off
+              the path is a 404 rather than a page that cannot load its data. */}
+          {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />

@@ -11,9 +11,11 @@ import {
   Terminal,
   Settings,
   Waves,
+  Landmark,
   Menu,
   X,
 } from "lucide-react";
+import { FUNDS_ENABLED } from "../../utils/fundsFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,6 +46,7 @@ export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Assets", path: "/assets", icon: CandlestickChart },
+    { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
@@ -59,7 +62,11 @@ export default function AppLayout() {
       i.name === "Watchlist" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
-      i.name === "Settings"
+      i.name === "Settings" ||
+      // Behind the flag: the entry has to be in both the list above and this
+      // allow-list to appear, and the page it links to needs the backend flag
+      // as well, so nothing half-appears.
+      (FUNDS_ENABLED && i.name === "Funds")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
