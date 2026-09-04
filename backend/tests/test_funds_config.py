@@ -45,6 +45,19 @@ class TestFlagReader:
         assert config._flag("FUNDS_TEST_FLAG", "true") is True
 
 
+def reload_without(*names: str, monkeypatch):
+    """Reload the config with the named variables absent from the environment.
+
+    Necessary because ``backend/.env`` is read during collection, so a developer
+    who has switched the feature on locally would otherwise see these tests go
+    red. The default is a property of the code, not of whoever is running it, so
+    the test has to control the environment rather than read it.
+    """
+    for name in names:
+        monkeypatch.delenv(name, raising=False)
+    return importlib.reload(config)
+
+
 class TestDefaults:
     """PINNED VALUE: the shipped defaults. A failure here means a default moved.
 
@@ -53,9 +66,14 @@ class TestDefaults:
     makes the feature live for every deployment that has not opted in.
     """
 
-    def test_both_feature_flags_are_off(self):
-        assert config.FUNDS_ENABLED is False
-        assert config.FUND_TRACES_ENABLED is False
+    def test_both_feature_flags_are_off(self, monkeypatch):
+        reloaded = reload_without("FUNDS_ENABLED", "FUND_TRACES_ENABLED", monkeypatch=monkeypatch)
+        try:
+            assert reloaded.FUNDS_ENABLED is False
+            assert reloaded.FUND_TRACES_ENABLED is False
+        finally:
+            monkeypatch.undo()
+            importlib.reload(config)
 
     def test_storage_and_platform_settings(self):
         assert config.MDD_BUCKET == "mdd"
@@ -89,9 +107,15 @@ class TestEnvironmentIsActuallyRead:
             monkeypatch.undo()
             importlib.reload(config)
 
-    def test_reload_restores_the_off_defaults(self):
+    def test_reload_restores_the_documented_ttl(self, monkeypatch):
         # REGRESSION GUARD for the test above: a leaked reload would make every
-        # later assertion about the off state meaningless.
-        assert config.FUNDS_ENABLED is False
-        assert config.FUND_TRACES_ENABLED is False
-        assert config.MDD_SIGNED_URL_TTL_SECONDS == 3600
+        # later assertion meaningless. The TTL is checked rather than the flags,
+        # because the flags legitimately reflect whatever `.env` says once the
+        # module is reloaded from a real environment.
+        monkeypatch.delenv("FUNDS_MDD_URL_TTL", raising=False)
+        reloaded = importlib.reload(config)
+        try:
+            assert reloaded.MDD_SIGNED_URL_TTL_SECONDS == 3600
+        finally:
+            monkeypatch.undo()
+            importlib.reload(config)

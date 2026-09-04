@@ -182,12 +182,15 @@ class TestMapValidation:
         assert "FR Best Blend Balanced Fund (C)" in {m.name for m in outcome.matches}
 
     def test_the_same_fund_is_not_shown_to_a_cautious_saver(self, fund_rows, snapshot_rows):
-        # A Moderate-High label cannot clear a conservative ceiling of 2.
+        # A Moderate-High label cannot clear a conservative ceiling of 2. The
+        # assertion is about this fund rather than an empty result: a cautious
+        # saver should see the money market fund, and once one was seeded an
+        # "empty" assertion started testing the wrong thing.
         outcome = FundMatcher(clock=lambda: TODAY).match(
             profile("Conservative", purpose="emergency_fund", horizon_target_year=2028),
             candidates(fund_rows, snapshot_rows),
         )
-        assert outcome.matches == ()
+        assert "FR Best Blend Balanced Fund (C)" not in {m.name for m in outcome.matches}
 
     def test_the_same_fund_is_not_shown_on_a_short_horizon(self, fund_rows, snapshot_rows):
         # Its sheet asks for five years; eighteen months is not five years.
@@ -206,6 +209,43 @@ class TestMapValidation:
                 candidates(fund_rows, snapshot_rows),
             )
             assert "Satrix 40 ETF" not in {m.name for m in outcome.matches}, risk
+
+    def test_a_cautious_saver_has_something_to_see(self, fund_rows, snapshot_rows):
+        # The panel's own worked example, and the case the equity side of the
+        # product cannot serve: someone who wants surety and access. Until a
+        # money market fund was seeded this matched nothing at all, which made
+        # the feature look broken while behaving correctly.
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Conservative", purpose="emergency_fund", horizon_target_year=2028),
+            candidates(fund_rows, snapshot_rows),
+        )
+        assert outcome.matches, "a Conservative profile matches nothing; seed a low-risk fund"
+        assert all(m.risk_indicator_1to5 <= 2 for m in outcome.matches)
+
+    def test_a_growth_profile_has_something_to_see(self, fund_rows, snapshot_rows):
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Aggressive", purpose="growth", horizon_target_year=2033),
+            candidates(fund_rows, snapshot_rows),
+        )
+        assert outcome.matches
+
+    def test_the_moderate_gap_is_visible_rather_than_forgotten(self, fund_rows, snapshot_rows):
+        # KNOWN GAP, asserted so it cannot be lost. A Moderate profile has a
+        # ceiling of 3 and its categories are medium/high equity, variable-term
+        # bonds and broad-market trackers. Nothing seeded yet sits at or below
+        # risk 3 in any of them, so the middle profile matches nothing.
+        #
+        # When a fund that closes it is seeded — a Multi Asset Medium Equity or
+        # an income fund rated Low-Moderate or Moderate — this test will fail,
+        # and the right response is to replace it with a positive assertion.
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Moderate", purpose="goal", horizon_target_year=2029),
+            candidates(fund_rows, snapshot_rows),
+        )
+        assert outcome.matches == (), (
+            "a Moderate profile now matches something — good. Replace this test "
+            "with an assertion that it does."
+        )
 
     def test_every_match_carries_the_facts_its_reason_needs(self, fund_rows, snapshot_rows):
         outcome = FundMatcher(clock=lambda: TODAY).match(

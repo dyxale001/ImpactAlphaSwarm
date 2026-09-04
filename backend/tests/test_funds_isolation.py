@@ -130,9 +130,13 @@ class TestTheApiOnlyReachesFundsBehindTheFlag:
     def test_only_the_flag_module_loads_when_the_flag_is_off(self):
         # The strongest form of the claim: with the flag unset, importing the
         # whole API leaves the feature on disk.
+        # Set the flag off explicitly rather than removing it. An environment
+        # variable wins over `backend/.env`, so this holds even for a developer
+        # who has switched the feature on locally — otherwise this test would
+        # measure their machine rather than the code.
         probe = (
             "import os, sys;"
-            "os.environ.pop('FUNDS_ENABLED', None);"
+            "os.environ['FUNDS_ENABLED'] = 'false';"
             "sys.path.insert(0, %r);"
             "import src.api;"
             "print(sorted(m for m in sys.modules if m.startswith('src.funds')))" % str(BACKEND_ROOT)
