@@ -468,6 +468,60 @@ async def refresh_asset_cache(ticker: str):
     }
 
 
+# Yahoo exchange codes for venues that quote in US dollars. Read off live search
+# responses rather than remembered: NASDAQ answers as both NMS and NGM, NYSE as
+# NYQ, its ETF venue as PCX, and the US over-the-counter market as PNK, OQB and
+# OQX. NCM and ASE are the remaining NASDAQ and NYSE American tiers.
+#
+# Everything else is a foreign listing, and the reason to exclude those is not
+# tidiness. Adding one to a watchlist puts its ticker into the next analysis run,
+# where the quantitative phase would price a rand-cent JSE quote as dollars and
+# the sentiment phase would find no coverage for it. A JSE fund belongs in the
+# funds catalogue, which reads published fact sheets instead of guessing.
+#
+# US over-the-counter venues are IN deliberately. They are how a name like
+# Naspers is reachable at all, they are quoted in dollars, and a user searching
+# for one and adding it is a deliberate act. That is different from the discovery
+# agent, which excludes over-the-counter names when choosing what to analyse
+# unprompted.
+US_EXCHANGE_CODES = frozenset({"NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "BTS", "PNK", "OQB", "OQX"})
+
+# Instruments we can price and analyse. Crypto, futures and indices are dropped.
+SEARCHABLE_QUOTE_TYPES = frozenset({"EQUITY", "ETF"})
+
+# How many results the search returns.
+SEARCH_RESULT_LIMIT = 6
+
+
+def _is_us_listed(quote: dict) -> bool:
+    """Whether a Yahoo search hit is quoted on a US venue.
+
+    Two checks rather than one. The exchange code is the real test; the absence
+    of a suffix in the symbol is the backstop, because a venue code we have
+    never seen would otherwise pass. Every foreign listing Yahoo returns carries
+    one (``STX40.JO``, ``AAL.L``, ``SXR8.DE``), and no US symbol does — Yahoo
+    writes share classes with a hyphen, as in ``BRK-B``.
+    """
+    if (quote.get("exchange") or "").upper() not in US_EXCHANGE_CODES:
+        return False
+    return "." not in (quote.get("symbol") or "")
+
+
+def _filter_search_quotes(quotes: list[dict]) -> list[dict]:
+    """Keep US-listed equities and ETFs, then take the first few.
+
+    Filtering before the slice matters: applied afterwards it would first fill
+    the six slots with foreign listings and then discard them, returning fewer
+    results than exist.
+    """
+    keep = [
+        row
+        for row in quotes
+        if (row.get("quoteType") or "").upper() in SEARCHABLE_QUOTE_TYPES and _is_us_listed(row)
+    ]
+    return keep[:SEARCH_RESULT_LIMIT]
+
+
 @app.get("/api/assets/search")
 async def search_assets(q: str = ""):
     """Fully live asset search via Yahoo Finance search API.
@@ -502,9 +556,7 @@ async def search_assets(q: str = ""):
     except Exception as exc:
         logger.warning("Yahoo Finance search failed for %s: %s", q, exc)
 
-    # Keep equities and ETFs; drop crypto, futures, indices
-    allowed = {"EQUITY", "ETF"}
-    quotes = [r for r in quotes if r.get("quoteType", "").upper() in allowed][:6]
+    quotes = _filter_search_quotes(quotes)
 
     if not quotes:
         return {"results": []}
