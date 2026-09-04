@@ -147,14 +147,27 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
         "sa_eq_general",
         "gl_eq_general",
     }),
+    # Everything a moderate bracket covers, with the tracker restriction lifted,
+    # plus the growth-oriented categories above it.
+    #
+    # Cumulative from Moderate upward on purpose. Written out as a curated list
+    # first, it produced a bracket NARROWER than the moderate one — an aggressive
+    # profile could not see a high-equity balanced fund that a moderate profile
+    # could, which is not a position anyone would defend. High-equity multi asset
+    # is plainly not more aggressive than general equity, so the fix is
+    # containment rather than a longer list. ⚠ This widens the categories named
+    # in the agreed bracket table; raise it before the copy review.
     "Aggressive": frozenset({
+        "sa_ma_medium_equity",
+        "sa_ma_high_equity",
+        "sa_ib_variable_term",
         "sa_eq_general",
         "gl_eq_general",
+        "sa_ma_flexible",
+        "gl_ma_high_equity",
+        "ww_ma_flexible",
         "sa_re_general",
         "gl_re_general",
-        "ww_ma_flexible",
-        "gl_ma_high_equity",
-        "sa_ma_high_equity",
     }),
 }
 

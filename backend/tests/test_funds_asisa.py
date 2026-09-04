@@ -191,11 +191,32 @@ class TestBracketPolicy:
             assert code not in cautious
 
     def test_brackets_widen_as_risk_tolerance_rises(self):
-        # Not a subset relation — a moderate bracket deliberately drops the
-        # cautious cash categories — but the count must not fall, or "more risk
-        # tolerance, fewer options" would be the result.
+        # Not a subset relation throughout — a moderate bracket deliberately
+        # drops the cautious cash categories — but the count must not fall, or
+        # "more risk tolerance, fewer options" would be the result. Writing the
+        # aggressive bracket as a curated list is what first broke this.
         sizes = [len(BRACKET_CATEGORIES[bracket]) for bracket in BRACKET_ORDER]
         assert sizes == sorted(sizes)
+
+    def test_the_top_bracket_contains_the_middle_one(self):
+        # An aggressive profile must not be shown less than a moderate one.
+        assert BRACKET_CATEGORIES["Moderate"] <= BRACKET_CATEGORIES["Aggressive"]
+
+    def test_the_top_bracket_lifts_the_tracker_restriction(self):
+        # Broad-market equity reaches a moderate bracket only as an index
+        # tracker; above it, a stock-picking equity fund is a fair option.
+        assert TRACKER_ONLY["Aggressive"] == frozenset()
+
+    def test_every_category_we_seed_is_reachable_from_some_bracket(self):
+        # A category stored in the database but named by no bracket can hold a
+        # fund that never matches anyone. That is either a curation decision
+        # nobody recorded or an orphan, and both want noticing here rather than
+        # as "why does this fund never appear".
+        reachable: set[str] = set()
+        for codes in BRACKET_CATEGORIES.values():
+            reachable |= codes
+        orphans = ASISA.codes() - reachable
+        assert not orphans, f"seeded but unreachable: {sorted(orphans)}"
 
     def test_module_exports_what_the_matcher_imports(self):
         # Cheap guard against a rename landing in one file only.
