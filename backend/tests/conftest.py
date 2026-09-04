@@ -1,14 +1,26 @@
 """Shared test setup.
 
-Two jobs, both about determinism:
+Three jobs, all about determinism:
 
 1.  Put ``backend/`` on ``sys.path`` so ``import src.…`` works no matter which
     directory pytest was invoked from.
 
-2.  Pin every env-tunable scoring constant to its DOCUMENTED DEFAULT before the
+2.  Give the Supabase client placeholder credentials if the environment has
+    none, so collection does not depend on a developer's ``.env``.
+
+3.  Pin every env-tunable scoring constant to its DOCUMENTED DEFAULT before the
     modules under test are imported.
 
-Point 2 matters more than it looks. ``ranking.py``, ``quant_analyst.py`` and
+Point 2 is not hypothetical. ``supabase_client`` raises at *import* when
+``SUPABASE_URL`` or ``SUPABASE_SERVICE_ROLE_KEY`` is missing, and several test
+modules import it transitively. Today the suite survives only because
+``langgraph_orchestrator`` calls ``load_dotenv()`` and a developer happens to have
+``backend/.env`` — so in a fresh clone, a git worktree or CI, collection fails
+with four errors before a single test runs. ``setdefault`` leaves a real
+environment untouched; the placeholders only ever apply where there was nothing.
+Nothing in the suite reaches the network, so a fake URL is never dialled.
+
+Point 3 matters more than it looks. ``ranking.py``, ``quant_analyst.py`` and
 ``ss_aggregation.py`` all read their thresholds via ``os.getenv`` at *import*
 time, and ``langgraph_orchestrator`` calls ``load_dotenv()``, which pulls
 ``backend/.env`` into the environment. None of the scoring tunables are set in
@@ -28,6 +40,17 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+# ── credentials the client insists on at import ──────────────────────────────
+# setdefault, not assignment: a real environment must win, because some tests are
+# run against a scratch project deliberately.
+_IMPORT_TIME_REQUIRED = {
+    "SUPABASE_URL": "http://localhost:54321",
+    "SUPABASE_SERVICE_ROLE_KEY": "test-service-role-key",
+}
+
+for _key, _value in _IMPORT_TIME_REQUIRED.items():
+    os.environ.setdefault(_key, _value)
 
 # ── documented defaults, pinned ──────────────────────────────────────────────
 _PINNED_DEFAULTS = {

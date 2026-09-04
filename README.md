@@ -327,6 +327,8 @@ LANGSMITH_PROJECT               → (Optional) LangSmith project name
 DISCOVERY_ENABLED               → (Optional) run the discovery agent, default false
 UNIFIED_RANKING_ENABLED         → (Optional) four-factor ordering, default false
 UNIFIED_RANKING_SHADOW          → (Optional) record without reordering, default true
+FUNDS_ENABLED                   → (Optional) serve the funds catalogue, default false
+FUND_TRACES_ENABLED             → (Optional) LLM fund explanations, default false
 ```
 
 Further tuning variables (discovery thresholds, news weighting, quant window,
@@ -338,6 +340,7 @@ VITE_SUPABASE_URL               → Supabase project URL (same as backend)
 VITE_SUPABASE_ANON_KEY          → Supabase anon key
 VITE_API_BASE                   → Backend URL (localhost:8000 locally)
 VITE_UNIFIED_SCORECARD          → (Optional) "true" renders the Signal Scorecard panel
+VITE_FUNDS_ENABLED              → (Optional) "true" shows the Funds page and nav entry
 ```
 
 ---
