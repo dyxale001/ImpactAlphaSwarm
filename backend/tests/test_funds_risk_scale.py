@@ -68,6 +68,16 @@ class TestNormalisingPublishedLabels:
             ("Low-Mod", 2),
             ("Mod", 3),
             ("Mod-High", 4),
+            # Satrix names its steps by temperament instead of by risk. Reading
+            # these wrongly is not a near miss: without them four of its funds
+            # looked like they published no rating, when the rating is printed
+            # plainly on the sheet.
+            ("Conservative", 1),
+            ("CONSERVATIVE", 1),
+            ("Cautious", 2),
+            ("Moderate-Aggressive", 4),
+            ("MODERATE-AGGRESSIVE", 4),
+            ("Aggressive", 5),
         ],
     )
     def test_published_wordings_map_to_the_scale(self, raw, expected):

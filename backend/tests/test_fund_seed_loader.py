@@ -200,15 +200,21 @@ class TestMapValidation:
         )
         assert "FR Best Blend Balanced Fund (C)" not in {m.name for m in outcome.matches}
 
-    def test_the_tracker_with_no_published_risk_label_never_matches(self, fund_rows, snapshot_rows):
-        # It is in the catalogue and browsable, and it cannot be matched by
-        # anyone, because its manager publishes no rating to compare.
+    def test_a_fund_with_no_published_rating_never_matches(self, fund_rows, snapshot_rows):
+        # Harvard House prints a continuous gradient with no named steps, so no
+        # level is recorded and no profile can be compared against it.
+        #
+        # This test used to name the Satrix 40 ETF, on the belief that ETF sheets
+        # generally publish no rating. That was wrong: Satrix does publish one,
+        # labelled by temperament rather than by risk, and a text search that did
+        # not know those words reported it as absent. The fund is rated
+        # Aggressive and the seed now says so.
         for risk in ("Conservative", "Moderate", "Aggressive"):
             outcome = FundMatcher(clock=lambda: TODAY).match(
                 profile(risk, purpose="growth", horizon_target_year=2035),
                 candidates(fund_rows, snapshot_rows),
             )
-            assert "Satrix 40 ETF" not in {m.name for m in outcome.matches}, risk
+            assert "Harvard House FR Property Fund (A)" not in {m.name for m in outcome.matches}, risk
 
     def test_a_cautious_saver_has_something_to_see(self, fund_rows, snapshot_rows):
         # The panel's own worked example, and the case the equity side of the
@@ -229,23 +235,17 @@ class TestMapValidation:
         )
         assert outcome.matches
 
-    def test_the_moderate_gap_is_visible_rather_than_forgotten(self, fund_rows, snapshot_rows):
-        # KNOWN GAP, asserted so it cannot be lost. A Moderate profile has a
-        # ceiling of 3 and its categories are medium/high equity, variable-term
-        # bonds and broad-market trackers. Nothing seeded yet sits at or below
-        # risk 3 in any of them, so the middle profile matches nothing.
-        #
-        # When a fund that closes it is seeded — a Multi Asset Medium Equity or
-        # an income fund rated Low-Moderate or Moderate — this test will fail,
-        # and the right response is to replace it with a positive assertion.
+    def test_the_middle_profile_has_something_to_see(self, fund_rows, snapshot_rows):
+        # Closed by the Satrix bond ETFs, which are rated Cautious and sit in
+        # Interest Bearing Variable Term — a Moderate category. Every one of the
+        # three profiles now matches something, which is the point at which the
+        # catalogue stops looking broken to whoever is testing it.
         outcome = FundMatcher(clock=lambda: TODAY).match(
             profile("Moderate", purpose="goal", horizon_target_year=2029),
             candidates(fund_rows, snapshot_rows),
         )
-        assert outcome.matches == (), (
-            "a Moderate profile now matches something — good. Replace this test "
-            "with an assertion that it does."
-        )
+        assert outcome.matches, "a Moderate profile matches nothing"
+        assert all(m.risk_indicator_1to5 <= 3 for m in outcome.matches)
 
     def test_every_match_carries_the_facts_its_reason_needs(self, fund_rows, snapshot_rows):
         outcome = FundMatcher(clock=lambda: TODAY).match(

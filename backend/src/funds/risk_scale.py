@@ -49,6 +49,16 @@ DEFAULT_CEILING = CEILINGS["Moderate"]
 # scale. Both dash styles and the spelled-out "to" appear in practice, and the
 # separator is collapsed before lookup so only the words need listing here.
 _RISK_ALIASES: dict[str, int] = {
+    # Satrix labels its five steps by investor temperament rather than by the
+    # amount of risk: CONSERVATIVE / CAUTIOUS / MODERATE / MODERATE-AGGRESSIVE /
+    # AGGRESSIVE. Note that "conservative" here is the LOWEST step, the opposite
+    # end from what the same word means as a user's own risk tolerance. Missing
+    # these read four Satrix funds as publishing no indicator at all when they
+    # publish one plainly.
+    "conservative": 1,
+    "cautious": 2,
+    "moderate to aggressive": 4,
+    "moderately aggressive": 4,
     "low": 1,
     "very low": 1,
     "low to moderate": 2,
