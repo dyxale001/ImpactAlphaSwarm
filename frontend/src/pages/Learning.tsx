@@ -22,6 +22,88 @@ import type {
   LearningQuizResult,
 } from "../types/learning";
 
+class LearningCentreSearchEngine {
+  scoreArticleMatch(article: LearningArticle, query: string) {
+    const title = article.title.toLowerCase();
+    const summary = article.summary.toLowerCase();
+    const content = article.content.toLowerCase();
+    const difficultyLevel = article.difficulty_level.toLowerCase();
+
+    if (title === query) return 5;
+    if (title.startsWith(query)) return 4;
+    if (title.includes(query)) return 3;
+    if (summary.includes(query)) return 2;
+    if (content.includes(query)) return 1;
+    if (difficultyLevel.includes(query)) return 1;
+
+    return 0;
+  }
+
+  buildSuggestedArticles(
+    categories: LearningCategory[],
+    search: string,
+  ): Array<LearningArticle & { categoryName: string; relevance: number }> {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return [];
+    }
+
+    return categories
+      .flatMap((category) =>
+        category.articles.map((article) => ({
+          ...article,
+          categoryName: category.name,
+        })),
+      )
+      .map((article) => ({
+        ...article,
+        relevance: this.scoreArticleMatch(article, query),
+      }))
+      .filter((article) => article.relevance > 0)
+      .sort((first, second) => {
+        if (second.relevance !== first.relevance) {
+          return second.relevance - first.relevance;
+        }
+
+        return first.title.localeCompare(second.title);
+      })
+      .slice(0, 5);
+  }
+
+  filterCategoriesByQuery(categories: LearningCategory[], query: string) {
+    const trimmedQuery = query.trim().toLowerCase();
+
+    if (!trimmedQuery) {
+      return categories;
+    }
+
+    return categories
+      .map((category) => {
+        const matchingArticles = category.articles.filter((article) => {
+          const searchableText = [
+            article.title,
+            article.summary,
+            article.content,
+            article.difficulty_level,
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          return searchableText.includes(trimmedQuery);
+        });
+
+        return {
+          ...category,
+          articles: matchingArticles,
+        };
+      })
+      .filter((category) => category.articles.length > 0);
+  }
+}
+
+const learningCentreSearchEngine = new LearningCentreSearchEngine();
+
 export default function LearningPage() {
   const { session, profile, fetchProfile } = useAuthStore();
   const userId = profile?.id ?? session?.user?.id ?? null;
@@ -44,22 +126,6 @@ export default function LearningPage() {
     articleId: string;
     result: LearningQuizResult;
   } | null>(null);
-
-  const scoreArticleMatch = (article: LearningArticle, query: string) => {
-    const title = article.title.toLowerCase();
-    const summary = article.summary.toLowerCase();
-    const content = article.content.toLowerCase();
-    const difficultyLevel = article.difficulty_level.toLowerCase();
-
-    if (title === query) return 5;
-    if (title.startsWith(query)) return 4;
-    if (title.includes(query)) return 3;
-    if (summary.includes(query)) return 2;
-    if (content.includes(query)) return 1;
-    if (difficultyLevel.includes(query)) return 1;
-
-    return 0;
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -147,64 +213,16 @@ export default function LearningPage() {
     };
   }, [userId]);
 
-  const suggestedArticles = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const suggestedArticles = useMemo(
+    () => learningCentreSearchEngine.buildSuggestedArticles(categories, search),
+    [categories, search],
+  );
 
-    if (!query) {
-      return [] as Array<LearningArticle & { categoryName: string }>;
-    }
-
-    return categories
-      .flatMap((category) =>
-        category.articles.map((article) => ({
-          ...article,
-          categoryName: category.name,
-        })),
-      )
-      .map((article) => ({
-        ...article,
-        relevance: scoreArticleMatch(article, query),
-      }))
-      .filter((article) => article.relevance > 0)
-      .sort((first, second) => {
-        if (second.relevance !== first.relevance) {
-          return second.relevance - first.relevance;
-        }
-
-        return first.title.localeCompare(second.title);
-      })
-      .slice(0, 5);
-  }, [categories, search]);
-
-  const filteredCategories = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) {
-      return categories;
-    }
-
-    return categories
-      .map((category) => {
-        const matchingArticles = category.articles.filter((article) => {
-          const searchableText = [
-            article.title,
-            article.summary,
-            article.content,
-            article.difficulty_level,
-          ]
-            .join(" ")
-            .toLowerCase();
-
-          return searchableText.includes(query);
-        });
-
-        return {
-          ...category,
-          articles: matchingArticles,
-        };
-      })
-      .filter((category) => category.articles.length > 0);
-  }, [categories, search]);
+  const filteredCategories = useMemo(
+    () =>
+      learningCentreSearchEngine.filterCategoriesByQuery(categories, search),
+    [categories, search],
+  );
 
   const hasSearchResults = filteredCategories.length > 0;
   const hasLearningContent = categories.length > 0;
