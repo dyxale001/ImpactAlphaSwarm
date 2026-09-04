@@ -38,9 +38,11 @@ ImpactAlphaSwarm/
 │   │   ├── api.py                    # FastAPI endpoints (analysis, assets, whales, admin)
 │   │   ├── agents/                   # sentiment_scout, quant_analyst, asset_discovery, gcp_nlp
 │   │   ├── orchestration/            # LangGraph orchestrator + unified ranking
+│   │   ├── funds/                    # funds catalogue: classification, matcher, fact sheets (flagged off)
 │   │   └── utils/                    # Supabase client, sentiment modules, whale watching, traces
-│   ├── migrations/                   # 001-014, applied in the Supabase SQL editor
-│   ├── scripts/                      # ranking shadow / stability reports
+│   ├── migrations/                   # 001-024, applied in the Supabase SQL editor
+│   ├── data/funds/                   # transcribed fact-sheet seed for the funds catalogue
+│   ├── scripts/                      # ranking shadow / stability reports, fund seed loader
 │   ├── tests/                        # pytest suite
 │   ├── Dockerfile                    # Cloud Run image (gunicorn + uvicorn worker)
 │   ├── main.py                       # CLI entry point for a local orchestrator run
@@ -85,12 +87,17 @@ From your Supabase project:
 ### Step 1.2: Apply the Migrations
 
 `backend/migrations/` holds the schema changes made since the base tables, in
-numbered order (001 through 014): news and social sentiment columns, the quant
+numbered order (001 through 024): news and social sentiment columns, the quant
 sub-dimensions, the whale-watching and news caches, asset discovery, entity
-descriptions, and the unified ranking tables.
+descriptions, the unified ranking tables, the sentiment day summaries, and the
+funds catalogue.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
+
+Migration 024 is the only one you can skip: it creates the funds catalogue, which
+does nothing until `FUNDS_ENABLED` is set. Apply it before turning that flag on,
+not after — the page needs the tables and a loaded seed to show anything.
 
 ---
 

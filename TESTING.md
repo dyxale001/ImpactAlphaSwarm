@@ -1,8 +1,8 @@
 # Testing
 
-Automated unit tests covering the scoring and ranking core. 361 tests, both
-suites run in under three seconds combined, and neither touches the network,
-the database, or an LLM.
+Automated unit tests covering the scoring and ranking core, and the funds
+catalogue. **1056 backend tests and 104 frontend tests**, both suites run in a
+few seconds combined, and neither touches the network, the database, or an LLM.
 
 ## Running them
 
@@ -28,6 +28,16 @@ npm run test:watch
 | `backend/tests/test_ranking.py` | `src/orchestration/ranking.py` | 102 |
 | `backend/tests/test_quant_analyst.py` | `src/agents/quant_analyst.py` | 106 |
 | `backend/tests/test_ss_aggregation.py` | `src/utils/ss_aggregation.py` | 49 |
+| `backend/tests/test_funds_repository.py` | `src/funds/repository.py`, `validators.py` | 123 |
+| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 59 |
+| `backend/tests/test_funds_copy.py` | `src/funds/copy.py` | 50 |
+| `backend/tests/test_funds_matcher.py` | `src/funds/matcher.py` | 37 |
+| `backend/tests/test_funds_explain.py` | `src/funds/explain.py` | 32 |
+| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 29 |
+| `backend/tests/test_api_search_guard.py` | asset-search exchange guard | 28 |
+| `backend/tests/test_funds_asisa.py` | `src/funds/asisa.py` | 24 |
+| `backend/tests/test_funds_isolation.py` | funds stay out of the pipeline | 9 |
+| `backend/tests/test_funds_config.py` | `src/funds/config.py` | 7 |
 | `frontend/src/utils/scoringEngine.test.ts` | onboarding psychometrics | 31 |
 | `frontend/src/utils/validation.test.ts` | email + password rules | 24 |
 | `frontend/src/utils/staleness.test.ts` | nightly-run staleness | 20 |
@@ -37,9 +47,26 @@ npm run test:watch
 The target is the pure logic that decides what a user is shown and in what
 order: the four ranking terms and their composition, the two-stage quant
 percentile engine, the tier/recency sentiment blend, and the onboarding survey
-that produces a user's risk tolerance. Components, pages, hooks, API routes and
-database access are deliberately out of scope — they are expensive to test and
-the risk in them is lower.
+that produces a user's risk tolerance. Components, pages and hooks are
+deliberately out of scope — they are expensive to test and the risk in them is
+lower.
+
+The funds catalogue extends that scope in two places, for reasons specific to it.
+Its **API routes** are tested (`test_funds_routes.py`) because the matching
+rules, the fact-sheet data and the wording are only correct *together*: a route
+returning the right funds in the wrong shape, or a reason sentence that lost its
+disclaimer, is the failure that matters and no unit test sees it. The tests use
+the real service over a fake Supabase client, so nothing reaches a network. Its
+**database access** is tested (`test_funds_repository.py`) because a repository
+that silently returns nothing looks exactly like a catalogue that is empty.
+
+Two funds suites defend properties rather than behaviour, and are worth knowing
+about before changing anything nearby. `test_funds_copy.py` scans every
+user-facing string for wording that would turn information into financial
+advice. `test_funds_isolation.py` fails if the nightly pipeline ever imports the
+funds package — a fund has no social coverage, so the sentiment phase would hand
+it a neutral score that convergence reads as conflict, and it would be demoted
+rather than simply unscored.
 
 ## What the assertions mean
 
