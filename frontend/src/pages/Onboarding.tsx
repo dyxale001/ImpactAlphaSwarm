@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { Layers, ArrowUpRight, Activity, Search, Check, Eye, ArrowRight, Terminal } from 'lucide-react'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { SURVEY_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
+import { SURVEY_QUESTIONS, GOAL_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import InvestorProfileCard from '../components/InvestorProfileCard'
+import { describeGoals } from '../utils/goals'
 import { useAuthStore } from '../store/authStore'
 
 // ─── Display maps ──────────────────────────────────────────────────────────
@@ -64,6 +65,10 @@ export default function Onboarding() {
     toggleUniverse,
     prevStep,
     handleSurveyAnswer,
+    goalAnswers,
+    handleGoalAnswer,
+    goals,
+    goalsAnswered,
   } = useOnboarding()
 
   useEffect(() => {
@@ -328,6 +333,62 @@ export default function Onboarding() {
                 </div>
               </div>
 
+              {/* Goals: asked before the risk questions because they are the
+                  easier ones and they frame what follows. Stored separately
+                  from the survey answers so they cannot reach the risk score. */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-baseline justify-between">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.1em] text-forest-700">
+                    Your goals
+                  </h3>
+                  <span className="text-[11px] font-semibold text-muted">
+                    {goalsAnswered} / {GOAL_QUESTIONS.length}
+                  </span>
+                </div>
+                <p className="text-[13px] leading-[1.5] text-muted">
+                  These four answers decide which fund categories we can show you, using the
+                  risk profiles and minimum terms fund managers publish themselves.
+                </p>
+              </div>
+
+              {GOAL_QUESTIONS.map((q) => (
+                <div key={q.id} className="flex flex-col gap-3 rounded-xl bg-white p-6 shadow-sm">
+                  <p className="text-[15px] font-semibold leading-normal text-forest-900">{q.question}</p>
+                  <div className="flex flex-col gap-2">
+                    {q.options.map((opt) => {
+                      const selected = goalAnswers[q.id] === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleGoalAnswer(q.id, opt.value)}
+                          className={`flex items-center gap-3 rounded-md border px-3.5 py-[11px] text-left transition-all duration-150 ${
+                            selected ? 'border-lime-500/80 bg-lime-100' : 'border-forest-900/8 bg-neutral-100/60'
+                          }`}
+                        >
+                          <span
+                            className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
+                              selected ? 'border-forest-900' : 'border-forest-900/25'
+                            }`}
+                          >
+                            {selected && <span className="h-1.5 w-1.5 rounded-full bg-forest-900" />}
+                          </span>
+                          <span className={`text-[13px] leading-[1.45] ${selected ? 'font-semibold text-forest-900' : 'text-muted'}`}>
+                            {opt.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex flex-col gap-1 pt-2">
+                <h3 className="text-[13px] font-semibold uppercase tracking-[0.1em] text-forest-700">
+                  Risk and literacy
+                </h3>
+              </div>
+
               {SURVEY_QUESTIONS.map((q) => (
                 <div key={q.id} className="flex flex-col gap-3 rounded-xl bg-white p-6 shadow-sm">
                   <p className="text-[15px] font-semibold leading-normal text-forest-900">{q.question}</p>
@@ -408,6 +469,22 @@ export default function Onboarding() {
                 Every recommendation the Swarm shows you will be filtered through this mandate, adjustable any time in
                 Settings.
               </p>
+              {/* The goal answers read back, so the profile shown is the whole
+                  profile and not only the part the risk questions produced. */}
+              {describeGoals(goals) && (
+                <div className="w-full max-w-[520px] rounded-xl bg-white p-5 shadow-sm">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+                    Your goals
+                  </h3>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-forest-900">
+                    {describeGoals(goals)}
+                  </p>
+                  <p className="mt-2 text-[12px] leading-relaxed text-muted">
+                    We use these to narrow fund categories to the ones whose published risk
+                    profile and minimum term fit what you told us.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
