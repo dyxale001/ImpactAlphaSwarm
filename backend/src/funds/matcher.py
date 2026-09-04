@@ -400,6 +400,7 @@ def _to_result(candidate: FundCandidate, state: MatchState) -> MatchResult:
         manco=fund.get("manco") or "",
         asisa_category=fund.get("asisa_category") or "",
         as_of=str(snap.get("as_of") or ""),
+        mdd_url=snap.get("mdd_url"),
         risk_indicator_1to5=level if level is not None else 0,
         risk_indicator_raw=snap.get("risk_indicator_raw") or label_for(level),
         recommended_min_term_years=as_number(snap.get("recommended_min_term_years")),

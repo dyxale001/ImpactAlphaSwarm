@@ -219,6 +219,25 @@ class TestBrowse:
         assert etf["risk_level"] is None
         assert "does not publish" in etf["risk_note"]
 
+    def test_a_fund_carries_the_dated_document_not_just_the_listing_page(self, client):
+        # REGRESSION GUARD. The card offered `mdd_page_url` under "Read the fact
+        # sheet", which for a manager with no per-fund page is a listing of
+        # hundreds of funds. The dated document is what the figures came from
+        # and what the reader is being promised.
+        body = client.get("/api/fund-catalogue").json()
+        fund = next(f for f in body["funds"] if f["isin"] == "ZAE000000001")
+        assert fund["mdd_url"] == "https://alpha.invalid/sheets/mm-july.pdf"
+        assert fund["mdd_page_url"] == "https://alpha.invalid/funds/money-market"
+        assert fund["mdd_url"] != fund["mdd_page_url"]
+
+    def test_a_fund_with_no_fact_sheet_has_no_document_url(self, client):
+        # Then the page is the only thing to offer, and the interface says so
+        # with different wording rather than promising a document.
+        body = client.get("/api/fund-catalogue").json()
+        for fund in body["funds"]:
+            if not fund["has_factsheet"]:
+                assert fund["mdd_url"] is None
+
     def test_a_filter_narrows_the_list(self, client):
         body = client.get("/api/fund-catalogue", params={"vehicle": "etf"}).json()
         assert [f["name"] for f in body["funds"]] == ["Zulu Top 40 Index ETF"]
@@ -294,6 +313,15 @@ class TestMatches:
         assert "South African - Interest Bearing - Money Market" in reason
         assert "31 July 2026" in reason
         assert "This is information, not advice." in reason
+
+    def test_every_match_links_the_fact_sheet_it_cites(self, client):
+        # The reason sentence names a fact sheet by date. Before this, a matched
+        # card carried no URL at all, so the citation could not be opened.
+        body = client.get("/api/fund-catalogue/matches").json()
+        assert body["matches"]
+        for match in body["matches"]:
+            assert match["mdd_url"], match["name"]
+            assert match["as_of"] in match["reason"] or match["as_of"]
 
     def test_the_bracket_explains_what_the_profile_resolved_to(self, client):
         bracket = client.get("/api/fund-catalogue/matches").json()["bracket"]

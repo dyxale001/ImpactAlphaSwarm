@@ -31,6 +31,9 @@ export interface CatalogueFund {
   tfsa_eligible: boolean;
   platforms: string[];
   curation_rule: string | null;
+  /** The dated document the figures came from. Prefer this over the page. */
+  mdd_url: string | null;
+  /** The manager's listing page, used only when no dated document is on file. */
   mdd_page_url: string | null;
   as_of: string | null;
   risk_level: number | null;
@@ -96,6 +99,8 @@ export interface FundMatch {
   manco: string;
   asisa_category: string;
   as_of: string;
+  /** The dated document the reason sentence cites. */
+  mdd_url: string | null;
   risk_level: number;
   risk_label: string | null;
   recommended_min_term_years: number | null;

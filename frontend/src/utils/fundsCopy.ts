@@ -93,6 +93,14 @@ export const RISK_SCALE_TITLE = "Risk profile, as the manager publishes it";
 
 export const FACT_SHEET_ACTION = "Read the fact sheet";
 
+/** Used when only the manager's listing page is on file, not the dated document.
+ *
+ * A separate label because the first one promises the sheet whose figures are
+ * on the card, and a manager without a per-fund page has a listing of hundreds.
+ * Sending someone there under "Read the fact sheet" is a small dishonesty on a
+ * page whose whole claim is that every figure is attributable. */
+export const FACT_SHEET_PAGE_ACTION = "Find this fund on the manager's site";
+
 export const AS_AT = "Fact sheet as at";
 
 export const COST_LABEL = "Total investment charge";
@@ -141,6 +149,7 @@ export function allStrings(): string[] {
     MIN_TERM_LABEL,
     TFSA_BADGE,
     TRACKER_BADGE,
+    FACT_SHEET_PAGE_ACTION,
     ...Object.values(VEHICLE_LABEL),
   ];
 }

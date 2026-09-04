@@ -195,6 +195,7 @@ class FundCatalogueService:
             "manco": match.manco,
             "asisa_category": match.asisa_category,
             "as_of": match.as_of,
+            "mdd_url": match.mdd_url,
             "risk_level": match.risk_indicator_1to5,
             "risk_label": match.risk_indicator_raw or label_for(match.risk_indicator_1to5),
             "recommended_min_term_years": match.recommended_min_term_years,
@@ -226,6 +227,13 @@ class FundCatalogueService:
             "tfsa_eligible": bool(fund.get("tfsa_eligible")),
             "platforms": fund.get("platforms") or [],
             "curation_rule": fund.get("curation_rule"),
+            # Two different things, and the card must prefer the first. `mdd_url`
+            # is the dated document these figures came from; `mdd_page_url` is
+            # the manager's listing page the current sheet is resolved from,
+            # which for a manager with no per-fund page is an index of hundreds.
+            # Offering the index under "read the fact sheet" is what this
+            # distinction exists to prevent.
+            "mdd_url": snapshot.get("mdd_url"),
             "mdd_page_url": fund.get("mdd_page_url"),
             "as_of": str(snapshot.get("as_of")) if snapshot.get("as_of") else None,
             "risk_level": level,

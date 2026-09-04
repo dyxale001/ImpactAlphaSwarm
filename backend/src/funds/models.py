@@ -242,6 +242,10 @@ class MatchResult:
     asisa_category: str
     as_of: str
     risk_indicator_1to5: int
+    # The dated document these figures came from. Carried on the match because
+    # the reason sentence cites it by date, and a citation a reader cannot open
+    # is not much of a citation.
+    mdd_url: str | None = None
     risk_indicator_raw: str | None = None
     recommended_min_term_years: float | None = None
     ter: float | None = None

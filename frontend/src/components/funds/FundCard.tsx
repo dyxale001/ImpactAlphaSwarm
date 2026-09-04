@@ -5,6 +5,7 @@ import {
   COST_LABEL,
   COST_TER_LABEL,
   FACT_SHEET_ACTION,
+  FACT_SHEET_PAGE_ACTION,
   MIN_TERM_LABEL,
   TFSA_BADGE,
   TRACKER_BADGE,
@@ -45,7 +46,12 @@ export default function FundCard({
   const asAt = formatAsAt(fund.as_of ?? null);
   const minTerm = formatMinTerm(fund.recommended_min_term_years ?? null);
   const size = formatFundSize((fund as CatalogueFund).fund_size_zar ?? null);
-  const factSheetUrl = (fund as CatalogueFund).mdd_page_url ?? null;
+  // The dated document first, the manager's listing page only as a fallback.
+  // Linking the listing page under "Read the fact sheet" sends a reader to an
+  // index of hundreds of funds instead of the one whose figures they are
+  // looking at, so the label changes with the destination.
+  const factSheetUrl = fund.mdd_url ?? (fund as CatalogueFund).mdd_page_url ?? null;
+  const linksToDocument = Boolean(fund.mdd_url);
 
   return (
     <article className="soft-card flex flex-col gap-4 p-5">
@@ -132,7 +138,7 @@ export default function FundCard({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-primary hover:underline"
           >
-            {FACT_SHEET_ACTION}
+            {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
             <ExternalLink className="h-3 w-3" />
           </a>
         )}
