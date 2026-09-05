@@ -245,6 +245,57 @@ class TestLatestSnapshots:
         assert client.tables_touched() == []
 
 
+class TestOneFundsHistory:
+    """INVARIANT: history has one entry per fact sheet, not per stored row.
+
+    The table is append-only — corrections cannot be deleted, by design and by
+    grant — so a re-read of a sheet lands as a second row for a date that
+    already has one. Both stay as the audit trail. Only the current reading is
+    history: a fee that never moved must not appear to have moved because we
+    fixed our own transcription of it.
+    """
+
+    def test_a_corrected_sheet_appears_once(self):
+        client = FakeClient(
+            rows={
+                "fund_factsheet_snapshots": [
+                    snapshot("f-1", "2026-07-31", mdd_sha256="corrected", created_at="2026-08-20"),
+                    snapshot("f-1", "2026-07-31", mdd_sha256="original", created_at="2026-08-05"),
+                ]
+            }
+        )
+        history = FundRepository(client).snapshots("f-1")
+        assert [row["mdd_sha256"] for row in history] == ["corrected"]
+
+    def test_genuinely_different_months_are_all_kept(self):
+        # The de-duplication is per date, so real history is untouched.
+        client = FakeClient(
+            rows={
+                "fund_factsheet_snapshots": [
+                    snapshot("f-1", "2026-07-31", mdd_sha256="jul"),
+                    snapshot("f-1", "2026-06-30", mdd_sha256="jun"),
+                    snapshot("f-1", "2026-05-31", mdd_sha256="may"),
+                ]
+            }
+        )
+        history = FundRepository(client).snapshots("f-1")
+        assert [row["mdd_sha256"] for row in history] == ["jul", "jun", "may"]
+
+    def test_it_still_asks_for_approved_sheets_newest_first(self):
+        # Keeping the first row per date is only correct because the database
+        # ordered them; if that ordering goes, the wrong reading wins silently.
+        client = FakeClient()
+        FundRepository(client).snapshots("f-1")
+        assert ("review_status", APPROVED) in client.filters_on("fund_factsheet_snapshots")
+        assert client.orderings_on("fund_factsheet_snapshots") == [
+            (("as_of",), {"desc": True}),
+            (("created_at",), {"desc": True}),
+        ]
+
+    def test_a_fund_with_no_sheets_has_no_history(self):
+        assert FundRepository(FakeClient()).snapshots("f-1") == []
+
+
 class TestCandidates:
     def test_a_fund_without_an_approved_sheet_still_comes_back(self):
         # It can never match — there is no published risk label to compare — but

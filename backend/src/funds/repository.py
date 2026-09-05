@@ -157,10 +157,18 @@ class FundRepository(Repository):
             return {}
 
     def snapshots(self, fund_id: str) -> list[dict[str, Any]]:
-        """Every approved sheet for one fund, newest first.
+        """One approved sheet per date for one fund, newest first.
 
         The history a unit trust has no price feed for: over time these rows are
         the only record of how a fund's costs and allocation moved.
+
+        A fact sheet is identified by its date, so the history shows one entry
+        per date — the latest reading of it. The table is append-only, so a
+        corrected transcription arrives as a second row for a date that already
+        has one; both are kept as the audit trail, and the superseded reading is
+        not a second month of history. Showing both would report the same sheet
+        twice and invite the reader to treat a fixed mistake as a change in the
+        fund.
         """
         try:
             resp = (
@@ -172,7 +180,13 @@ class FundRepository(Repository):
                 .order("created_at", desc=True)
                 .execute()
             )
-            return resp.data or []
+            # Ordered newest-correction-first above, so the first row seen for a
+            # date is the one to keep. Done here rather than in the query because
+            # PostgREST cannot express `distinct on`.
+            newest_per_date: dict[Any, dict[str, Any]] = {}
+            for row in resp.data or []:
+                newest_per_date.setdefault(row.get("as_of"), row)
+            return list(newest_per_date.values())
         except Exception as e:
             print(f"Error fetching snapshots for fund {fund_id}: {e}")
             return []
