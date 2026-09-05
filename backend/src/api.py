@@ -157,6 +157,14 @@ if FUNDS_ENABLED:
     else:
         logger.warning("FUNDS_ENABLED is set but the funds catalogue did not mount")
 
+    # The maintenance surface, behind the same flag and the usual admin check.
+    from src.funds.admin_routes import mount_fund_catalogue_admin  # noqa: E402
+
+    if mount_fund_catalogue_admin(app):
+        logger.info("Funds catalogue admin mounted at /api/admin/fund-catalogue")
+    else:
+        logger.warning("FUNDS_ENABLED is set but the funds admin did not mount")
+
 
 # --- Orphaned-run guard -------------------------------------------------------
 # An interactive analysis runs as a fire-and-forget background task after the API

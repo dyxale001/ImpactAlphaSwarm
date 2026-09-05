@@ -120,17 +120,11 @@ def pdf_bytes_for(isin: str, as_of: str) -> bytes | None:
 def transcription_identity(isin: str, snapshot: dict) -> str:
     """What makes one transcribed fact sheet different from another.
 
-    Stands in for the document's own hash when no PDF was archived. It covers
-    every transcribed value, not just which document they came from, so that
-    fixing a mis-read figure produces a different identity and therefore a new
-    snapshot rather than being discarded as a duplicate.
-
-    Sorted so the string does not depend on CSV column order, and the fund's
-    own ISIN is included so two funds can never collide.
+    Kept as a thin alias so this script reads in its own terms; the rule itself
+    lives on ``FundRepository`` because the admin form records snapshots too and
+    the two must not drift. See that method for why it hashes every value.
     """
-    fields = {k: v for k, v in snapshot.items() if k not in ("fund_id", "mdd_sha256", "mdd_pdf_ref")}
-    parts = "|".join(f"{k}={fields[k]!r}" for k in sorted(fields))
-    return f"{isin}|{parts}"
+    return FundRepository.transcription_hash(isin, snapshot)
 
 
 def main(argv: list[str]) -> int:
@@ -211,9 +205,7 @@ def main(argv: list[str]) -> int:
                 # the fix for the Satrix 40 risk rating, which stayed "no
                 # published indicator" in the database after the CSV said
                 # Aggressive.
-                snapshot["mdd_sha256"] = hashlib.sha256(
-                    transcription_identity(isin, snapshot).encode()
-                ).hexdigest()
+                snapshot["mdd_sha256"] = transcription_identity(isin, snapshot)
                 snapshot["mdd_pdf_ref"] = None
 
             snapshot["fund_id"] = fund_id

@@ -21,6 +21,7 @@ goes in and this method's callers do not change.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Optional, Sequence
 
 from ..utils.supabase_client import Repository, normalize_risk_tolerance
@@ -105,6 +106,20 @@ class FundRepository(Repository):
             return resp.data or []
         except Exception as e:
             print(f"Error listing funds: {e}")
+            return []
+
+    def list_every(self) -> list[dict[str, Any]]:
+        """Every fund, retired ones included, for the admin list.
+
+        The public list shows only active funds; whoever maintains the catalogue
+        has to see the retired ones too, because reviving one is how a fund
+        comes back — there is no delete to undo.
+        """
+        try:
+            resp = self.table().select(FUND_COLUMNS).order("name").execute()
+            return resp.data or []
+        except Exception as e:
+            print(f"Error listing every fund: {e}")
             return []
 
     def get(self, fund_id: str) -> Optional[dict[str, Any]]:
@@ -237,6 +252,46 @@ class FundRepository(Repository):
         payload = dict(row)
         payload["updated_at"] = self._now_iso()
         resp = self.table().upsert(payload, on_conflict="isin").execute()
+        return resp.data or []
+
+    @staticmethod
+    def transcription_hash(isin: str, snapshot: dict[str, Any]) -> str:
+        """Stand-in for a fact sheet's own hash, when no PDF has been archived.
+
+        Snapshots de-duplicate on ``(fund_id, as_of, mdd_sha256)``. With a PDF on
+        file that hash is the document's; without one it has to be derived, and
+        what it is derived from decides whether a correction can ever land.
+
+        It covers **every transcribed value**, not just which document they came
+        from. Hashing only isin/date/url — which is what this did first — makes
+        re-runs idempotent and silently discards every correction: the sheet is
+        the same, so a fixed figure looks like a duplicate. The Satrix 40 risk
+        rating sat wrong in a live database for exactly that reason.
+
+        Lives here rather than in the loader so the CSV path and the admin form
+        cannot drift apart on a rule this quiet.
+        """
+        fields = {
+            k: v for k, v in snapshot.items()
+            if k not in ("fund_id", "mdd_sha256", "mdd_pdf_ref", "id", "created_at")
+        }
+        parts = "|".join(f"{k}={fields[k]!r}" for k in sorted(fields))
+        return hashlib.sha256(f"{isin}|{parts}".encode()).hexdigest()
+
+    def update_fund(self, fund_id: str, patch: dict[str, Any]) -> list[dict[str, Any]]:
+        """Change some columns of one fund, addressed by its id.
+
+        Separate from ``upsert_fund`` because that one is keyed on ISIN and
+        writes a whole row: the admin interface edits a fund that already exists
+        and must not be able to move it onto another ISIN by mistake. ``isin``
+        and ``id`` are therefore dropped from the patch rather than trusted.
+
+        Not wrapped, for the same reason as the other writes: a save that did
+        not happen must not be reported as one.
+        """
+        payload = {k: v for k, v in patch.items() if k not in ("id", "isin")}
+        payload["updated_at"] = self._now_iso()
+        resp = self.table().update(payload).eq("id", fund_id).execute()
         return resp.data or []
 
     def insert_snapshot(self, row: dict[str, Any]) -> list[dict[str, Any]]:
