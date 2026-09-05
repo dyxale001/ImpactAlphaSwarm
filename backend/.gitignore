@@ -34,6 +34,10 @@ data/reports/
 # managers' own documents that the loader fetches.
 !data/funds/
 data/funds/mdd/
+# Fact sheets and workbooks the curation scripts download to read. Same reason:
+# copies of other people's published documents, re-fetchable from the URLs the
+# seed already records.
+scripts/curation/.cache/
 .vscode/
 .idea/
 *.swp

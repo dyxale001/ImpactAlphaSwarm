@@ -1,4 +1,11 @@
-# Test-only dependencies. Deliberately NOT in requirements.txt so the deployed
-# container image stays unchanged.
+# Test- and tooling-only dependencies. Deliberately NOT in requirements.txt so
+# the deployed container image stays unchanged.
 #   pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0
+
+# Read fund fact sheets when curating the catalogue seed (scripts/curation/).
+# The app never opens a PDF; only the person transcribing a fact sheet does.
+# pypdf pulls the text; pymupdf renders the risk-profile block, which every
+# manager draws as a graphic rather than printing as text.
+pypdf>=4.0
+pymupdf>=1.24
