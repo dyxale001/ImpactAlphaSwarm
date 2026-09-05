@@ -23,6 +23,8 @@ import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import FundsPage from "./pages/Funds";
 import FundDetailPage from "./pages/FundDetail";
+import AdminFunds from "./pages/AdminFunds";
+import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
@@ -125,6 +127,10 @@ export default function App() {
           />
           <Route path="/admin/badges" element={<AdminBadges />} />
           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
+          {/* Gated by the funds flag as well as by AdminRoute: with the feature
+              off its API is unmounted, so the pages would have nothing to read. */}
+          {FUNDS_ENABLED && <Route path="/admin/funds" element={<AdminFunds />} />}
+          {FUNDS_ENABLED && <Route path="/admin/funds/:fundId" element={<AdminFundEdit />} />}
         </Route>
       </Route>
     </Routes>
