@@ -289,3 +289,64 @@ class TestTheLoader:
         broken = [{"isin": "nope", "asisa_category": "South African - Equity - Mining", "vehicle": "bond"}]
         findings = fund_validators().check_all(broken)
         assert any(problem.blocking for _index, problem in findings)
+
+
+class TestCorrectingATranscription:
+    """INVARIANT: fixing a mis-read figure actually reaches the database.
+
+    Snapshots are append-only and de-duplicated on the document's hash, so that
+    re-running the loader is a no-op and a re-issued sheet lands beside its
+    predecessor rather than overwriting it. Where no PDF was archived, that hash
+    stands in for the document.
+
+    The first version of that stand-in hashed only ISIN, date and URL. It made
+    re-runs idempotent and it silently discarded every correction: same sheet,
+    same URL, same date, so a fixed figure looked like a duplicate. The Satrix 40
+    risk rating was wrong in a live database for exactly this reason — the CSV
+    said Aggressive and the loader kept reporting success without changing
+    anything.
+    """
+
+    @staticmethod
+    def _identity():
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("_seed_loader", LOADER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.transcription_identity
+
+    def test_an_unchanged_row_keeps_its_identity(self):
+        # Idempotence is the property the de-duplication exists for; a correction
+        # must not be bought at the price of a new row on every run.
+        identity = self._identity()
+        row = {"as_of": "2026-07-31", "mdd_url": "https://x/y.pdf", "risk_indicator_1to5": 5}
+        assert identity("ZAE000027108", dict(row)) == identity("ZAE000027108", dict(row))
+
+    def test_a_corrected_figure_changes_the_identity(self):
+        # The whole point: same fund, same sheet, same URL, different reading.
+        identity = self._identity()
+        base = {"as_of": "2026-07-31", "mdd_url": "https://x/y.pdf"}
+        was_unrated = identity("ZAE000027108", base | {"risk_indicator_raw": None, "risk_indicator_1to5": None})
+        now_rated = identity("ZAE000027108", base | {"risk_indicator_raw": "Aggressive", "risk_indicator_1to5": 5})
+        assert was_unrated != now_rated
+
+    def test_column_order_does_not_change_the_identity(self):
+        # Otherwise re-ordering a column in the CSV would re-insert every row.
+        identity = self._identity()
+        assert identity("X", {"a": 1, "b": 2}) == identity("X", {"b": 2, "a": 1})
+
+    def test_two_funds_never_share_an_identity(self):
+        identity = self._identity()
+        row = {"as_of": "2026-07-31", "mdd_url": "https://x/y.pdf"}
+        assert identity("ZAE000027108", dict(row)) != identity("ZAE000240123", dict(row))
+
+    def test_bookkeeping_columns_are_ignored(self):
+        # fund_id is assigned after the hash is taken, and the two mdd_* columns
+        # are what the hash is being computed *for*; including any of them would
+        # make the identity depend on itself or on a database id.
+        identity = self._identity()
+        bare = {"as_of": "2026-07-31"}
+        assert identity("X", dict(bare)) == identity(
+            "X", bare | {"fund_id": "abc", "mdd_sha256": "def", "mdd_pdf_ref": "ghi"}
+        )

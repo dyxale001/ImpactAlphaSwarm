@@ -117,6 +117,22 @@ def pdf_bytes_for(isin: str, as_of: str) -> bytes | None:
     return None
 
 
+def transcription_identity(isin: str, snapshot: dict) -> str:
+    """What makes one transcribed fact sheet different from another.
+
+    Stands in for the document's own hash when no PDF was archived. It covers
+    every transcribed value, not just which document they came from, so that
+    fixing a mis-read figure produces a different identity and therefore a new
+    snapshot rather than being discarded as a duplicate.
+
+    Sorted so the string does not depend on CSV column order, and the fund's
+    own ISIN is included so two funds can never collide.
+    """
+    fields = {k: v for k, v in snapshot.items() if k not in ("fund_id", "mdd_sha256", "mdd_pdf_ref")}
+    parts = "|".join(f"{k}={fields[k]!r}" for k in sorted(fields))
+    return f"{isin}|{parts}"
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Load the fund catalogue seed.")
     parser.add_argument("backend", nargs="?", default=".", help="path to the backend directory")
@@ -183,11 +199,21 @@ def main(argv: list[str]) -> int:
                 snapshot["mdd_sha256"] = hashlib.sha256(pdf).hexdigest()
                 snapshot["mdd_pdf_ref"] = repo.upload_mdd(isin, str(snapshot["as_of"]), pdf)
             else:
-                # No archived copy: hash what identifies the document instead, so
-                # the row still has a stable identity and a re-run is a no-op.
-                # The product links to the manager's own URL either way.
-                identity = f"{isin}:{snapshot['as_of']}:{snapshot.get('mdd_url')}"
-                snapshot["mdd_sha256"] = hashlib.sha256(identity.encode()).hexdigest()
+                # No archived copy, so stand in for the document's hash with a
+                # hash of the transcription itself. Re-running an unchanged seed
+                # stays a no-op, and a CORRECTED row lands as a new snapshot
+                # that `latest_snapshots` then prefers, because it orders by
+                # as_of then created_at.
+                #
+                # Hashing only isin/as_of/url — which is what this did first —
+                # silently drops corrections: the identity of a fact sheet is
+                # the same, but what we transcribed off it is not. That bug hid
+                # the fix for the Satrix 40 risk rating, which stayed "no
+                # published indicator" in the database after the CSV said
+                # Aggressive.
+                snapshot["mdd_sha256"] = hashlib.sha256(
+                    transcription_identity(isin, snapshot).encode()
+                ).hexdigest()
                 snapshot["mdd_pdf_ref"] = None
 
             snapshot["fund_id"] = fund_id
