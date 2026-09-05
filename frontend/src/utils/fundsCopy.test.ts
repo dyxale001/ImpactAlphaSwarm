@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import * as copy from './fundsCopy'
 import {
   FORBIDDEN_TERMS,
   allStrings,
@@ -145,5 +146,52 @@ describe('formatMinTerm', () => {
     // Silence is not a claim, and the card omits the line.
     expect(formatMinTerm(null)).toBeNull()
     expect(formatMinTerm(0)).toBeNull()
+  })
+})
+
+describe('every user-facing string is registered for scanning', () => {
+  it('has no exported copy string missing from allStrings()', () => {
+    // The forbidden-term scan above only polices what allStrings() returns, so
+    // a string added to this module but not registered there is invisible to
+    // it — the failure mode is silent, and the thing it lets through is
+    // exactly the wording the product is not licensed to use.
+    const registered = new Set(allStrings())
+    const exported = Object.entries(copy).filter(
+      ([name, value]) => typeof value === 'string' && name === name.toUpperCase(),
+    )
+    const unregistered = exported
+      .filter(([, value]) => !registered.has(value as string))
+      .map(([name]) => name)
+
+    // Guards the assertion below: if the filter ever stops finding the copy
+    // constants, this test would pass while checking nothing.
+    expect(exported.length).toBeGreaterThan(30)
+    expect(unregistered).toEqual([])
+  })
+})
+
+describe('the provenance copy keeps its two admissions', () => {
+  // These sentences are the page's honesty about itself. Softening either one
+  // turns a hand-transcribed catalogue into something that reads as though it
+  // were fetched from an authority, which is the claim the whole feature is
+  // built to avoid making.
+
+  it('says the figures were read by hand off the manager document', () => {
+    expect(copy.DETAIL_PROVENANCE_MANUAL).toMatch(/by hand/i)
+    expect(copy.DETAIL_PROVENANCE_MANUAL).toMatch(/nothing here is calculated by us/i)
+  })
+
+  it('says a missing section is our gap, not the fund lacking it', () => {
+    expect(copy.DETAIL_PROVENANCE_GAPS).toMatch(/gap in our reading, not in the fund/i)
+  })
+
+  it('warns that a platform fee sits on top of the published charge', () => {
+    // The fact sheet's TIC is not what the investor actually pays; omitting
+    // this would understate the cost on the page that leads with cost.
+    expect(copy.DETAIL_PLATFORM_FEE_NOTE).toMatch(/platform/i)
+  })
+
+  it('attributes the objective to the manager rather than to us', () => {
+    expect(copy.DETAIL_OBJECTIVE_ATTRIB).toMatch(/manager's own words/i)
   })
 })

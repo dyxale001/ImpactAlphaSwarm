@@ -1,4 +1,5 @@
 import { ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import RiskScale from "./RiskScale";
 import {
   AS_AT,
@@ -71,7 +72,18 @@ export default function FundCard({
             </span>
           )}
         </div>
-        <h3 className="text-[15px] font-bold leading-snug text-brand-primary">{fund.name}</h3>
+        {/* The name is the way in to the full sheet. Only the name is a link:
+            making the whole card clickable would swallow the fact-sheet link in
+            the footer, which goes somewhere else entirely. */}
+        <h3 className="text-[15px] font-bold leading-snug text-brand-primary">
+          {fund.fund_id ? (
+            <Link to={`/funds/${fund.fund_id}`} className="hover:underline">
+              {fund.name}
+            </Link>
+          ) : (
+            fund.name
+          )}
+        </h3>
         {/* The management company, not just the brand: it is the party that
             issues the fact sheet, and for a co-named boutique fund the two are
             different companies. */}

@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import {
+  getCatalogueFund,
   getFundCatalogue,
   getFundCatalogueMeta,
   getFundMatches,
   type CatalogueFilters,
+  type CatalogueFundDetail,
   type CatalogueMeta,
   type CatalogueResponse,
   type FundMatchesResponse,
@@ -46,6 +48,58 @@ export function useFundCatalogue(filters: CatalogueFilters) {
   }, [key]);
 
   return { data, funds: data?.funds ?? [], isLoading, error };
+}
+
+/** One fund, reloaded when the id in the URL changes.
+ *
+ * `notFound` is separated from `error` because the two want different pages: an
+ * unknown id is a dead link the reader should be sent back from, a failed
+ * request is worth retrying.
+ */
+export function useFundDetail(fundId: string | undefined) {
+  const [fund, setFund] = useState<CatalogueFundDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!fundId) {
+        setNotFound(true);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      setNotFound(false);
+      try {
+        const res = await getCatalogueFund(fundId);
+        if (cancelled) return;
+        setFund(res);
+      } catch (e) {
+        if (cancelled) return;
+        // A 404 is the expected answer for a link to a fund that has been
+        // retired, so it is not logged as a failure.
+        if (e instanceof Error && /not found/i.test(e.message)) {
+          setNotFound(true);
+        } else {
+          console.error("Error loading fund:", e);
+          setError(LOAD_FAILED);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fundId]);
+
+  return { fund, isLoading, error, notFound };
 }
 
 /** The classification tree, the vehicles and the risk scale. Loaded once. */

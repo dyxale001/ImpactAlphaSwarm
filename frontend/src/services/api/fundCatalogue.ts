@@ -49,6 +49,50 @@ export interface CatalogueFund {
   has_factsheet: boolean;
 }
 
+/** One dated fact sheet, exactly as it was transcribed. */
+export interface FundSnapshot {
+  as_of: string;
+  mdd_url: string | null;
+  risk_indicator_raw: string | null;
+  risk_indicator_1to5: number | null;
+  recommended_min_term_years: number | null;
+  objective: string | null;
+  benchmark: string | null;
+  ter: number | null;
+  tc: number | null;
+  tic: number | null;
+  min_lump_sum: number | null;
+  min_debit_order: number | null;
+  distribution_frequency: string | null;
+  fund_size_zar: number | null;
+  /** Null across the whole seed today: the allocation is a pie chart on the
+   *  page and nothing reads it yet. Typed so the page can show it the day it
+   *  arrives rather than needing a change then. */
+  asset_allocation: Record<string, number> | null;
+  performance: Record<string, number> | null;
+  top_holdings: Record<string, number> | null;
+  /** How the row got here — `manual` for everything transcribed by hand. */
+  source: string | null;
+  entered_by: string | null;
+}
+
+/** One fund, its newest fact sheet, and the dates it has been published on. */
+export interface CatalogueFundDetail extends CatalogueFund {
+  snapshot: FundSnapshot | null;
+  /** One entry per fact-sheet date, newest first. A corrected transcription
+   *  supersedes rather than adding a second entry for the same date. */
+  snapshot_history: Array<{ as_of: string; mdd_url: string | null }>;
+  /** Our stored copy, used only when the manager's own link has rotted. */
+  archived_mdd_url: string | null;
+  vehicle_note: string | null;
+  available_on: string | null;
+  /** The templated sentence saying who classified this fund, as what, and when.
+   *  Null when no fact sheet is on file, because there is then nothing to say. */
+  why_this_appears: string | null;
+  disclaimer: string;
+  not_licensed: string;
+}
+
 export interface CatalogueResponse {
   asisa_version: string;
   count: number;
@@ -161,7 +205,7 @@ export async function getFundCatalogueMeta() {
 export async function getCatalogueFund(fundId: string) {
   const res = await fetch(`${BASE}/api/fund-catalogue/${encodeURIComponent(fundId)}`);
   if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<CatalogueFund & Record<string, unknown>>;
+  return res.json() as Promise<CatalogueFundDetail>;
 }
 
 /** The caller's own matches. Authenticated: the user is taken from the token,

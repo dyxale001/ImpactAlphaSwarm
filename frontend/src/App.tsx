@@ -22,6 +22,7 @@ import AdminBadges from "./pages/AdminBadges";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import FundsPage from "./pages/Funds";
+import FundDetailPage from "./pages/FundDetail";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
@@ -87,8 +88,11 @@ export default function App() {
           {/* Changed from "/" to "/dashboard" */}
           <Route path="/assets" element={<AssetsPage />} />
           {/* Funds catalogue. Unrouted unless the flag is set, so with it off
-              the path is a 404 rather than a page that cannot load its data. */}
+              the path is a 404 rather than a page that cannot load its data.
+              The detail route is listed after the list route and is equally
+              gated, so a deep link cannot reach a page whose API is off. */}
           {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
+          {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />

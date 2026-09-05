@@ -118,6 +118,77 @@ export const VEHICLE_LABEL: Record<string, string> = {
   etf: "Exchange traded fund",
 };
 
+/* ── Fund detail page ────────────────────────────────────────────────────── */
+
+export const DETAIL_BACK = "Back to funds";
+
+export const DETAIL_NOT_FOUND_TITLE = "That fund is not in the catalogue";
+
+export const DETAIL_NOT_FOUND_LEAD =
+  "The link may be old, or the fund may have been retired. Everything we cover is on the funds page.";
+
+export const DETAIL_OBJECTIVE_TITLE = "What the fund says it aims to do";
+
+/** Framed as a quotation rather than a description, because it is one: the
+ *  sentence is the manager's, lifted off the fact sheet, not our summary. */
+export const DETAIL_OBJECTIVE_ATTRIB = "In the manager's own words, from the fact sheet dated";
+
+export const DETAIL_COSTS_TITLE = "What it costs each year";
+
+export const DETAIL_COSTS_LEAD =
+  "The total investment charge is what the fund deducts in a year. It is the expense ratio plus trading costs, and it is charged whether the fund gains or loses.";
+
+export const DETAIL_TC_LABEL = "Transaction costs";
+
+export const DETAIL_PLATFORM_FEE_NOTE =
+  "A platform may add its own fee on top of these. Check before you invest.";
+
+export const DETAIL_FACTS_TITLE = "The published facts";
+
+export const DETAIL_BENCHMARK_LABEL = "Measured against";
+
+export const DETAIL_SIZE_LABEL = "Fund size";
+
+export const DETAIL_DISTRIBUTION_LABEL = "Pays income";
+
+export const DETAIL_ISIN_LABEL = "ISIN";
+
+export const DETAIL_MANCO_LABEL = "Issued by";
+
+export const DETAIL_JSE_LABEL = "JSE code";
+
+export const DETAIL_WHY_TITLE = "Why this fund appears here";
+
+export const DETAIL_HISTORY_TITLE = "Fact sheets on file";
+
+export const DETAIL_HISTORY_LEAD =
+  "Each entry is one dated document. We keep every one, so a figure can always be traced to the sheet it came from.";
+
+export const DETAIL_PROVENANCE_TITLE = "Where these figures come from";
+
+/** The honest limits, stated on the page rather than in a footnote.
+ *
+ * Both sentences exist because someone will otherwise assume the opposite: that
+ * a number this specific was fetched from somewhere authoritative, and that a
+ * missing section means the fund lacks the thing rather than that we do. */
+export const DETAIL_PROVENANCE_MANUAL =
+  "Every figure on this page was read by hand off the manager's own fact sheet and dated by it. Nothing here is calculated by us, and nothing is taken from a platform's copy.";
+
+export const DETAIL_PROVENANCE_GAPS =
+  "Where a section is missing, the figure is not on the sheet in a form we read yet — the asset allocation and holdings are published as charts. An absent figure is a gap in our reading, not in the fund.";
+
+export const DETAIL_NO_FACTSHEET =
+  "No fact sheet is on file for this fund yet, so there is nothing dated to show. It stays listed because the fund exists; it cannot be matched to anyone until its published figures are recorded.";
+
+export const DETAIL_ALLOCATION_TITLE = "What it holds";
+
+export const DETAIL_PERFORMANCE_TITLE = "Past returns, as published";
+
+/** Shown with any performance figure. Required by the fact sheets themselves,
+ *  and the one claim the documents most insist on. */
+export const DETAIL_PERFORMANCE_NOTE =
+  "Published by the manager for the period ending on the fact sheet date. Past returns do not predict future returns.";
+
 /** Every string this module can put on screen, for the scan test. */
 export function allStrings(): string[] {
   return [
@@ -150,6 +221,32 @@ export function allStrings(): string[] {
     TFSA_BADGE,
     TRACKER_BADGE,
     FACT_SHEET_PAGE_ACTION,
+    DETAIL_BACK,
+    DETAIL_NOT_FOUND_TITLE,
+    DETAIL_NOT_FOUND_LEAD,
+    DETAIL_OBJECTIVE_TITLE,
+    DETAIL_OBJECTIVE_ATTRIB,
+    DETAIL_COSTS_TITLE,
+    DETAIL_COSTS_LEAD,
+    DETAIL_TC_LABEL,
+    DETAIL_PLATFORM_FEE_NOTE,
+    DETAIL_FACTS_TITLE,
+    DETAIL_BENCHMARK_LABEL,
+    DETAIL_SIZE_LABEL,
+    DETAIL_DISTRIBUTION_LABEL,
+    DETAIL_ISIN_LABEL,
+    DETAIL_MANCO_LABEL,
+    DETAIL_JSE_LABEL,
+    DETAIL_WHY_TITLE,
+    DETAIL_HISTORY_TITLE,
+    DETAIL_HISTORY_LEAD,
+    DETAIL_PROVENANCE_TITLE,
+    DETAIL_PROVENANCE_MANUAL,
+    DETAIL_PROVENANCE_GAPS,
+    DETAIL_NO_FACTSHEET,
+    DETAIL_ALLOCATION_TITLE,
+    DETAIL_PERFORMANCE_TITLE,
+    DETAIL_PERFORMANCE_NOTE,
     ...Object.values(VEHICLE_LABEL),
   ];
 }
