@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Landmark, RotateCcw } from "lucide-react";
+import AddFundForm from "../components/admin/AddFundForm";
 import {
   listAdminFunds,
   updateAdminFund,
@@ -81,6 +82,8 @@ export default function AdminFunds() {
           </p>
         )}
       </header>
+
+      <AddFundForm onCreated={load} />
 
       {error && (
         <div className="soft-card flex items-center gap-2 p-4 text-sm text-brand-primary">

@@ -44,10 +44,18 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
     ...init,
     headers: await authHeaders(),
   });
-  if (res.status === 422) {
+  if (res.status === 422 || res.status === 409) {
     const body = await res.json().catch(() => null);
     const detail = body?.detail ?? {};
-    throw new ValidationError(detail.message ?? "This row cannot be saved yet.", detail.problems ?? []);
+    // A duplicate ISIN is refused with 409 and no per-field problems, but it is
+    // a problem with one field and belongs on it — otherwise the message lands
+    // in the form footer while the offending box looks fine.
+    const problems: FieldProblem[] =
+      detail.problems ??
+      (res.status === 409
+        ? [{ field: "isin", message: detail.message ?? "Already in the catalogue.", severity: "error" }]
+        : []);
+    throw new ValidationError(detail.message ?? "This row cannot be saved yet.", problems);
   }
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<T>;
