@@ -4,15 +4,14 @@ import { LayoutGrid, Loader2, Pin, RotateCcw } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { parseLayout } from "../dashboard/layoutSchema";
 import { WIDGET_SPEC, widgetById } from "../dashboard/widgetRegistry";
-import { DECKS, isDeckId } from "../dashboard/decks";
 import { clearDashboardLayout } from "../services/supabase/dashboardLayoutService";
 
 /**
  * What the dashboard currently looks like, and a way back to a blank slate.
  *
  * The escape hatch for someone who has removed every widget and cannot find
- * their way back: clearing the layout to null is what puts the starter-deck
- * picker in front of them again, the same screen a brand new user sees.
+ * their way back: clearing the layout to null is what puts the setup manual in
+ * front of them again, the same screen a brand new user sees.
  *
  * Reads the layout out of the auth store rather than through useDashboardLayout.
  * That hook owns edit state, debounced writes and drag bookkeeping, none of
@@ -30,9 +29,6 @@ export default function DashboardPreferencesSection() {
     [analysis?.dashboard_layout],
   );
 
-  const deckName =
-    layout?.deck && isDeckId(layout.deck) ? DECKS[layout.deck].name : null;
-
   const handleReset = async () => {
     if (!profile?.id) return;
     setIsResetting(true);
@@ -42,7 +38,7 @@ export default function DashboardPreferencesSection() {
       await clearDashboardLayout(profile.id);
       await fetchProfile(profile.id);
       setConfirming(false);
-      setDone("Your dashboard has been reset. Open it to choose a new layout.");
+      setDone("Your dashboard has been reset. Open it to build a new one.");
     } catch (e) {
       console.error("Failed to reset dashboard:", e);
       setError("We could not reset your dashboard. Please try again.");
@@ -71,7 +67,7 @@ export default function DashboardPreferencesSection() {
                 to="/dashboard"
                 className="font-semibold text-brand-primary hover:underline"
               >
-                Choose a starting layout
+                Build it now
               </Link>
               .
             </p>
@@ -81,7 +77,7 @@ export default function DashboardPreferencesSection() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="chip bg-brand-primary/10 text-brand-primary">
                 <LayoutGrid className="h-2.5 w-2.5" />
-                {deckName ?? "Custom layout"}
+                Your layout
               </span>
               <span className="chip bg-brand-border/30 text-brand-muted-fg">
                 {layout.widgets.length} widget
@@ -146,9 +142,9 @@ export default function DashboardPreferencesSection() {
             {confirming ? (
               <div className="space-y-3">
                 <p className="text-sm text-brand-fg">
-                  This clears your layout and asks you to pick a starting
-                  dashboard again. Your watchlist, holdings and learning progress
-                  are not affected.
+                  This clears your layout and takes you back to a blank
+                  dashboard with the setup guide. Your watchlist, holdings and
+                  learning progress are not affected.
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button

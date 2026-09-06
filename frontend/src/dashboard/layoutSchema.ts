@@ -25,8 +25,6 @@ export interface LayoutEntry {
 
 export interface DashboardLayout {
   version: number;
-  /** Which starter deck seeded this layout, so "reset to my deck" knows where to go back to. */
-  deck: string | null;
   /** The asset every ticker-scoped widget points at. */
   pinnedTicker: string | null;
   widgets: LayoutEntry[];
@@ -51,10 +49,13 @@ export interface WidgetProps {
 
 export type WidgetSpecMap = Record<string, WidgetSpec>;
 
-/** The layout of someone who has cleared every widget off. Still a real layout,
- *  which is what distinguishes it from null (never set one up). */
-export function emptyLayout(deck: string | null = null): DashboardLayout {
-  return { version: LAYOUT_VERSION, deck, pinnedTicker: null, widgets: [] };
+/** The layout everyone starts from: a blank page.
+ *
+ *  Still a real layout, which is what distinguishes it from null. Null means
+ *  the user has never touched their dashboard, and is what puts the setup guide
+ *  in front of them; this means they have one and it happens to be empty. */
+export function emptyLayout(): DashboardLayout {
+  return { version: LAYOUT_VERSION, pinnedTicker: null, widgets: [] };
 }
 
 function isSize(value: unknown): value is WidgetSize {
@@ -111,10 +112,13 @@ export function parseLayout(
     widgets.push(settings ? { id, size, settings } : { id, size });
   }
 
+  // A `deck` field on an older row is read straight past. Starter decks were
+  // removed in favour of everyone beginning from a blank page, so the field no
+  // longer means anything, and dropping it here is what retires it from a saved
+  // layout the next time that layout is written back.
   return {
     version:
       typeof record.version === "number" ? record.version : LAYOUT_VERSION,
-    deck: typeof record.deck === "string" ? record.deck : null,
     pinnedTicker:
       typeof record.pinnedTicker === "string" && record.pinnedTicker.trim()
         ? record.pinnedTicker.trim().toUpperCase()

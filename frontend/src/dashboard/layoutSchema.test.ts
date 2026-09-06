@@ -21,7 +21,6 @@ describe("parseLayout", () => {
     const parsed = parseLayout(
       {
         version: 1,
-        deck: "trend_rider",
         pinnedTicker: "NVDA",
         widgets: [
           { id: "top-pick", size: "medium" },
@@ -33,7 +32,6 @@ describe("parseLayout", () => {
 
     expect(parsed).toEqual({
       version: 1,
-      deck: "trend_rider",
       pinnedTicker: "NVDA",
       widgets: [
         { id: "top-pick", size: "medium" },
@@ -138,20 +136,30 @@ describe("parseLayout", () => {
     expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
   });
 
-  it("defaults a missing version and deck", () => {
+  it("defaults a missing version", () => {
     const parsed = parseLayout({ widgets: [] }, SPEC);
     expect(parsed).toEqual({
       version: LAYOUT_VERSION,
-      deck: null,
       pinnedTicker: null,
       widgets: [],
     });
   });
 
+  it("reads straight past a deck field left by an older build", () => {
+    // Starter decks were removed in favour of everyone beginning from a blank
+    // page, so the field no longer means anything and must not survive a
+    // parse into the layout that gets written back.
+    const parsed = parseLayout(
+      { deck: "trend_rider", widgets: [{ id: "top-pick", size: "wide" }] },
+      SPEC,
+    );
+    expect(parsed).not.toHaveProperty("deck");
+  });
+
   it("distinguishes an emptied layout from no layout at all", () => {
-    // Null sends the user back to the deck picker; an empty widget list is a
+    // Null sends the user back to the setup guide; an empty widget list is a
     // dashboard they chose to clear, and must not.
-    expect(parseLayout(emptyLayout("trend_rider"), SPEC)).not.toBeNull();
+    expect(parseLayout(emptyLayout(), SPEC)).not.toBeNull();
     expect(parseLayout(null, SPEC)).toBeNull();
   });
 });

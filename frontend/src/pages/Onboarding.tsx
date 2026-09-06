@@ -3,8 +3,6 @@ import { Layers, ArrowUpRight, Activity, Search, Check, Eye, ArrowRight, Termina
 import { useOnboarding } from '../hooks/useOnboarding'
 import { SURVEY_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import InvestorProfileCard from '../components/InvestorProfileCard'
-import DeckPicker from '../components/dashboard/deck/DeckPicker'
-import { isDeckId, type DeckId } from '../dashboard/decks'
 import { useAuthStore } from '../store/authStore'
 
 // ─── Display maps ──────────────────────────────────────────────────────────
@@ -26,27 +24,24 @@ const SECTOR_DOT: Record<string, string> = {
   'Healthcare':    'bg-sector-healthcare',
 }
 
-const STEP_TITLES = ['Your Path', 'What You Know', 'Assessment', 'Your Dashboard', 'Profile']
-const STEP_SUBS = ['Investing style', 'Companies you follow', 'Risk & literacy', 'How you want it laid out', 'Your mandate']
+const STEP_TITLES = ['Your Path', 'What You Know', 'Assessment', 'Profile']
+const STEP_SUBS = ['Investing style', 'Companies you follow', 'Risk & literacy', 'Your mandate']
 const STEP_EYEBROWS = [
-  'Step 01 of 05 · Your Path',
-  'Step 02 of 05 · What You Know',
-  'Step 03 of 05 · Assessment',
-  'Step 04 of 05 · Your Dashboard',
-  'Step 05 of 05 · Profile',
+  'Step 01 of 04 · Your Path',
+  'Step 02 of 04 · What You Know',
+  'Step 03 of 04 · Assessment',
+  'Step 04 of 04 · Profile',
 ]
 const STEP_HEADS = [
   'How Do You Like to Invest?',
   'What Do You Already Follow?',
   'Your Risk Profile',
-  'How Should Your Dashboard Look?',
   'Your Profile Is Ready',
 ]
 const STEP_LEADS = [
   'Pick the style that sounds most like you, adjustable any time.',
   "Select companies you recognise. We'll suggest sectors and can start your watchlist.",
   'These questions set the foundation for how the Swarm sizes and filters for you.',
-  'We have picked one to match your path. Everything on it can be moved, resized or removed later.',
   'Every recommendation you see will be filtered through this mandate.',
 ]
 
@@ -66,8 +61,6 @@ export default function Onboarding() {
     psychometrics,
     investorPath,
     setInvestorPath,
-    selectedDeck,
-    setSelectedDeck,
     familiarAssets,
     toggleFamiliarAsset,
     addPicksToWatchlist,
@@ -89,9 +82,6 @@ export default function Onboarding() {
   const firstName = user?.user_metadata?.first_name || 'Authorised'
   const lastName = user?.user_metadata?.last_name || 'Investor'
   const pathLabel = INVESTOR_PATHS.find((p) => p.id === investorPath)?.label ?? 'Steady Builder'
-  // The deck ids and the investor path ids are the same set on purpose, so the
-  // recommendation is the path itself rather than a mapping to maintain.
-  const recommendedDeck: DeckId = isDeckId(investorPath) ? investorPath : 'steady_builder'
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-neutral-100 font-sans text-forest-900 selection:bg-lime-500 selection:text-forest-900 lg:grid-cols-[320px_1fr]">
@@ -406,25 +396,9 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* ── STEP 4: starter dashboard ── */}
+          {/* ── STEP 4: profile ── */}
           {step === 4 && (
-            <div key="step4" className="animate-fade-up flex flex-col gap-4">
-              <DeckPicker
-                selected={selectedDeck}
-                recommended={recommendedDeck}
-                onSelect={setSelectedDeck}
-              />
-              <p className="text-[13px] leading-relaxed text-muted">
-                Your dashboard is yours to rearrange. Drag anything into a new
-                position, make it wider or narrower, add widgets you want and
-                remove the ones you do not.
-              </p>
-            </div>
-          )}
-
-          {/* ── STEP 5: profile ── */}
-          {step === 5 && (
-            <div key="step5" className="animate-fade-up flex flex-col items-center gap-6">
+            <div key="step4" className="animate-fade-up flex flex-col items-center gap-6">
               <div className="w-full max-w-[520px]">
                 <InvestorProfileCard
                   name={`${firstName} ${lastName}`}
@@ -479,9 +453,7 @@ export default function Onboarding() {
                       : 'Continue'
                     : step === 3
                       ? 'Generate Profile'
-                      : step === 4
-                        ? 'Continue'
-                        : 'Confirm & Enter Dashboard'}
+                      : 'Confirm & Enter Dashboard'}
               {!loading && <ArrowRight size={16} strokeWidth={2} />}
             </button>
           </div>

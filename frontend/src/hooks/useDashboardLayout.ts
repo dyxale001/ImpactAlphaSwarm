@@ -15,13 +15,19 @@ import {
   widgetById,
   type WidgetDef,
 } from "../dashboard/widgetRegistry";
-import { deckLayout, isDeckId, type DeckId } from "../dashboard/decks";
+import { NO_ACTIVITY, type GuideActivity } from "../dashboard/guideSteps";
 import {
   clearDashboardLayout,
   saveDashboardLayout,
 } from "../services/supabase/dashboardLayoutService";
 
 // All dashboard layout state. The page talks to this and to nothing else.
+//
+// Every dashboard starts blank. There are no starter layouts to choose from and
+// nothing is placed on anyone's behalf: the setup guide explains the controls
+// and the reader decides what belongs there. `layout === null` therefore means
+// "has never touched this", which is what opens that guide, and it is the state
+// both a fresh signup and every existing account are in.
 //
 // Edits land in local state immediately and are written back on a debounce, so a
 // drag across four positions is one round trip rather than four. A failed write
@@ -45,9 +51,17 @@ export function useDashboardLayout() {
   );
 
   const [layout, setLayout] = useState<DashboardLayout | null>(stored);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditingRaw] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // What the reader has done, for the setup guide to tick off. Session-scoped on
+  // purpose: it describes this visit, and the guide only auto-opens for someone
+  // who has never configured anything, so there is nothing to carry forward.
+  const [activity, setActivity] = useState<GuideActivity>(NO_ACTIVITY);
+  const mark = useCallback((key: keyof GuideActivity) => {
+    setActivity((current) => (current[key] ? current : { ...current, [key]: true }));
+  }, []);
 
   // Adopt whatever the store now holds, unless we are mid-edit: a profile
   // refetch fired by an analysis run must not throw away an arrangement the user
@@ -58,21 +72,41 @@ export function useDashboardLayout() {
     if (!isEditingRef.current) setLayout(stored);
   }, [stored]);
 
-  // Null layout means the user has never set a dashboard up. That is the whole
-  // trigger for the first-run deck picker, and it is what every user who signed
-  // up before this feature existed looks like.
-  //
-  // Read off `layout` rather than `stored` so it covers three cases with one
-  // condition: never set one up, cleared it from Settings just now, and having
-  // no user_analysis row at all. That last one is reachable by an admin, since
-  // ProtectedRoute only sends NON-admins with no analysis to onboarding. The
-  // save is an upsert, so confirming a deck creates the row rather than failing
-  // against a missing one.
-  const needsSetup = Boolean(profile) && layout === null;
+  // Turning customise mode off with something on the page is what "saved" means
+  // to the guide. The writes themselves are debounced and already done by then.
+  const widgetCountRef = useRef(0);
+  widgetCountRef.current = layout?.widgets.length ?? 0;
+  const setIsEditing = useCallback(
+    (next: boolean) => {
+      if (next) mark("entered");
+      else if (widgetCountRef.current > 0) mark("saved");
+      setIsEditingRaw(next);
+    },
+    [mark],
+  );
+
+  // Null layout means the user has never set a dashboard up, which is every
+  // account until they arrange one. That is what opens the setup guide.
+  const needsGuide = Boolean(profile) && layout === null;
 
   // ── Saving ───────────────────────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingRef = useRef<DashboardLayout | null>(null);
+
+  /** Keep the auth store in step with what was just written.
+   *
+   *  A direct patch rather than fetchProfile(): that flips the store's
+   *  isProfileLoading flag, which Dashboard.tsx (like most pages) treats as
+   *  "show a loading skeleton" — so refetching after every debounced widget
+   *  edit swapped the entire customise session out for a skeleton and back on
+   *  each single change. We already know exactly what was written. */
+  const syncStore = useCallback((next: DashboardLayout | null) => {
+    useAuthStore.setState((state) =>
+      state.analysis
+        ? { analysis: { ...state.analysis, dashboard_layout: next } }
+        : state,
+    );
+  }, []);
 
   const flush = useCallback(async () => {
     const next = pendingRef.current;
@@ -83,25 +117,14 @@ export function useDashboardLayout() {
     setSaveError(null);
     try {
       await saveDashboardLayout(userId, next);
-      // Patch the auth store directly rather than re-fetching the whole
-      // profile. fetchProfile() flips the store's isProfileLoading flag, which
-      // Dashboard.tsx (like most pages) treats as "show a loading skeleton" —
-      // so refetching after every debounced widget edit swapped the entire
-      // customise session out for a skeleton and back on each single change,
-      // which read as being kicked out of edit mode. We already know exactly
-      // what was written, so there is nothing a re-fetch would tell us here.
-      useAuthStore.setState((state) =>
-        state.analysis
-          ? { analysis: { ...state.analysis, dashboard_layout: next } }
-          : state,
-      );
+      syncStore(next);
     } catch (e) {
       console.error("Failed to save dashboard layout:", e);
       setSaveError("We could not save your dashboard. Your changes are still here.");
     } finally {
       setIsSaving(false);
     }
-  }, [userId]);
+  }, [userId, syncStore]);
 
   const queueSave = useCallback(
     (next: DashboardLayout) => {
@@ -121,13 +144,19 @@ export function useDashboardLayout() {
     };
   }, [flush]);
 
-  /** Apply a change to the current layout and schedule the write. */
+  /**
+   * Apply a change to the current layout and schedule the write.
+   *
+   * Seeds from an empty layout when there is none yet, so the first thing
+   * anyone does on a blank dashboard both works and creates their layout. There
+   * is no separate "initialise" step for the page to remember to call.
+   */
   const mutate = useCallback(
     (fn: (current: DashboardLayout) => DashboardLayout) => {
       setLayout((current) => {
-        if (!current) return current;
-        const next = fn(current);
-        if (next === current) return current;
+        const base = current ?? emptyLayout();
+        const next = fn(base);
+        if (next === base && current !== null) return current;
         queueSave(next);
         return next;
       });
@@ -135,8 +164,8 @@ export function useDashboardLayout() {
     [queueSave],
   );
 
-  /** Write a whole layout at once, with no debounce. Used by the deck picker,
-   *  where the user is waiting to see the result. */
+  /** Write a whole layout at once, with no debounce. For the deliberate
+   *  one-off actions where the user is waiting to see the result. */
   const commit = useCallback(
     async (next: DashboardLayout) => {
       setLayout(next);
@@ -148,15 +177,7 @@ export function useDashboardLayout() {
       setSaveError(null);
       try {
         await saveDashboardLayout(userId, next);
-        // Same reasoning as flush(): a direct patch keeps the store in step
-        // without routing through isProfileLoading, so confirming a deck does
-        // not flash the page to a skeleton right as `layout` has already
-        // flipped it out of the first-run picker.
-        useAuthStore.setState((state) =>
-          state.analysis
-            ? { analysis: { ...state.analysis, dashboard_layout: next } }
-            : state,
-        );
+        syncStore(next);
       } catch (e) {
         console.error("Failed to save dashboard layout:", e);
         setSaveError("We could not save your dashboard. Your changes are still here.");
@@ -164,29 +185,14 @@ export function useDashboardLayout() {
         setIsSaving(false);
       }
     },
-    [userId],
+    [userId, syncStore],
   );
 
   // ── Operations ───────────────────────────────────────────────────────────
-  const applyDeck = useCallback(
-    (deckId: DeckId) => commit(deckLayout(deckId)),
-    [commit],
-  );
 
-  const resetToDeck = useCallback(() => {
-    // Guarded rather than cast: `deck` came off free-form jsonb, and a value
-    // that is not a deck id would index DECKS to undefined and throw.
-    const deck = layout?.deck;
-    if (!deck || !isDeckId(deck)) return;
-    // The pinned ticker survives a reset. It is a choice about which asset the
-    // dashboard is ABOUT, not part of the arrangement being put back.
-    void commit({
-      ...deckLayout(deck),
-      pinnedTicker: layout?.pinnedTicker ?? null,
-    });
-  }, [commit, layout?.deck, layout?.pinnedTicker]);
-
-  const startFromScratch = useCallback(
+  /** Claim the blank page as theirs without placing anything on it. What
+   *  dismissing the guide calls, so it does not reopen on the next visit. */
+  const startBlank = useCallback(
     () => commit(emptyLayout()),
     [commit],
   );
@@ -198,20 +204,22 @@ export function useDashboardLayout() {
     try {
       await clearDashboardLayout(userId);
       setLayout(null);
-      setIsEditing(false);
-      await fetchProfile(userId);
+      setIsEditingRaw(false);
+      setActivity(NO_ACTIVITY);
+      syncStore(null);
     } catch (e) {
       console.error("Failed to reset dashboard layout:", e);
       setSaveError("We could not reset your dashboard.");
     } finally {
       setIsSaving(false);
     }
-  }, [userId, fetchProfile]);
+  }, [userId, syncStore]);
 
   const addWidget = useCallback(
     (id: string) => {
       const def = widgetById(id);
       if (!def) return;
+      mark("added");
       mutate((current) =>
         current.widgets.some((w) => w.id === id)
           ? current
@@ -221,7 +229,7 @@ export function useDashboardLayout() {
             },
       );
     },
-    [mutate],
+    [mutate, mark],
   );
 
   const removeWidget = useCallback(
@@ -234,12 +242,14 @@ export function useDashboardLayout() {
   );
 
   const setSize = useCallback(
-    (id: string, size: WidgetSize) =>
+    (id: string, size: WidgetSize) => {
+      mark("resized");
       mutate((current) => ({
         ...current,
         widgets: current.widgets.map((w) => (w.id === id ? { ...w, size } : w)),
-      })),
-    [mutate],
+      }));
+    },
+    [mutate, mark],
   );
 
   /** Step a widget through the sizes it offers, wrapping at the end. One button
@@ -248,6 +258,7 @@ export function useDashboardLayout() {
     (id: string) => {
       const def = widgetById(id);
       if (!def) return;
+      mark("resized");
       mutate((current) => ({
         ...current,
         widgets: current.widgets.map((w) => {
@@ -257,16 +268,21 @@ export function useDashboardLayout() {
         }),
       }));
     },
-    [mutate],
+    [mutate, mark],
   );
 
   const moveWidget = useCallback(
-    (from: number, to: number) =>
+    (from: number, to: number) => {
       mutate((current) => {
         const widgets = arrayMove(current.widgets, from, to);
-        return widgets === current.widgets ? current : { ...current, widgets };
-      }),
-    [mutate],
+        if (widgets === current.widgets) return current;
+        return { ...current, widgets };
+      });
+      // Only a move that changed something counts, so nudging the first widget
+      // further up does not tick the step off.
+      if (from !== to) mark("reordered");
+    },
+    [mutate, mark],
   );
 
   const updateSettings = useCallback(
@@ -311,14 +327,13 @@ export function useDashboardLayout() {
     layout,
     placedWidgets,
     availableWidgets,
-    needsSetup,
+    needsGuide,
+    activity,
     isEditing,
     setIsEditing,
     isSaving,
     saveError,
-    applyDeck,
-    resetToDeck,
-    startFromScratch,
+    startBlank,
     forgetLayout,
     addWidget,
     removeWidget,
@@ -327,5 +342,7 @@ export function useDashboardLayout() {
     moveWidget,
     updateSettings,
     setPinnedTicker,
+    // Kept for the settings page, which resets and then wants the store fresh.
+    refetchProfile: fetchProfile,
   };
 }

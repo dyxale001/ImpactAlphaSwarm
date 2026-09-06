@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { LayoutGrid, Plus } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { useDashboardLayout } from "../hooks/useDashboardLayout";
-import { resolveStarterDeck, type DeckId } from "../dashboard/decks";
 import { SIZE_CLASS } from "../dashboard/layoutSchema";
 import { DashboardDataProvider } from "../dashboard/DashboardDataContext";
-import DeckSetupPanel from "../components/dashboard/deck/DeckSetupPanel";
+import SetupGuide from "../components/dashboard/deck/SetupGuide";
 import TodayStrip from "../components/dashboard/deck/TodayStrip";
 import WidgetFrame from "../components/dashboard/deck/WidgetFrame";
 import AddWidgetDrawer from "../components/dashboard/deck/AddWidgetDrawer";
@@ -16,9 +15,9 @@ import { rememberHubPage } from "../utils/lastHubPage";
 
 // The dashboard the user composed.
 //
-// Three states: a first-run deck picker for anyone who has never set one up, the
-// arranged grid, and edit mode over the top of it. All layout state lives in
-// useDashboardLayout; this page is the arrangement of it.
+// Every dashboard starts blank, so the states are: the setup guide for anyone
+// who has never configured one, the arranged grid, and edit mode over the top of
+// it. All layout state lives in useDashboardLayout; this page arranges it.
 
 const PAGE = "max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16";
 
@@ -30,19 +29,18 @@ export default function DashboardPage() {
     rememberHubPage("/dashboard");
   }, []);
 
-  const { profile, analysis, isLoading, isProfileLoading } = useAuthStore();
+  const { profile, isLoading, isProfileLoading } = useAuthStore();
   const {
     layout,
     placedWidgets,
     availableWidgets,
-    needsSetup,
+    needsGuide,
+    activity,
     isEditing,
     setIsEditing,
     isSaving,
     saveError,
-    applyDeck,
-    resetToDeck,
-    startFromScratch,
+    startBlank,
     addWidget,
     removeWidget,
     cycleSize,
@@ -56,30 +54,26 @@ export default function DashboardPage() {
   // than id: the move is an array operation and indices are what it takes.
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
-
-  const recommended: DeckId = useMemo(
-    () => resolveStarterDeck(analysis),
-    [analysis],
-  );
+  // Dismissed for this visit. Separate from `needsGuide`, which is about
+  // whether they have ever configured anything: someone can close the guide
+  // and reopen it from the banner without that meaning they started over.
+  const [guideHidden, setGuideHidden] = useState(false);
+  const [guideRequested, setGuideRequested] = useState(false);
 
   if (isLoading || isProfileLoading || !profile) {
     return <DashboardSkeleton />;
   }
 
-  if (needsSetup) {
-    return (
-      <div className={PAGE}>
-        <DeckSetupPanel
-          recommended={recommended}
-          isSaving={isSaving}
-          onConfirm={(deck) => void applyDeck(deck)}
-          onStartFromScratch={() => void startFromScratch()}
-        />
-      </div>
-    );
-  }
-
   const pinnedTicker = layout?.pinnedTicker ?? null;
+  const showGuide = (needsGuide || guideRequested) && !guideHidden;
+
+  /** Closing the guide also claims the blank page, so it does not reopen on the
+   *  next visit for someone who read it and decided to come back later. */
+  const dismissGuide = () => {
+    setGuideHidden(true);
+    setGuideRequested(false);
+    if (layout === null) void startBlank();
+  };
 
   const finishDrag = () => {
     if (dragFrom !== null && dragOver !== null && dragFrom !== dragOver) {
@@ -93,17 +87,36 @@ export default function DashboardPage() {
     <DashboardDataProvider>
       <div className={`${PAGE} space-y-6`}>
         <TodayStrip
-          deck={layout?.deck ?? null}
           widgetCount={placedWidgets.length}
           pinnedTicker={pinnedTicker}
           isEditing={isEditing}
           onCustomise={() => setIsEditing(true)}
+          onOpenGuide={
+            showGuide
+              ? null
+              : () => {
+                  setGuideHidden(false);
+                  setGuideRequested(true);
+                }
+          }
         />
 
         {saveError && !isEditing ? (
           <div className="rounded-lg border border-semantic-danger/20 bg-semantic-danger/10 p-4 text-sm text-semantic-danger">
             {saveError}
           </div>
+        ) : null}
+
+        {showGuide ? (
+          <SetupGuide
+            activity={activity}
+            widgetCount={placedWidgets.length}
+            isEditing={isEditing}
+            onStartCustomising={() => setIsEditing(true)}
+            onOpenLibrary={() => setDrawerOpen(true)}
+            onFinish={dismissGuide}
+            onDismiss={dismissGuide}
+          />
         ) : null}
 
         {placedWidgets.length === 0 ? (
@@ -224,12 +237,10 @@ export default function DashboardPage() {
 
         {isEditing ? (
           <EditModeBar
-            deck={layout?.deck ?? null}
             widgetCount={placedWidgets.length}
             isSaving={isSaving}
             saveError={saveError}
             onAdd={() => setDrawerOpen(true)}
-            onReset={resetToDeck}
             onDone={() => setIsEditing(false)}
           />
         ) : null}

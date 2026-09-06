@@ -18,7 +18,6 @@
 --
 --   {
 --     "version": 1,
---     "deck": "trend_rider",
 --     "pinnedTicker": "NVDA",
 --     "widgets": [
 --       { "id": "sentiment-trend", "size": "wide" },
@@ -26,9 +25,10 @@
 --     ]
 --   }
 --
--- Null means the user has never set a dashboard up. That is what shows them the
--- starter-deck picker, so existing users get the same first-run experience new
--- ones get during onboarding.
+-- Null means the user has never set a dashboard up. Every dashboard starts
+-- blank and nothing is arranged on anyone's behalf, so null is what puts the
+-- setup guide in front of them: a new signup and an existing account both begin
+-- from the same empty page.
 --
 -- Run this in the Supabase SQL editor BEFORE deploying the frontend that reads
 -- it. Safe to re-run (idempotent).
@@ -37,4 +37,4 @@ alter table public.user_analysis
   add column if not exists dashboard_layout jsonb;
 
 comment on column public.user_analysis.dashboard_layout is
-  'Versioned widget layout for the personalised dashboard. Null until the user picks a starter deck.';
+  'Versioned widget layout for the personalised dashboard. Null until the user arranges one; every dashboard starts blank.';

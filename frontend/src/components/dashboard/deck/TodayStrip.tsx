@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { Pencil, Pin, RefreshCw } from "lucide-react";
+import { BookOpen, Pencil, Pin, RefreshCw } from "lucide-react";
 import { useAuthStore } from "../../../store/authStore";
 import { useSignals } from "../../../dashboard/DashboardDataContext";
 import { useAnalysisRefresh } from "../../../hooks/useAnalysisRefresh";
 import { useSentimentLastUpdated } from "../../../hooks/useSentimentLastUpdated";
 import { getUsdZarExchangeRate } from "../../../services/api/analysis";
 import { MarketClock } from "../../research/MarketClock";
-import { DECKS, isDeckId } from "../../../dashboard/decks";
 import DashboardGridMotif from "./DashboardGridMotif";
 
 function greeting(hour: number = new Date().getHours()): string {
@@ -32,29 +31,27 @@ function greeting(hour: number = new Date().getHours()): string {
  * rest of the numbers unexplained.
  */
 export default function TodayStrip({
-  deck,
   widgetCount,
   pinnedTicker,
   onCustomise,
+  onOpenGuide,
   isEditing,
 }: {
-  /** The deck id the current layout was seeded from, or null for a
-   *  from-scratch layout. Names the description rather than leaving it generic. */
-  deck: string | null;
   widgetCount: number;
   pinnedTicker: string | null;
   onCustomise: () => void;
+  /** Reopens the setup manual. Null while it is already on screen, which is
+   *  what keeps the banner from offering to show something already shown. */
+  onOpenGuide: (() => void) | null;
   isEditing: boolean;
 }) {
   const { profile } = useAuthStore();
-  const deckName = deck && isDeckId(deck) ? DECKS[deck].name : null;
 
-  // The deck name is shown as its own label at the end of the row rather than
-  // folded into this sentence, so it reads as a fact about the layout (a
-  // badge) rather than a clause that has to be read to the end.
   const description = isEditing
     ? "Drag a widget to move it, or use the arrows. The letter button changes how wide it is."
-    : `${widgetCount} widget${widgetCount === 1 ? "" : "s"}, arranged your way`;
+    : widgetCount === 0
+      ? "Nothing here yet. Everything on this page is something you put there."
+      : `${widgetCount} widget${widgetCount === 1 ? "" : "s"}, arranged your way`;
 
   const { latestRunCreatedAt, isRunInProgress, refreshRecommendations } =
     useSignals();
@@ -145,10 +142,10 @@ export default function TodayStrip({
             </div>
           ) : null}
 
-          {/* Description, the Customise entry point and the active deck's
-              name share one line, divided by hairlines — three short facts
+          {/* Description, the Customise entry point and the way back to the
+              manual share one line, divided by hairlines: three short facts
               read left to right rather than a sentence with a button
-              somewhere else on the card and a badge somewhere else again. */}
+              somewhere else on the card and a link somewhere else again. */}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-relaxed text-brand-bg/75">
             <span className="max-w-2xl">{description}</span>
 
@@ -167,15 +164,20 @@ export default function TodayStrip({
                   Customise
                 </button>
 
-                {deckName ? (
+                {onOpenGuide ? (
                   <>
                     <span
                       className="hidden h-4 w-px bg-white/15 sm:block"
                       aria-hidden="true"
                     />
-                    <span className="text-xs font-semibold uppercase tracking-wide text-brand-accent">
-                      {deckName}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={onOpenGuide}
+                      className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-accent transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                    >
+                      <BookOpen className="h-3 w-3" />
+                      How to set this up
+                    </button>
                   </>
                 ) : null}
               </>

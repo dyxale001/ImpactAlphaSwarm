@@ -6,10 +6,9 @@ import { determinePsychometrics } from '../utils/scoringEngine'
 import { startAnalysis, getStatus, getResult } from '../services/api/analysis'
 import { pollUntilComplete } from '../services/api/poll'
 import { inferUniverseFromAssets } from '../utils/onboardingData'
-import { deckLayout, isDeckId, type DeckId } from '../dashboard/decks'
 
-// Total steps: 1=Path, 2=Assets, 3=Survey, 4=Dashboard, 5=Review
-const TOTAL_STEPS = 5
+// Total steps: 1=Path, 2=Assets, 3=Survey, 4=Review
+const TOTAL_STEPS = 4
 const SUBMIT_STEP = TOTAL_STEPS
 
 export function useOnboarding() {
@@ -23,22 +22,6 @@ export function useOnboarding() {
   const [familiarAssets, setFamiliarAssets] = useState<string[]>([])
   // Opt-in: also save the user's familiar picks to their watchlist
   const [addPicksToWatchlist, setAddPicksToWatchlist] = useState(true)
-
-  // ── Starter dashboard ──────────────────────────────────────────────────
-  // Null until step 1 is answered, then the deck matching their investor path.
-  // Selecting a path IS selecting a deck unless they say otherwise, so step 4
-  // opens already answered and Continue is the whole of it for most people.
-  const [selectedDeck, setSelectedDeck] = useState<DeckId | null>(null)
-
-  const chooseInvestorPath = (pathId: string) => {
-    setInvestorPath(pathId)
-    // Only follows the path while the user has not overridden it. Going back to
-    // change your path after picking a different deck must not silently undo the
-    // deck choice.
-    setSelectedDeck((current) =>
-      current === null && isDeckId(pathId) ? pathId : current
-    )
-  }
 
   // ── Existing form data ─────────────────────────────────────────────────
   const [formData, setFormData] = useState({
@@ -101,10 +84,6 @@ export function useOnboarding() {
         return setError('Please select at least one Investment Universe.')
     }
 
-    if (step === 4) {
-      if (!selectedDeck) return setError('Please choose a starting dashboard to continue.')
-    }
-
     setStep(prev => prev + 1)
   }
 
@@ -151,11 +130,9 @@ export function useOnboarding() {
       },
       ai_derived_expertise: psychometrics.calculatedExpertise,
       is_active: true,
-      // Rides along on the row we are already inserting, so the starter
-      // dashboard costs no extra write and has no failure path of its own. A
-      // null here would put the first-run deck picker in front of them on
-      // arrival, which is the same screen they just filled in.
-      dashboard_layout: deckLayout(selectedDeck ?? 'steady_builder'),
+      // dashboard_layout is deliberately left unwritten. A new account arrives
+      // on a blank dashboard with the setup guide, which is what a null column
+      // means: nothing is arranged on anyone's behalf.
     }
 
     const { error: analysisError } = await supabase
@@ -223,9 +200,7 @@ export function useOnboarding() {
     psychometrics,
     // New
     investorPath,
-    setInvestorPath: chooseInvestorPath,
-    selectedDeck,
-    setSelectedDeck,
+    setInvestorPath,
     familiarAssets,
     toggleFamiliarAsset,
     addPicksToWatchlist,
