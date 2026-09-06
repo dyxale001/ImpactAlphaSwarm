@@ -1,6 +1,7 @@
 import { supabase } from "../../lib/supabase";
 import type { SocialPost } from "../../components/research/SocialPosts";
 import type { NewsArticle } from "../../components/research/NewsArticles";
+import type { AnalysisStatus } from "../../types/analysisLifecycle";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -31,7 +32,7 @@ export async function startAnalysis(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<AnalysisStatus>;
 }
 
 export async function getStatus(runId: string) {
@@ -137,7 +138,6 @@ export interface TopFundsResponse {
   cached?: boolean;
   fetched_at?: string | null;
 }
-
 
 // Institutional data inverted to per-fund holdings across all tracked assets.
 export async function getTopFunds() {

@@ -327,7 +327,7 @@ async def start_analysis(
 
 @app.get("/api/analysis/status/{run_id}")
 async def analysis_status(run_id: str):
-    resp = supabase.table("ai_runs").select("id, status, created_at").eq("id", run_id).execute()
+    resp = supabase.table("ai_runs").select("id, status, created_at, progress").eq("id", run_id).execute()
     data = resp.data or []
     if not data:
         raise HTTPException(status_code=404, detail="run not found")
@@ -337,6 +337,19 @@ async def analysis_status(run_id: str):
     if row.get("status") == "running" and _is_run_stale(row.get("created_at")):
         update_ai_run_status(run_id, "failed")
         row["status"] = "failed"
+    progress = row.get("progress")
+    if isinstance(progress, dict):
+        phases = {"initializing", "analysis", "synthesis", "output", "complete"}
+        active = {"quant", "sentiment"}
+        row["progress"] = {
+            "phase": progress.get("phase") if progress.get("phase") in phases else "initializing",
+            "message": progress.get("message") if isinstance(progress.get("message"), str) else "Preparing your analysis",
+            "active": [item for item in progress.get("active", []) if item in active],
+        }
+        if isinstance(progress.get("selected_assets"), int):
+            row["progress"]["selected_assets"] = progress["selected_assets"]
+    else:
+        row["progress"] = None
     return row
 
 

@@ -1,3 +1,7 @@
+import type {
+  AnalysisLoadingStage,
+  AnalysisProgress,
+} from "../types/analysisLifecycle";
 import { useState } from "react";
 import { useAuthStore } from "../store/authStore";
 import { startAnalysis, getStatus, getResult } from "../services/api/analysis";
@@ -9,14 +13,21 @@ import { pollUntilComplete } from "../services/api/poll";
  * the new run. Backs both the manual "Refresh" button and the automatic
  * stale-data refresh.
  */
-export function useAnalysisRefresh() {
+export function useAnalysisRefresh(onComplete?: () => Promise<void>) {
   const { profile, analysis, fetchProfile } = useAuthStore();
-  const [isRunning, setIsRunning] = useState(false);
+  const [stage, setStage] = useState<AnalysisLoadingStage | null>(null);
+  const [progress, setProgress] = useState<AnalysisProgress | null>(null);
+  const isRunning = stage !== null;
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!profile?.id) return;
 
-    setIsRunning(true);
+    setStage("preparing");
+    setProgress(null);
+    setError(null);
+    let hasStartedRun = false;
+    let runFinished = false;
     try {
       const universes = Array.isArray(analysis?.investment_universe)
         ? analysis.investment_universe
@@ -29,14 +40,43 @@ export function useAnalysisRefresh() {
         expertise_level: analysis?.ai_derived_expertise ?? "novice",
       });
 
-      await pollUntilComplete(run_id, getStatus, getResult);
+      hasStartedRun = true;
+      setStage("processing");
+      await pollUntilComplete(run_id, getStatus, getResult, (status) => {
+        if (status.id !== run_id) return;
+        setProgress(status.progress);
+        if (status.status === "complete") {
+          runFinished = true;
+          setStage("results");
+        }
+        if (status.status === "failed") {
+          runFinished = true;
+          setStage(null);
+        }
+      });
+      runFinished = true;
       await fetchProfile(profile.id);
+      await onComplete?.();
     } catch (e) {
       console.error("Refresh analysis failed:", e);
+      setError(
+        "We couldn’t finish checking your analysis. It may still be running. Try checking again.",
+      );
+      if (!hasStartedRun) setStage(null);
     } finally {
-      setIsRunning(false);
+      if (runFinished) {
+        setStage(null);
+        setProgress(null);
+      }
     }
   };
 
-  return { isRunning, refresh };
+  return {
+    isRunning,
+    stage,
+    progress,
+    refresh,
+    error,
+    clearError: () => setError(null),
+  };
 }

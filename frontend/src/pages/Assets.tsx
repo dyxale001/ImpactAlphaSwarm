@@ -1,3 +1,8 @@
+import type {
+  AnalysisLoadingStage,
+  AnalysisProgress,
+} from "../types/analysisLifecycle";
+import { getAnalysisExecutionIdentity } from "../types/analysisLifecycle";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -8,6 +13,7 @@ import {
   BrainCircuit,
   CandlestickChart,
   ChevronDown,
+  CircleAlert,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
@@ -21,6 +27,7 @@ import SignalScorecard from "../components/dashboard/SignalScorecard";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 import { CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
+import AssetsAnalysisLoading from "../components/dashboard/AssetsAnalysisLoading";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 import LadderMotif from "../components/dashboard/LadderMotif";
 import ScoredAssetRow from "../components/dashboard/ScoredAssetRow";
@@ -63,6 +70,8 @@ export default function AssetsPage() {
     filteredRecs,
     isLoadingRecs,
     isRunInProgress,
+    isRunComplete,
+    analysisProgress,
     recommendationError,
     latestRunCreatedAt,
     recommendations,
@@ -103,7 +112,14 @@ export default function AssetsPage() {
     useAuthStore();
   const navigate = useNavigate();
 
-  const [isRunning, setIsRunning] = useState(false);
+  const [manualStage, setManualStage] = useState<AnalysisLoadingStage | null>(
+    null,
+  );
+  const [manualProgress, setManualProgress] = useState<AnalysisProgress | null>(
+    null,
+  );
+  const isRunning = manualStage !== null;
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [exchangeRateSource, setExchangeRateSource] =
     useState<string>("Yahoo Finance");
@@ -128,16 +144,31 @@ export default function AssetsPage() {
   // button's state was being used, so an auto-refresh ran with no loading state at
   // all — the page looked blank while a multi-minute analysis went on — and the
   // auto-refresh guard could not see its own run.
-  const { refresh, isRunning: isAutoRefreshRunning } = useAnalysisRefresh();
-  const { updatedAt: sentimentUpdatedAt, isLoading: isSentimentUpdatedLoading } =
-    useSentimentLastUpdated();
+  const {
+    refresh,
+    isRunning: isAutoRefreshRunning,
+    stage: autoRefreshStage,
+    progress: autoRefreshProgress,
+    error: autoRefreshError,
+    clearError: clearAutoRefreshError,
+  } = useAnalysisRefresh(refreshRecommendations);
+  const {
+    updatedAt: sentimentUpdatedAt,
+    isLoading: isSentimentUpdatedLoading,
+  } = useSentimentLastUpdated();
   const anyRunInFlight = isRunning || isAutoRefreshRunning;
   const isStale = isRunStale(latestRunCreatedAt);
 
   const handleRefresh = async () => {
-    if (!profile?.id) return;
+    if (!profile?.id || anyRunInFlight) return;
 
-    setIsRunning(true);
+    setRefreshError(null);
+    clearAutoRefreshError();
+    setManualStage("preparing");
+    setManualProgress(null);
+    let manualRunStarted = false;
+    let manualRunFinished = false;
+    let currentManualExecutionIdentity: string | null = null;
     try {
       const universes = Array.isArray(analysis?.investment_universe)
         ? analysis.investment_universe
@@ -159,16 +190,46 @@ export default function AssetsPage() {
         expertise_level: analysis?.ai_derived_expertise ?? "novice",
       });
 
+      manualRunStarted = true;
+      setManualStage("processing");
       await refreshRecommendations();
 
-      await pollUntilComplete(run_id, getStatus, getResult);
+      await pollUntilComplete(run_id, getStatus, getResult, (status) => {
+        if (status.id !== run_id) return;
+        const executionIdentity = getAnalysisExecutionIdentity(
+          status.id,
+          status.created_at,
+        );
+        if (
+          currentManualExecutionIdentity &&
+          executionIdentity !== currentManualExecutionIdentity
+        )
+          return;
+        currentManualExecutionIdentity = executionIdentity;
+        setManualProgress(status.progress);
+        if (status.status === "complete") {
+          manualRunFinished = true;
+          setManualStage("results");
+        }
+        if (status.status === "failed") {
+          manualRunFinished = true;
+          setManualStage(null);
+        }
+      });
+      manualRunFinished = true;
       await fetchProfile(profile.id);
       await refreshRecommendations();
       await loadExchangeRate();
     } catch (e) {
       console.error("Refresh analysis failed:", e);
+      setRefreshError(
+        "We couldn’t finish checking your analysis. It may still be running. Try checking again.",
+      );
     } finally {
-      setIsRunning(false);
+      if (manualRunFinished || !manualRunStarted) {
+        setManualStage(null);
+        setManualProgress(null);
+      }
     }
   };
 
@@ -184,8 +245,12 @@ export default function AssetsPage() {
   // Self-heal returning users whose data predates the last nightly run.
   useStaleAutoRefresh({
     isStale,
-    isRunning: anyRunInFlight,
-    ready: !currentlyLoading && Boolean(profile?.id),
+    isRunning: anyRunInFlight || isRunInProgress,
+    ready:
+      !currentlyLoading &&
+      !isLoadingRecs &&
+      !recommendationError &&
+      Boolean(profile?.id),
     refresh,
   });
 
@@ -199,12 +264,64 @@ export default function AssetsPage() {
 
   if (profile?.role === "admin") return null;
 
-  const showDashboardSkeleton =
-    anyRunInFlight || isRunInProgress || isLoadingRecs;
+  const analysisError = refreshError || autoRefreshError || recommendationError;
 
-  if (showDashboardSkeleton) {
-    return <DashboardSkeleton />;
+  // A failed status/read must remain visible even if the last known status was running.
+  if (!anyRunInFlight && analysisError) {
+    return (
+      <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10">
+        <div
+          className="soft-card mx-auto max-w-xl p-5 text-center sm:p-6"
+          role="alert"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <CircleAlert
+              className="h-5 w-5 shrink-0 text-brand-accent"
+              aria-hidden="true"
+            />
+            <div className="min-w-0 space-y-3">
+              <div>
+                <h1 className="text-xl font-semibold text-brand-fg">
+                  We couldn't complete your analysis
+                </h1>
+                <p className="mt-2 text-sm leading-relaxed text-brand-muted-fg">
+                  Something interrupted the analysis before it could finish. You
+                  can try again whenever you're ready.
+                </p>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            className="mt-4 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   }
+
+  // Local lifecycle takes precedence over an older saved run during a new start.
+  const loadingStage =
+    manualStage ??
+    autoRefreshStage ??
+    (isRunInProgress
+      ? "processing"
+      : isRunComplete && isLoadingRecs
+        ? "results"
+        : null);
+  const loadingProgress = anyRunInFlight
+    ? (manualProgress ?? autoRefreshProgress)
+    : analysisProgress;
+  if (loadingStage) {
+    return (
+      <AssetsAnalysisLoading stage={loadingStage} progress={loadingProgress} />
+    );
+  }
+
+  if (isLoadingRecs) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto">
@@ -274,7 +391,9 @@ export default function AssetsPage() {
                 to fill their track by default, so a border on the label spans draws
                 one continuous vertical rule rather than a short underline per row. */}
             <div className="grid grid-cols-[auto_auto] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
-              <span className="border-r border-brand-bg/15 pr-2 mr-2">Last AI run</span>
+              <span className="border-r border-brand-bg/15 pr-2 mr-2">
+                Last AI run
+              </span>
               <span className="font-semibold text-brand-bg">
                 {latestRunCreatedAt
                   ? new Date(latestRunCreatedAt).toLocaleString()
@@ -433,14 +552,7 @@ export default function AssetsPage() {
       {/* The rest of the shortlist, ranks 2 to 5. Headed by the block above,
           alongside the hero it continues. */}
       <div>
-        {recommendationError ? (
-          <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-primary">
-            <p className="font-semibold text-primary mb-2">
-              No dashboard data available
-            </p>
-            <p>{recommendationError}</p>
-          </div>
-        ) : filteredRecs.length === 0 ? (
+        {filteredRecs.length === 0 ? (
           <div className="glass-card p-6 text-center text-sm text-primary">
             No recommendations available right now.
           </div>
@@ -468,15 +580,17 @@ export default function AssetsPage() {
       {alsoScored.length > 0 ? (
         <div className="mt-10">
           <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
-            <h2 className="text-2xl font-semibold text-brand-fg">Also scored</h2>
+            <h2 className="text-2xl font-semibold text-brand-fg">
+              Also scored
+            </h2>
             <span className="text-xs text-brand-muted-fg">
               {alsoScored.length} more
             </span>
           </div>
           <p className="text-sm text-brand-muted-fg mb-4">
-            Ranked in the same run but outside the shortlist above. The committee
-            writes its full reasoning for the top {SHORTLIST_SIZE}; these carry the
-            summary it recorded for every asset it scored.
+            Ranked in the same run but outside the shortlist above. The
+            committee writes its full reasoning for the top {SHORTLIST_SIZE};
+            these carry the summary it recorded for every asset it scored.
           </p>
 
           <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 overflow-hidden">
@@ -514,12 +628,12 @@ export default function AssetsPage() {
             AlphaSwarm is an AI-powered analytical tool designed for
             informational and educational purposes only. Every figure shown is a
             measurement of public data produced by automated analysis, and the
-            ordering of this list reflects those measurements plus a weighting we
-            choose and disclose. Nothing here constitutes professional financial,
-            investment or legal advice, and nothing predicts future prices. All
-            trading involves risk; past performance is not indicative of future
-            results. Please consult with a licensed financial advisor before
-            making any investment decisions.
+            ordering of this list reflects those measurements plus a weighting
+            we choose and disclose. Nothing here constitutes professional
+            financial, investment or legal advice, and nothing predicts future
+            prices. All trading involves risk; past performance is not
+            indicative of future results. Please consult with a licensed
+            financial advisor before making any investment decisions.
           </p>
         </div>
       </div>
