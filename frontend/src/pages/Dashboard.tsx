@@ -1,103 +1,255 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { HardHat, Hammer, ArrowRight } from "lucide-react";
+import { LayoutGrid, Plus } from "lucide-react";
+import { useAuthStore } from "../store/authStore";
+import { useDashboardLayout } from "../hooks/useDashboardLayout";
+import { resolveStarterDeck, type DeckId } from "../dashboard/decks";
+import { SIZE_CLASS } from "../dashboard/layoutSchema";
+import { DashboardDataProvider } from "../dashboard/DashboardDataContext";
+import DeckSetupPanel from "../components/dashboard/deck/DeckSetupPanel";
+import TodayStrip from "../components/dashboard/deck/TodayStrip";
+import WidgetFrame from "../components/dashboard/deck/WidgetFrame";
+import AddWidgetDrawer from "../components/dashboard/deck/AddWidgetDrawer";
+import EditModeBar from "../components/dashboard/deck/EditModeBar";
+import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
+import { rememberHubPage } from "../utils/lastHubPage";
 
-// The dashboard is being rebuilt around the user. This placeholder stands in for it
-// so the route keeps working and the rest of the app is unaffected; the previous
-// implementation is in git history and comes back when the new one lands.
+// The dashboard the user composed.
+//
+// Three states: a first-run deck picker for anyone who has never set one up, the
+// arranged grid, and edit mode over the top of it. All layout state lives in
+// useDashboardLayout; this page is the arrangement of it.
+
+const PAGE = "max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16";
 
 export default function DashboardPage() {
-  return (
-    <div className="max-w-3xl mx-auto pt-12 lg:pt-20 px-4 sm:px-6 lg:px-8 pb-20 animate-fade-in-up">
-      <style>{`
-        @keyframes wip-bob {
-          0%, 100% { transform: rotate(-8deg) translateY(0); }
-          50%      { transform: rotate(6deg) translateY(-3px); }
-        }
-        @keyframes wip-grid {
-          from { background-position: 0 0; }
-          to   { background-position: 42px 42px; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .wip-bob, .wip-grid { animation: none !important; }
-        }
-      `}</style>
+  // Names this as the page an asset's "Back to X" link should return to. See
+  // lastHubPage.ts: every route into /asset/:ticker shares this without being
+  // threaded through individually.
+  useEffect(() => {
+    rememberHubPage("/dashboard");
+  }, []);
 
-      <div className="hero-card relative overflow-hidden p-8 sm:p-12">
-        {/* Blueprint grid, drifting slowly behind everything. */}
-        <div
-          className="wip-grid pointer-events-none absolute inset-0 opacity-[0.14]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(199,242,105,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(199,242,105,0.5) 1px, transparent 1px)",
-            backgroundSize: "42px 42px",
-            animation: "wip-grid 6s linear infinite",
-            maskImage:
-              "radial-gradient(circle at 30% 0%, black, transparent 75%)",
-            WebkitMaskImage:
-              "radial-gradient(circle at 30% 0%, black, transparent 75%)",
-          }}
+  const { profile, analysis, isLoading, isProfileLoading } = useAuthStore();
+  const {
+    layout,
+    placedWidgets,
+    availableWidgets,
+    needsSetup,
+    isEditing,
+    setIsEditing,
+    isSaving,
+    saveError,
+    applyDeck,
+    resetToDeck,
+    startFromScratch,
+    addWidget,
+    removeWidget,
+    cycleSize,
+    moveWidget,
+    updateSettings,
+    setPinnedTicker,
+  } = useDashboardLayout();
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Which widget is being dragged, and which it is currently over. Index rather
+  // than id: the move is an array operation and indices are what it takes.
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const recommended: DeckId = useMemo(
+    () => resolveStarterDeck(analysis),
+    [analysis],
+  );
+
+  if (isLoading || isProfileLoading || !profile) {
+    return <DashboardSkeleton />;
+  }
+
+  if (needsSetup) {
+    return (
+      <div className={PAGE}>
+        <DeckSetupPanel
+          recommended={recommended}
+          isSaving={isSaving}
+          onConfirm={(deck) => void applyDeck(deck)}
+          onStartFromScratch={() => void startFromScratch()}
+        />
+      </div>
+    );
+  }
+
+  const pinnedTicker = layout?.pinnedTicker ?? null;
+
+  const finishDrag = () => {
+    if (dragFrom !== null && dragOver !== null && dragFrom !== dragOver) {
+      moveWidget(dragFrom, dragOver);
+    }
+    setDragFrom(null);
+    setDragOver(null);
+  };
+
+  return (
+    <DashboardDataProvider>
+      <div className={`${PAGE} space-y-6`}>
+        <TodayStrip
+          deck={layout?.deck ?? null}
+          widgetCount={placedWidgets.length}
+          pinnedTicker={pinnedTicker}
+          isEditing={isEditing}
+          onCustomise={() => setIsEditing(true)}
         />
 
-        <div className="relative">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-accent">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand-accent animate-pulse" />
-            AlphaSwarm · Your Dashboard
+        {saveError && !isEditing ? (
+          <div className="rounded-lg border border-semantic-danger/20 bg-semantic-danger/10 p-4 text-sm text-semantic-danger">
+            {saveError}
           </div>
+        ) : null}
 
-          <div className="mt-5 flex items-start gap-4">
-            <span className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-brand-accent/40 bg-brand-accent/10">
-              <HardHat className="h-7 w-7 text-brand-accent" />
-              <Hammer
-                className="wip-bob absolute -right-2 -top-2 h-5 w-5 text-white"
-                style={{
-                  animation: "wip-bob 1.6s ease-in-out infinite",
-                  transformOrigin: "bottom left",
-                }}
-              />
-            </span>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold leading-tight text-white">
-                We're rebuilding the dashboard around you
-              </h1>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3 text-sm sm:text-[15px] text-white/70 leading-relaxed">
-            <p>Hi there,</p>
-            <p>
-              We're turning this page into your page: your watchlist, your
-              holdings and the signals that fit how you invest, all in one view.
-              We've taken it offline for a short while to get that right, and it
-              will reopen here as soon as it's ready.
+        {placedWidgets.length === 0 ? (
+          <div className="soft-card flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <LayoutGrid className="h-7 w-7 text-brand-muted-fg" />
+            <p className="text-sm font-medium text-brand-fg">
+              Your dashboard is empty
             </p>
-            <p>
-              Nothing else has changed. The rest of the app is running as normal
-              in the meantime, so carry on as usual.
+            <p className="max-w-sm text-xs leading-relaxed text-brand-muted-fg">
+              Add the pieces you want to see. Your watchlist, the assets your
+              latest run ranked, sentiment, insider activity and your learning
+              progress are all available.
             </p>
-            <p className="text-white/85">
-              Thanks for bearing with us,
-              <br />
-              <span className="font-semibold text-white">Team AlphaSwarm</span>
-            </p>
-          </div>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              to="/assets"
-              className="inline-flex items-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-brand-primary transition-colors hover:bg-brand-accent/85"
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditing(true);
+                setDrawerOpen(true);
+              }}
+              className="mt-1 inline-flex items-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
-              Browse assets
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              to="/watchlist"
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-brand-accent/60 hover:text-brand-accent"
-            >
-              Go to watchlist
-            </Link>
+              <Plus className="h-4 w-4" />
+              Add a widget
+            </button>
           </div>
-        </div>
+        ) : (
+          <div
+            className={`bento-grid ${isEditing ? "rounded-2xl bg-brand-fg/[0.02] p-3" : ""}`}
+          >
+            {placedWidgets.map(({ entry, def }, index) => (
+              // Every drag handler lives on this plain wrapper rather than on
+              // WidgetFrame. The frame is a framer-motion element, and
+              // framer-motion claims onDragStart and onDragEnd for its own pan
+              // gestures, consuming them before they reach the DOM. It also
+              // makes the whole grid cell the drop target, including the gap
+              // around the card that its own padding leaves.
+              <div
+                key={entry.id}
+                className={SIZE_CLASS[entry.size]}
+                // Draggable only in edit mode: a draggable card in normal use
+                // hijacks text selection and turns a stray swipe into a layout
+                // change.
+                draggable={isEditing}
+                onDragStart={
+                  isEditing
+                    ? (e) => {
+                        // Firefox refuses to start a drag with nothing on the
+                        // transfer.
+                        e.dataTransfer.setData("text/plain", entry.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragFrom(index);
+                      }
+                    : undefined
+                }
+                onDragEnter={isEditing ? () => setDragOver(index) : undefined}
+                onDragOver={
+                  isEditing
+                    ? (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }
+                    : undefined
+                }
+                onDrop={
+                  isEditing
+                    ? (e) => {
+                        e.preventDefault();
+                        finishDrag();
+                      }
+                    : undefined
+                }
+                // Fires whether the drop landed on a target or was abandoned, so
+                // this is what guarantees the drag state is always cleaned up.
+                onDragEnd={isEditing ? finishDrag : undefined}
+              >
+                <WidgetFrame
+                  def={def}
+                  size={entry.size}
+                  index={index}
+                  total={placedWidgets.length}
+                  isEditing={isEditing}
+                  isDragging={dragFrom === index}
+                  isDropTarget={dragOver === index}
+                  onMove={(to) => moveWidget(index, to)}
+                  onCycleSize={() => cycleSize(entry.id)}
+                  onRemove={() => removeWidget(entry.id)}
+                >
+                  <def.Component
+                    size={entry.size}
+                    pinnedTicker={pinnedTicker}
+                    setPinnedTicker={setPinnedTicker}
+                    settings={entry.settings ?? {}}
+                    updateSettings={(patch) => updateSettings(entry.id, patch)}
+                  />
+                </WidgetFrame>
+              </div>
+            ))}
+
+            {/* The ghost slot. Only in edit mode, and it sits in the grid rather
+                than below it so "add" reads as a place on the page. */}
+            {isEditing ? (
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                disabled={availableWidgets.length === 0}
+                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-border/70 text-brand-muted-fg transition-colors hover:border-brand-accent hover:text-brand-primary disabled:opacity-40 lg:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-xs font-semibold">
+                  {availableWidgets.length === 0
+                    ? "Everything is placed"
+                    : "Add a widget"}
+                </span>
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {isEditing ? (
+          <EditModeBar
+            deck={layout?.deck ?? null}
+            widgetCount={placedWidgets.length}
+            isSaving={isSaving}
+            saveError={saveError}
+            onAdd={() => setDrawerOpen(true)}
+            onReset={resetToDeck}
+            onDone={() => setIsEditing(false)}
+          />
+        ) : null}
+
+        <AddWidgetDrawer
+          open={drawerOpen}
+          available={availableWidgets}
+          onAdd={(id) => addWidget(id)}
+          onClose={() => setDrawerOpen(false)}
+        />
+
+        <p className="pt-2 text-[11px] leading-relaxed text-brand-muted-fg">
+          Everything here is research, not financial advice. Prices are US
+          listings shown in rand.{" "}
+          <Link to="/settings" className="text-brand-primary hover:underline">
+            Manage your preferences
+          </Link>
+          .
+        </p>
       </div>
-    </div>
+    </DashboardDataProvider>
   );
 }

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Eye, RefreshCw, ArrowUpDown, TrendingUp } from 'lucide-react'
-import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
-import { Link } from 'react-router-dom'
+import { useWatchlistData, type SortOption } from '../hooks/useWatchlistData'
 import WatchlistSearch from '../components/watchlist/WatchlistSearch'
 import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
+import TopPickRow from '../components/watchlist/TopPickRow'
 import RadarMotif from '../components/watchlist/RadarMotif'
 
 const SECTOR_DOT: Record<string, string> = {
@@ -12,59 +12,6 @@ const SECTOR_DOT: Record<string, string> = {
   'Finance':       'bg-amber-400',
   'AI & Robotics': 'bg-purple-400',
   'Healthcare':    'bg-pink-400',
-}
-
-// ─── Top pick row — horizontal, spacious, readable ─────────────────────────
-function TopPickRow({ pick, index }: { pick: TopPick; index: number }) {
-  return (
-    <div
-      className="soft-card p-5 flex items-center gap-5 hover:border-brand-primary/30 transition-all"
-      style={{ animation: `slide-up ${0.3 + index * 0.06}s ease-out forwards` }}
-    >
-      {/* Rank + ticker */}
-      <div className="flex items-center gap-3 min-w-0 flex-1 sm:flex-none sm:w-36 sm:shrink-0">
-        <div className="w-7 h-7 shrink-0 rounded-full bg-brand-primary/10 flex items-center justify-center text-[10px] font-bold text-brand-primary">
-          {pick.rank}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-black font-mono text-brand-fg">{pick.ticker}</p>
-          <p className="text-[10px] text-brand-muted-fg truncate">{pick.name}</p>
-        </div>
-      </div>
-
-      {/* Reasoning */}
-      <p className="flex-1 text-xs text-brand-muted-fg leading-relaxed line-clamp-2 hidden md:block">
-        {pick.reasoning || 'No reasoning available.'}
-      </p>
-
-      {/* Scores
-      <div className="flex items-center gap-6 shrink-0">
-        <div className="text-center">
-          <p className="text-[9px] uppercase tracking-wider text-brand-muted-fg font-semibold">Confidence</p>
-          <p className={`text-lg font-bold font-mono ${scoreColor(pick.confidenceScore)}`}>{pick.confidenceScore}</p>
-        </div>
-        <div className="text-center hidden sm:block">
-          <p className="text-[9px] uppercase tracking-wider text-brand-muted-fg font-semibold">Sentiment</p>
-          <p className={`text-sm font-bold font-mono ${scoreColor(pick.sentimentScore)}`}>{pick.sentimentScore}</p>
-        </div>
-        <div className="text-center hidden sm:block">
-          <p className="text-[9px] uppercase tracking-wider text-brand-muted-fg font-semibold">Quant</p>
-          <p className={`text-sm font-bold font-mono ${scoreColor(pick.quantScore)}`}>{pick.quantScore}</p>
-        </div>
-      </div> */}
-
-      {/* Price + link */}
-      <div className="text-right shrink-0 ml-auto">
-        {pick.priceAtRun > 0 && (
-          <p className="text-xs font-mono text-brand-muted-fg mb-1">R {pick.priceAtRun.toFixed(2)}</p>
-        )}
-        <Link to={`/asset/${pick.ticker}`}
-          className="text-xs text-brand-primary hover:underline font-semibold">
-          Analyse →
-        </Link>
-      </div>
-    </div>
-  )
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────

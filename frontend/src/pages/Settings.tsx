@@ -4,6 +4,7 @@ import { useUserSettings } from "../hooks/useUserSettings"
 import ChangePasswordSection from "../components/ChangePasswordSection"
 import InvestmentPreferencesSection from "../components/InvestmentPreferencesSection"
 import DeactivateAccountSection from "../components/DeactivateAccountSection"
+import DashboardPreferencesSection from "../components/DashboardPreferencesSection"
 
 export default function SettingsPage() {
   const { setSession } = useAuthStore()
@@ -143,6 +144,9 @@ export default function SettingsPage() {
         onSave={saveInvestmentPrefs}
         onReset={resetInvestmentPrefs}
       />
+
+      {/* ── Dashboard ────────────────────────────────────── */}
+      <DashboardPreferencesSection />
 
     </div>
   )
