@@ -78,6 +78,7 @@ export default function SocialSentimentPage() {
         icon={MessageSquare}
         title="Social Sentiment"
         subtitle={`How retail chatter about ${tickerLabel} moved over the last ${SOCIAL_HISTORY_DAYS} days.`}
+        backHref={`/asset/${tickerLabel}?tab=sentiment`}
       />
 
       <SentimentTrendChart
