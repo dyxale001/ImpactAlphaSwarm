@@ -133,6 +133,38 @@ class TestItInheritsTheBaseContract:
             repo.insert_snapshot(snapshot())
 
 
+class TestRetiredFundsStayOffThePublicSide:
+    """INVARIANT: retiring a fund takes it off every public surface.
+
+    Retiring is this feature's only form of removal, so it has to actually
+    remove the fund from what a reader can reach. A retired fund still served at
+    its own URL is worse than a dead link: it presents a withdrawn fund as a
+    current one, on a page whose whole claim is that its figures are current and
+    attributable.
+
+    The admin is the exception, and has to be: a fund that could not be fetched
+    once retired could never be restored.
+    """
+
+    def test_fetching_a_fund_excludes_retired_ones_by_default(self):
+        client = FakeClient()
+        FundRepository(client).get("f-1")
+        assert ("is_active", True) in client.filters_on("funds")
+
+    def test_the_admin_can_ask_for_a_retired_one(self):
+        client = FakeClient()
+        FundRepository(client).get("f-1", include_retired=True)
+        assert ("is_active", True) not in client.filters_on("funds")
+
+    def test_a_retired_fund_is_not_returned_to_the_public_path(self):
+        client = FakeClient(rows={"funds": [{**FUND_ROW, "id": "f-1", "is_active": False}]})
+        assert FundRepository(client).get("f-1") is None
+
+    def test_the_same_fund_is_returned_when_retired_ones_are_asked_for(self):
+        client = FakeClient(rows={"funds": [{**FUND_ROW, "id": "f-1", "is_active": False}]})
+        assert FundRepository(client).get("f-1", include_retired=True) is not None
+
+
 class TestListingAndFiltering:
     def test_only_active_funds_are_listed(self):
         client = FakeClient()

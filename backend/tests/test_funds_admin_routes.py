@@ -126,6 +126,22 @@ class TestNothingDeletes:
         assert any(name == "update" for name, *_ in calls)
         assert not any(name == "delete" for name, *_ in calls)
 
+    def test_a_retired_fund_can_still_be_edited_and_restored(self):
+        # The public side hides it; the admin must not, or retiring would be a
+        # one-way door and this feature's only removal would be irreversible.
+        app = build_app(rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []})
+        res = TestClient(app).patch("/api/admin/fund-catalogue/funds/f-1", json={"is_active": True})
+        assert res.status_code == 200
+
+    def test_a_sheet_can_be_recorded_against_a_retired_fund(self):
+        # The document was published whether or not we still list the fund.
+        app = build_app(rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []})
+        res = TestClient(app).post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "risk_indicator_raw": "Low", "risk_indicator_1to5": 1},
+        )
+        assert res.status_code == 201
+
     def test_a_correction_is_recorded_as_another_sheet(self, client):
         # Same fund, same date, a different reading. It must insert, because
         # the earlier reading is the record of what the catalogue said then.

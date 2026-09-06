@@ -122,9 +122,23 @@ class FundRepository(Repository):
             print(f"Error listing every fund: {e}")
             return []
 
-    def get(self, fund_id: str) -> Optional[dict[str, Any]]:
+    def get(self, fund_id: str, include_retired: bool = False) -> Optional[dict[str, Any]]:
+        """One fund by id. Retired funds are hidden unless asked for.
+
+        The default is the safe one because the public detail page is the
+        caller that must not have them: a fund taken off the catalogue would
+        otherwise still render at its own URL as though it were current, which
+        is worse than a dead link — it presents a withdrawn fund as an offer.
+
+        The admin passes ``include_retired`` because retiring is this feature's
+        only form of removal, and a fund that could not be fetched afterwards
+        could never be restored.
+        """
         try:
-            resp = self.table().select(FUND_COLUMNS).eq("id", fund_id).limit(1).execute()
+            query = self.table().select(FUND_COLUMNS).eq("id", fund_id)
+            if not include_retired:
+                query = query.eq("is_active", True)
+            resp = query.limit(1).execute()
             data = resp.data or []
             return data[0] if data else None
         except Exception as e:

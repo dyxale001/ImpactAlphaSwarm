@@ -243,7 +243,9 @@ def update_fund(
     against the patch alone: a category is only valid in the context of the rest
     of the row.
     """
-    existing = repo.get(fund_id)
+    # Retired ones included: restoring a fund means editing one, and retiring is
+    # the only removal there is.
+    existing = repo.get(fund_id, include_retired=True)
     if not existing:
         raise HTTPException(status_code=404, detail="Fund not found")
 
@@ -272,7 +274,10 @@ def add_snapshot(
     newest. Nothing is overwritten, so the earlier reading stays as the record
     of what the catalogue said at the time.
     """
-    fund = repo.get(fund_id)
+    # A retired fund can still have sheets recorded against it: the document
+    # was published whether or not we still list the fund, and recording it
+    # keeps the history complete for whoever restores it later.
+    fund = repo.get(fund_id, include_retired=True)
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
 
