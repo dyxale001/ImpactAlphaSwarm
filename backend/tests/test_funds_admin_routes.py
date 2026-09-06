@@ -190,6 +190,40 @@ class TestOneStandardForFormsAndCsv:
         )
         assert res.status_code == 422
 
+    def test_a_complete_allocation_is_accepted(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={
+                "as_of": "2026-07-31",
+                "asset_allocation": {"Domestic bonds": 40.0, "Domestic cash": 59.5},
+            },
+        )
+        assert res.status_code == 201
+
+    def test_a_partial_allocation_is_refused(self, client):
+        # The failure this guards is subtle: a donut summing to 60% renders
+        # perfectly and reads as a fund holding 40% of nothing.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "asset_allocation": {"Domestic equity": 60.0}},
+        )
+        assert res.status_code == 422
+        problems = res.json()["detail"]["problems"]
+        assert any(p["field"] == "asset_allocation" for p in problems)
+        assert any("line item" in p["message"] for p in problems)
+
+    def test_published_returns_are_stored_as_given(self, client):
+        # Quoted from the sheet's own table, never recomputed, so they must go
+        # in exactly as typed — including a negative period.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "performance": {"1y": 14.41, "3y": -2.5}},
+        )
+        assert res.status_code == 201
+        call = [c for c in client.app.state.fake.calls_on("fund_factsheet_snapshots") if c[0] == "upsert"][0]
+        payload = call[1][0]
+        assert payload["performance"] == {"1y": 14.41, "3y": -2.5}
+
     def test_a_valid_fund_is_written(self, client):
         res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
         assert res.status_code == 201

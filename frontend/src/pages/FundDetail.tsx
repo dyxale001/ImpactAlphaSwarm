@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import RiskScale from "../components/funds/RiskScale";
 import FundsSkeleton from "../components/funds/FundsSkeleton";
 import FundPriceChart from "../components/funds/FundPriceChart";
+import FundAllocation from "../components/funds/FundAllocation";
+import FundPerformance from "../components/funds/FundPerformance";
 import { useFundDetail, useFundPrices } from "../hooks/useFundCatalogue";
 import {
   AS_AT,
@@ -168,6 +170,13 @@ export default function FundDetailPage() {
 
       {/* ── What it closed at, for a listed fund only ── */}
       {prices && <FundPriceChart prices={prices} />}
+
+      {/* ── The manager's own figures, when someone has transcribed them.
+             Absent rather than stubbed: both are charts on the sheet, so a
+             missing one means nobody has read it yet, which the provenance
+             block below says outright. ── */}
+      <FundPerformance performance={snapshot?.performance ?? null} asAt={asAt} />
+      <FundAllocation allocation={snapshot?.asset_allocation ?? null} />
 
       {/* ── The manager's own objective ── */}
       {snapshot?.objective && (

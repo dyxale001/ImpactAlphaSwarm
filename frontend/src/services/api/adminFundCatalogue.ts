@@ -130,6 +130,10 @@ export interface SnapshotInput {
   min_lump_sum?: number | null;
   min_debit_order?: number | null;
   distribution_frequency?: string | null;
+  /** Asset class → percent. Must account for the whole fund if given at all. */
+  asset_allocation?: Record<string, number>;
+  /** Period ("1y", "3y", …) → annualised percent, as the sheet prints them. */
+  performance?: Record<string, number>;
 }
 
 interface Saved<T> {

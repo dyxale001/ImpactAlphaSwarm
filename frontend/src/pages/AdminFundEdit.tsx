@@ -183,6 +183,17 @@ function RecordSheet({
     recommended_min_term_years: "",
   });
 
+  // Asset classes vary by fund, so these are free-form rows. Periods do not, so
+  // those are fixed below: a mix of "1y", "1 year" and "1Y" across funds would
+  // make the figures unchartable later for no gain now.
+  const [allocation, setAllocation] = useState<Array<{ label: string; percent: string }>>([]);
+  const [performance, setPerformance] = useState<Record<string, string>>({
+    "1y": "",
+    "3y": "",
+    "5y": "",
+    "10y": "",
+  });
+
   const { problems, warnings, saved, saving, save } = useSaver(async () => {
     const body: SnapshotInput = { as_of: values.as_of };
     // Empty means "the sheet does not state it", which is not the same as zero.
@@ -193,9 +204,23 @@ function RecordSheet({
       const numeric = ["risk_indicator_1to5", "ter", "tc", "tic", "fund_size_zar", "recommended_min_term_years"];
       (body as Record<string, unknown>)[key] = numeric.includes(key) ? Number(raw) : raw;
     }
+
+    const filledAllocation = allocation.filter((r) => r.label.trim() && r.percent.trim());
+    if (filledAllocation.length) {
+      body.asset_allocation = Object.fromEntries(
+        filledAllocation.map((r) => [r.label.trim(), Number(r.percent)]),
+      );
+    }
+    const filledPerformance = Object.entries(performance).filter(([, v]) => v.trim() !== "");
+    if (filledPerformance.length) {
+      body.performance = Object.fromEntries(filledPerformance.map(([k, v]) => [k, Number(v)]));
+    }
+
     await addAdminSnapshot(fundId, body);
     await onSaved();
   });
+
+  const allocationTotal = allocation.reduce((sum, r) => sum + (Number(r.percent) || 0), 0);
 
   const supersedes = fund.snapshot_history.some((h) => h.as_of === values.as_of);
 
@@ -226,6 +251,98 @@ function RecordSheet({
         <Field label="Minimum term (years)" value={values.recommended_min_term_years} onChange={(v) => setValues({ ...values, recommended_min_term_years: v })} problems={problems} name="recommended_min_term_years" />
       </div>
       <Field label="Objective, in the manager's words" value={values.objective} onChange={(v) => setValues({ ...values, objective: v })} problems={problems} name="objective" />
+
+      {/* ── What it holds ── */}
+      <div className="space-y-2 border-t border-brand-border/40 pt-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-xs font-bold text-brand-primary">What it holds</h3>
+          {allocation.length > 0 && (
+            <span
+              className={`text-[11px] font-semibold ${
+                allocationTotal >= 95 && allocationTotal <= 105
+                  ? "text-emerald-700"
+                  : "text-amber-700"
+              }`}
+            >
+              {allocationTotal.toFixed(1)}% of 100
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+          Optional — many tracker sheets print no breakdown, and the index is the answer. If you do
+          enter one it has to account for the whole fund: a partial breakdown reads as a fund
+          holding some of nothing.
+        </p>
+        {allocation.map((row, index) => (
+          <div key={index} className="flex gap-2">
+            <input
+              value={row.label}
+              placeholder="Domestic equity"
+              onChange={(e) => {
+                const next = [...allocation];
+                next[index] = { ...row, label: e.target.value };
+                setAllocation(next);
+              }}
+              className="flex-1 rounded-md border border-brand-border/60 px-2.5 py-1.5 text-xs text-brand-primary"
+            />
+            <input
+              value={row.percent}
+              placeholder="%"
+              onChange={(e) => {
+                const next = [...allocation];
+                next[index] = { ...row, percent: e.target.value };
+                setAllocation(next);
+              }}
+              className="w-20 rounded-md border border-brand-border/60 px-2.5 py-1.5 text-xs text-brand-primary"
+            />
+            <button
+              type="button"
+              onClick={() => setAllocation(allocation.filter((_, i) => i !== index))}
+              className="px-2 text-xs text-brand-secondary hover:text-brand-primary"
+              aria-label="Remove this line"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setAllocation([...allocation, { label: "", percent: "" }])}
+          className="text-[11px] font-semibold text-brand-primary hover:underline"
+        >
+          + Add a line
+        </button>
+        {problems
+          .filter((p) => p.field === "asset_allocation")
+          .map((p) => (
+            <p key={p.message} className="text-[11px] text-amber-700">
+              {p.message}
+            </p>
+          ))}
+      </div>
+
+      {/* ── Published returns ── */}
+      <div className="space-y-2 border-t border-brand-border/40 pt-3">
+        <h3 className="text-xs font-bold text-brand-primary">Returns, as the sheet prints them</h3>
+        <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+          Annualised percentages from the fund's own performance table, for the period ending on the
+          sheet date. Leave a period blank when the sheet does not show it — a fund younger than
+          five years has no five-year figure, and a zero would claim it made nothing.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Object.keys(performance).map((period) => (
+            <label key={period} className="flex flex-col gap-1 text-xs">
+              <span className="font-semibold text-brand-secondary/80">{period}</span>
+              <input
+                value={performance[period]}
+                onChange={(e) => setPerformance({ ...performance, [period]: e.target.value })}
+                className="rounded-md border border-brand-border/60 px-2.5 py-1.5 text-brand-primary"
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
       <SaveRow saving={saving} saved={saved} problems={problems} warnings={warnings} onSave={save} label="Record sheet" />
     </section>
   );
