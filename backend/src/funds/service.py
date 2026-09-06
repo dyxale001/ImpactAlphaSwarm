@@ -118,6 +118,31 @@ class FundCatalogueService:
         detail["not_licensed"] = copytext.FOOTER_NOT_LICENSED
         return detail
 
+    def prices_for(self, fund_id: str) -> Optional[dict[str, Any]]:
+        """One fund's stored closes, or None when the fund does not exist.
+
+        A listed fund with no rows yet and an unlisted fund both return an empty
+        series, but they are told apart by ``listed``: the page draws nothing
+        either way, and only the first is worth refreshing.
+        """
+        fund = self.funds.get(fund_id)
+        if not fund:
+            return None
+        listed = bool((fund.get("yahoo_symbol") or "").strip())
+        rows = self.funds.prices(fund_id) if listed else []
+        return {
+            "fund_id": fund_id,
+            "listed": listed,
+            "currency": "ZAR",
+            # Named so nobody reads it as a return. It is the exchange's closing
+            # price, and the page says so; performance comes off the fact sheet.
+            "closes": [
+                {"date": str(row.get("price_date")), "close_zar": row.get("close_zar")}
+                for row in rows
+            ],
+            "note": copytext.PRICE_NOTE,
+        }
+
     # ── match ───────────────────────────────────────────────────────────────
 
     def matches_for(self, user_id: str) -> dict[str, Any]:

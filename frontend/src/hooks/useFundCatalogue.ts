@@ -4,11 +4,13 @@ import {
   getFundCatalogue,
   getFundCatalogueMeta,
   getFundMatches,
+  getFundPrices,
   type CatalogueFilters,
   type CatalogueFundDetail,
   type CatalogueMeta,
   type CatalogueResponse,
   type FundMatchesResponse,
+  type FundPrices,
 } from "../services/api/fundCatalogue";
 import { LOAD_FAILED, MATCHES_LOAD_FAILED } from "../utils/fundsCopy";
 
@@ -100,6 +102,49 @@ export function useFundDetail(fundId: string | undefined) {
   }, [fundId]);
 
   return { fund, isLoading, error, notFound };
+}
+
+/** One fund's closing prices, for the chart on its page.
+ *
+ * A failure is silent by design: the chart is the least important thing on a
+ * page whose point is the published document, so a price feed being down loses
+ * the line and nothing else.
+ */
+export function useFundPrices(fundId: string | undefined, listed: boolean) {
+  const [prices, setPrices] = useState<FundPrices | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Not asked for at all when the fund is not listed: a unit trust has no
+    // market price, so the request would be a round trip to learn nothing.
+    if (!fundId || !listed) {
+      setPrices(null);
+      return;
+    }
+
+    async function load() {
+      setIsLoading(true);
+      try {
+        const res = await getFundPrices(fundId as string);
+        if (!cancelled) setPrices(res);
+      } catch (e) {
+        if (!cancelled) {
+          console.error("Error loading fund prices:", e);
+          setPrices(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fundId, listed]);
+
+  return { prices, isLoading };
 }
 
 /** The classification tree, the vehicles and the risk scale. Loaded once. */

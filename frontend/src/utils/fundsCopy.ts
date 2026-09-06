@@ -180,6 +180,8 @@ export const DETAIL_PROVENANCE_GAPS =
 export const DETAIL_NO_FACTSHEET =
   "No fact sheet is on file for this fund yet, so there is nothing dated to show. It stays listed because the fund exists; it cannot be matched to anyone until its published figures are recorded.";
 
+export const DETAIL_PRICE_TITLE = "What it closed at on the JSE";
+
 export const DETAIL_ALLOCATION_TITLE = "What it holds";
 
 export const DETAIL_PERFORMANCE_TITLE = "Past returns, as published";
@@ -244,6 +246,7 @@ export function allStrings(): string[] {
     DETAIL_PROVENANCE_MANUAL,
     DETAIL_PROVENANCE_GAPS,
     DETAIL_NO_FACTSHEET,
+    DETAIL_PRICE_TITLE,
     DETAIL_ALLOCATION_TITLE,
     DETAIL_PERFORMANCE_TITLE,
     DETAIL_PERFORMANCE_NOTE,

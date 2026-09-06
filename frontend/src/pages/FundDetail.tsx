@@ -2,7 +2,8 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import RiskScale from "../components/funds/RiskScale";
 import FundsSkeleton from "../components/funds/FundsSkeleton";
-import { useFundDetail } from "../hooks/useFundCatalogue";
+import FundPriceChart from "../components/funds/FundPriceChart";
+import { useFundDetail, useFundPrices } from "../hooks/useFundCatalogue";
 import {
   AS_AT,
   COST_LABEL,
@@ -64,6 +65,11 @@ import {
 export default function FundDetailPage() {
   const { fundId } = useParams<{ fundId: string }>();
   const { fund, isLoading, error, notFound } = useFundDetail(fundId);
+  // Asked for only when the fund is exchange-traded. The vehicle is the cheap
+  // check the client can make; the backend's `listed` flag is the authority,
+  // and the chart renders nothing when it is false — so a mislabelled fund
+  // costs one wasted request, never a fabricated line.
+  const { prices } = useFundPrices(fundId, fund?.vehicle === "etf");
 
   if (isLoading) {
     return (
@@ -159,6 +165,9 @@ export default function FundDetailPage() {
           <RiskScale level={fund.risk_level} label={fund.risk_label} note={fund.risk_note} />
         </section>
       )}
+
+      {/* ── What it closed at, for a listed fund only ── */}
+      {prices && <FundPriceChart prices={prices} />}
 
       {/* ── The manager's own objective ── */}
       {snapshot?.objective && (

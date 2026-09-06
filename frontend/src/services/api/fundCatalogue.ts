@@ -202,6 +202,26 @@ export async function getFundCatalogueMeta() {
   return res.json() as Promise<CatalogueMeta>;
 }
 
+/** A listed fund's closing prices. Empty for a unit trust, which has none. */
+export interface FundPrices {
+  fund_id: string;
+  /** False for a unit trust: it is not on an exchange, so there is no price to
+   *  draw. Distinguishes "no market price exists" from "not fetched yet". */
+  listed: boolean;
+  currency: "ZAR";
+  closes: Array<{ date: string; close_zar: number }>;
+  /** Says this is a closing price and not a return. Rendered with the chart. */
+  note: string;
+}
+
+export async function getFundPrices(fundId: string) {
+  const res = await fetch(
+    `${BASE}/api/fund-catalogue/${encodeURIComponent(fundId)}/prices`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<FundPrices>;
+}
+
 export async function getCatalogueFund(fundId: string) {
   const res = await fetch(`${BASE}/api/fund-catalogue/${encodeURIComponent(fundId)}`);
   if (!res.ok) throw new Error(await res.text());

@@ -268,6 +268,43 @@ class FundRepository(Repository):
         resp = self.table().upsert(payload, on_conflict="isin").execute()
         return resp.data or []
 
+    def prices(self, fund_id: str, limit: int = 400) -> list[dict[str, Any]]:
+        """One fund's stored closes, oldest first, for drawing a line.
+
+        Oldest first because that is the order a chart plots; the database is
+        asked for the newest so a fund with years of history returns the recent
+        window rather than the first page of it.
+        """
+        try:
+            resp = (
+                self.table(self.prices_table)
+                .select("price_date,close_zar")
+                .eq("fund_id", fund_id)
+                .order("price_date", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return list(reversed(resp.data or []))
+        except Exception as e:
+            print(f"Error fetching prices for fund {fund_id}: {e}")
+            return []
+
+    def upsert_prices(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Store closes, replacing any already held for the same day.
+
+        Keyed on (fund_id, price_date), so re-running a refresh over a period
+        that overlaps the last one rewrites those days rather than duplicating
+        them. Not wrapped: a refresh that failed must not report success.
+        """
+        if not rows:
+            return []
+        resp = (
+            self.table(self.prices_table)
+            .upsert(rows, on_conflict="fund_id,price_date")
+            .execute()
+        )
+        return resp.data or []
+
     @staticmethod
     def transcription_hash(isin: str, snapshot: dict[str, Any]) -> str:
         """Stand-in for a fact sheet's own hash, when no PDF has been archived.

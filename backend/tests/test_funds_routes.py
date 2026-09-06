@@ -250,6 +250,39 @@ class TestBrowse:
         assert client.get("/api/fund-catalogue", params={"vehicle": "bond"}).status_code == 422
 
 
+class TestPrices:
+    """The chart's data, and the two ways it is allowed to be empty."""
+
+    def test_prices_is_not_swallowed_by_the_fund_id_route(self, client):
+        body = client.get("/api/fund-catalogue/f-etf/prices").json()
+        assert "closes" in body, "the parameterised route matched first"
+
+    def test_a_listed_fund_says_so_even_with_no_rows_yet(self, client):
+        # Nothing has been refreshed in this fixture, so the series is empty —
+        # but the fund is listed, which is what tells a caller it is worth
+        # refreshing rather than permanently priceless.
+        body = client.get("/api/fund-catalogue/f-etf/prices").json()
+        assert body["listed"] is True
+        assert body["closes"] == []
+
+    def test_a_unit_trust_is_not_listed(self, client):
+        # It has no market price at all: units are bought from the manager at a
+        # daily NAV. The page draws no chart, and that is the correct answer.
+        body = client.get("/api/fund-catalogue/f-mm/prices").json()
+        assert body["listed"] is False
+        assert body["closes"] == []
+
+    def test_the_series_is_labelled_as_a_close_not_a_return(self, client):
+        # A line of closes looks exactly like a performance chart. The note is
+        # what stops it being read as one.
+        body = client.get("/api/fund-catalogue/f-etf/prices").json()
+        assert body["currency"] == "ZAR"
+        assert "not a return" in body["note"]
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        assert client.get("/api/fund-catalogue/nope/prices").status_code == 404
+
+
 class TestMeta:
     def test_meta_is_not_swallowed_by_the_fund_id_route(self, client):
         body = client.get("/api/fund-catalogue/meta").json()

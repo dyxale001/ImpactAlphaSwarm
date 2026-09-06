@@ -126,6 +126,15 @@ CIS_DISCLAIMER = (
     "markets and with exchange rates, and charges reduce what you earn."
 )
 
+# Attached to the price chart. It exists to stop the line being read as a return:
+# a chart of closes looks exactly like a performance chart, and the two mean
+# different things on a page whose other figures are the manager's own.
+PRICE_NOTE = (
+    "The price this fund closed at on the JSE each day, in rand. It is not a "
+    "return and is not the manager's published performance, which is on the "
+    "fact sheet and is measured to the sheet's own date."
+)
+
 INCLUSION_RULE = (
     "How this list is chosen: for each category below we include the largest "
     "funds by fund size that are available on EasyEquities, using the fund size "
@@ -253,6 +262,7 @@ def all_strings() -> Iterator[str]:
         HEADER_STRIP,
         FOOTER_NOT_LICENSED,
         CIS_DISCLAIMER,
+        PRICE_NOTE,
         INCLUSION_RULE,
         NOT_COVERED,
         RISK_ONLY_NOTICE,

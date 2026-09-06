@@ -98,6 +98,23 @@ async def my_matches(
     return service.matches_for(user_id)
 
 
+# Declared before "/{fund_id}" for the same reason "/meta" is: a path with a
+# literal segment after the parameter is fine, but the bare "/{fund_id}" would
+# match "/{id}/prices" first if it came earlier.
+@router.get("/{fund_id}/prices")
+def fund_prices(fund_id: str, service: FundCatalogueService = Depends(get_service)):
+    """One listed fund's closing prices, for the chart on its page.
+
+    Empty for a unit trust, which has no market price — that is a fact about the
+    vehicle, not a gap, and the page omits the chart rather than drawing a blank
+    frame.
+    """
+    prices = service.prices_for(fund_id)
+    if prices is None:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    return prices
+
+
 # Declared last: a literal path must be registered before the parameterised one,
 # or "/meta" and "/matches" are read as fund ids.
 @router.get("/{fund_id}")
