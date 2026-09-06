@@ -4,6 +4,7 @@ import { useUserSettings } from "../hooks/useUserSettings"
 import ChangePasswordSection from "../components/ChangePasswordSection"
 import InvestmentPreferencesSection from "../components/InvestmentPreferencesSection"
 import DeactivateAccountSection from "../components/DeactivateAccountSection"
+import ProfileAnswersSection from "../components/settings/ProfileAnswersSection"
 
 export default function SettingsPage() {
   const { setSession } = useAuthStore()
@@ -143,6 +144,9 @@ export default function SettingsPage() {
         onSave={saveInvestmentPrefs}
         onReset={resetInvestmentPrefs}
       />
+
+      {/* ── The answers the profile is derived from ──────── */}
+      <ProfileAnswersSection />
 
     </div>
   )

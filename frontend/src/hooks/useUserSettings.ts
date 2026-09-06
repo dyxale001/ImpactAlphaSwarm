@@ -126,7 +126,10 @@ export const useUserSettings = () => {
           {
             user_id: profile.id,
             investment_universe: formData.investment_universe,
-            risk_tolerance: normalizeRiskTolerance(formData.risk_tolerance),
+            // risk_tolerance is deliberately not written here. It is derived
+            // from the questionnaire (see useProfileAnswers), and this form
+            // holds whatever it loaded — so saving it back would silently undo
+            // a retake done since the page opened.
             ai_derived_expertise: formData.expertise_level,
             is_active: true,
             updated_at: new Date().toISOString(),

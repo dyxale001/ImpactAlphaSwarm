@@ -135,40 +135,25 @@ export default function InvestmentPreferencesSection({
         )}
       </div>
 
-      {/* ── Risk Tolerance ─────────────────────────────── */}
+      {/* ── Risk Tolerance ─────────────────────────────────────────────────
+          Read-only, and set from the questionnaire in "Your risk profile"
+          below. It used to be three tiles that wrote the label directly, which
+          let a user pick a bracket without the answers that justify it. That
+          was harmless while the label only tinted a dashboard; it stopped being
+          harmless once it decided which funds someone is shown, because the
+          filter's entire basis is that both sides of the comparison are
+          published rather than chosen. */}
       <div>
         <Label>Risk Tolerance</Label>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {RISK_TILES.map(({ value, label, Icon, tagline, bars }) => {
-            const on = formData.risk_tolerance === value
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => updateFormField('risk_tolerance', value)}
-                aria-pressed={on}
-                className={`relative group text-left px-3.5 py-3 rounded-xl border transition-all duration-150 active:scale-[0.97] focus:outline-none ${
-                  on
-                    ? 'border-brand-primary/50 bg-brand-primary/5'
-                    : 'border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/40'
-                }`}
-              >
-                {on && <SelectionRing />}
-
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                    on ? 'bg-brand-primary/15' : 'bg-brand-border/20'
-                  }`}>
-                    <Icon size={13} className={on ? 'text-brand-primary' : 'text-brand-muted-fg'} strokeWidth={1.75} />
-                  </div>
-                  <VolBars filled={bars} />
-                </div>
-
-                <p className="text-xs font-semibold text-brand-fg">{label}</p>
-                <p className="text-[10px] text-brand-muted-fg mt-0.5 leading-snug">{tagline}</p>
-              </button>
-            )
-          })}
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-border/40 bg-brand-surface/20 px-3.5 py-3">
+          <span className="text-xs font-semibold text-brand-fg">
+            {RISK_TILES.find((t) => t.value === formData.risk_tolerance)?.label ??
+              formData.risk_tolerance ??
+              'Not yet answered'}
+          </span>
+          <span className="text-[10px] leading-snug text-brand-muted-fg">
+            Worked out from your questionnaire answers. Change it under “Your risk profile”.
+          </span>
         </div>
       </div>
 
