@@ -126,6 +126,17 @@ CIS_DISCLAIMER = (
     "markets and with exchange rates, and charges reduce what you earn."
 )
 
+# The last step of onboarding, once the answers exist but before they are saved.
+#
+# Wording is the reviewed one. An earlier draft headed this "Where someone like
+# you might start", which was dropped: "might start" is a soft proposal, and a
+# proposal is the one thing this product is not licensed to make. What is left
+# describes a filter over labels other people published — which is all it is.
+ONBOARDING_PANEL = (
+    "Based on your answers, these ASISA fund categories carry a published risk "
+    "label at or below yours. Explore them in Funds."
+)
+
 # Attached to the price chart. It exists to stop the line being read as a return:
 # a chart of closes looks exactly like a performance chart, and the two mean
 # different things on a page whose other figures are the manager's own.
@@ -263,6 +274,7 @@ def all_strings() -> Iterator[str]:
         FOOTER_NOT_LICENSED,
         CIS_DISCLAIMER,
         PRICE_NOTE,
+        ONBOARDING_PANEL,
         INCLUSION_RULE,
         NOT_COVERED,
         RISK_ONLY_NOTICE,

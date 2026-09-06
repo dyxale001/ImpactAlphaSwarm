@@ -3,6 +3,8 @@ import { Layers, ArrowUpRight, Activity, Search, Check, Eye, ArrowRight, Termina
 import { useOnboarding } from '../hooks/useOnboarding'
 import { SURVEY_QUESTIONS, GOAL_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
 import GoalQuestions from '../components/onboarding/GoalQuestions'
+import BracketPanel from '../components/onboarding/BracketPanel'
+import { FUNDS_ENABLED } from '../utils/fundsFlags'
 import InvestorProfileCard from '../components/InvestorProfileCard'
 import { describeGoals } from '../utils/goals'
 import { useAuthStore } from '../store/authStore'
@@ -437,9 +439,9 @@ export default function Onboarding() {
                 />
               </div>
               <p className="max-w-[420px] text-center text-[13px] leading-relaxed text-muted">
-                You're classified as <span className="font-bold text-forest-900">{psychometrics.riskTolerance}</span>.
-                Every recommendation the Swarm shows you will be filtered through this mandate, adjustable any time in
-                Settings.
+                You're classified as <span className="font-bold text-forest-900">{psychometrics.riskTolerance}</span>,
+                worked out from your answers. What the Swarm shows you is filtered through it. You can revisit your
+                answers any time in Settings.
               </p>
               {/* The goal answers read back, so the profile shown is the whole
                   profile and not only the part the risk questions produced. */}
@@ -456,6 +458,17 @@ export default function Onboarding() {
                     profile and minimum term fit what you told us.
                   </p>
                 </div>
+              )}
+
+              {/* Which categories those answers actually open, computed by the
+                  same matcher the Funds page uses. Absent if the flag is off or
+                  the request fails — it is an extra at the end of a form that
+                  has already done its job. */}
+              {FUNDS_ENABLED && (
+                <BracketPanel
+                  riskTolerance={psychometrics.riskTolerance}
+                  goals={Object.keys(goalAnswers).length ? goalAnswers : null}
+                />
               )}
             </div>
           )}

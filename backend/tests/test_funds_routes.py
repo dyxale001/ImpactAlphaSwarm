@@ -250,6 +250,87 @@ class TestBrowse:
         assert client.get("/api/fund-catalogue", params={"vehicle": "bond"}).status_code == 422
 
 
+class TestBracketPreview:
+    """The panel at the end of onboarding, where answers exist but are unsaved.
+
+    Its whole value is agreeing with the page it points at, so it runs the same
+    matcher over the same catalogue rather than re-deriving the rule.
+    """
+
+    def test_it_answers_from_the_body_without_a_saved_profile(self, anonymous_client):
+        # Unauthenticated on purpose: it reads nothing about anybody, and at
+        # this point in onboarding there is no profile to read.
+        res = anonymous_client.post(
+            "/api/fund-catalogue/preview",
+            json={"risk_tolerance": "Conservative", "goals": {"goal_horizon": "under_2"}},
+        )
+        assert res.status_code == 200
+        assert res.json()["bracket"]["risk_tolerance"] == "Conservative"
+
+    def test_it_writes_nothing(self):
+        # A user who abandons onboarding must leave no trace. Built here rather
+        # than from the fixture so the fake client can be inspected directly.
+        fund_client = FakeClient(
+            rows={"funds": [MONEY_MARKET, TOP40_ETF], "fund_factsheet_snapshots": [MM_SHEET, ETF_SHEET]}
+        )
+        user_client = FakeClient(rows={"user_analysis": [CONSERVATIVE_USER]})
+        service = FundCatalogueService(
+            funds=FundRepository(fund_client),
+            profiles=UserGoalsRepository(user_client),
+            clock=lambda: TODAY,
+        )
+
+        service.preview_bracket("Moderate", {"goals": {"goal_horizon": "2_to_5"}})
+
+        writes = {"insert", "upsert", "update", "delete"}
+        for fake in (fund_client, user_client):
+            for table in ("funds", "fund_factsheet_snapshots", "user_analysis"):
+                performed = {name for name, *_ in fake.calls_on(table)}
+                assert not (performed & writes), f"{table} was written: {performed & writes}"
+
+    def test_it_reads_no_profile_at_all(self):
+        # The answers arrive in the request. Reaching for a stored profile would
+        # be both pointless here and a way for the panel to disagree with them.
+        user_client = FakeClient(rows={"user_analysis": [CONSERVATIVE_USER]})
+        service = FundCatalogueService(
+            funds=FundRepository(FakeClient(rows={"funds": [MONEY_MARKET], "fund_factsheet_snapshots": [MM_SHEET]})),
+            profiles=UserGoalsRepository(user_client),
+            clock=lambda: TODAY,
+        )
+        service.preview_bracket("Aggressive")
+        assert user_client.calls_on("user_analysis") == []
+
+    def test_goals_are_optional(self, client):
+        # Someone who skipped the goal questions still gets their risk bracket.
+        res = client.post("/api/fund-catalogue/preview", json={"risk_tolerance": "Moderate"})
+        assert res.status_code == 200
+        assert res.json()["bracket"]["categories"]
+
+    def test_the_sample_is_short_but_the_count_is_whole(self, client):
+        # Onboarding is not a place to browse a catalogue; the count carries the
+        # real size so the panel does not understate what is available.
+        res = client.post("/api/fund-catalogue/preview", json={"risk_tolerance": "Aggressive"}).json()
+        assert len(res["matches"]) <= 3
+        assert res["match_count"] >= len(res["matches"])
+
+    def test_the_panel_wording_is_the_reviewed_one(self, client):
+        # "Where someone like you might start" was rejected: "might start" is a
+        # soft proposal, which is the one thing this may not make.
+        panel = client.post("/api/fund-catalogue/preview", json={"risk_tolerance": "Moderate"}).json()["panel"]
+        assert "at or below yours" in panel
+        assert "might start" not in panel.lower()
+
+    def test_an_unknown_risk_label_does_not_widen_the_bracket(self, client):
+        # Falls back to the moderate ceiling, never the permissive one.
+        res = client.post("/api/fund-catalogue/preview", json={"risk_tolerance": "Fearless"}).json()
+        assert res["bracket"]["ceiling"] <= 3
+
+    def test_preview_is_not_swallowed_by_the_fund_id_route(self, client):
+        assert client.post(
+            "/api/fund-catalogue/preview", json={"risk_tolerance": "Moderate"}
+        ).status_code == 200
+
+
 class TestPrices:
     """The chart's data, and the two ways it is allowed to be empty."""
 

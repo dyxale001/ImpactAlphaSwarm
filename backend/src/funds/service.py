@@ -19,9 +19,10 @@ from .asisa import ASISA, ASISA_VERSION
 from . import copy as copytext
 from .explain import ExplanationBuilder, ExplanationContext, ReasonSentence
 from .matcher import FundMatcher
-from .models import FundCandidate, FundFilters, MatchOutcome, MatchResult, Profile
+from .models import FundCandidate, FundFilters, Goals, MatchOutcome, MatchResult, Profile
 from .repository import FundRepository, UserGoalsRepository
 from .risk_scale import RISK_SCALE, label_for
+from ..utils.supabase_client import normalize_risk_tolerance
 
 
 class FundCatalogueService:
@@ -175,6 +176,40 @@ class FundCatalogueService:
             "fallback_risk_only": outcome.fallback_risk_only,
             "notice": self._notice(outcome),
             "section_title": copytext.SECTION_MATCHED,
+            "not_licensed": copytext.FOOTER_NOT_LICENSED,
+        }
+
+    def preview_bracket(
+        self, risk_tolerance: str, survey_answers: Any = None, limit: int = 3
+    ) -> dict[str, Any]:
+        """What a set of answers would map to, before they are saved.
+
+        For the last step of onboarding, where the answers exist in a form and
+        nowhere else. It runs the **same matcher over the same catalogue** as
+        the signed-in page, so the panel cannot promise a bracket that `/funds`
+        then disagrees with — the alternative, re-deriving the rule in the
+        browser, is exactly how those two drift apart.
+
+        Unauthenticated because it reads nothing about anybody: the answers come
+        in with the request, and the bracket policy is published anyway. Nothing
+        is written, so a user who abandons onboarding leaves no trace.
+
+        `limit` keeps the sample small on purpose. Onboarding is not the place
+        to browse a catalogue, and a long list at the end of a form is the
+        end-wait problem the flow was shortened to avoid.
+        """
+        profile = Profile(
+            user_id="preview",
+            risk_tolerance=normalize_risk_tolerance(risk_tolerance),
+            goals=Goals.from_survey_answers(survey_answers),
+        )
+        outcome = self.matcher.match(profile, self.funds.candidates())
+        return {
+            "bracket": self._bracket(outcome),
+            "matches": [self._match(match, profile) for match in outcome.matches[:limit]],
+            "match_count": len(outcome.matches),
+            "notice": self._notice(outcome),
+            "panel": copytext.ONBOARDING_PANEL,
             "not_licensed": copytext.FOOTER_NOT_LICENSED,
         }
 

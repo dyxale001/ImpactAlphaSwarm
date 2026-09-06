@@ -20,10 +20,22 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from pydantic import BaseModel
 
 from .config import FUNDS_ENABLED
 from .models import FundFilters
 from .service import FundCatalogueService
+
+
+class BracketPreviewIn(BaseModel):
+    """Onboarding answers, sent rather than stored.
+
+    Goals are optional: someone who skipped them still gets the risk bracket,
+    which is the panel's own fallback rather than an error.
+    """
+
+    risk_tolerance: str
+    goals: Optional[dict[str, str]] = None
 
 router = APIRouter(prefix="/api/fund-catalogue", tags=["fund-catalogue"])
 
@@ -96,6 +108,21 @@ async def my_matches(
 ):
     """The funds whose published risk label matches the caller's own profile."""
     return service.matches_for(user_id)
+
+
+@router.post("/preview")
+def preview_bracket(body: BracketPreviewIn, service: FundCatalogueService = Depends(get_service)):
+    """What a set of onboarding answers would map to, before they are saved.
+
+    A POST because the answers are the input and there is no resource to name,
+    not because anything is written — nothing is. Unauthenticated for the same
+    reason: it reads nothing about anybody, and the bracket policy it applies is
+    published on the page anyway.
+    """
+    return service.preview_bracket(
+        risk_tolerance=body.risk_tolerance,
+        survey_answers={"goals": body.goals} if body.goals else None,
+    )
 
 
 # Declared before "/{fund_id}" for the same reason "/meta" is: a path with a

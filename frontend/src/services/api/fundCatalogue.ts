@@ -202,6 +202,36 @@ export async function getFundCatalogueMeta() {
   return res.json() as Promise<CatalogueMeta>;
 }
 
+/** What a set of unsaved onboarding answers maps to. */
+export interface BracketPreview {
+  bracket: CatalogueBracket | null;
+  matches: FundMatch[];
+  /** How many funds qualify in total; `matches` is a short sample of them. */
+  match_count: number;
+  notice: string | null;
+  panel: string;
+  not_licensed: string;
+}
+
+/** Preview a bracket from answers that have not been saved.
+ *
+ * Unauthenticated, and writes nothing: the answers travel with the request, so
+ * a user who abandons onboarding leaves no trace. Runs the same matcher the
+ * signed-in page runs, so the two cannot disagree.
+ */
+export async function previewBracket(
+  riskTolerance: string,
+  goals: Record<string, string> | null,
+) {
+  const res = await fetch(`${BASE}/api/fund-catalogue/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ risk_tolerance: riskTolerance, goals: goals ?? null }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<BracketPreview>;
+}
+
 /** A listed fund's closing prices. Empty for a unit trust, which has none. */
 export interface FundPrices {
   fund_id: string;
