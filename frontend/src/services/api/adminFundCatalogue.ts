@@ -142,6 +142,23 @@ interface Saved<T> {
   snapshot?: T;
 }
 
+/** What reading a fact sheet produced: values, their source text, and refusals. */
+export interface Extraction {
+  template: string;
+  url: string;
+  fields: Record<string, string | number>;
+  /** The text each value was read from, so review is a comparison not a nod. */
+  evidence: Record<string, string>;
+  /** Fields the template would not read, and why. These arrive blank on
+   *  purpose: a wrong value that looks right is worse than an empty box. */
+  unresolved: Array<{ field: string; reason: string }>;
+}
+
+/** Read a fact sheet to pre-fill the form. Writes nothing. */
+export async function extractFactsheet(url: string) {
+  return send<Extraction>("/extract", { method: "POST", body: JSON.stringify({ url }) });
+}
+
 export async function listAdminFunds() {
   return send<AdminFundList>("/funds", { method: "GET" });
 }

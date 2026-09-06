@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .config import FUNDS_ENABLED
+from .extract import FetchError, extract_from_url, readable_hosts
 from .repository import FundRepository
 from .validators import Problem, fund_validators, snapshot_validators
 
@@ -297,6 +298,42 @@ def add_snapshot(
 
     written = repo.insert_snapshot(row)
     return {"snapshot": written[0] if written else None, "warnings": _warnings(problems)}
+
+
+class ExtractIn(BaseModel):
+    """A fact-sheet address, as pasted from a manager's own site."""
+
+    url: str
+
+
+@router.post("/extract")
+def extract_factsheet(body: ExtractIn, _admin: str = Depends(require_admin)):
+    """Read a fact sheet so the form can be pre-filled, and write nothing.
+
+    The catalogue's claim is that every figure came off a document a manager
+    published. This does not change that — a person still approves every value —
+    it only changes what they are looking at while they do.
+
+    What comes back is deliberately three things rather than one. `fields` is
+    what to pre-fill. `evidence` is the text each value was read from, so review
+    can be a comparison rather than a nod. `unresolved` is what the template
+    declined and why, because a field that cannot be read confidently must
+    arrive blank: a wrong value that looks right is worse than an empty box, and
+    the Satrix risk rating — drawn, not written — is the standing proof.
+    """
+    try:
+        extraction = extract_from_url(body.url)
+    except FetchError as exc:
+        # A bad link is the admin's to fix, not a server fault.
+        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
+
+    return extraction.as_dict()
+
+
+@router.get("/extract/hosts")
+def extractable_hosts(_admin: str = Depends(require_admin)):
+    """The managers a sheet can be read from, so the form can say so up front."""
+    return {"hosts": list(readable_hosts())}
 
 
 def mount_fund_catalogue_admin(app: FastAPI, enabled: bool = FUNDS_ENABLED) -> bool:

@@ -27,8 +27,9 @@ gap.
 | Script | What it is for |
 |---|---|
 | `easyequities_instruments.py` | The availability boundary. Reads the instrument workbook EasyEquities publishes; look an ISIN up before seeding it. |
-| `satrix_mdd.py` | Satrix fact sheets, keyed by JSE code at a stable URL. Also crops the risk block to an image. |
-| `fundrock_mdd.py` | FundRock/BCI fact sheets — one template across ~580 fund classes from many boutique managers. `--index` lists them. |
+| `read_factsheet.py` | Read any sheet a template covers. A thin wrapper over `src/funds/extract`, which is what the admin form uses — one set of patterns, so the terminal and the form cannot disagree. `--hosts` lists the managers covered. |
+| `fundrock_index.py` | Discovery: the ~580 fund classes FundRock publishes, filtered by word. |
+| `../extractor_accuracy.py` | Scores the extractor against the hand-transcribed seed, per field. Refusals are counted separately from mistakes — declining to read a graphic is correct behaviour, not an error. |
 
 Downloads land in `.cache/`, which is gitignored.
 

@@ -41,6 +41,8 @@ from src.funds.admin_routes import (  # noqa: E402
     require_admin,
     router,
 )
+from src.funds.extract import FetchError  # noqa: E402
+from src.funds.extract.base import Extraction, Reading, Unresolved  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
 
 TODAY = date(2026, 9, 5)
@@ -291,6 +293,70 @@ class TestTheStalenessOrdering:
         # Failing toward "current" would hide a fund from the list that exists
         # to surface exactly this.
         assert _staleness("not a date", TODAY)["status"] == "unreadable"
+
+
+class TestExtractingToPrefill:
+    """INVARIANT: reading a sheet pre-fills a form and writes nothing."""
+
+    def test_it_writes_nothing_to_the_catalogue(self, client, monkeypatch):
+        from src.funds import admin_routes
+
+        monkeypatch.setattr(
+            admin_routes,
+            "extract_from_url",
+            lambda url: Extraction(template="fake", url=url, readings=(Reading("isin", "X", "ev"),)),
+        )
+        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
+        assert res.status_code == 200
+        for table in ("funds", "fund_factsheet_snapshots"):
+            assert not any(
+                name in ("insert", "upsert", "update", "delete")
+                for name, *_ in client.app.state.fake.calls_on(table)
+            )
+
+    def test_it_returns_values_evidence_and_refusals_separately(self, client, monkeypatch):
+        # Three things, not one: what to fill, what it was read from, and what
+        # the reviewer has to supply themselves.
+        from src.funds import admin_routes
+
+        monkeypatch.setattr(
+            admin_routes,
+            "extract_from_url",
+            lambda url: Extraction(
+                template="satrix",
+                url=url,
+                readings=(Reading("isin", "ZAE000240123", "ISIN Code ZAE000240123"),),
+                unresolved=(Unresolved("risk_indicator_raw", "drawn as a graphic — read the sheet"),),
+            ),
+        )
+        body = client.post(
+            "/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"}
+        ).json()
+        assert body["fields"] == {"isin": "ZAE000240123"}
+        assert "ISIN Code" in body["evidence"]["isin"]
+        assert body["unresolved"][0]["field"] == "risk_indicator_raw"
+
+    def test_a_bad_link_is_the_admins_to_fix_not_a_server_fault(self, client, monkeypatch):
+        from src.funds import admin_routes
+
+        def explode(_url):
+            raise FetchError("That address did not return a PDF.")
+
+        monkeypatch.setattr(admin_routes, "extract_from_url", explode)
+        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
+        assert res.status_code == 422
+        assert "PDF" in res.json()["detail"]["message"]
+
+    def test_the_readable_hosts_are_listed_for_the_form(self, client):
+        hosts = client.get("/api/admin/fund-catalogue/extract/hosts").json()["hosts"]
+        assert "satrix.co.za" in hosts
+
+    def test_extraction_needs_an_admin_like_everything_else(self):
+        app = build_app(admin=False)
+        res = TestClient(app).post(
+            "/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"}
+        )
+        assert res.status_code in (401, 403)
 
 
 class TestTheFlagAndTheAdminCheck:
