@@ -327,12 +327,24 @@ def get_assets_by_universes(universes: List[str]) -> List[str]:
 
 
 def get_or_create_asset_id(ticker: str) -> Optional[str]:
+    """Look up an asset's id by ticker, or None if it can't be found or created.
+
+    assets.universe is NOT NULL with no default, so a bare {"ticker", "name"}
+    insert for a watchlist ticker with no existing row (e.g. one added via
+    search that was never classified into a universe) is rejected by Postgres.
+    That must never abort the caller's whole save: callers skip tickers that
+    come back None rather than losing the entire run's recommendations to one
+    unresolvable ticker.
+    """
     resp = supabase.table("assets").select("id").eq("ticker", ticker).limit(1).execute()
     data = resp.data or []
     if data:
         return data[0]["id"]
-    # Optional: create a minimal asset row if your schema allows it
-    new_resp = supabase.table("assets").insert({"ticker": ticker, "name": ticker}).execute()
+    try:
+        new_resp = supabase.table("assets").insert({"ticker": ticker, "name": ticker}).execute()
+    except Exception as e:
+        print(f"Could not create asset row for ticker {ticker} (skipping): {e}")
+        return None
     new_data = new_resp.data or []
     return new_data[0]["id"] if new_data else None
 
@@ -521,6 +533,13 @@ def save_top_assets(
     for rank, asset in enumerate(top_5, start=1):
         ticker = asset.get("ticker")
         asset_id = get_or_create_asset_id(ticker)
+        if not asset_id:
+            # Unresolvable ticker (e.g. a watchlist add with no assets row and no
+            # universe to create one under) -- skip it rather than aborting the
+            # whole save, which used to leave every OTHER ranked asset stuck
+            # showing the previous run's stale recommendations.
+            print(f"Skipping {ticker}: could not resolve or create an asset id")
+            continue
         quant = quant_results.get(ticker, {})
         sentiment = sentiment_results.get(ticker, {})
 
@@ -636,6 +655,14 @@ def save_top_assets(
         rows.append(row)
 
     if not rows:
+        if top_5:
+            # Every ranked ticker failed asset resolution (e.g. a batch of
+            # watchlist tickers with no assets row). Distinct from the benign
+            # "nothing to save" case below: this is a failed save, and the
+            # caller must not treat it as a successful run -- otherwise the
+            # previous run's rows are left in place under this run_id and
+            # get displayed as though they were fresh (the 2026-09-03 defect).
+            return {"status": "resolution_failed", "requested": len(top_5)}
         return {"status": "no_rows"}
 
     # Make the write idempotent for this run. create_ai_run clears the PREVIOUS
@@ -649,9 +676,13 @@ def save_top_assets(
     except Exception as e:
         print(f"Warning: could not clear existing rows for run {run_id}: {e}")
 
+    # Counts let the caller tell a full save from a partial one (some requested
+    # tickers skipped for lack of a resolvable asset) without re-deriving it.
+    counts = {"requested": len(top_5), "saved": len(rows)}
+
     try:
         resp = supabase.table("ai_recommendation").insert(rows).execute()
-        return {"status": "inserted", "response": resp.data}
+        return {"status": "inserted", "response": resp.data, **counts}
     except Exception as e:
         # Most likely migration 010 has not been applied yet, so the v2 columns
         # don't exist. The recommendations themselves matter far more than the
@@ -663,7 +694,7 @@ def save_top_assets(
             {k: v for k, v in row.items() if k not in RANKING_V2_COLUMNS} for row in rows
         ]
         resp = supabase.table("ai_recommendation").insert(legacy_rows).execute()
-        return {"status": "inserted_without_v2", "response": resp.data}
+        return {"status": "inserted_without_v2", "response": resp.data, **counts}
 
 
 # ---------------------------------------------------------------------------

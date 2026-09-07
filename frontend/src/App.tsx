@@ -19,6 +19,7 @@ import AdminLearningCategories from "./pages/AdminLearningCategories";
 import AdminLearningArticles from "./pages/AdminLearningArticles";
 import AdminLearningQuestions from "./pages/AdminLearningQuestions";
 import AdminBadges from "./pages/AdminBadges";
+import AdminReports from "./pages/AdminReports";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import ResearchPage from "./pages/Research";
@@ -117,6 +118,7 @@ export default function App() {
             element={<AdminLearningQuestions />}
           />
           <Route path="/admin/badges" element={<AdminBadges />} />
+          <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
         </Route>
       </Route>

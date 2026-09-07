@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import {
   LayoutDashboard,
   CandlestickChart,
@@ -133,6 +134,8 @@ export default function AppLayout() {
       <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">
         <Outlet />{" "}
       </main>
+
+      <AskAlphaSwarmChatbot />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Flame, Sparkles, BrainCircuit } from "lucide-react";
+import { ArrowRight, Flame, Sparkles, BrainCircuit, MessageCircleQuestion } from "lucide-react";
 import {
   type AssetRecommendation,
   SCORECARD_ENABLED,
@@ -10,6 +10,7 @@ import {
   CONVERGENCE_TONE,
   CONVERGENCE_DETAIL,
 } from "../../data/signalCopy";
+import { useAskChatbotStore } from "../../store/askChatbotStore";
 import DualBar from "./DualBar";
 import AddToWatchlistButton from "./Addtowatchlistbutton";
 
@@ -36,6 +37,7 @@ export default function RecommendationCard({
   // a 0-100 position for the marker. Null on legacy rows -> DualBar keeps its bar.
   const quantPercentile =
     asset.quantLean !== null ? ((asset.quantLean + 1) / 2) * 100 : null;
+  const openAskChatbot = useAskChatbotStore(s => s.openWithPrompt);
 
   return (
     <div
@@ -148,7 +150,36 @@ export default function RecommendationCard({
         >
           Full analysis <ArrowRight className="w-3 h-3" />
         </Link>
-        <AddToWatchlistButton ticker={asset.ticker} />
+        <div className="flex items-center gap-1.5">
+          {/* Reuses the exact accessible tooltip pattern already used above
+              (group + tabIndex + group-focus-within) — keyboard-reachable,
+              not hover-only, and the accessible name alone ("Ask AlphaSwarm
+              about {ticker}") already conveys the meaning without the
+              tooltip, so this works on touch devices too. */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={(e) => {
+                // Defensive: this card sits in a grid of otherwise-plain
+                // divs (no wrapping <Link>), but stop propagation anyway so
+                // a future ancestor click handler can never swallow this or
+                // trigger unrelated navigation.
+                e.stopPropagation();
+                openAskChatbot(`Tell me about ${asset.ticker}`);
+              }}
+              aria-label={`Ask AlphaSwarm about ${asset.ticker}`}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-brand-muted-fg hover:text-brand-primary hover:bg-brand-primary/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+            >
+              <MessageCircleQuestion className="w-4 h-4" />
+            </button>
+            <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 translate-x-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
+              <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
+                Ask AlphaSwarm about this
+              </div>
+            </div>
+          </div>
+          <AddToWatchlistButton ticker={asset.ticker} />
+        </div>
       </div>
     </div>
   );

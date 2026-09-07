@@ -1,9 +1,12 @@
 import os
 import asyncio
+import contextvars
 import datetime
 import logging
+import re
 import secrets
 import time
+from collections import Counter
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -18,6 +21,7 @@ from src.utils.supabase_client import (
     fetch_price_at_run_in_zar, fetch_fx_rate_to_zar,
 )
 from src.utils import whale_watching as ww
+from src.utils.ask_output_validator import validate_ask_output
 
 # Configure the ROOT logger, once, at import.
 #
@@ -231,8 +235,15 @@ async def start_analysis(
                 run_id,
                 req.expertise_level,
             )
-            update_ai_run_status(run_id, "complete")
-            logger.info("Analysis finished for run %s", run_id)
+            # phase_4_output reports "failed" in its returned state when
+            # recommendation persistence could not save anything (e.g. every
+            # ranked ticker failed asset resolution) -- run_analysis itself
+            # doesn't raise in that case, so a bare "it returned" is not
+            # enough to call the run complete. See the 2026-09-03 design note
+            # on stale recommendations surviving under a falsely-complete run.
+            final_status = "complete" if result.get("status") != "failed" else "failed"
+            update_ai_run_status(run_id, final_status)
+            logger.info("Analysis run %s finished with status %s", run_id, final_status)
             return result
         except Exception as e:
             logger.exception("Background analysis failed for run %s: %s", run_id, e)
@@ -548,6 +559,61 @@ _ASK_NO_DATA_MESSAGE = (
     "supporting data in its own analysis."
 )
 
+# Deterministic (no-LLM) gates for two categories the intent classifier
+# alone was not reliably separating from AlphaSwarm's own supported scope:
+#
+# (A) Out-of-scope / unrelated consumer topics — banking products, account
+#     services, loans, insurance — that have nothing to do with market/asset
+#     analysis. These must NOT fall into the PLATFORM_QUESTION methodology
+#     explanation (the old catch-all fallback) just because the classifier
+#     found nothing better; they get their own concise scope response.
+#
+# (B) Personal-finance / personal-circumstance topics — retirement accounts
+#     (Roth IRA, 401(k)), tax planning, debt payoff, personalised savings
+#     allocation — where even a factual-sounding phrasing ("how should I
+#     structure my Roth IRA withdrawal") is actually asking for
+#     individualised advice AlphaSwarm must not give. Checked BEFORE
+#     conversational-reference resolution and BEFORE asset/metric
+#     resolution, so a bare "roth ira" or an "IRA"-containing query can
+#     never be misread as naming an asset/metric and routed into the
+#     "could you name the asset or metric you mean?" clarification.
+_ASK_OUT_OF_SCOPE_MESSAGE = (
+    "AlphaSwarm focuses on market and asset analysis — it doesn't have "
+    "information on banking products, account services, loans, or similar "
+    "topics. Try asking about a specific asset, your watchlist, or a "
+    "market/investing concept instead."
+)
+
+_ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE = (
+    "AlphaSwarm can't give personalised financial, tax, or retirement-"
+    "planning advice — that depends on your individual circumstances and "
+    "should come from a licensed financial or tax advisor. It can still "
+    "explain general market/investing concepts and AlphaSwarm's own asset "
+    "analysis."
+)
+
+_ASK_PERSONAL_FINANCE_PATTERN = re.compile(
+    r"\b("
+    r"roth\s+ira|traditional\s+ira|401\s*\(?k\)?|ira\s+withdrawal|"
+    r"pension\s+withdrawal|retirement\s+account|retirement\s+plan(?:ning)?|"
+    r"tax\s+deduction|tax\s+bracket|avoid\s+taxes|tax[- ]free\s+withdrawal|"
+    r"pay\s+off\s+(?:my\s+)?debt|credit[- ]card\s+debt|"
+    r"my\s+(?:personal\s+)?(?:situation|circumstances)|"
+    r"personalised\s+advice|personalized\s+advice"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_ASK_OUT_OF_SCOPE_PATTERN = re.compile(
+    r"\b("
+    r"checking\s+account|savings\s+account|bank\s+balance|bank\s+transaction|"
+    r"account\s+balance|mortgage\s+rate|mortgage\s+payment|refinanc\w*|"
+    r"car\s+loan|student\s+loan|credit\s+card\s+(?:interest\s+)?rate|"
+    r"insurance\s+premium|insurance\s+policy"
+    r")\b",
+    re.IGNORECASE,
+)
+
 # Hardcoded methodology text — actual AlphaSwarm implementation only, never
 # LLM-generated. Mirrors ranking.py's disclosed four-term composite.
 _PLATFORM_METHODOLOGY = (
@@ -736,12 +802,295 @@ def _classify_ask_intent(query: str) -> str:
         return "UNKNOWN"
 
 
-def _narrate_ask(question: str, data_summary: str) -> Optional[str]:
-    """Small Groq call: narrate the ALREADY-RETRIEVED data. Returns None (never
-    call narrator) if Groq is unavailable — caller must handle that case."""
+def _format_price(value: float, currency: str) -> str:
+    if currency == "ZAR":
+        return f"R{value:,.2f}"
+    return f"{value:,.2f} {currency}"
+
+
+def _format_price_rounded(value: float, currency: str) -> str:
+    """Conversational precision — 'R5,345' rather than 'R5,345.0709'. Used
+    for narration/fallback prose; the validator's existing tolerance already
+    accepts this level of rounding, so this changes nothing about what's
+    accepted, only what gets written."""
+    if currency == "ZAR":
+        return f"R{value:,.0f}"
+    return f"{value:,.0f} {currency}"
+
+
+def _round_for_narration(data: dict) -> dict:
+    """A rounded-for-DISPLAY copy of retrieved data, used ONLY to build the
+    text a narration prompt sees — NEVER used for validation (that always
+    checks the ORIGINAL, unrounded trusted value via `validation_data`/
+    `data`/`comparison_assets`, passed separately). Without this, a prompt
+    built from a raw Python dict repr hands the model a value like
+    37.935861810004596, which it then simply echoes verbatim — this is what
+    produced the '37.935861810004596' style responses. Rounding what the
+    model SEES doesn't change what's verified against; it just stops an
+    ugly float from ever reaching the model in the first place."""
+    rounded = {}
+    for key, value in data.items():
+        if isinstance(value, float):
+            rounded[key] = round(value, 2)
+        else:
+            rounded[key] = value
+    return rounded
+
+
+# Question-keyword -> data field -> display label, in priority order — used
+# only by _deterministic_grounded_fallback below to pick which fact(s) to
+# state when the LLM is unavailable or both the original and repaired
+# narration failed validation. Not a second narration system: it never adds
+# a field the retrieved data doesn't actually have, and every band
+# description below comes straight from AlphaSwarm's own documented
+# thresholds (see _ASK_GLOSSARY's "beta"/"rsi" entries) — never invented.
+_FALLBACK_METRIC_ORDER: tuple[tuple[str, str, str], ...] = (
+    ("beta", "beta", "beta"),
+    ("rsi", "rsi", "RSI"),
+    ("sharpe", "sharpe_ratio", "Sharpe ratio"),
+    ("volatility", "volatility", "volatility"),
+    ("sentiment", "sentiment_score", "sentiment score"),
+    ("confidence", "confidence_score", "confidence score"),
+    ("quant score", "quant_score", "quant score"),
+    ("rank", "rank", "rank"),
+)
+
+# Secondary signals offered for a GENERAL question ("tell me about X", "is X
+# doing well") that names no specific metric — same fields, ordered by how
+# informative they typically are. Capped at a few in the fallback itself
+# (see _deterministic_grounded_fallback) so it stays a short paragraph, not
+# a field dump.
+_FALLBACK_SECONDARY_METRICS: tuple[tuple[str, str], ...] = (
+    ("rsi", "RSI"),
+    ("beta", "beta"),
+    ("sharpe_ratio", "Sharpe ratio"),
+    ("sentiment_score", "sentiment score"),
+    ("confidence_score", "confidence score"),
+    ("quant_score", "quant score"),
+    ("volatility", "volatility"),
+    ("rank", "rank"),
+)
+
+# AlphaSwarm's own documented bands for the two metrics that have one (see
+# _ASK_GLOSSARY) — used to add a one-clause deterministic interpretation
+# ("in AlphaSwarm's neutral band") without inventing any causal claim.
+def _rsi_band(value: float) -> str:
+    if value < 30:
+        return "AlphaSwarm's oversold band, below 30"
+    if value > 70:
+        return "AlphaSwarm's overbought band, above 70"
+    return "AlphaSwarm's neutral band, 30-70"
+
+
+def _beta_band(value: float) -> str:
+    if value < 0:
+        return "labelled 'inverse' by AlphaSwarm — it has moved opposite to the market"
+    if value < 0.8:
+        return "labelled 'low' by AlphaSwarm, below 0.8"
+    if value > 1.2:
+        return "labelled 'high' by AlphaSwarm, above 1.2"
+    return "labelled 'market' by AlphaSwarm, 0.8-1.2"
+
+
+_METRIC_BAND_DESCRIPTIONS = {"rsi": _rsi_band, "beta": _beta_band}
+
+
+def _describe_metric_value(field_key: str, value: Any, currency: Optional[str] = None) -> str:
+    """Rounded value, plus a deterministic band clause for rsi/beta where
+    AlphaSwarm has a documented one. current_price gets proper currency
+    formatting (comma-grouped, 'R' prefix) instead of a bare number — a
+    price is never just 'about 5345.07'. Every other metric just gets a
+    rounded number — no band is invented for metrics that don't have one."""
+    if field_key == "current_price" and isinstance(value, (int, float)):
+        return f"around {_format_price_rounded(value, currency or 'ZAR')}"
+    if isinstance(value, float):
+        value = round(value, 2)
+    band_fn = _METRIC_BAND_DESCRIPTIONS.get(field_key)
+    if band_fn and isinstance(value, (int, float)):
+        return f"about {value} ({band_fn(value)})"
+    return f"about {value}" if isinstance(value, float) else f"{value}"
+
+
+def _deterministic_grounded_fallback(question: str, data: Optional[dict]) -> Optional[str]:
+    """Last-resort, fully deterministic sentence built directly from trusted
+    retrieved data — used when the LLM is unavailable, or a narration AND
+    its one repair attempt both still fail validation. Never invents
+    anything: it only ever states a field that is actually present in
+    `data` (rounded, with a documented band where one exists), so it is
+    inherently validator-safe. A question naming one specific metric gets
+    just that metric explained; a general/qualitative question ('tell me
+    about X', 'is X doing well') gets price plus up to two more available
+    signals in one short paragraph — never price alone when more is known,
+    and never more than a few signals."""
+    _ask_telemetry_mark(fallback_used=True)
+    if not data or not data.get("ticker"):
+        return None
+    ticker = data["ticker"]
+    ql = question.lower()
+
+    for keyword, field_key, label in _FALLBACK_METRIC_ORDER:
+        if keyword in ql and data.get(field_key) is not None:
+            return f"{ticker}'s {label} is {_describe_metric_value(field_key, data[field_key], data.get('currency'))}."
+
+    parts: list[str] = []
+    price = data.get("current_price")
+    if price is not None:
+        currency = data.get("currency") or "ZAR"
+        parts.append(f"{ticker} is currently trading around {_format_price_rounded(price, currency)}")
+    for field_key, label in _FALLBACK_SECONDARY_METRICS:
+        if len(parts) >= 3:
+            break
+        value = data.get(field_key)
+        if value is None:
+            continue
+        parts.append(f"its {label} is {_describe_metric_value(field_key, value)}")
+
+    if not parts:
+        if data.get("name"):
+            return f"{ticker} ({data['name']}) is in AlphaSwarm's data, but a detailed answer isn't available right now."
+        return None
+    if len(parts) == 1:
+        return parts[0] + "."
+    return "; ".join(parts[:-1]) + f"; and {parts[-1]}."
+
+
+def _deterministic_qualitative_synthesis(data: Optional[dict]) -> Optional[str]:
+    """Deterministic fallback SPECIFICALLY for interpretation questions ("is
+    X doing well?", "how is X performing?") — used by _narrate_synthesis,
+    never by _narrate_ask's plain "tell me about X" fallback, so the two
+    genuinely differ even when Groq is unreachable. Classifies each
+    available signal as positive/negative using AlphaSwarm's OWN documented
+    semantics (RSI midpoint, MACD crossover direction, Sharpe sign,
+    sentiment above/below its 0-100 midpoint) — never an invented opinion —
+    then states whether the picture looks mixed, generally positive, or
+    generally negative. This is a synthesis of REAL classified data, not a
+    prediction or recommendation."""
+    _ask_telemetry_mark(fallback_used=True)
+    if not data or not data.get("ticker"):
+        return None
+    ticker = data["ticker"]
+
+    positives: list[str] = []
+    negatives: list[str] = []
+
+    rsi = data.get("rsi")
+    if isinstance(rsi, (int, float)):
+        band = _rsi_band(rsi)  # "AlphaSwarm's neutral band, 30-70" etc — the exact documented label, never invented
+        if rsi >= 50:
+            positives.append(f"its RSI around {round(rsi, 1)} is within {band} and points to relatively firm recent momentum")
+        else:
+            negatives.append(f"its RSI around {round(rsi, 1)} is within {band} but suggests relatively weak recent momentum")
+
+    macd = data.get("macd")
+    if isinstance(macd, str):
+        if "bullish" in macd.lower():
+            positives.append("its MACD shows a bullish crossover")
+        elif "bearish" in macd.lower():
+            negatives.append("its MACD shows a bearish crossover")
+
+    sharpe = data.get("sharpe_ratio")
+    if isinstance(sharpe, (int, float)):
+        if sharpe >= 0:
+            positives.append(f"its Sharpe ratio of {round(sharpe, 2)} points to favourable risk-adjusted performance")
+        else:
+            negatives.append(f"its Sharpe ratio of {round(sharpe, 2)} points to unfavourable risk-adjusted performance")
+
+    sentiment = data.get("sentiment_score")
+    if isinstance(sentiment, (int, float)):
+        if sentiment >= 50:
+            positives.append(f"sentiment is positive at about {round(sentiment, 1)}")
+        else:
+            negatives.append(f"sentiment is negative at about {round(sentiment, 1)}")
+
+    if not positives and not negatives:
+        # No signal AlphaSwarm has a documented positive/negative reading
+        # for — fall back to the plain general-overview text rather than
+        # claiming a mixed/positive/negative picture with nothing behind it.
+        return _deterministic_grounded_fallback("tell me about " + ticker, data)
+
+    if positives and negatives:
+        verdict = "looks mixed rather than clearly strong or weak"
+    elif positives:
+        verdict = "leans positive based on the available signals"
+    else:
+        verdict = "leans negative based on the available signals"
+
+    clauses = positives + negatives
+    if len(clauses) == 1:
+        signal_text = clauses[0]
+    else:
+        signal_text = "; ".join(clauses[:-1]) + f"; and {clauses[-1]}"
+
+    return (
+        f"Based on the available AlphaSwarm data, {ticker}'s picture {verdict}: "
+        f"{signal_text}."
+    )
+
+
+def _repair_narration_with_grounded_data(
+    client, question: str, violations: list[str],
+    *, data: Optional[dict] = None, comparison_assets: Optional[list] = None,
+) -> Optional[str]:
+    """One bounded repair attempt after a validation failure — never a retry
+    loop, never called more than once per narration attempt. Only fires when
+    there IS trusted structured data to regenerate from. The prompt supplies
+    ONLY the trusted structured values (never the rejected answer) and
+    explicitly forbids inventing, predicting, recommending, or recomputing
+    any number. The repaired text is re-validated through the exact same
+    validate_ask_output() used everywhere else."""
+    payload = data if data is not None else comparison_assets
+    if not payload:
+        return None
+    prompt = (
+        "Your previous answer to this question was rejected because it did "
+        "not match AlphaSwarm's own recorded data (" + "; ".join(violations) + ").\n\n"
+        "Answer the SAME question again, using ONLY the exact structured "
+        "values below. Do not invent, estimate, or recompute any number — "
+        "state each value exactly as given, in the same units/currency. Do "
+        "not make predictions and do not recommend buying, selling, or "
+        "investing. Preserve the user's actual question and answer naturally "
+        "in normal, conversational English — not a data dump. Write plain "
+        "prose only: no markdown, no headings, no bold/asterisks, no "
+        "bullet-point lists, no 'Comparison of X and Y' style headers. Round "
+        "numbers to a natural conversational precision (e.g. 'R5,345', not "
+        "'R5,345.0709') and never say 'AlphaSwarm price' — just 'current "
+        "price'. If a value needed to answer is not present below, say "
+        "plainly that AlphaSwarm doesn't have it rather than guessing.\n\n"
+        f"USER QUESTION:\n{question}\n\nTRUSTED DATA (use these exact values):\n{payload}"
+    )
+    try:
+        repaired = client.complete(prompt).strip()
+    except Exception as e:
+        logger.warning("Ask narration repair call failed: %s", e)
+        return None
+    result = validate_ask_output(repaired, data=data, comparison_assets=comparison_assets)
+    if not result.valid:
+        logger.warning("ask_output_validation_repair_failed violations=%s", result.violations)
+        return None
+    return repaired
+
+
+def _narrate_ask(
+    question: str, data_summary: str, validation_data: Optional[dict] = None,
+    fallback_text: Optional[str] = None, comparison_assets: Optional[list] = None,
+) -> Optional[str]:
+    """Small Groq call: narrate the ALREADY-RETRIEVED data, then run the
+    result through the runtime output validator before it can be returned.
+    A validation failure gets exactly one repair attempt, grounded in the
+    SAME trusted `validation_data`; if that also fails (or Groq itself is
+    unreachable), falls back to a deterministic sentence rather than an
+    opaque refusal — `fallback_text`, when the caller already has a better
+    one ready (e.g. _ask_contextual_metric_explanation's glossary-aware
+    text), otherwise the generic _deterministic_grounded_fallback built
+    from `validation_data`. Returns None only when there is truly
+    nothing — no narration and no fallback of either kind — leaving the
+    caller's existing no-data message as the last resort."""
+    def _fallback() -> Optional[str]:
+        return fallback_text if fallback_text is not None else _deterministic_grounded_fallback(question, validation_data)
+
     client = _get_ask_narration_client()
     if client is None:
-        return None
+        return _fallback()
     system = (
         "You are AlphaSwarm, explaining a user's own results back to them.\n\n"
         "Explain only the AlphaSwarm data provided to you.\n\n"
@@ -762,19 +1111,77 @@ def _narrate_ask(question: str, data_summary: str) -> Optional[str]:
         "takeaway from the data, (c) the strongest supporting signal(s), (d) any "
         "conflicting or weaker signals, (e) important caveats or missing "
         "information. Only mention a metric if it actually contributes to that "
-        "explanation — do not list metrics that add nothing.\n"
+        "explanation — do not list metrics that add nothing. HOWEVER, for a "
+        "general 'tell me about X' style question where several metrics are "
+        "present in the data (e.g. RSI, beta, sentiment, confidence score, "
+        "rank), do not collapse the answer down to price alone — mention at "
+        "least two or three of the most relevant signals, each briefly "
+        "explained in plain terms, not just a single number.\n"
         "10. Keep the answer concise and conversational. Write in plain prose — "
         "no markdown, no bold text, no asterisks, no headings, no bullet-point "
         "dumps of the data.\n"
         "11. Do not end with a disclaimer sentence — that is shown separately in "
-        "the interface."
+        "the interface.\n"
+        "12. If a 'currency' field is present alongside a price, state that "
+        "currency explicitly (e.g. 'R5,345') — never assume or imply a "
+        "different currency, and never say 'AlphaSwarm price' — AlphaSwarm "
+        "is the source of the data, not a type of price; just say 'current "
+        "price' or 'trading at'. Never perform currency conversion or any "
+        "other arithmetic yourself — if the data includes an already-computed "
+        "value, state exactly that value.\n"
+        "13. Round numbers to a natural conversational precision (e.g. "
+        "'R5,345' or 'around R5,345', 'RSI of about 37.9') rather than "
+        "copying a long decimal straight from the data, unless the user "
+        "explicitly asks for the exact figure.\n"
+        "14. AlphaSwarm's RSI classification has exactly three bands: below "
+        "30 is 'oversold', 30 to 70 is 'neutral', above 70 is 'overbought'. "
+        "Use exactly one of those three words for the band — never an "
+        "invented gradation like 'slightly oversold', 'mildly overbought', "
+        "or 'neutral to slightly oversold'. A value of 37.94 is squarely "
+        "'neutral', full stop; you may separately note it is below the "
+        "midpoint of 50 (reflecting relatively weaker recent momentum "
+        "within that neutral range) without changing which band it is in. "
+        "Same principle for beta: below 0.8 is 'low'/'lower than market', "
+        "0.8 to 1.2 is 'market', above 1.2 is 'high' — use AlphaSwarm's own "
+        "band label, not an invented one, and do not equate beta with "
+        "volatility (beta is sensitivity to a benchmark, volatility is a "
+        "separate, differently-computed field). Only describe beta as "
+        "measured 'against the S&P 500' if the data itself says so — "
+        "otherwise say 'relative to its benchmark market' generically.\n"
+        "15. A price shown in ZAR (South African Rand) is only AlphaSwarm's "
+        "displayed currency for that figure — it is NOT evidence of where the "
+        "company is listed or traded, and AlphaSwarm itself is not a stock "
+        "exchange or listing venue. Never say an asset is 'listed in the "
+        "South African market' or similar because of a ZAR price. Prefer "
+        "phrasing like 'its latest recorded price in AlphaSwarm's displayed "
+        "currency is around R5,345' or simply 'X's latest recorded price is "
+        "around R5,345'.\n"
+        "16. Never attribute a number's provenance to the user, e.g. never say "
+        "'the data set you provided' or 'the data you gave me' — the user did "
+        "not supply this data; it is AlphaSwarm's own retrieved analysis. Say "
+        "'AlphaSwarm's latest available analysis reports...' or 'according to "
+        "AlphaSwarm's data...' instead."
     )
     prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM DATA:\n{data_summary}"
     try:
-        return client.complete(prompt).strip()
+        narration = client.complete(prompt).strip()
     except Exception as e:
         logger.warning("Ask narration failed: %s", e)
-        return None
+        return _fallback()
+
+    result = validate_ask_output(narration, data=validation_data, comparison_assets=comparison_assets)
+    if result.valid:
+        return narration
+
+    _ask_telemetry_mark(validation_failed=True)
+    logger.warning("ask_output_validation_failed fn=_narrate_ask violations=%s", result.violations)
+    if validation_data or comparison_assets:
+        repaired = _repair_narration_with_grounded_data(
+            client, question, result.violations, data=validation_data, comparison_assets=comparison_assets,
+        )
+        if repaired is not None:
+            return repaired
+    return _fallback()
 
 
 def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
@@ -907,6 +1314,16 @@ def _resolve_asset(query: str) -> Optional[dict]:
         if ticker and ticker in tokens:
             return asset
 
+    # Possessive typo with no apostrophe ("googls rsi" instead of "GOOGL's
+    # RSI") — the {1,5}-length token match above never even sees a 6-letter
+    # word like "GOOGLS". Only fires when stripping one trailing S yields an
+    # ACTUAL known ticker, so it can't turn an unrelated 6-letter word into a
+    # false match.
+    ticker_map_local = {(a.get("ticker") or "").upper(): a for a in assets if a.get("ticker")}
+    for word in re.findall(r"\b[A-Za-z]{2,6}\b", query.upper()):
+        if word.endswith("S") and word[:-1] in ticker_map_local:
+            return ticker_map_local[word[:-1]]
+
     # Company-name WORD match: a significant word from the asset's name (not a
     # generic corporate suffix) appears as a whole word in the query. Matching
     # the full name as a substring (the old approach) missed "Tell me about
@@ -1034,7 +1451,7 @@ def _build_ask_comparison_trigger_pattern():
         r"\b("
         r"vs\.?|versus|compare|compared\s+to|"
         r"rank(?:s|ed)?\s+(?:above|below|higher|lower|over)|"
-        r"which\s+(?:one\s+|asset\s+)?(?:has|is)|"
+        r"which\s+(?:one\s+|asset\s+)?(?:has|is|looks|seems)|"
         r"(?:higher|lower|better)\s+(?:beta|rsi|sharpe|volatility|price|score|confidence|dividend)|"
         r"more\s+(?:volatile|risky)|"
         r"the\s+other\s+one|the\s+other|both|their"
@@ -1062,9 +1479,15 @@ _ASK_METRIC_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("profile fit", "profile fit"),
     ("confidence score", "confidence score"),
     ("confidence", "confidence score"),
+    ("quant score", "quant score"),
     ("sentiment", "sentiment score"),
     ("beta", "beta"),
+    ("current price", "price"),
+    ("trading at", "price"),
+    ("worth right now", "price"),
+    ("worth", "price"),
     ("price", "price"),
+    ("rank", "rank"),
     ("dividend", "dividend"),
 )
 
@@ -1119,6 +1542,24 @@ def _resolve_conversational_reference(
     # conversation at all.
     explicit_asset = _resolve_asset(query)
     explicit_multi = _resolve_multiple_assets(query, limit=2)
+
+    # A query naming exactly ONE asset but ALSO carrying comparison wording,
+    # with a DIFFERENT single asset already active in context ("Tell me
+    # about GOOGL" -> "What about its beta?" -> "How does that compare with
+    # MSFT?") is a two-asset comparison between the context asset and the
+    # newly named one — "that" refers to GOOGL, not to MSFT alone. Checked
+    # BEFORE the single-asset shortcut below, which would otherwise swallow
+    # this straight into an MSFT-only question and silently drop "that".
+    # Reuses the exact same "— compare A and B" mechanism the compare_assets
+    # branch below already produces — no new comparison path.
+    if (
+        explicit_asset and len(explicit_multi) <= 1
+        and context and context.active_asset
+        and context.active_asset != explicit_asset["ticker"]
+        and _ASK_COMPARISON_TRIGGER_PATTERN.search(query)
+    ):
+        return f"{query} — compare {context.active_asset} and {explicit_asset['ticker']}", None, None, None
+
     if explicit_asset and len(explicit_multi) <= 1:
         metric = _extract_metric_from_query(query)
         return query, None, explicit_asset["ticker"], metric
@@ -1252,11 +1693,17 @@ def _fetch_asset_analysis_data(asset: dict, user_id: str) -> tuple[dict, str]:
     ("why does C rank above MSFT") can fetch each already-resolved asset's
     data without re-running text-based asset resolution per asset.
     """
+    price = _valid_price(asset.get("current_price"))
     base = {
         "ticker": asset["ticker"],
         "name": asset.get("name"),
         "universe": asset.get("universe"),
-        "current_price": _valid_price(asset.get("current_price")),
+        "current_price": price,
+        # current_price is stored in ZAR (see utils/supabase_client's
+        # ZarPriceConverter) — a platform-wide fact, not per-row data.
+        # Attached explicitly so neither the narration LLM nor the validator
+        # has to guess/assume a currency.
+        "currency": "ZAR" if price is not None else None,
     }
 
     # 1. This user's latest completed run.
@@ -1311,7 +1758,7 @@ def _narrate_synthesis(question: str, data: dict) -> Optional[str]:
     — never invents a metric that wasn't supplied."""
     client = _get_ask_narration_client()
     if client is None:
-        return None
+        return _deterministic_qualitative_synthesis(data)
     system = (
         "You are AlphaSwarm, helping a user interpret results it has already "
         "shown them.\n\n"
@@ -1354,7 +1801,26 @@ def _narrate_synthesis(question: str, data: dict) -> Optional[str]:
         "that decision for the user.\n"
         "Write in plain conversational prose — no markdown, no bold text, no "
         "asterisks, no bullet-point dumps, no disclaimer sentence (shown "
-        "separately in the interface).\n\n"
+        "separately in the interface). Round numbers to a natural "
+        "conversational precision (e.g. 'R5,345', 'RSI of about 37.9') "
+        "rather than a long decimal, and never say 'AlphaSwarm price' — "
+        "just 'current price' or 'trading at'.\n"
+        "RSI has exactly three AlphaSwarm bands — below 30 'oversold', 30-70 "
+        "'neutral', above 70 'overbought' — use exactly one of those words, "
+        "never an invented gradation like 'slightly oversold'. Beta has "
+        "exactly three bands — below 0.8 'low', 0.8-1.2 'market', above 1.2 "
+        "'high' — never equate beta with volatility (they're different "
+        "fields), and only say 'against the S&P 500' if the data itself "
+        "says so. When you distinguish positive/negative/mixed signals, do "
+        "not convert a neutral RSI into a bullish or bearish signal, do not "
+        "claim an overall 'good' or 'bad' investment, and keep any "
+        "conclusion appropriately qualified (e.g. 'the picture looks "
+        "mixed', not a definitive verdict). A price shown in ZAR is only "
+        "AlphaSwarm's displayed currency, never evidence of where an asset is "
+        "listed or traded — never say it is 'listed in the South African "
+        "market' or similar. Never attribute a figure's provenance to the "
+        "user (e.g. never say 'the data set you provided') — say 'AlphaSwarm's "
+        "data shows...' instead.\n\n"
         "HARD LENGTH LIMIT: respond in at most 5 sentences (roughly 120 words "
         "total). This is a budget, not a target — use fewer if the takeaway is "
         "simple. Cover only: (1) the one overall takeaway, (2) the strongest "
@@ -1362,12 +1828,67 @@ def _narrate_synthesis(question: str, data: dict) -> Optional[str]:
         "combination means together. Do not work through every field in the "
         "data one by one — pick only what actually supports the takeaway."
     )
-    prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM DATA:\n{data}"
+    prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM DATA:\n{_round_for_narration(data)}"
     try:
-        return client.complete(prompt).strip()
+        narration = client.complete(prompt).strip()
     except Exception as e:
         logger.warning("Ask context-synthesis failed: %s", e)
+        return _deterministic_qualitative_synthesis(data)
+
+    result = validate_ask_output(narration, data=data)
+    if result.valid:
+        return narration
+    _ask_telemetry_mark(validation_failed=True)
+    logger.warning("ask_output_validation_failed fn=_narrate_synthesis violations=%s", result.violations)
+    repaired = _repair_narration_with_grounded_data(client, question, result.violations, data=data)
+    if repaired is not None:
+        return repaired
+    return _deterministic_qualitative_synthesis(data)
+
+
+def _deterministic_grounded_comparison_fallback(assets: List[dict]) -> Optional[str]:
+    """Multi-asset counterpart to _deterministic_grounded_fallback — used
+    only when a comparison narration AND its one repair attempt both still
+    fail validation. States each asset's ticker + price (the one fact
+    every comparison case has), in plain prose, straight from the supplied
+    data. Never invents a ranking or an opinion about which is "better" —
+    that judgment is exactly what a rejected narration risked getting
+    wrong, so the fallback simply doesn't make one."""
+    _ask_telemetry_mark(fallback_used=True)
+    priced = [
+        (a["ticker"], a["current_price"], a.get("currency") or "ZAR")
+        for a in assets
+        if a.get("ticker") and a.get("current_price") is not None
+    ]
+    if not priced:
         return None
+    parts = [f"{ticker} is around {_format_price_rounded(price, currency)}" for ticker, price, currency in priced]
+    if len(parts) == 1:
+        sentence = f"{parts[0]}, according to AlphaSwarm's data."
+    else:
+        sentence = ", ".join(parts[:-1]) + f", and {parts[-1]}, according to AlphaSwarm's data."
+
+    # One comparable secondary metric, if the data actually supports one —
+    # never enumerate every field. If only SOME assets have it, say so
+    # naturally instead of silently dropping the metric or comparing across
+    # a gap in the data.
+    for field_key, label in (("beta", "beta"), ("rsi", "RSI"), ("sharpe_ratio", "Sharpe ratio")):
+        have = [(a["ticker"], a[field_key]) for a in assets if a.get("ticker") and a.get(field_key) is not None]
+        missing = [a["ticker"] for a in assets if a.get("ticker") and a.get(field_key) is None]
+        if len(have) >= 2:
+            sentence += " " + ", ".join(
+                f"{t}'s {label} is {_describe_metric_value(field_key, v)}" for t, v in have
+            ) + "."
+            break
+        if len(have) == 1 and missing:
+            t, v = have[0]
+            sentence += (
+                f" {t}'s {label} is {_describe_metric_value(field_key, v)}. AlphaSwarm doesn't "
+                f"currently have a {label} value for {', '.join(missing)}, so there isn't enough "
+                "data to compare on that metric."
+            )
+            break
+    return sentence
 
 
 def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
@@ -1378,7 +1899,7 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
     data in particular) that were not supplied."""
     client = _get_ask_narration_client()
     if client is None:
-        return None
+        return _deterministic_grounded_comparison_fallback(assets)
     system = (
         "You are AlphaSwarm, helping a user compare assets using data it has "
         "already shown them.\n\n"
@@ -1392,10 +1913,22 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
         "investing is available unless the data says so. A lower price is not a "
         "better investment, lower risk, or higher expected return — it only "
         "means less capital is needed per whole share. Never call the "
-        "cheapest asset the 'best' one on that basis. Only compare assets whose "
+        "cheapest asset the 'best' one on that basis, and never call it the "
+        "'cheaper option' as if that implied value — state it precisely as a "
+        "share-price fact instead, e.g. 'GOOGL has the lower current share "
+        "price, at about R5,345 versus approximately R6,418 for MSFT'. Only "
+        "compare assets whose "
         "current_price is actually present in the data — an asset with a "
         "missing, zero, or invalid price has no known price; say its price is "
         "unavailable rather than treating it as free or cheapest.\n\n"
+        "If the user asks which asset 'looks stronger' or similar: having MORE "
+        "available signals for one asset is NOT the same as that asset being "
+        "stronger — never conclude one asset is stronger merely because "
+        "AlphaSwarm has more data on it. State plainly what data exists for "
+        "each, and if one has comparable metrics while the other has little "
+        "more than a price, say there isn't enough comparable information to "
+        "reliably judge which is stronger, rather than drawing a conclusion "
+        "the data doesn't support.\n\n"
         "If the user asks about income/dividends/monthly income and no dividend "
         "field is present in the data, say plainly that AlphaSwarm's current "
         "results don't include that information — do not infer or invent an "
@@ -1412,7 +1945,20 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
         "choice, or suitable for you — except to explicitly explain that "
         "AlphaSwarm does not make that decision for the user.\n"
         "Write in plain conversational prose — no markdown, no bold text, no "
-        "asterisks, no disclaimer sentence (shown separately in the interface).\n\n"
+        "asterisks, no headings, no bullet-point lists, no 'Comparison of X "
+        "and Y' style header, no disclaimer sentence (shown separately in "
+        "the interface). Round numbers to a natural conversational precision "
+        "(e.g. 'R5,345', not 'R5,345.0709'), and never say 'AlphaSwarm "
+        "price' — just 'current price' or 'trading at'. RSI has exactly "
+        "three AlphaSwarm bands (below 30 'oversold', 30-70 'neutral', "
+        "above 70 'overbought') and beta has exactly three (below 0.8 "
+        "'low', 0.8-1.2 'market', above 1.2 'high') — use those exact "
+        "words, never an invented gradation, and never equate beta with "
+        "volatility. A ZAR price is only AlphaSwarm's displayed currency, "
+        "never evidence of where an asset is listed or traded — never say an "
+        "asset is 'listed in the South African market' or similar. Never "
+        "attribute a figure's provenance to the user (e.g. never say 'the "
+        "data set you provided') — say 'AlphaSwarm's data shows...' instead.\n\n"
         "HARD LENGTH LIMIT: respond in at most 5 sentences (roughly 120 words "
         "total). This is a budget, not a target. Do NOT walk through every "
         "asset field by field — group assets by what's relevant to the "
@@ -1421,12 +1967,22 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
         "conflict or caveat. Never list a metric for an asset unless it "
         "actually changes the answer."
     )
-    prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM ASSETS:\n{assets}"
+    prompt = f"{system}\n\nUSER QUESTION:\n{question}\n\nALPHASWARM ASSETS:\n{[_round_for_narration(a) for a in assets]}"
     try:
-        return client.complete(prompt).strip()
+        narration = client.complete(prompt).strip()
     except Exception as e:
         logger.warning("Ask context-comparison failed: %s", e)
-        return None
+        return _deterministic_grounded_comparison_fallback(assets)
+
+    result = validate_ask_output(narration, comparison_assets=assets)
+    if result.valid:
+        return narration
+    _ask_telemetry_mark(validation_failed=True)
+    logger.warning("ask_output_validation_failed fn=_narrate_comparison violations=%s", result.violations)
+    repaired = _repair_narration_with_grounded_data(client, question, result.violations, comparison_assets=assets)
+    if repaired is not None:
+        return repaired
+    return _deterministic_grounded_comparison_fallback(assets)
 
 
 def _gather_comparison_assets(user_id: str, limit: int = 8) -> List[dict]:
@@ -1632,10 +2188,24 @@ _ASK_GLOSSARY = {
     "sentiment score": "The sentiment score blends news sentiment (weighted higher) and social sentiment (StockTwits) into a single 0-100 reading of tone, not a price forecast.",
     "confidence score": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
     "confidence": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
+    "quant score": "The quant score is AlphaSwarm's quantitative (price-data-based) signal for an asset, before it's blended with sentiment — a measurement derived from price history, not a prediction.",
+    "rank": "Rank is an asset's position in AlphaSwarm's most recent ranked run, ordered by its confidence score — 1 is the highest-ranked asset in that run. It reflects the current data, not a forecast.",
+    "price": "An asset's current price, as last recorded by AlphaSwarm — the capital needed for one whole share, always quoted in South African Rand (ZAR). Not a measure of investment quality by itself.",
     "institutional ownership": "Institutional ownership shows what share of a company is held by large investors (funds, asset managers) based on their public 13F filings. It's purely informational — refreshed periodically, not part of AlphaSwarm's ranking or Signal Score.",
     "spy": "SPY (the SPDR S&P 500 ETF Trust) is an exchange-traded fund that tracks the S&P 500 index — a basket of roughly 500 large U.S. companies — so its price moves up and down along with that index. AlphaSwarm uses SPY's price history as the market benchmark when it calculates beta for an asset, so an asset's beta specifically describes how it has moved relative to SPY.",
     "s&p 500": "The S&P 500 is a stock market index that tracks roughly 500 of the largest publicly traded companies in the United States, widely used as a general gauge of the US stock market as a whole. SPY (the SPDR S&P 500 ETF Trust) is a fund built to track this index, which is why AlphaSwarm uses SPY's price history as a practical stand-in for 'the market' when it calculates beta.",
     "sp500": "The S&P 500 is a stock market index that tracks roughly 500 of the largest publicly traded companies in the United States, widely used as a general gauge of the US stock market as a whole. SPY (the SPDR S&P 500 ETF Trust) is a fund built to track this index, which is why AlphaSwarm uses SPY's price history as a practical stand-in for 'the market' when it calculates beta.",
+    # General financial-education terms — not AlphaSwarm-specific
+    # methodology, but basic vocabulary the assistant should be able to
+    # explain without a market-data lookup. "eft" is a common typo for
+    # "etf" (letters transposed) — recognised narrowly here, not a
+    # general-purpose spellchecker.
+    "etf": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
+    "eft": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
+    "asset": "In investing, an asset is any resource with economic value that can be owned and traded — a stock, a bond, an ETF, property, or commodity are all examples. On AlphaSwarm, 'asset' generally refers to one of the tradable stocks or ETFs the platform tracks and analyses.",
+    "bull market": "A bull market is a sustained period in which prices in a market are generally rising (or expected to rise), typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
+    "bear market": "A bear market is a sustained period in which prices in a market are generally falling, typically accompanied by widespread pessimism. It's the opposite of a bull market, where prices are generally rising.",
+    "whale watching": "In general market terminology, \"whale watching\" means tracking the trading activity of large holders (\"whales\") — big investors, funds, or institutions — since their large trades can move prices or signal a shift in sentiment. AlphaSwarm has its own whale-tracking feature, separate from its ranking/Signal Score methodology, that surfaces insider dealings and institutional ownership data (based on public filings) for an asset.",
 }
 
 
@@ -1829,11 +2399,34 @@ _ASK_METRIC_FIELD_MAP: dict[str, str] = {
     "convergence": "convergence",
     "confidence score": "confidence_score",
     "sentiment score": "sentiment_score",
+    "quant score": "quant_score",
+    "rank": "rank",
+    "price": "current_price",
 }
+
+# Qualitative-performance questions about an asset ("Is GOOGL doing well?",
+# "How is GOOGL performing?", "Does GOOGL look strong?", "What do you think
+# about GOOGL's current performance?") — these name no specific metric, so
+# they don't match the metric-question shortcut above, but they DO ask for
+# an interpretation of an asset AlphaSwarm already has data on. Routed
+# directly to the EXISTING _ask_context_synthesis (the same function that
+# already answers "what are the downsides of X") rather than left to gamble
+# on the LLM classifier, which observed testing showed sometimes returns
+# UNKNOWN for this phrasing instead of CONTEXT_SYNTHESIS.
+_ASK_QUALITATIVE_PERFORMANCE_PATTERN = re.compile(
+    r"\bdoing\s+well\b|\bperforming\b|\bperformance\b|"
+    r"\blook(?:s|ing)?\s+(?:strong|weak|good|bad|healthy)\b|"
+    r"\bwhat\s+do\s+you\s+think\s+(?:about|of)\b|"
+    r"\bhow(?:'s|\s+is)\s+\w+\s+(?:doing|looking)\b",
+    re.IGNORECASE,
+)
+
+
+_ASK_CAUSAL_WHY_PATTERN = re.compile(r"\bwhy\b", re.IGNORECASE)
 
 
 def _ask_contextual_metric_explanation(
-    resolved_asset: Optional[str], resolved_metric: Optional[str], user_id: str
+    resolved_asset: Optional[str], resolved_metric: Optional[str], user_id: str, query: str = "",
 ) -> Optional[AskResponse]:
     """Priority rule (see _resolve_conversational_reference): a metric
     question resolved to a specific asset — explicitly ("GOOGL's RSI") or via
@@ -1847,6 +2440,16 @@ def _ask_contextual_metric_explanation(
     path. This function never invents a value: if the metric isn't present
     in the asset's retrieved data, it says so explicitly rather than
     fabricating one (see the missing-data branch below).
+
+    `query` is used ONLY to detect a causal "why" framing ("why is GOOGL's
+    RSI low?") — semantically distinct from "what is GOOGL's RSI?": the
+    reading itself is the same fact either way, but a "why" question asks
+    for a CAUSE, and AlphaSwarm's retrieved data (a snapshot metric) never
+    contains one. Rather than silently answer the "what" question again,
+    this explicitly states that AlphaSwarm's data indicates what the
+    reading means but does not establish why it is at that level — never
+    inventing a cause like "investors are selling" that the data doesn't
+    support.
     """
     if not resolved_asset or not resolved_metric:
         return None
@@ -1895,20 +2498,413 @@ def _ask_contextual_metric_explanation(
     data_summary = {
         "ticker": ticker,
         "metric": resolved_metric,
-        "value": value,
+        "value": round(value, 2) if isinstance(value, float) else value,
         "authoritative_definition": glossary_definition,
     }
-    narration = _narrate_ask(f"What does {ticker}'s {resolved_metric} mean?", str(data_summary))
-    if narration is None:
-        # Groq unavailable/failed — deterministic fallback, still grounded in
-        # the real value rather than silently dropping to generic text that
-        # hides it.
-        narration = f"{glossary_definition} {ticker}'s current {resolved_metric} is {value}."
+    is_causal = bool(_ASK_CAUSAL_WHY_PATTERN.search(query))
+    described_value = _describe_metric_value(field_key, value, data.get("currency"))
+
+    if is_causal:
+        question_text = (
+            f"Why might {ticker}'s {resolved_metric} be at its current level? "
+            "Explain what the reading indicates according to AlphaSwarm's "
+            "documented methodology — but AlphaSwarm's data is a snapshot "
+            "measurement, not a record of cause, so do not claim to know WHY "
+            "it moved there (e.g. do not say investors are selling, or "
+            "anything else not directly supported by the supplied data). "
+            "State plainly that AlphaSwarm's current data does not establish "
+            "a specific cause for the reading."
+        )
+        fallback_text = (
+            f"{ticker}'s current {resolved_metric} is {described_value}. "
+            "AlphaSwarm's data does not establish a specific cause for that reading."
+        )
+    else:
+        question_text = f"What does {ticker}'s {resolved_metric} mean?"
+        # A richer, glossary-aware fallback than the generic
+        # _deterministic_grounded_fallback (which has no idea this is a "what
+        # does X mean" question) — used only if Groq is unavailable or both
+        # the narration and its one repair attempt fail validation. Rounded
+        # value + AlphaSwarm's own documented band (for rsi/beta), same as
+        # the generic fallback now does, so a Groq outage never degrades to
+        # a bare unrounded float with no explanation.
+        fallback_text = f"{glossary_definition} {ticker}'s current {resolved_metric} is {described_value}."
+
+    narration = _narrate_ask(
+        question_text, str(data_summary),
+        validation_data={"ticker": ticker, field_key: value},
+        fallback_text=fallback_text,
+    )
 
     return AskResponse(
         intent="LEARNING_QUESTION", narration=narration,
         data={"term": metric_key, "ticker": ticker, field_key: value},
         source=source, sources=[], is_blocked=False, redirect_suggestions=[],
+    )
+
+
+# ── Multi-intent Ask ─────────────────────────────────────────────────────
+# Deterministic detection/decomposition for a query that asks SEVERAL
+# independent things at once ("what is an ETF and what is an asset and
+# GOOGL RSI"). No LLM is used to split the query — only re.split on the
+# plain word "and" plus the SAME resolution primitives every other Ask path
+# already uses (_resolve_asset, _extract_metric_from_query, _ASK_GLOSSARY).
+# A fragment that doesn't independently resolve to either a known concept or
+# an asset+metric pair (e.g. "and is it high" trailing a metric question) is
+# simply not counted — if that leaves fewer than two resolved intents, this
+# whole mechanism backs off and returns None, so the ORIGINAL full query
+# flows into the existing single-intent pipeline completely unchanged. This
+# is what keeps "Compare GOOGL and MSFT" (2nd fragment "MSFT" resolves
+# nothing on its own) and "What is GOOGL's RSI and is it high?" (2nd
+# fragment resolves nothing on its own) routing exactly as before.
+
+# Advice/prediction detection SCOPED TO ONE CLAUSE of a multi-intent query —
+# separate from _ASK_BLOCKLIST (tuned for a whole single query) so it can
+# also catch phrasings a compound sentence produces that the full-query
+# blocklist was never asked to catch, e.g. "tell me which one I should buy"
+# (word order differs from the blocklist's "should i buy") and "will it go
+# up tomorrow". This is a narrower TRIGGER for the exact same existing
+# refusal (_ASK_NO_ADVICE_MESSAGE) — not a new or weaker safeguard.
+_ASK_ADVICE_CLAUSE_RE = re.compile(
+    r"\bshould\s+i\s+(?:buy|sell|invest|hold|avoid)\b|"
+    r"\bi\s+should\s+(?:buy|sell|invest)\b|"
+    r"\bwhich\s+(?:one\s+|asset\s+|stock\s+)?i\s+should\s+(?:buy|invest|choose|pick)\b|"
+    r"\bwill\s+(?:it|[A-Za-z]{1,6})\s+go\s+(?:up|down)\b|"
+    r"\bwill\s+(?:it|[A-Za-z]{1,6})\s+(?:rise|fall)\b|"
+    r"\bgood\s+investment\b|"
+    r"\bwhat\s+should\s+i\s+(?:buy|invest|sell)\b",
+    re.IGNORECASE,
+)
+_ASK_OVERVIEW_CLAUSE_RE = re.compile(r"\btell\s+me\s+about\b", re.IGNORECASE)
+_ASK_BOTH_METRIC_RE = re.compile(r"\bboth\b[^.?!]{0,20}\btheir\b", re.IGNORECASE)
+
+# Conservative compound-clause split: bare "and", or a comma followed by
+# non-digit text (never touches a thousands-separated number like
+# "5,345" — the lookahead requires the very next character NOT be a
+# digit). Deliberately simple; real decomposition happens per-fragment
+# below, and a fragment that doesn't independently resolve is just
+# discarded, so an over-eager split here costs nothing but a wasted
+# classification attempt.
+_ASK_CLAUSE_SPLIT_RE = re.compile(r",\s+(?=\D)|\band\b", re.IGNORECASE)
+_ASK_LEADING_AND_RE = re.compile(r"^\s*and\s+", re.IGNORECASE)
+
+
+def _split_ask_clauses(query: str) -> list[str]:
+    parts = []
+    for raw in _ASK_CLAUSE_SPLIT_RE.split(query):
+        cleaned = _ASK_LEADING_AND_RE.sub("", raw.strip()).strip(" ?.,!")
+        if cleaned:
+            parts.append(cleaned)
+    return parts
+
+
+def _fetch_full_asset_data(ticker_or_text: str, user_id: str) -> Optional[dict]:
+    asset = _resolve_asset(ticker_or_text)
+    if not asset:
+        return None
+    try:
+        data, _source = _fetch_asset_analysis_data(asset, user_id)
+    except Exception as e:
+        logger.warning("Multi-intent asset lookup failed for %r: %s", ticker_or_text, e)
+        return None
+    return data
+
+
+def _resolve_comparison_clause(fragment: str, user_id: str, local_assets: dict) -> Optional[tuple]:
+    """'compare it with MSFT' / 'compare GOOGL and MSFT' / 'how does that
+    compare with MSFT' -> both tickers' full trusted data. A pronoun
+    ("it"/"that") resolves against an asset already established EARLIER IN
+    THIS SAME QUERY (local_assets, insertion-ordered) — the query's own
+    running context, not a parallel system; cross-turn context is handled
+    exactly as before by _resolve_conversational_reference."""
+    if not _ASK_COMPARISON_TRIGGER_PATTERN.search(fragment):
+        return None
+    explicit = _resolve_multiple_assets(fragment, limit=2)
+    tickers = [a["ticker"] for a in explicit if a.get("ticker")]
+
+    if len(tickers) >= 2:
+        a_ticker, b_ticker = tickers[0], tickers[1]
+    elif len(tickers) == 1 and local_assets:
+        b_ticker = tickers[0]
+        prior = [t for t in local_assets if t != b_ticker]
+        if not prior:
+            return None
+        a_ticker = prior[-1]
+    else:
+        return None
+
+    data_a = local_assets.get(a_ticker) or _fetch_full_asset_data(a_ticker, user_id)
+    data_b = local_assets.get(b_ticker) or _fetch_full_asset_data(b_ticker, user_id)
+    if not data_a or not data_b:
+        return None
+    return ("comparison", a_ticker, b_ticker, data_a, data_b)
+
+
+def _resolve_both_metric_clause(fragment: str, last_pair: Optional[tuple], local_assets: dict) -> Optional[tuple]:
+    """'tell me both their RSIs' -> the metric applied to BOTH assets of the
+    most recent comparison clause established earlier in this same query —
+    never a randomly/globally chosen asset, and never a fabricated value if
+    one or both are genuinely missing (see PART 3)."""
+    if not last_pair or not _ASK_BOTH_METRIC_RE.search(fragment):
+        return None
+    metric = _extract_metric_from_query(fragment)
+    if not metric:
+        return None
+    metric_key = metric.lower()
+    field_key = _ASK_METRIC_FIELD_MAP.get(metric_key)
+    glossary_definition = _ASK_GLOSSARY.get(metric_key)
+    if not field_key or not glossary_definition:
+        return None
+    results = [(ticker, (local_assets.get(ticker) or {}).get(field_key)) for ticker in last_pair]
+    return ("both_metric", results, field_key, metric, glossary_definition)
+
+
+def _classify_ask_clause(
+    fragment: str, user_id: str, context: Optional["AskContext"],
+) -> Optional[tuple]:
+    """One fragment of a multi-intent query -> either
+    ('asset_metric', ticker, field_key, value, glossary_definition, metric_label, currency)
+    or ('general', term, definition), or None if the fragment doesn't stand
+    on its own. A fragment naming no explicit asset but using reference
+    wording ("its beta") falls back to the conversation's active_asset —
+    the SAME context mechanism every other Ask path already uses, not a
+    parallel one."""
+    fragment = fragment.strip(" ?.,!")
+    if not fragment:
+        return None
+
+    asset = _resolve_asset(fragment)
+    metric = _extract_metric_from_query(fragment)
+    if not asset and metric and context and context.active_asset and _ASK_REFERENCE_PATTERN.search(fragment):
+        asset = _resolve_asset(context.active_asset)
+
+    if asset and metric:
+        metric_key = metric.lower()
+        field_key = _ASK_METRIC_FIELD_MAP.get(metric_key)
+        glossary_definition = _ASK_GLOSSARY.get(metric_key)
+        if field_key and glossary_definition:
+            try:
+                data, _source = _fetch_asset_analysis_data(asset, user_id)
+            except Exception as e:
+                logger.warning("Multi-intent clause lookup failed for %r: %s", fragment, e)
+                return None
+            ticker = data.get("ticker", asset.get("ticker"))
+            return ("asset_metric", ticker, field_key, data.get(field_key), glossary_definition, metric, data)
+
+    frag_lower = fragment.lower()
+    for term in sorted(_ASK_GLOSSARY, key=len, reverse=True):
+        if re.search(r"\b" + re.escape(term) + r"\b", frag_lower):
+            return ("general", term, _ASK_GLOSSARY[term])
+    return None
+
+
+def _remerge_split_comparison_pairs(raw_parts: list[str]) -> list[str]:
+    """'Compare GOOGL and MSFT and tell me which I should buy' splits on
+    EVERY bare 'and', which would otherwise tear 'Compare GOOGL and MSFT'
+    itself into two fragments ('Compare GOOGL', 'MSFT') before the
+    comparison clause ever gets to see both tickers together. If a
+    comparison-trigger fragment is immediately followed by a fragment that
+    is JUST a bare ticker mention (nothing else substantive — never merges
+    "MSFT's beta" or a real follow-up clause), re-join them into one
+    fragment so _resolve_comparison_clause resolves it as a single
+    two-asset comparison, same as if the user's "and" there had never been
+    split at all."""
+    merged: list[str] = []
+    skip_next = False
+    for i, part in enumerate(raw_parts):
+        if skip_next:
+            skip_next = False
+            continue
+        if _ASK_COMPARISON_TRIGGER_PATTERN.search(part) and i + 1 < len(raw_parts):
+            next_part = raw_parts[i + 1]
+            asset = _resolve_asset(next_part)
+            if asset and asset.get("ticker"):
+                leftover = re.sub(r"\b" + re.escape(asset["ticker"]) + r"\b", "", next_part, flags=re.IGNORECASE)
+                if not re.search(r"[a-zA-Z]", leftover):
+                    merged.append(f"{part} and {next_part}")
+                    skip_next = True
+                    continue
+        merged.append(part)
+    return merged
+
+
+def _ask_multi_intent(query: str, context: Optional["AskContext"], user_id: str) -> Optional[AskResponse]:
+    """Handles a query that independently asks several things at once —
+    including a bounded financial-advice/prediction clause ("...and tell me
+    which one I should buy") that must NOT cause the whole query to be
+    refused (see module-level PART 1/2/3 discussion above the helpers this
+    calls). Returns None (not a multi-intent query, or not enough of it
+    resolved deterministically) so the caller falls through to the existing
+    single-intent pipeline completely unchanged — this never replaces that
+    pipeline, only supplements it. Clauses are processed IN ORDER, tracking
+    which assets have already been established earlier in THIS query
+    (`local_assets`) and the most recent comparison pair (`last_pair`), so
+    "compare it with MSFT" and "tell me both their RSIs" can resolve
+    against what a PRIOR clause in the same sentence just established —
+    the query's own running context, never a random/global guess."""
+    raw_parts = _remerge_split_comparison_pairs(_split_ask_clauses(query))
+    if len(raw_parts) < 2:
+        return None
+
+    local_assets: dict[str, dict] = {}
+    last_pair: Optional[tuple] = None
+    clauses: list[tuple] = []
+
+    for fragment in raw_parts:
+        if _ASK_ADVICE_CLAUSE_RE.search(fragment):
+            clauses.append(("advice",))
+            continue
+
+        comparison = _resolve_comparison_clause(fragment, user_id, local_assets)
+        if comparison is not None:
+            _kind, a_ticker, b_ticker, data_a, data_b = comparison
+            local_assets[a_ticker] = data_a
+            local_assets[b_ticker] = data_b
+            last_pair = (a_ticker, b_ticker)
+            clauses.append(comparison)
+            continue
+
+        both = _resolve_both_metric_clause(fragment, last_pair, local_assets)
+        if both is not None:
+            clauses.append(both)
+            continue
+
+        if _ASK_OVERVIEW_CLAUSE_RE.search(fragment):
+            overview_data = _fetch_full_asset_data(fragment, user_id)
+            if overview_data and overview_data.get("ticker"):
+                local_assets[overview_data["ticker"]] = overview_data
+                clauses.append(("overview", overview_data["ticker"], overview_data))
+                continue
+
+        classified = _classify_ask_clause(fragment, user_id, context)
+        if classified is not None:
+            if classified[0] == "asset_metric":
+                local_assets.setdefault(classified[1], classified[6])
+            clauses.append(classified)
+
+    if len(clauses) < 2:
+        return None
+
+    # One narration call total, over ALL clauses combined — never one call
+    # per clause. Structured facts (never invented text) for the model to
+    # weave together; the SAME _narrate_ask system prompt (safety rules,
+    # RSI/beta bands, rounding, no 'AlphaSwarm price') applies unchanged.
+    data_summary: list[dict] = []
+    comparison_assets_map: dict[str, dict] = {}
+    fallback_sentences: list[str] = []
+    advice_present = False
+
+    def _register(full_data: dict) -> None:
+        ticker = full_data.get("ticker")
+        if ticker:
+            comparison_assets_map.setdefault(ticker, {}).update(full_data)
+
+    for clause in clauses:
+        kind = clause[0]
+
+        if kind == "advice":
+            advice_present = True
+
+        elif kind == "general":
+            _kind, term, definition = clause
+            data_summary.append({"concept": term, "definition": definition})
+            fallback_sentences.append(definition)
+
+        elif kind == "overview":
+            _kind, ticker, full_data = clause
+            _register(full_data)
+            price = full_data.get("current_price")
+            overview_facts = {
+                k: v for k, v in full_data.items()
+                if k not in ("run_scope", "ticker") and v is not None
+            }
+            data_summary.append({"ticker": ticker, "overview": overview_facts})
+            if price is not None:
+                fallback_sentences.append(
+                    f"{ticker} is currently trading around {_format_price_rounded(price, full_data.get('currency') or 'ZAR')}."
+                )
+            else:
+                fallback_sentences.append(f"{ticker} is in AlphaSwarm's data.")
+
+        elif kind == "comparison":
+            _kind, a_ticker, b_ticker, data_a, data_b = clause
+            _register(data_a)
+            _register(data_b)
+            data_summary.append({"comparison": [a_ticker, b_ticker]})
+            price_a, price_b = data_a.get("current_price"), data_b.get("current_price")
+            if price_a is not None and price_b is not None:
+                fallback_sentences.append(
+                    f"{a_ticker} and {b_ticker} can be compared using AlphaSwarm's data — {a_ticker} is "
+                    f"around {_format_price_rounded(price_a, data_a.get('currency') or 'ZAR')} and {b_ticker} "
+                    f"is around {_format_price_rounded(price_b, data_b.get('currency') or 'ZAR')}."
+                )
+            else:
+                fallback_sentences.append(f"{a_ticker} and {b_ticker} can be compared using AlphaSwarm's available data.")
+
+        elif kind == "both_metric":
+            _kind, results, field_key, metric_label, glossary_definition = clause
+            data_summary.append({
+                "metric": metric_label, "authoritative_definition": glossary_definition,
+                "values": {ticker: value for ticker, value in results},
+            })
+            for ticker, value in results:
+                if value is None:
+                    fallback_sentences.append(f"AlphaSwarm's current data does not include a {metric_label} value for {ticker}.")
+                else:
+                    _register({"ticker": ticker, field_key: value})
+                    currency = comparison_assets_map.get(ticker, {}).get("currency")
+                    fallback_sentences.append(f"{ticker}'s {metric_label} is {_describe_metric_value(field_key, value, currency)}.")
+
+        else:  # "asset_metric" — unchanged shape from the original single-clause implementation
+            _kind, ticker, field_key, value, glossary_definition, metric_label, full_data = clause
+            _register(full_data)
+            currency = full_data.get("currency")
+            if value is None:
+                fallback_sentences.append(f"AlphaSwarm's current data does not include a {metric_label} value for {ticker}.")
+                continue
+            data_summary.append({
+                "ticker": ticker, "metric": metric_label, "value": round(value, 2) if isinstance(value, float) else value,
+                "authoritative_definition": glossary_definition,
+            })
+            fallback_sentences.append(f"{ticker}'s {metric_label} is {_describe_metric_value(field_key, value, currency)}.")
+
+    # A pure advice clause with nothing else resolved isn't a multi-intent
+    # case at all — let the existing blocklist/classifier handle it exactly
+    # as before (this can only happen if every OTHER fragment also failed
+    # to resolve, which needs at least 2 total to have reached this point,
+    # so in practice this guards a single "advice"-only outcome).
+    if not data_summary:
+        return None
+
+    if advice_present:
+        fallback_sentences.append(_ASK_NO_ADVICE_MESSAGE)
+        data_summary.append({
+            "note": (
+                "The user also asked AlphaSwarm to tell them what to buy/sell or "
+                "which asset is best for them personally. State plainly and briefly "
+                "that AlphaSwarm can explain the data above but does not give "
+                "investment advice or tell the user what to buy — do not soften "
+                "this into a recommendation."
+            ),
+        })
+
+    comparison_assets = list(comparison_assets_map.values()) or None
+    fallback_text = " ".join(fallback_sentences)
+
+    narration = _narrate_ask(
+        query, str(data_summary),
+        comparison_assets=comparison_assets,
+        fallback_text=fallback_text,
+    )
+    if narration is None:
+        narration = fallback_text
+
+    return AskResponse(
+        intent="CONTEXT_SYNTHESIS" if comparison_assets else "LEARNING_QUESTION",
+        narration=narration,
+        data={"clauses": data_summary},
+        source="ai_recommendation" if comparison_assets else "methodology_glossary",
+        sources=[], is_blocked=False, redirect_suggestions=[],
     )
 
 
@@ -2085,6 +3081,27 @@ class AskContext(BaseModel):
     previous_intent: Optional[str] = None
 
 
+# --- Ask AlphaSwarm analytics telemetry ---------------------------------------
+# Purely additive, best-effort instrumentation of /api/ask for the Admin
+# Reports "Chatbot" report (see migration 018_ask_query_logs.sql). Never
+# changes the ask pipeline's control flow or behaviour — the narration/
+# fallback/repair functions below only ever RECORD what already happened,
+# via a contextvar so deeply-nested helper functions (which have no return
+# path back to the request handler) can flag an outcome without threading an
+# extra parameter through every call site. NEVER records raw prompt/answer
+# text — only booleans.
+_ask_telemetry: contextvars.ContextVar[Optional[Dict[str, Any]]] = contextvars.ContextVar(
+    "_ask_telemetry", default=None
+)
+
+
+def _ask_telemetry_mark(**flags: Any) -> None:
+    telemetry = _ask_telemetry.get()
+    if telemetry is None:
+        return
+    telemetry.update(flags)
+
+
 class AskRequest(BaseModel):
     query: str
     context: Optional[AskContext] = None
@@ -2111,12 +3128,82 @@ class AskResponse(BaseModel):
     redirect_suggestions: List[str] = []
 
 
+def _log_ask_query(
+    *, user_id: Optional[str], asset_symbol: Optional[str], intent: str,
+    success: bool, fallback_used: bool, validation_failed: bool, latency_ms: int,
+) -> None:
+    """Best-effort persistence of one /api/ask outcome for the Admin Reports
+    Chatbot report (migration 018_ask_query_logs.sql). Deliberately writes
+    only aggregate metadata — never the raw query or narration text — and
+    NEVER raises: a logging failure must not turn a successful /api/ask
+    response into an error for the user."""
+    try:
+        supabase.table("ask_query_logs").insert({
+            "user_id": user_id,
+            "asset_symbol": asset_symbol,
+            "intent": intent,
+            "success": success,
+            "fallback_used": fallback_used,
+            "validation_failed": validation_failed,
+            "latency_ms": latency_ms,
+        }).execute()
+    except Exception as e:
+        logger.warning("ask_query_log_write_failed: %s", e)
+
+
 @app.post("/api/ask", response_model=AskResponse)
 async def ask_alphaswarm(
     req: AskRequest,
     authorization: Optional[str] = Header(None),
 ):
+    """Thin instrumentation wrapper around _ask_alphaswarm_impl: times the
+    request and writes exactly one ask_query_logs row per request, after the
+    response is fully resolved — regardless of how many internal Groq calls
+    (classification, narration, one bounded repair attempt) it took. The
+    pipeline/behaviour below is entirely unchanged from before this wrapper
+    existed; see _ask_alphaswarm_impl."""
+    telemetry: Dict[str, Any] = {"fallback_used": False, "validation_failed": False, "user_id": None}
+    token = _ask_telemetry.set(telemetry)
+    start = time.monotonic()
+    response: Optional[AskResponse] = None
+    try:
+        response = await _ask_alphaswarm_impl(req, authorization)
+        return response
+    finally:
+        _ask_telemetry.reset(token)
+        if response is not None:
+            latency_ms = int((time.monotonic() - start) * 1000)
+            data = response.data or {}
+            assets_list = data.get("assets")
+            asset_symbol = data.get("ticker") or (
+                assets_list[0].get("ticker") if isinstance(assets_list, list) and assets_list else None
+            )
+            # "Success" = a real answer was produced: not blocked, and not the
+            # generic no-data/unknown placeholder narration. Deterministic
+            # fallback text still counts as success (a real, grounded answer
+            # was returned) — fallback_used is reported as its own dimension.
+            success = (
+                not response.is_blocked
+                and response.intent != "UNKNOWN"
+                and response.source != "none"
+            )
+            _log_ask_query(
+                user_id=telemetry.get("user_id"),
+                asset_symbol=asset_symbol,
+                intent=response.intent,
+                success=success,
+                fallback_used=bool(telemetry.get("fallback_used")),
+                validation_failed=bool(telemetry.get("validation_failed")),
+                latency_ms=latency_ms,
+            )
+
+
+async def _ask_alphaswarm_impl(
+    req: AskRequest,
+    authorization: Optional[str],
+):
     user_id = await _get_user_id_from_bearer(authorization)
+    _ask_telemetry_mark(user_id=user_id)
 
     if not _check_ask_rate_limit(user_id):
         raise HTTPException(status_code=429, detail="Too many requests — please wait a moment.")
@@ -2132,14 +3219,53 @@ async def ask_alphaswarm(
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
 
-    # 1. Local blocklist — before any LLM call.
+    # 1. Local blocklist — before any LLM call. Safety check still runs
+    # FIRST, exactly as before. The one addition: a blocklist phrase like
+    # "should i buy" can appear as ONE CLAUSE of an otherwise legitimate
+    # compound question ("What is GOOGL's RSI and should I buy GOOGL?") —
+    # rather than let that single clause discard a real, answerable
+    # question, try the SAME deterministic multi-intent decomposition used
+    # below (never an LLM, never a different safety rule) as a second
+    # opinion; it only fires when it can resolve 2+ genuine clauses
+    # (including the advice one, which it bounds with the identical
+    # _ASK_NO_ADVICE_MESSAGE refusal), so a plain single-clause advice
+    # question ("Should I buy GOOGL?") still gets the exact same blanket
+    # refusal as before.
     if _ask_blocklist_hit(query):
+        multi_intent = _ask_multi_intent(query, req.context, user_id)
+        if multi_intent is not None:
+            return multi_intent
         return AskResponse(
             intent="UNSUPPORTED_FINANCIAL_ADVICE",
             narration=_ASK_NO_ADVICE_MESSAGE,
             data={},
             source="blocklist",
             is_blocked=True,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # 1b. Personal-finance / out-of-scope gates — deterministic, no LLM call,
+    # checked before conversational-reference and asset/metric resolution so
+    # a term like "Roth IRA" or "IRA" is never mistaken for an asset/metric
+    # name and never reaches the old generic PLATFORM_QUESTION methodology
+    # fallback. Personal-finance boundary takes priority over the plainer
+    # out-of-scope message since it's the more specific/safety-relevant case.
+    if _ASK_PERSONAL_FINANCE_PATTERN.search(query):
+        return AskResponse(
+            intent="UNSUPPORTED_FINANCIAL_ADVICE",
+            narration=_ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE,
+            data={},
+            source="scope_boundary",
+            is_blocked=True,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+    if _ASK_OUT_OF_SCOPE_PATTERN.search(query):
+        return AskResponse(
+            intent="UNKNOWN",
+            narration=_ASK_OUT_OF_SCOPE_MESSAGE,
+            data={},
+            source="scope_boundary",
+            is_blocked=False,
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
 
@@ -2152,6 +3278,50 @@ async def ask_alphaswarm(
     query, clarification, resolved_asset, resolved_metric = _resolve_conversational_reference(query, req.context)
     if clarification is not None:
         return clarification
+
+    # 2a. Multi-intent detection — checked BEFORE the single-intent
+    # shortcuts below, since those would otherwise grab the FIRST thing
+    # they recognise (e.g. the RSI part of "what is an ETF and what is an
+    # asset and GOOGL RSI") and silently discard the rest of the question.
+    # Deterministic: returns None (not a multi-intent query, or not enough
+    # of it resolved) for the overwhelming majority of queries, in which
+    # case everything below runs exactly as it did before this existed.
+    multi_intent = _ask_multi_intent(query, req.context, user_id)
+    if multi_intent is not None:
+        return multi_intent
+
+    # 2b. Asset-specific metric questions ("what is Microsoft's beta?",
+    # "what is GOOGL's RSI?", "what does its beta mean?") — deterministic,
+    # checked BEFORE intent classification. resolved_asset+resolved_metric
+    # are already known with certainty from step 2 above (explicit mention
+    # or conversational context); there's no reason to gamble on the LLM
+    # classifier also calling this LEARNING_QUESTION and hoping it reaches
+    # the SAME _ask_contextual_metric_explanation this calls directly. A
+    # BARE "what is beta?" is unaffected — resolved_asset is None for it (no
+    # asset named, no context), so it falls through unchanged to the
+    # classifier and the generic glossary path exactly as before.
+    if resolved_asset and resolved_metric and resolved_metric.lower() in _ASK_METRIC_FIELD_MAP:
+        contextual = _ask_contextual_metric_explanation(resolved_asset, resolved_metric, user_id, query)
+        if contextual is not None:
+            return contextual
+
+    # 2c. Qualitative-performance questions about a known asset ("Is GOOGL
+    # doing well?", "How is GOOGL performing?", "Does GOOGL look strong?")
+    # — no specific metric named, so 2b above doesn't apply, but the
+    # question is still an interpretation request about an asset AlphaSwarm
+    # already has data on. Routed straight to the EXISTING
+    # _ask_context_synthesis (the same function "what are the downsides of
+    # X" already uses) rather than left to the classifier, which manual
+    # testing showed sometimes returns UNKNOWN for this exact phrasing.
+    if resolved_asset and _ASK_QUALITATIVE_PERFORMANCE_PATTERN.search(query):
+        try:
+            return _ask_context_synthesis(query, user_id)
+        except Exception as e:
+            logger.warning("Ask qualitative-performance retrieval failed: %s", e)
+            return AskResponse(
+                intent="CONTEXT_SYNTHESIS", narration=_ASK_NO_DATA_MESSAGE, data={}, source="none",
+                is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+            )
 
     # 3. Intent classification (small Groq call).
     intent = _classify_ask_intent(query)
@@ -2219,7 +3389,7 @@ async def ask_alphaswarm(
         # match "RSI" as a bare keyword and answer generically regardless of
         # the resolved asset (the bug this priority rule fixes).
         try:
-            contextual = _ask_contextual_metric_explanation(resolved_asset, resolved_metric, user_id)
+            contextual = _ask_contextual_metric_explanation(resolved_asset, resolved_metric, user_id, query)
             if contextual is not None:
                 return contextual
             return _ask_learning_question(query)
@@ -2266,7 +3436,12 @@ async def ask_alphaswarm(
         )
 
     # 5. Narration (small Groq call) over the minimum relevant retrieved data.
-    narration = _narrate_ask(query, str(data))
+    # The model sees a ROUNDED copy (avoids it echoing a 15-decimal float
+    # verbatim); validation always checks the ORIGINAL trusted values.
+    narration = _narrate_ask(
+        query, str(_round_for_narration(data)),
+        validation_data=data if data.get("ticker") else None,
+    )
     if narration is None:
         return AskResponse(
             intent=intent,
@@ -2599,10 +3774,485 @@ async def delete_user_admin(
 
         supabase.table("user_analysis").delete().eq("user_id", req.user_id).execute()
         supabase.table("users").delete().eq("id", req.user_id).execute()
-        
+
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
-        
-    
+
+# --- Admin Reports -------------------------------------------------------------
+# Admin-only analytics endpoints (P0 + P1 scope). Every query here aggregates
+# server-side (Supabase/PostgREST count queries, or a single narrow-column
+# select bucketed in Python) rather than shipping raw rows to the frontend.
+# There is no group-by/aggregate RPC layer in this project (PostgREST alone
+# does not support GROUP BY), so leaderboard/trend-style reports select only
+# the 1-2 columns they need for every matching row and aggregate them here —
+# acceptable at this project's scale, called out as a scaling limitation
+# rather than solved with speculative new SQL views/RPCs.
+#
+# Definitions (do not blur these — see audit notes):
+#   * "active" in Overview/Retention = signed in recently (Supabase Auth
+#     last_sign_in_at via get_active_user_ids()) — sign-in activity.
+#   * "account status active/inactive" in the Users report = users.is_active
+#     (admin ban/deactivation flag) — a completely different signal.
+#   * ai_runs activity (analysis runs) and watchlist activity are their own,
+#     separate signals — never conflated with "active" above.
+
+_REPORT_RANGE_DAYS: Dict[str, Optional[int]] = {"today": 1, "7d": 7, "30d": 30, "90d": 90, "all": None}
+
+
+def _report_range_cutoff(range_key: str) -> Optional[datetime.datetime]:
+    days = _REPORT_RANGE_DAYS.get(range_key, 30)
+    if days is None:
+        return None
+    return datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+
+
+def _parse_ts(value: str) -> datetime.datetime:
+    v = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    dt = datetime.datetime.fromisoformat(v)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt
+
+
+async def _get_active_user_ids_safe(days: int, timeout_seconds: float = 8.0) -> List[str]:
+    """get_active_user_ids() paginates through every Supabase Auth user via
+    the admin list_users API and has no timeout of its own — reachable from
+    three admin-report endpoints now (previously only from the once-nightly
+    batch job, where a slow/stuck call went unnoticed). Runs it off the
+    event loop with a hard timeout so a slow or misbehaving Auth Admin API
+    degrades this one figure to empty rather than hanging the whole report
+    request indefinitely."""
+    from src.utils.supabase_client import get_active_user_ids
+
+    loop = asyncio.get_running_loop()
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, get_active_user_ids, days), timeout=timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        logger.warning("get_active_user_ids(%s) timed out after %ss", days, timeout_seconds)
+        return []
+    except Exception as e:
+        logger.warning("get_active_user_ids(%s) failed: %s", days, e)
+        return []
+
+
+def _count_rows(
+    table: str, *, gte_col: Optional[str] = None,
+    cutoff: Optional[datetime.datetime] = None, eq: Optional[Dict[str, Any]] = None,
+) -> int:
+    """Server-side row count via PostgREST's exact count + head=True (no rows
+    are actually transferred)."""
+    q = supabase.table(table).select("*", count="exact", head=True)
+    if eq:
+        for k, v in eq.items():
+            q = q.eq(k, v)
+    if gte_col and cutoff is not None:
+        q = q.gte(gte_col, cutoff.isoformat())
+    resp = q.execute()
+    return resp.count or 0
+
+
+def _new_user_trend(days: int) -> Dict[str, Any]:
+    """Current window vs. the immediately preceding equal-length window."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    curr_start = now - datetime.timedelta(days=days)
+    prev_start = now - datetime.timedelta(days=2 * days)
+    current = _count_rows("users", gte_col="created_at", cutoff=curr_start)
+    prev_resp = (
+        supabase.table("users").select("*", count="exact", head=True)
+        .gte("created_at", prev_start.isoformat())
+        .lt("created_at", curr_start.isoformat())
+        .execute()
+    )
+    previous = prev_resp.count or 0
+    delta_pct = round(((current - previous) / previous) * 100, 1) if previous > 0 else None
+    return {"current": current, "previous": previous, "delta_pct": delta_pct}
+
+
+def _bucket_xp(values: List[float]) -> Dict[str, int]:
+    buckets = {"0": 0, "1-99": 0, "100-499": 0, "500-999": 0, "1000+": 0}
+    for v in values:
+        if v <= 0:
+            buckets["0"] += 1
+        elif v < 100:
+            buckets["1-99"] += 1
+        elif v < 500:
+            buckets["100-499"] += 1
+        elif v < 1000:
+            buckets["500-999"] += 1
+        else:
+            buckets["1000+"] += 1
+    return buckets
+
+
+@app.get("/api/admin/reports/overview")
+async def admin_reports_overview(range: str = "30d", authorization: Optional[str] = Header(None)):
+    """Platform-wide KPIs: totals, role split, active/inactive, trend deltas."""
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        cutoff = _report_range_cutoff(range)
+        total_users = _count_rows("users")
+        new_users = _count_rows("users", gte_col="created_at", cutoff=cutoff) if cutoff else total_users
+
+        active_window = _REPORT_RANGE_DAYS.get(range) or 30
+        active_users = len(await _get_active_user_ids_safe(active_window))
+        inactive_users = max(total_users - active_users, 0)
+
+        role_rows = supabase.table("users").select("role").execute().data or []
+        users_by_role = dict(Counter((r.get("role") or "unknown") for r in role_rows))
+
+        trends = {key: _new_user_trend(days) for key, days in (("7d", 7), ("30d", 30), ("90d", 90))}
+
+        return {
+            "range": range,
+            "total_users": total_users,
+            "new_users": new_users,
+            "active_users": active_users,
+            "active_window_days": active_window,
+            "inactive_users": inactive_users,
+            "users_by_role": users_by_role,
+            "new_user_trends": trends,
+        }
+    except Exception as e:
+        logger.warning("admin_reports_overview failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build overview report: {e}")
+
+
+@app.get("/api/admin/reports/users")
+async def admin_reports_users(range: str = "30d", authorization: Optional[str] = Header(None)):
+    """Registration trend, weekly cohort table, and account-status split."""
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        cutoff = _report_range_cutoff(range)
+        rows = supabase.table("users").select("created_at,is_active,role").execute().data or []
+
+        filtered = rows
+        if cutoff:
+            filtered = [r for r in rows if r.get("created_at") and _parse_ts(r["created_at"]) >= cutoff]
+
+        granularity_weekly = range in ("90d", "all")
+        trend_buckets: Dict[str, int] = {}
+        cohort_buckets: Dict[str, int] = {}
+        for r in filtered:
+            ts = r.get("created_at")
+            if not ts:
+                continue
+            dt = _parse_ts(ts)
+            iso = dt.isocalendar()
+            week_key = f"{iso[0]}-W{iso[1]:02d}"
+            day_key = dt.date().isoformat()
+            trend_key = week_key if granularity_weekly else day_key
+            trend_buckets[trend_key] = trend_buckets.get(trend_key, 0) + 1
+            cohort_buckets[week_key] = cohort_buckets.get(week_key, 0) + 1
+
+        registration_trend = [{"period": k, "new_users": v} for k, v in sorted(trend_buckets.items())]
+        cohorts = [{"week": k, "new_users": v} for k, v in sorted(cohort_buckets.items())]
+
+        active_count = sum(1 for r in rows if r.get("is_active", True))
+        inactive_count = len(rows) - active_count
+        users_by_role = dict(Counter((r.get("role") or "unknown") for r in rows))
+
+        return {
+            "range": range,
+            "registration_trend": registration_trend,
+            "registration_trend_granularity": "week" if granularity_weekly else "day",
+            "cohorts_by_registration_week": cohorts,
+            "account_status": {"active": active_count, "inactive": inactive_count},
+            "users_by_role": users_by_role,
+            "total_in_range": len(filtered),
+        }
+    except Exception as e:
+        logger.warning("admin_reports_users failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build users report: {e}")
+
+
+@app.get("/api/admin/reports/learners")
+async def admin_reports_learners(range: str = "30d", authorization: Optional[str] = Header(None)):
+    """Watchlist activity and learning-XP distribution.
+
+    Analysis-run volume (ai_runs) is reported under Assets, not here — it's
+    the stock-research feature, not the Learning Centre/badges/XP feature,
+    and grouping it into "Learners" blurred two genuinely different parts
+    of the product.
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        cutoff = _report_range_cutoff(range)
+
+        watchlist_total = _count_rows("user_watchlist_assets")
+        watchlist_in_range = (
+            _count_rows("user_watchlist_assets", gte_col="created_at", cutoff=cutoff) if cutoff else watchlist_total
+        )
+
+        # avg/distribution computed only over registered learners (role
+        # 'user'), the same eligible population used for badge rarity — an
+        # admin who never earned XP counts as 0, they aren't excluded, so
+        # this is a real (if currently small/uniform) average, not invented.
+        xp_rows = supabase.table("users").select("learning_xp").eq("role", "user").execute().data or []
+        xp_values = [r.get("learning_xp") or 0 for r in xp_rows]
+        avg_xp = round(sum(xp_values) / len(xp_values), 1) if xp_values else 0
+
+        return {
+            "range": range,
+            "watchlist_additions": {"total": watchlist_total, "in_range": watchlist_in_range},
+            "learning_xp": {
+                "average": avg_xp,
+                "distribution": _bucket_xp(xp_values),
+                "learner_count": len(xp_values),
+            },
+        }
+    except Exception as e:
+        logger.warning("admin_reports_learners failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build learners report: {e}")
+
+
+@app.get("/api/admin/reports/badges")
+async def admin_reports_badges(range: str = "30d", authorization: Optional[str] = Header(None)):
+    """Badge leaderboard, rarity (% of eligible learners), and earn trend.
+
+    Rarity is earned_count / eligible_learners, where eligible_learners is
+    registered users with role 'user' (i.e. all learners, not just active
+    ones) — the only population every badge is in principle earnable by.
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        cutoff = _report_range_cutoff(range)
+
+        badges_rows = supabase.table("badges").select("id,name").execute().data or []
+        badge_names = {b["id"]: b["name"] for b in badges_rows}
+
+        ub_rows = supabase.table("user_badges").select("user_id,badge_id,earned_at").execute().data or []
+        eligible_learners = _count_rows("users", eq={"role": "user"})
+
+        earned_counts = Counter(r["badge_id"] for r in ub_rows if r.get("badge_id"))
+        leaderboard = sorted(
+            (
+                {
+                    "badge_id": bid,
+                    "badge_name": badge_names.get(bid, "Unknown badge"),
+                    "earned_count": count,
+                    "pct_of_learners": round((count / eligible_learners) * 100, 1) if eligible_learners else 0.0,
+                }
+                for bid, count in earned_counts.items()
+            ),
+            key=lambda x: x["earned_count"],
+            reverse=True,
+        )
+
+        per_user_counts = Counter(r["user_id"] for r in ub_rows if r.get("user_id"))
+        avg_badges_per_learner = round(sum(per_user_counts.values()) / eligible_learners, 2) if eligible_learners else 0.0
+
+        trend_rows = ub_rows
+        if cutoff:
+            trend_rows = [r for r in ub_rows if r.get("earned_at") and _parse_ts(r["earned_at"]) >= cutoff]
+        trend_buckets: Dict[str, int] = {}
+        for r in trend_rows:
+            key = _parse_ts(r["earned_at"]).date().isoformat()
+            trend_buckets[key] = trend_buckets.get(key, 0) + 1
+        earning_trend = [{"date": k, "badges_earned": v} for k, v in sorted(trend_buckets.items())]
+
+        return {
+            "range": range,
+            "leaderboard": leaderboard,
+            "rarity_definition": "earned_count / eligible_learners (registered users with role 'user')",
+            "average_badges_per_learner": avg_badges_per_learner,
+            "earning_trend": earning_trend,
+            "total_badges_earned": len(ub_rows),
+            "total_badges_earned_in_range": len(trend_rows),
+        }
+    except Exception as e:
+        logger.warning("admin_reports_badges failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build badges report: {e}")
+
+
+@app.get("/api/admin/reports/assets")
+async def admin_reports_assets(range: str = "30d", limit: int = 10, authorization: Optional[str] = Header(None)):
+    """Analysis-run volume, most-watchlisted assets, and most-analyzed assets.
+
+    'Most analyzed' counts ai_recommendation rows: each completed AI analysis
+    run scores a set of assets and writes one ai_recommendation row per asset
+    it actually considered/ranked for that run, so a ticker's count here is
+    literally "how many completed analysis runs scored this asset" — not
+    page views, not clicks, and not its recommendation rank. ai_recommendation
+    carries no timestamp of its own, so range-filtering joins through its
+    parent ai_runs.created_at.
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        limit = max(1, min(limit, 50))
+        cutoff = _report_range_cutoff(range)
+
+        wl_rows = supabase.table("user_watchlist_assets").select("ticker,created_at").execute().data or []
+        if cutoff:
+            wl_rows = [r for r in wl_rows if r.get("created_at") and _parse_ts(r["created_at"]) >= cutoff]
+        watchlist_counts = Counter(r["ticker"] for r in wl_rows if r.get("ticker"))
+        most_watchlisted = [{"ticker": t, "count": c} for t, c in watchlist_counts.most_common(limit)]
+
+        runs_total = _count_rows("ai_runs", eq={"status": "complete"})
+        runs_in_range = (
+            _count_rows("ai_runs", gte_col="created_at", cutoff=cutoff, eq={"status": "complete"})
+            if cutoff else runs_total
+        )
+
+        runs_query = supabase.table("ai_runs").select("id,created_at").eq("status", "complete")
+        if cutoff:
+            runs_query = runs_query.gte("created_at", cutoff.isoformat())
+        run_ids = [r["id"] for r in (runs_query.execute().data or [])]
+
+        analyzed_counts: Counter = Counter()
+        if run_ids:
+            rec_rows = supabase.table("ai_recommendation").select("asset_id,run_id").in_("run_id", run_ids).execute().data or []
+            analyzed_counts = Counter(r["asset_id"] for r in rec_rows if r.get("asset_id"))
+
+        top_asset_ids = [aid for aid, _ in analyzed_counts.most_common(limit)]
+        ticker_map: Dict[str, str] = {}
+        if top_asset_ids:
+            assets_resp = supabase.table("assets").select("id,ticker").in_("id", top_asset_ids).execute()
+            ticker_map = {a["id"]: a["ticker"] for a in (assets_resp.data or [])}
+        most_analyzed = [
+            {"ticker": ticker_map.get(aid, aid), "count": c}
+            for aid, c in analyzed_counts.most_common(limit)
+        ]
+
+        return {
+            "range": range,
+            "analysis_runs": {"total": runs_total, "in_range": runs_in_range},
+            "most_watchlisted": most_watchlisted,
+            "most_analyzed": most_analyzed,
+            "most_analyzed_definition": (
+                "Number of completed analysis runs that scored this asset "
+                "(one ai_recommendation row per asset per completed run) — "
+                "not views, clicks, or recommendation rank."
+            ),
+        }
+    except Exception as e:
+        logger.warning("admin_reports_assets failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build assets report: {e}")
+
+
+@app.get("/api/admin/reports/retention")
+async def admin_reports_retention(authorization: Optional[str] = Header(None)):
+    """DAU/WAU/MAU and new-vs-returning, using the existing Supabase-Auth-
+    based get_active_user_ids() helper — no new activity mechanism.
+
+    Definitions:
+      DAU = unique users with a sign-in (last_sign_in_at) within the last 1 day.
+      WAU = ... within the last 7 days.
+      MAU = ... within the last 30 days.
+      'new' (last 30d) = users.created_at within the last 30 days.
+      'returning' (last 30d) = active within the last 30 days AND registered
+      before that window.
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    try:
+        dau = len(await _get_active_user_ids_safe(1))
+        wau = len(await _get_active_user_ids_safe(7))
+        active_30_ids = set(await _get_active_user_ids_safe(30))
+        mau = len(active_30_ids)
+
+        cutoff30 = _report_range_cutoff("30d")
+        users_rows = supabase.table("users").select("id,created_at").execute().data or []
+        new_ids = {r["id"] for r in users_rows if r.get("created_at") and _parse_ts(r["created_at"]) >= cutoff30}
+
+        new_and_active = len(active_30_ids & new_ids)
+        returning_active = len(active_30_ids - new_ids)
+
+        return {
+            "definitions": {
+                "dau": "Unique users with a Supabase Auth sign-in (last_sign_in_at) within the last 1 day.",
+                "wau": "...within the last 7 days.",
+                "mau": "...within the last 30 days.",
+                "new_vs_returning": (
+                    "Within the last 30 days: 'new' = users.created_at in that window; "
+                    "'returning' = active in that window but registered earlier."
+                ),
+            },
+            "dau": dau,
+            "wau": wau,
+            "mau": mau,
+            "new_active_last_30d": new_and_active,
+            "returning_active_last_30d": returning_active,
+        }
+    except Exception as e:
+        logger.warning("admin_reports_retention failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to build retention report: {e}")
+
+
+@app.get("/api/admin/reports/chatbot")
+async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str] = Header(None)):
+    """Ask AlphaSwarm usage/quality, from ask_query_logs (migration 018).
+
+    Never returns raw prompt/answer text — only the aggregate metadata the
+    table stores. If the table doesn't exist yet (migration not applied) or
+    has no rows in range, reports that plainly rather than fabricating data.
+    """
+    requester_id = await _get_user_id_from_bearer(authorization)
+    await _require_admin(requester_id)
+
+    cutoff = _report_range_cutoff(range)
+    try:
+        q = supabase.table("ask_query_logs").select(
+            "intent,success,fallback_used,validation_failed,latency_ms,asset_symbol,user_id,created_at"
+        )
+        if cutoff:
+            q = q.gte("created_at", cutoff.isoformat())
+        rows = q.execute().data or []
+    except Exception as e:
+        logger.warning("admin_reports_chatbot query failed: %s", e)
+        rows = []
+
+    total = len(rows)
+    if total == 0:
+        return {
+            "range": range,
+            "available": False,
+            "message": "Ask AlphaSwarm query logging begins once migration 018 is deployed. No data is available for the selected range yet.",
+            "total_queries": 0,
+        }
+
+    success_count = sum(1 for r in rows if r.get("success"))
+    fallback_count = sum(1 for r in rows if r.get("fallback_used"))
+    validation_failed_count = sum(1 for r in rows if r.get("validation_failed"))
+    latencies = [r["latency_ms"] for r in rows if isinstance(r.get("latency_ms"), (int, float))]
+    avg_latency_ms = round(sum(latencies) / len(latencies)) if latencies else None
+    unique_users = len({r["user_id"] for r in rows if r.get("user_id")})
+
+    asset_counts = Counter(r["asset_symbol"] for r in rows if r.get("asset_symbol"))
+    top_queried_assets = [{"ticker": t, "count": c} for t, c in asset_counts.most_common(10)]
+
+    time_buckets: Dict[str, int] = {}
+    for r in rows:
+        ts = r.get("created_at")
+        if not ts:
+            continue
+        key = _parse_ts(ts).date().isoformat()
+        time_buckets[key] = time_buckets.get(key, 0) + 1
+    queries_over_time = [{"date": k, "count": v} for k, v in sorted(time_buckets.items())]
+
+    return {
+        "range": range,
+        "available": True,
+        "total_queries": total,
+        "unique_users": unique_users,
+        "success_rate_pct": round((success_count / total) * 100, 1),
+        "fallback_rate_pct": round((fallback_count / total) * 100, 1),
+        "validation_failure_rate_pct": round((validation_failed_count / total) * 100, 1),
+        "average_latency_ms": avg_latency_ms,
+        "top_queried_assets": top_queried_assets,
+        "queries_over_time": queries_over_time,
+    }

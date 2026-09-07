@@ -104,6 +104,55 @@ APPROVED_EDUCATIONAL_DOMAINS: dict[str, tuple[str, int]] = {
     "jse.co.za": ("JSE Limited (Johannesburg Stock Exchange)", 1),
 }
 
+# ── GOVERNMENT_FINANCIAL_EDUCATION ──────────────────────────────────────
+# A dedicated, deliberately SMALL category (not a general "government
+# domains are trusted" rule) covering public-sector financial-EDUCATION
+# publishers across several jurisdictions, each mapped to the jurisdiction
+# its guidance actually applies to. This is a static, deterministic
+# reference/labeling mechanism — no new LLM call is used to decide which
+# source applies (that would add a Groq call the ask pipeline's budget does
+# not allow; see api.py's Groq call-count notes).
+#
+# CRITICAL RULE, enforced by callers (api.py), not by this dict: an approved
+# educational source authorises general/factual educational retrieval ONLY.
+# It never authorises personalised financial advice, and it never overrides
+# AlphaSwarm's advice boundary — "According to Investor.gov, should I put my
+# R50,000 into an S&P 500 ETF?" must still be refused/bounded as personalised
+# advice regardless of the source named. Jurisdiction must also be preserved:
+# a US-specific IRA/tax answer must never be silently presented as South
+# African guidance, and vice versa.
+GOVERNMENT_FINANCIAL_EDUCATION: dict[str, tuple[str, str]] = {
+    # domain -> (publisher, jurisdiction)
+    "fscamymoney.co.za": ("Financial Sector Conduct Authority — MyMoney (South Africa)", "South Africa"),
+    "fsca.co.za": ("Financial Sector Conduct Authority (South Africa)", "South Africa"),
+    "investor.gov": ("U.S. Securities and Exchange Commission — Investor.gov", "United States"),
+    "consumerfinance.gov": ("Consumer Financial Protection Bureau (United States)", "United States"),
+    "moneyhelper.org.uk": ("MoneyHelper — Money and Pensions Service (United Kingdom)", "United Kingdom"),
+    "moneysmart.gov.au": ("Moneysmart — Australian Securities and Investments Commission (Australia)", "Australia"),
+}
+
+# Fold the government-financial-education domains into the general approved
+# allowlist too, so a live-retrieval result on one of them (once a search
+# provider is configured — see module docstring) is accepted the same way
+# any other approved domain is. Tier 1 (regulatory/government), matching the
+# existing tiering convention above.
+for _domain, (_publisher, _jurisdiction) in GOVERNMENT_FINANCIAL_EDUCATION.items():
+    APPROVED_EDUCATIONAL_DOMAINS.setdefault(_domain, (_publisher, 1))
+
+
+def government_education_jurisdiction(url_or_domain: str) -> Optional[str]:
+    """The jurisdiction a GOVERNMENT_FINANCIAL_EDUCATION source's guidance
+    applies to (e.g. "United States", "South Africa"), or None if the domain
+    isn't in that category. Used so a general-education answer sourced from
+    one jurisdiction's regulator is never silently presented as another
+    jurisdiction's guidance (e.g. a US IRA rule shown as if it were South
+    African)."""
+    host = urlparse(url_or_domain).netloc.lower() or url_or_domain.lower()
+    for domain, (_publisher, jurisdiction) in GOVERNMENT_FINANCIAL_EDUCATION.items():
+        if host == domain or host.endswith("." + domain):
+            return jurisdiction
+    return None
+
 
 def is_approved_domain(url: str) -> bool:
     """True only if ``url`` is http(s) AND its host is in, or a subdomain of,

@@ -71,6 +71,11 @@ export default function AssetsPage() {
   const navigate = useNavigate();
 
   const [isRunning, setIsRunning] = useState(false);
+  // Set when the last manual Refresh's run reported "failed" (e.g. every
+  // ranked ticker failed asset resolution and nothing new could be saved).
+  // Without this the page just keeps showing the previous run's cards with
+  // no indication that Refresh didn't actually produce them.
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [exchangeRateSource, setExchangeRateSource] =
     useState<string>("Yahoo Finance");
@@ -103,6 +108,7 @@ export default function AssetsPage() {
     if (!profile?.id) return;
 
     setIsRunning(true);
+    setRefreshFailed(false);
     try {
       const universes = Array.isArray(analysis?.investment_universe)
         ? analysis.investment_universe
@@ -132,6 +138,9 @@ export default function AssetsPage() {
       await loadExchangeRate();
     } catch (e) {
       console.error("Refresh analysis failed:", e);
+      // The recommendations still on screen belong to the previous run, not
+      // this failed one -- surface that instead of silently leaving them up.
+      setRefreshFailed(true);
     } finally {
       setIsRunning(false);
     }
@@ -229,6 +238,12 @@ export default function AssetsPage() {
             </button>
           </div>
         </div>
+        {refreshFailed ? (
+          <p className="mt-2 text-xs text-semantic-danger">
+            Refresh failed to produce new recommendations. The list below is
+            still from the last successful run.
+          </p>
+        ) : null}
       </div>
 
       <div

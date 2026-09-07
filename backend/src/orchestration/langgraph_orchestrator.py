@@ -992,6 +992,7 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
     # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
     # and watchlist cards need scores for assets outside the top 5. The dashboard
     # still shows five, capped on its own read.
+    save_status = "complete"
     try:
         save_res = save_top_assets(
             run_id=state["run_id"],
@@ -1001,11 +1002,22 @@ def phase_4_output(state: AnalysisState) -> dict[str, Any]:
             sentiment_results=state.get("sentiment_results", {}),
         )
         logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
+        if save_res.get("status") == "resolution_failed":
+            # Every ranked ticker failed asset resolution -- nothing new was
+            # written, so the previous run's rows are still sitting under this
+            # run_id. Reporting "complete" here would let the caller display
+            # them as though they were this run's fresh result.
+            logger.error(
+                f"Run {state['run_id']}: no recommendations could be saved "
+                f"({save_res.get('requested')} requested, 0 resolved)"
+            )
+            save_status = "failed"
     except Exception as e:
         logger.error(f"Failed to save top-5 to Supabase: {e}")
+        save_status = "failed"
 
     print("Output formatted and ready")
-    return {"status": "complete"}
+    return {"status": save_status}
 
 
 def build_graph():
