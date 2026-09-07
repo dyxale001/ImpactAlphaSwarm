@@ -42,7 +42,8 @@ SNAPSHOT_COLUMNS = (
     "id,fund_id,as_of,mdd_url,mdd_sha256,risk_indicator_raw,risk_indicator_1to5,"
     "recommended_min_term_years,objective,asset_allocation,benchmark,ter,tc,tic,"
     "performance,top_holdings,min_lump_sum,min_debit_order,distribution_frequency,"
-    "fund_size_zar,source,entered_by,reviewed_by,review_status,mdd_pdf_ref,created_at,"
+    "fund_size_zar,source,entered_by,reviewed_by,review_status,mdd_pdf_ref,"
+    "extracted_text_ref,created_at,"
     # The common core added in migration 025: the rest of what every Minimum
     # Disclosure Document publishes. Selected explicitly rather than with `*`,
     # so a column added to the table does not silently start reaching the page.
@@ -328,9 +329,27 @@ class FundRepository(Repository):
         Lives here rather than in the loader so the CSV path and the admin form
         cannot drift apart on a rule this quiet.
         """
+        # Excluded because they are not part of what was read: an id, a
+        # timestamp, the hash itself, and where our copies are kept. A storage
+        # path changing is not a corrected figure, and letting one in would
+        # re-key every existing row — which inserts a duplicate per fund rather
+        # than raising anything.
+        #
+        # `extracted_text_ref` is named here for a reason beyond tidiness. The
+        # loader happens to set it after computing the hash, so today it is
+        # absent from the dict and cannot affect the result — meaning the
+        # invariant currently rests on statement order in another file. Naming
+        # it makes the order irrelevant.
         fields = {
             k: v for k, v in snapshot.items()
-            if k not in ("fund_id", "mdd_sha256", "mdd_pdf_ref", "id", "created_at")
+            if k not in (
+                "fund_id",
+                "mdd_sha256",
+                "mdd_pdf_ref",
+                "extracted_text_ref",
+                "id",
+                "created_at",
+            )
         }
         parts = "|".join(f"{k}={fields[k]!r}" for k in sorted(fields))
         return hashlib.sha256(f"{isin}|{parts}".encode()).hexdigest()
@@ -371,6 +390,43 @@ class FundRepository(Repository):
 
     # ── the archived documents ──────────────────────────────────────────────
 
+    def update_snapshot_refs(
+        self,
+        fund_id: str,
+        as_of: str,
+        mdd_pdf_ref: Optional[str],
+        extracted_text_ref: Optional[str],
+    ) -> list[dict[str, Any]]:
+        """Point an existing snapshot at our archived copies of its document.
+
+        Narrow on purpose: two columns, both of which say where a copy is kept
+        and neither of which is a transcribed figure. `transcription_hash`
+        excludes both, so setting them cannot change what a row means — which is
+        what makes this safe to do to a row somebody already approved.
+
+        The alternative is recording a new snapshot with the document's real
+        sha256, which is the more faithful thing and adds a row per sheet. That
+        choice belongs to whoever runs `scripts/archive_fund_documents.py`, and
+        the trade-off is written down there.
+        """
+        try:
+            return (
+                self.snapshots_table_query()
+                .update(
+                    {"mdd_pdf_ref": mdd_pdf_ref, "extracted_text_ref": extracted_text_ref}
+                )
+                .eq("fund_id", fund_id)
+                .eq("as_of", as_of)
+                .execute()
+            ).data or []
+        except Exception as e:
+            print(f"Error pointing snapshot {fund_id} {as_of} at its archive: {e}")
+            return []
+
+    def snapshots_table_query(self):
+        """The snapshots table, for a write that spells out its own filters."""
+        return self.client.table(self.snapshots_table)
+
     @staticmethod
     def mdd_object_path(isin: str, as_of: str) -> str:
         """Where one fact sheet is archived: ``<isin>/<as_of>.pdf``.
@@ -388,11 +444,39 @@ class FundRepository(Repository):
         corrected one for the same month should replace the copy at that path
         while the snapshot row records both hashes.
         """
-        path = self.mdd_object_path(isin, as_of)
+        return self._upload(self.mdd_object_path(isin, as_of), pdf, "application/pdf")
+
+    @staticmethod
+    def mdd_text_object_path(isin: str, as_of: str) -> str:
+        """Where one fact sheet's text layer is archived: ``<isin>/<as_of>.txt``.
+
+        Beside the PDF and named the same way, so one path implies the other and
+        neither has to be stored twice.
+        """
+        return f"{isin}/{as_of}.txt"
+
+    def upload_mdd_text(self, isin: str, as_of: str, text: str) -> str:
+        """Archive a fact sheet's text layer and return its storage path.
+
+        Kept alongside the document rather than in the snapshot row, for the
+        same reason the PDF is: a fact sheet's text runs to several thousand
+        words, and a column that size on a row the catalogue reads on every page
+        load would be paid for by every reader to serve an auditor.
+
+        Upserting, matching `upload_mdd`: a corrected reading of the same month
+        replaces the copy at that path while the row records both hashes.
+        """
+        return self._upload(
+            self.mdd_text_object_path(isin, as_of),
+            text.encode("utf-8"),
+            "text/plain; charset=utf-8",
+        )
+
+    def _upload(self, path: str, payload: bytes, content_type: str) -> str:
         self.client.storage.from_(MDD_BUCKET).upload(
             path,
-            pdf,
-            {"content-type": "application/pdf", "upsert": "true"},
+            payload,
+            {"content-type": content_type, "upsert": "true"},
         )
         return path
 

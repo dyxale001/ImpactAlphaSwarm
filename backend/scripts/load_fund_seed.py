@@ -149,6 +149,31 @@ def pdf_bytes_for(isin: str, as_of: str) -> bytes | None:
     return None
 
 
+def archive_text(repo, isin: str, as_of: str, pdf: bytes) -> str | None:
+    """Store a sheet's text layer beside its PDF, or return None saying nothing.
+
+    Best effort on purpose. The PDF is the record and the text is a convenience
+    for checking it, so a sheet whose text cannot be extracted — a scanned one,
+    or one whose fonts pypdf cannot decode — should still be archived and
+    recorded rather than blocking the load.
+    """
+    try:
+        from src.funds.extract import extract_text
+
+        text = extract_text(pdf)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  warn  {isin}: could not read the text layer ({exc})")
+        return None
+    if not text.strip():
+        print(f"  warn  {isin}: the document has no text layer (scanned?)")
+        return None
+    try:
+        return repo.upload_mdd_text(isin, as_of, text)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  warn  {isin}: could not archive the text ({exc})")
+        return None
+
+
 def transcription_identity(isin: str, snapshot: dict) -> str:
     """What makes one transcribed fact sheet different from another.
 
@@ -221,9 +246,18 @@ def main(argv: list[str]) -> int:
                 return 2
 
             pdf = pdf_bytes_for(isin, str(snapshot["as_of"]))
-            if pdf is not None:
+            if pdf:
                 snapshot["mdd_sha256"] = hashlib.sha256(pdf).hexdigest()
                 snapshot["mdd_pdf_ref"] = repo.upload_mdd(isin, str(snapshot["as_of"]), pdf)
+                # The text layer goes with the document. It is what makes a
+                # figure's evidence quote checkable later without re-opening a
+                # PDF, or after the manager's own link has rotted — which
+                # happens: one platform-hosted sheet found during design was
+                # five years stale. Failing to archive it must not lose the row,
+                # so the text is best effort and the PDF is the record.
+                snapshot["extracted_text_ref"] = archive_text(
+                    repo, isin, str(snapshot["as_of"]), pdf
+                )
             else:
                 # No archived copy, so stand in for the document's hash with a
                 # hash of the transcription itself. Re-running an unchanged seed
@@ -239,6 +273,7 @@ def main(argv: list[str]) -> int:
                 # Aggressive.
                 snapshot["mdd_sha256"] = transcription_identity(isin, snapshot)
                 snapshot["mdd_pdf_ref"] = None
+                snapshot["extracted_text_ref"] = None
 
             snapshot["fund_id"] = fund_id
             snapshot.setdefault("source", "manual")
