@@ -31,9 +31,11 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from src.funds.extract import build_readers  # noqa: E402
 from src.funds.extract.llm import (  # noqa: E402
     FIELDS,
+    VERBATIM,
     LlmExtractError,
     LlmFactsheetReader,
     _coerce,
+    _comparable,
     cached_reading,
     store_reading,
 )
@@ -183,6 +185,258 @@ class TestTheQuoteMustBeInTheDocument:
             tmp_path,
         )
         assert "risk_narrative" not in extraction.fields
+
+
+class TestWordsBrokenAcrossALineStillMatch:
+    """REGRESSION GUARD: two live false refusals, both on the same sentence.
+
+    The Satrix ILBI sheet sets its note as "...based on 10 non-\noverlapping one
+    year periods...". Collapsing the newline leaves "non- overlapping", and a
+    reader quoting that line writes it whichever way reads naturally: the first
+    live run quoted "non-overlapping", the second quoted "nonoverlapping". Both
+    were correct about the page and both were thrown away with a reason saying
+    the line was not in the document.
+
+    The field lost each time was `return_extremes_basis`, which is the one that
+    stops a fund's rolling-year extreme being shown beside another's calendar
+    year — so the refusal cost a real column, twice.
+    """
+
+    HAYPHENATED = (
+        "The highest and lowest annualised performance numbers are based on 10 non-\n"
+        "overlapping one year periods or the number from inception"
+    )
+
+    @pytest.mark.parametrize(
+        "quoted",
+        [
+            "based on 10 non-overlapping one year periods",
+            "based on 10 nonoverlapping one year periods",
+            "based on 10 non- overlapping one year periods",
+        ],
+    )
+    def test_every_way_a_reader_writes_a_broken_word_is_found(self, quoted, tmp_path):
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "return_extremes_basis",
+                        "value": "rolling_12m",
+                        "quote": quoted,
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, self.HAYPHENATED, "https://satrix.co.za/x")
+        assert extraction.fields["return_extremes_basis"] == "rolling_12m"
+
+    def test_a_hyphen_used_as_a_separator_is_left_alone(self):
+        """"Moderate - High Risk" and "1-Year" are labels, not broken words."""
+        assert _comparable("Moderate - High Risk") == "moderate - high risk"
+        assert _comparable("1-Year 3-Year") == "1-year 3-year"
+
+    def test_it_still_cannot_match_text_that_is_not_there(self):
+        """The repair must not become a fuzzy match."""
+        assert _comparable("calendar year performance") not in _comparable(self.HAYPHENATED)
+
+
+class TestAShortValueMustBeWrittenInItsLine:
+    """INVARIANT: a verbatim field's value appears in the line it was read from.
+
+    Verifying the quote proves the line is on the sheet. It does not prove the
+    value is a reading of THAT line, and the gap showed up live: the reader
+    returned `distribution_frequency` = "Semi-annual" quoting "Date of Income
+    Declaration: 30 June/31 December". Real quote, reasonable inference, and the
+    word is nowhere on the document.
+
+    Only short verbatim fields are policed. The prose fields are out on purpose —
+    quoting the first sentence of a four-sentence risk narrative is correct
+    behaviour — and numbers are out because a stated conversion is intended.
+    """
+
+    def test_a_value_written_in_its_quote_is_kept(self, tmp_path):
+        line = "Portfolio Managers The Satrix Investment Team"
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "portfolio_manager",
+                        "value": "The Satrix Investment Team",
+                        "quote": line,
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, line, "https://satrix.co.za/x")
+        assert extraction.fields["portfolio_manager"] == "The Satrix Investment Team"
+
+    def test_a_value_that_describes_the_line_rather_than_quoting_it_is_refused(self, tmp_path):
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "benchmark",
+                        "value": "A property index",
+                        "quote": "Benchmark FTSE/JSE All Property Index (J803)",
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(
+            PDF,
+            "Benchmark FTSE/JSE All Property Index (J803)",
+            "https://satrix.co.za/x",
+        )
+        assert "benchmark" not in extraction.fields
+        assert any("not written in the line" in u.reason for u in extraction.unresolved)
+
+    def test_prose_may_quote_only_its_first_sentence(self, tmp_path):
+        """A four-sentence narrative with a one-sentence quote is correct."""
+        text = "This portfolio holds more equity exposure than a medium risk portfolio."
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "risk_narrative",
+                        "value": text + " In turn the expected volatility is higher.",
+                        "quote": text,
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, text, "https://x")
+        assert extraction.fields["risk_narrative"].startswith("This portfolio holds")
+
+    def test_a_number_may_be_converted_from_how_it_is_printed(self, tmp_path):
+        """"Portfolio Value R362 million" really is 362000000."""
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "fund_size_zar",
+                        "value": 362000000,
+                        "quote": "Portfolio Value R362 million",
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, "Portfolio Value R362 million", "https://x")
+        assert extraction.fields["fund_size_zar"] == 362000000.0
+
+    def test_the_frequency_field_is_not_policed_this_way(self):
+        """It was, for one run, and the reasoning cut both ways.
+
+        FundRock prints declaration DATES and no frequency word, so the rule
+        forced the reader to return "31 Mar/30 Jun/30 Sep/31 Dec" and the page
+        rendered "Pays income: 31 Mar/30 Jun/30 Sep/31 Dec". Four printed
+        quarter-end dates are not ambiguous the way a drawn risk scale is:
+        "Quarterly" is a faithful reading, and the evidence quote shows what it
+        was read from.
+        """
+        assert "distribution_frequency" not in VERBATIM
+        assert "benchmark" in VERBATIM
+
+
+class TestTheRiskRating:
+    """REGRESSION GUARD: the reader must be ASKED for the matching field.
+
+    It was not, for the whole of the first live run. `risk_indicator_raw` is what
+    the bracket ceiling compares against, and switching a manager from a written
+    template to this reader would have silently dropped it — the FundRock
+    template reads it as text, and the model was never asked.
+    """
+
+    def test_it_is_one_of_the_fields_asked_for(self):
+        assert "risk_indicator_raw" in FIELDS
+
+    def test_the_ask_says_to_refuse_a_drawn_scale(self):
+        described = FIELDS["risk_indicator_raw"].lower()
+        assert "refuse" in described
+        assert "shading" in described or "scale" in described
+
+    def test_a_rating_printed_as_text_is_read(self, tmp_path):
+        extraction = reader(
+            {
+                "readings": [
+                    {
+                        "field": "risk_indicator_raw",
+                        "value": "Moderate - High Risk",
+                        "quote": "RISK PROFILE Moderate - High Risk",
+                    }
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, "RISK PROFILE Moderate - High Risk", "https://x")
+        assert extraction.fields["risk_indicator_raw"] == "Moderate - High Risk"
+
+    def test_the_level_is_not_asked_for(self):
+        """The 1-5 level is normalised from the words by `risk_scale`.
+
+        Asking a reader for both would let a level arrive that disagrees with the
+        label beside it — which is exactly what `RiskLabelValidator` exists to
+        catch, and it cannot catch it if the same source supplied both.
+        """
+        assert "risk_indicator_1to5" not in FIELDS
+
+
+class TestTheNarrativeIsNotTheObjectiveAgain:
+    """REGRESSION GUARD: they are shown as two quotations on one page.
+
+    The Satrix sheets draw their risk profile and print no narrative, and on the
+    first live run the reader filled the gap with the investment objective. Not a
+    lie — the text is on the sheet — but it presents one statement as two.
+    """
+
+    def test_a_narrative_identical_to_the_objective_is_dropped(self, tmp_path):
+        shared = "This fund aims to provide stable income in conjunction with capital values."
+        extraction = reader(
+            {
+                "readings": [
+                    {"field": "objective", "value": shared, "quote": shared},
+                    {"field": "risk_narrative", "value": shared, "quote": shared},
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, shared, "https://x")
+        assert extraction.fields["objective"] == shared
+        assert "risk_narrative" not in extraction.fields
+
+    def test_and_it_says_why_rather_than_leaving_a_blank(self, tmp_path):
+        """A dropped reading with no reason is an empty box with nothing beside it."""
+        shared = "This fund aims to provide stable income in conjunction with capital values."
+        extraction = reader(
+            {
+                "readings": [
+                    {"field": "objective", "value": shared, "quote": shared},
+                    {"field": "risk_narrative", "value": shared, "quote": shared},
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, shared, "https://x")
+        reason = next(u.reason for u in extraction.unresolved if u.field == "risk_narrative")
+        assert "copy of the investment objective" in reason
+
+    def test_a_genuine_narrative_survives(self, tmp_path):
+        text = "RISK PROFILE This portfolio holds more equity exposure than a medium risk fund."
+        extraction = reader(
+            {
+                "readings": [
+                    {"field": "objective", "value": "A specialist multi-managed fund.", "quote": "A specialist multi-managed fund."},
+                    {"field": "risk_narrative", "value": "This portfolio holds more equity exposure than a medium risk fund.", "quote": text},
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, text + " A specialist multi-managed fund.", "https://x")
+        assert extraction.fields["risk_narrative"].startswith("This portfolio holds")
 
 
 class TestEveryFieldIsAccountedFor:
@@ -385,6 +639,29 @@ class TestTheRequest:
         system = one._client.calls[0]["system"]
         assert "1-YEAR" in system
         assert "fee_period" in system
+
+    def test_a_stated_fee_reduction_beats_the_printed_column(self, tmp_path):
+        """REGRESSION GUARD, and it was a wrong FEE — the error that matters most.
+
+        The Satrix MSCI World sheet prints "Total Expense Ratio (TER) 0.27 0.32"
+        AND a note that the TER "was reduced to 0.25% effective 01 October 2025".
+        Told only to take the 1-Year column, the reader took 0.27. The sheet's own
+        Total Investment Charge row is 0.25 with a zero transaction cost, so 0.27
+        cannot be right — and `FeeRelationValidator` would have flagged it.
+        """
+        one = reader({"readings": [], "unresolved": []}, tmp_path)
+        one.read(PDF, SHEET_TEXT, "https://satrix.co.za/x")
+        system = one._client.calls[0]["system"]
+        assert "REDUCTION" in system
+        assert "reduced" in system
+
+    def test_the_prompt_offers_the_sheets_own_arithmetic_as_a_self_check(self, tmp_path):
+        """TER + TC = TIC, all three printed. Not a figure to report — a way to
+        catch having read the wrong row."""
+        one = reader({"readings": [], "unresolved": []}, tmp_path)
+        one.read(PDF, SHEET_TEXT, "https://satrix.co.za/x")
+        system = one._client.calls[0]["system"]
+        assert "add up to the printed TIC" in system
 
     def test_the_extremes_basis_rule_is_in_the_prompt(self, tmp_path):
         one = reader({"readings": [], "unresolved": []}, tmp_path)

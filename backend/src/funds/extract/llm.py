@@ -84,6 +84,13 @@ MIN_QUOTE_CHARS = 6
 #: and a field the form does show cannot be silently dropped from the ask.
 FIELDS: dict[str, str] = {
     "as_of": "the sheet's own as-at date, as YYYY-MM-DD",
+    "risk_indicator_raw": (
+        "the risk rating in the sheet's OWN WORDS, and only if it is printed as "
+        "text you can quote — e.g. FundRock prints 'RISK PROFILE Moderate - High "
+        "Risk'. REFUSE it if the rating is shown by shading or colouring one step "
+        "of a scale, because every step's label is printed whatever the rating and "
+        "there is no line of text that states the answer"
+    ),
     "isin": "the ISIN, twelve characters",
     "jse_code": "the JSE or fund code, if the sheet prints one",
     "asisa_category": (
@@ -129,8 +136,10 @@ FIELDS: dict[str, str] = {
         "periods; 'calendar_year' if it says calendar year"
     ),
     "risk_narrative": (
-        "the manager's prose describing the fund's risk, quoted. Only if it is "
-        "written as sentences — not if the risk profile is only a diagram"
+        "the manager's prose describing the fund's RISK, from the sheet's risk "
+        "block, quoted. Only if that block is written as sentences. Leave it out "
+        "if the risk profile is only a diagram, and never repeat the investment "
+        "objective here — they are different fields and a reader is shown both"
     ),
     "horizon_words": (
         "the manager's wording about how long to hold the fund, quoted"
@@ -162,6 +171,43 @@ VOCABULARIES: dict[str, tuple[str, ...]] = {
     "fee_period": ("1y", "3y"),
     "return_extremes_basis": ("rolling_12m", "calendar_year"),
 }
+
+# Short fields whose value must appear INSIDE the line it was quoted from.
+#
+# Verifying the quote proves the line is on the sheet. It does not prove the
+# value is a reading of that line, and the difference showed up on the first
+# live sheet: the reader returned `distribution_frequency` = "Semi-annual",
+# quoting "Date of Income Declaration: 30 June/31 December". The quote is real,
+# the inference is reasonable, and "Semi-annual" is nowhere on the document — it
+# is our word for what the manager printed. That is the one thing this catalogue
+# does not do.
+#
+# Only short verbatim fields are listed. The prose fields are deliberately out:
+# a reader quoting the first sentence of a four-sentence risk narrative is
+# behaving correctly, and requiring the whole value inside the quote would refuse
+# it. Numbers are out because a stated conversion is allowed and intended —
+# "Portfolio Value R362 million" really is 362000000. `asisa_category` is out
+# because it is resolved onto the published name, which is the point of it.
+VERBATIM: frozenset[str] = frozenset({
+    "benchmark",
+    "jse_code",
+    "isin",
+    "portfolio_manager",
+})
+
+# `distribution_frequency` was in that set for one run and came out again, which
+# is worth recording because the reasoning cut both ways. FundRock sheets print
+# declaration DATES — "31 Mar/30 Jun/30 Sep/31 Dec" — and no frequency word, so
+# requiring the value inside the quote forced the reader to return the dates. It
+# then disagreed with eight seed rows that say "Quarterly", and the page rendered
+# "Pays income: 31 Mar/30 Jun/30 Sep/31 Dec".
+#
+# The distinction that settles it: refusing the risk rating is right because the
+# ANSWER is ambiguous from the text. Four printed quarter-end dates are not
+# ambiguous — "Quarterly" is a faithful reading of them, the evidence quote shows
+# the dates it came from, and a reviewer can judge it at a glance. The rule this
+# catalogue holds is that a figure came off the document, not that no two words
+# may summarise four dates.
 
 SYSTEM = """You transcribe South African fund fact sheets (Minimum Disclosure \
 Documents) for a catalogue that shows every figure next to the document it came \
@@ -195,6 +241,17 @@ headings, and the figures differ. Take the 1-YEAR column and set `fee_period` to
 '1y'. If the sheet prints only one unlabelled figure, take it and set \
 `fee_period` to the period the sheet's own notes describe — and if the notes do \
 not say, refuse `fee_period` rather than assuming.
+
+5a. A STATED FEE REDUCTION BEATS THE PRINTED COLUMN. Where a sheet carries a note \
+like "The Total Expense Ratio (TER) was reduced to 0.25% effective 01 October \
+2025", the historic column is out of date and the reduced figure is the one in \
+force. Take the reduced figure and quote the note.
+
+5b. CHECK YOUR FEES AGAINST THE SHEET'S OWN TOTAL. The total investment charge is \
+the expense ratio plus the transaction cost, and all three are printed. If the TER \
+and TC you picked do not add up to the printed TIC, you have taken a figure from \
+the wrong row or the wrong column — go back and look again. This is not a \
+calculation to report, it is a way to catch yourself.
 
 6. THE BEST AND WORST YEAR ARE NOT ONE STATISTIC. Some sheets publish the \
 highest and lowest ANNUAL ROLLING return over separate one-year periods; others \
@@ -259,11 +316,31 @@ class LlmExtractError(ExtractError):
 def _comparable(text: str) -> str:
     """Text reduced to what a PDF's layout cannot vary.
 
-    Whitespace collapsed and case folded. Deliberately nothing else: no
-    punctuation stripping and no fuzzy distance, because every loosening here
-    buys a wrong value the right to pass verification.
+    Whitespace collapsed, hyphenated line breaks repaired, case folded.
+    Deliberately nothing else: no punctuation stripping and no fuzzy distance,
+    because every loosening here buys a wrong value the right to pass.
+
+    **The word-break repair is not cosmetic, and it cost two false refusals to
+    get right.** The Satrix ILBI sheet sets its note as "...based on 10
+    non-\noverlapping one year periods...". Collapsing the newline leaves
+    "non- overlapping", and a reader quoting that line writes it whichever way
+    reads naturally — the first live run quoted "non-overlapping", the second
+    quoted "nonoverlapping". All three are the same words on the same page, and
+    the first two versions of this function refused one form each, discarding a
+    correct reading of `return_extremes_basis` with a reason saying the line was
+    not in the document. It was.
+
+    So a hyphen BETWEEN LETTERS, with or without space after it, is removed
+    entirely and all three forms collapse to "nonoverlapping". Between anything
+    else it is left alone, which keeps "Moderate - High Risk" and "1-Year"
+    intact — those are separators and labels, not broken words.
+
+    Applied to both sides, so it cannot make two genuinely different strings
+    match: any pair it equates differed only in where a typesetter broke a word.
     """
-    return " ".join(str(text or "").split()).casefold()
+    cleaned = str(text or "").replace("\xad", "")  # soft hyphens
+    collapsed = " ".join(cleaned.split()).casefold()
+    return re.sub(r"(?<=[a-z])-\s*(?=[a-z])", "", collapsed)
 
 
 def _cache_path(digest: str, directory: Optional[str] = None) -> Path:
@@ -479,7 +556,43 @@ class LlmFactsheetReader(FactsheetTemplate):
                 unresolved.append(Unresolved(field, problem))
                 continue
 
+            if field in VERBATIM and _comparable(value) not in _comparable(quote):
+                unresolved.append(
+                    Unresolved(
+                        field,
+                        f"{str(value)[:40]!r} is not written in the line it was read "
+                        f"from, so it is a description of the sheet rather than a "
+                        f"reading of it. Quoted: {quote.strip()[:70]!r}",
+                    )
+                )
+                continue
+
             readings.append(Reading(field, value, " ".join(quote.split())))
+
+        # The objective and the risk narrative are shown as two separate
+        # quotations on the fund page, so the same paragraph in both is not a
+        # lie — the text is on the sheet — but it presents one statement as two.
+        # The Satrix sheets draw their risk profile and print no narrative, and
+        # the reader filled the gap with the objective on the first live run.
+        objective = fields_so_far(readings, "objective")
+        duplicated = objective is not None and any(
+            r.field == "risk_narrative" and _comparable(r.value) == _comparable(objective)
+            for r in readings
+        )
+        if duplicated:
+            readings = [r for r in readings if r.field != "risk_narrative"]
+            # Said, not silently dropped: an empty box with no reason beside it
+            # is the one presentation this whole design exists to avoid. And said
+            # ONLY when a reading was really discarded — a field the reader never
+            # mentioned gets the "not reported" reason further down, because
+            # claiming it duplicated the objective would be untrue.
+            unresolved.append(
+                Unresolved(
+                    "risk_narrative",
+                    "came back as a copy of the investment objective. The sheet's own "
+                    "risk block is a diagram on many sheets — read it from the crop.",
+                )
+            )
 
         for entry in payload.get("unresolved") or []:
             if not isinstance(entry, dict):
@@ -502,6 +615,14 @@ class LlmFactsheetReader(FactsheetTemplate):
             readings=tuple(readings),
             unresolved=tuple(unresolved),
         )
+
+
+def fields_so_far(readings: list[Reading], field: str) -> Any:
+    """One field's value out of a part-built reading list, or None."""
+    for reading in readings:
+        if reading.field == field:
+            return reading.value
+    return None
 
 
 def _readable_failure(exc: Exception) -> str:

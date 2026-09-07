@@ -44,6 +44,14 @@ from pathlib import Path
 BACKEND = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else Path.cwd()
 sys.path.insert(0, str(BACKEND))
 
+# `--reader llm` needs the API key, and every run needs the fetch to work, so
+# the environment is loaded here rather than assumed. Nothing else in this
+# script's import graph calls load_dotenv — `api.py` does, and this does not
+# import it.
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(BACKEND / ".env")
+
 from src.funds.extract import build_readers, extract_text  # noqa: E402
 from src.funds.extract.fetch import FetchError, fetch, normalise  # noqa: E402
 
