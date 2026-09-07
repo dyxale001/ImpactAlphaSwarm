@@ -340,16 +340,37 @@ class FundRepository(Repository):
         # absent from the dict and cannot affect the result — meaning the
         # invariant currently rests on statement order in another file. Naming
         # it makes the order irrelevant.
+        ignored = (
+            "fund_id",
+            "mdd_sha256",
+            "mdd_pdf_ref",
+            "extracted_text_ref",
+            "id",
+            "created_at",
+        )
+        # A column with no value in it is not a transcribed figure, so it is not
+        # part of the reading's identity.
+        #
+        # This is load-bearing, and it was found the hard way. Migration 025
+        # added fourteen columns and the seed CSV gained fourteen headers — blank
+        # for the fifteen funds whose documents nobody can read yet. Those blanks
+        # arrive here as None, and while they were counted, every one of the
+        # nineteen rows got a new hash: loading the seed would have recorded
+        # nineteen "corrected" readings, fifteen of which corrected nothing. Not
+        # wrong, exactly — the newest reading per date wins, so the page would
+        # have been right — but permanent, since migration 024 grants no DELETE,
+        # and it would have buried the four real corrections in fifteen fake
+        # ones.
+        #
+        # So the rule is what the docstring always claimed: the hash covers what
+        # was READ. Adding a column nobody has filled in changes nothing, and
+        # filling one in is a new reading.
         fields = {
-            k: v for k, v in snapshot.items()
-            if k not in (
-                "fund_id",
-                "mdd_sha256",
-                "mdd_pdf_ref",
-                "extracted_text_ref",
-                "id",
-                "created_at",
-            )
+            k: v
+            for k, v in snapshot.items()
+            if k not in ignored
+            and v is not None
+            and not (isinstance(v, str) and not v.strip())
         }
         parts = "|".join(f"{k}={fields[k]!r}" for k in sorted(fields))
         return hashlib.sha256(f"{isin}|{parts}".encode()).hexdigest()

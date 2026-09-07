@@ -146,6 +146,74 @@ class TestTheHashIgnoresWhereCopiesAreKept:
             "ZAE1", row
         ) != FundRepository.transcription_hash("ZAE1", {**row, "ter": 0.26})
 
+    @pytest.mark.parametrize("blank", [None, "", "   "])
+    def test_a_column_nobody_filled_in_is_not_a_new_reading(self, blank):
+        """REGRESSION GUARD: adding an empty column must not re-key a row.
+
+        Migration 025 added fourteen columns, and the seed CSV gained fourteen
+        headers that are blank for the fifteen funds whose documents nobody can
+        read yet. While those blanks counted toward the hash, loading the seed
+        recorded nineteen "corrected" readings, fifteen of which corrected
+        nothing — permanently, since migration 024 grants no DELETE, and burying
+        the four real corrections among them.
+        """
+        row = {"as_of": "2026-07-31", "ter": 0.25}
+        assert FundRepository.transcription_hash(
+            "ZAE1", row
+        ) == FundRepository.transcription_hash("ZAE1", {**row, "nav_cpu": blank})
+
+    def test_filling_that_column_in_is_a_new_reading(self):
+        """The complement, or the guard above would just be blindness."""
+        row = {"as_of": "2026-07-31", "ter": 0.25}
+        assert FundRepository.transcription_hash(
+            "ZAE1", row
+        ) != FundRepository.transcription_hash("ZAE1", {**row, "nav_cpu": 923})
+
+    def test_a_real_zero_is_a_reading_not_a_blank(self):
+        """0.00 is a figure a sheet prints — a free transaction cost, or a month
+        with no distribution declared. Treating it as absent would lose it."""
+        row = {"as_of": "2026-07-31"}
+        assert FundRepository.transcription_hash(
+            "ZAE1", row
+        ) != FundRepository.transcription_hash("ZAE1", {**row, "tc": 0.0})
+
+    def test_only_the_funds_that_gained_data_get_a_new_identity(self):
+        """Checked against the real seed, because the count is the whole point."""
+        new_columns = (
+            "nav_cpu",
+            "nav_date",
+            "fee_period",
+            "inception_date",
+            "annual_management_fee",
+            "return_high_12m",
+            "return_low_12m",
+            "return_extremes_basis",
+            "risk_narrative",
+            "horizon_words",
+            "portfolio_manager",
+            "regulation_28",
+            "income_distribution",
+            "top_holdings",
+        )
+        parse = loader().parse_snapshot
+        with SNAPSHOTS_CSV.open(newline="", encoding="utf-8") as handle:
+            rows = [parse(row) for row in csv.DictReader(handle)]
+
+        rekeyed = []
+        for row in rows:
+            isin = row["isin"]
+            after = {k: v for k, v in row.items() if k != "isin"}
+            before = {k: v for k, v in after.items() if k not in new_columns}
+            if FundRepository.transcription_hash(
+                isin, after
+            ) != FundRepository.transcription_hash(isin, before):
+                rekeyed.append(isin)
+
+        # The four whose Minimum Disclosure Document is readable locally.
+        assert sorted(rekeyed) == sorted(
+            ["ZAE000027108", "ZAE000188538", "ZAE000240123", "ZAE000240131"]
+        )
+
     def test_every_seeded_row_keeps_its_hash_whether_or_not_it_is_archived(self):
         """Checked across the real seed, because the cost of being wrong is 19 duplicates."""
         parse = loader().parse_snapshot
