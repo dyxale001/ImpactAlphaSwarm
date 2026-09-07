@@ -79,6 +79,3 @@ class SatrixTemplate(FactsheetTemplate):
         "performance": "printed as a table this template does not parse",
         "fund_size_zar": "not stated on every Satrix sheet — leave empty unless the document gives it",
     }
-
-    def matches(self, url: str) -> bool:
-        return any(host in url.lower() for host in self.hosts)

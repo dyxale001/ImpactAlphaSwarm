@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
-from urllib.parse import quote, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
 import httpx
 
@@ -41,14 +41,41 @@ class Fetched:
     content: bytes
 
 
+#: Query parameters that identify a visitor rather than a document. Google
+#: Analytics adds `_ga` and friends to every link copied out of a browser, and a
+#: pasted fact-sheet URL usually carries one.
+TRACKING_PARAMS = ("_ga", "_gl", "_gac", "gclid", "fbclid")
+
+
 def normalise(url: str) -> str:
-    """Percent-encode the path, leaving scheme and host alone.
+    """Canonicalise a URL: encode the path, drop tracking parameters.
 
     Manager index pages carry literal spaces in their links, and an unencoded
     space is what makes these hosts answer 200 with HTML instead of 404.
+
+    Tracking parameters are stripped because the URL is STORED, and stored on a
+    row whose identity is a hash of everything transcribed — `mdd_url` included.
+    A sheet pasted from a browser arrives as
+    `…/AGTBC.pdf?_ga=2.135063031.70250128.1788764106-1291023247.1788631183`,
+    and the same document pasted tomorrow carries a different `_ga`. Kept, that
+    would make one fact sheet look like a new reading every time somebody
+    recorded it, and would put a session identifier on a public page.
+
+    Only parameters that identify a visitor are dropped. A parameter that
+    selects a document is part of the address and is left alone.
     """
     parts = urlparse(url.strip())
-    return urlunparse(parts._replace(path=quote(parts.path, safe="/%")))
+    kept = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key.lower() not in TRACKING_PARAMS
+    ]
+    return urlunparse(
+        parts._replace(
+            path=quote(parts.path, safe="/%"),
+            query=urlencode(kept),
+        )
+    )
 
 
 def check_allowed(url: str) -> None:

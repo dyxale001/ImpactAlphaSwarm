@@ -84,6 +84,3 @@ class FundRockTemplate(FactsheetTemplate):
             "the fund is listed — FundRock prints one on unit trusts too"
         ),
     }
-
-    def matches(self, url: str) -> bool:
-        return any(host in url.lower() for host in self.hosts)

@@ -26,7 +26,8 @@ show beside them, and the list of things the reviewer has to supply themselves.
 from __future__ import annotations
 
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -162,9 +163,28 @@ class FactsheetTemplate(ABC):
     #: vocabulary turns that into either the right answer or an honest refusal.
     vocabulary: dict[str, Any] = {}
 
-    @abstractmethod
     def matches(self, url: str) -> bool:
-        """Whether this template should be used for a URL."""
+        """Whether this reader claims a URL, decided on its HOSTNAME.
+
+        Every reader used to do `any(host in url.lower() ...)`, which is a
+        substring test over the whole address — so
+        `https://evil.example.com/resources.easyequities.co.za/x.pdf` matched,
+        and `https://satrix.co.za.attacker.net/x` matched. This list is also the
+        fetch allowlist (see `fetch.check_allowed`), so a substring match is the
+        difference between "hosts we can read" and "anywhere, if the string
+        appears somewhere in the URL".
+
+        Parsed, lower-cased, port stripped, and matched exactly or as a
+        subdomain — `www.satrix.co.za` matches `satrix.co.za`, and
+        `satrix.co.za.attacker.net` does not.
+        """
+        hostname = (urlparse(url.strip()).hostname or "").lower().rstrip(".")
+        if not hostname:
+            return False
+        return any(
+            hostname == host or hostname.endswith(f".{host}")
+            for host in (h.lower() for h in self.hosts)
+        )
 
     def read(self, document: bytes, text: str, url: str) -> Extraction:
         """Read a fetched document, in whatever way this reader works.

@@ -195,10 +195,19 @@ class TestFetchingIsBounded:
     def test_a_claimed_host_passes(self):
         check_allowed("https://satrix.co.za/fund/mdd/STX40")
 
-    def test_the_allowlist_is_the_templates_own_hosts(self):
-        assert set(readable_hosts()) == {
-            host for template in (FundRockTemplate(), SatrixTemplate()) for host in template.hosts
-        }
+    def test_the_allowlist_is_the_readers_own_hosts(self):
+        """The allowlist and the readable set are one list, so they cannot drift.
+
+        Asserted against whichever readers are configured rather than a
+        hard-coded pair: the model reader claims a host the templates do not
+        (`resources.easyequities.co.za`), and the invariant is that the server
+        will fetch from exactly the hosts something can read — not that the set
+        never changes.
+        """
+        from src.funds.extract.registry import TEMPLATES
+
+        assert set(readable_hosts()) == {host for r in TEMPLATES for host in r.hosts}
+        assert set(readable_hosts()), "an empty allowlist would fetch nothing at all"
 
     def test_spaces_in_a_path_are_encoded(self):
         # An unencoded space is what makes these hosts answer 200 with an HTML
@@ -220,6 +229,67 @@ class TestTheResultShape:
         assert body["evidence"]["isin"].startswith("ISIN")
         assert body["unresolved"] == []
 
-    def test_a_template_must_say_which_urls_it_reads(self):
-        with pytest.raises(TypeError):
-            FactsheetTemplate()  # abstract: matches() is not implemented
+    def test_a_reader_must_say_which_hosts_it_reads(self):
+        """`matches` is shared now, so the declaration is the `hosts` tuple.
+
+        It used to be an abstract method each reader implemented with
+        `any(host in url.lower() ...)` — a substring test over the whole address,
+        which matched `evil.example.com/satrix.co.za/x.pdf`. Since this list is
+        also the fetch allowlist, that was worth removing from every reader at
+        once rather than trusting three copies to stay right.
+
+        What has to hold now is that a registered reader declares hosts: one
+        with an empty tuple matches nothing and would be dead code sitting in
+        the allowlist's way.
+        """
+        from src.funds.extract.registry import build_readers
+
+        for enabled in (False, True):
+            for reader in build_readers(llm_enabled=enabled):
+                assert reader.hosts, f"{reader.name} declares no hosts"
+                assert all(h and "/" not in h for h in reader.hosts), reader.name
+
+    def test_a_bare_reader_claims_nothing(self):
+        """The base class is safe by default: no hosts, no claims."""
+        assert FactsheetTemplate.hosts == ()
+        assert not FactsheetTemplate().matches("https://satrix.co.za/x")
+
+class TestTrackingParametersAreDropped:
+    """INVARIANT: the same document has the same address every time.
+
+    A fact-sheet URL copied out of a browser carries Google Analytics
+    parameters: `…/AGTBC.pdf?_ga=2.135063031.70250128.1788764106-1291023247…`.
+    The URL is STORED, on a row whose identity is a hash of everything
+    transcribed — `mdd_url` included — so keeping the parameter would make one
+    sheet look like a new reading every time somebody recorded it, and would put
+    a session identifier on a public page.
+    """
+
+    def test_a_google_analytics_parameter_is_removed(self):
+        from src.funds.extract.fetch import normalise
+
+        assert normalise(
+            "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf"
+            "?_ga=2.135063031.70250128.1788764106-1291023247.1788631183"
+        ) == "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf"
+
+    def test_the_same_sheet_pasted_twice_normalises_the_same_way(self):
+        from src.funds.extract.fetch import normalise
+
+        base = "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf"
+        assert normalise(f"{base}?_ga=1.1.1") == normalise(f"{base}?_ga=9.9.9")
+
+    def test_a_parameter_that_selects_a_document_is_kept(self):
+        """Only visitor identifiers go. A query that picks the file stays."""
+        from src.funds.extract.fetch import normalise
+
+        assert normalise("https://satrix.co.za/mdd?code=STX40&_ga=1.2.3") == (
+            "https://satrix.co.za/mdd?code=STX40"
+        )
+
+    def test_a_space_in_the_path_is_still_encoded(self):
+        """The original reason this function exists: an unencoded space makes
+        these hosts answer 200 with an HTML page instead of 404."""
+        from src.funds.extract.fetch import normalise
+
+        assert "%20" in normalise("https://resources.easyequities.co.za/Unit Trusts/A.pdf")

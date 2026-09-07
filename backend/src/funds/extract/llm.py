@@ -124,8 +124,15 @@ FIELDS: dict[str, str] = {
     "recommended_min_term_years": (
         "the minimum term in years, only if the sheet states a NUMBER"
     ),
-    "min_lump_sum": "the minimum lump sum in rand, if stated",
-    "min_debit_order": "the minimum monthly debit order in rand, if stated",
+    "min_lump_sum": (
+        "the MINIMUM lump sum in rand, if stated. A tax-free fund prints a "
+        "MAXIMUM instead, because SARS caps contributions — leave this out "
+        "rather than recording a cap as a minimum"
+    ),
+    "min_debit_order": (
+        "the MINIMUM monthly debit order in rand, if stated. As above: a maximum "
+        "is not a minimum"
+    ),
     "return_high_12m": "the highest annual return the sheet publishes",
     "return_low_12m": (
         "the lowest annual return the sheet publishes. Printed in brackets when "
@@ -188,6 +195,25 @@ VOCABULARIES: dict[str, tuple[str, ...]] = {
 # it. Numbers are out because a stated conversion is allowed and intended —
 # "Portfolio Value R362 million" really is 362000000. `asisa_category` is out
 # because it is resolved onto the published name, which is the point of it.
+#: field -> words that, appearing in the quote, mean the line is about the
+#: OPPOSITE of the field, unless the field's own word appears too.
+#:
+#: The failure this exists for is the nastiest one found so far, because every
+#: other guard passed it. The Allan Gray Tax-Free Balanced Fund is capped by
+#: SARS, so its sheet prints "Maximum lump sum per investor account R46 000" and
+#: "Maximum debit order* R 3 833.33". The reader filed both under `min_`. The
+#: quote was real, the number was real, the type was right — and the meaning was
+#: inverted. A beginner would have been shown a R46 000 MINIMUM on a fund whose
+#: actual barrier to entry is nothing, which is the exact opposite of the fact
+#: and excludes the reader this catalogue is for.
+#:
+#: Cheap to check and worth checking: the sheet says which it is, in the line the
+#: value was read from.
+CONTRADICTED_BY: dict[str, tuple[str, ...]] = {
+    "min_lump_sum": ("maximum", "max "),
+    "min_debit_order": ("maximum", "max "),
+}
+
 VERBATIM: frozenset[str] = frozenset({
     "benchmark",
     "jse_code",
@@ -313,6 +339,21 @@ class LlmExtractError(ExtractError):
     """The reading could not be attempted, with a reason worth showing an admin."""
 
 
+#: Typesetter's punctuation, folded to the plain forms a reader types.
+#:
+#: Found on the Allan Gray sheet, which sets "The Fund’s benchmark is..." with a
+#: curly apostrophe while the reader quoted it with a straight one. The quote
+#: check failed and a correct `benchmark` reading was thrown away with a reason
+#: saying the line was not in the document. Same class as the hyphenated line
+#: break above: the words match, the glyphs do not.
+_TYPOGRAPHY = str.maketrans({
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+    "\u2013": "-", "\u2014": "-", "\u2012": "-", "\u2212": "-",
+    "\u00a0": " ", "\u2009": " ", "\u202f": " ",
+})
+
+
 def _comparable(text: str) -> str:
     """Text reduced to what a PDF's layout cannot vary.
 
@@ -339,6 +380,7 @@ def _comparable(text: str) -> str:
     match: any pair it equates differed only in where a typesetter broke a word.
     """
     cleaned = str(text or "").replace("\xad", "")  # soft hyphens
+    cleaned = cleaned.translate(_TYPOGRAPHY)
     collapsed = " ".join(cleaned.split()).casefold()
     return re.sub(r"(?<=[a-z])-\s*(?=[a-z])", "", collapsed)
 
@@ -382,10 +424,28 @@ class LlmFactsheetReader(FactsheetTemplate):
     #: free, covers most of the catalogue, and disagreement between it and this
     #: reader on the same sheet is a signal worth being able to see.
     #:
+    #: EasyEquities is here for a different reason from Satrix, and it is the
+    #: case this reader was built for: it re-hosts the Minimum Disclosure
+    #: Documents of MANY management companies at one predictable path, so one
+    #: host reaches Allan Gray, Coronation, Ninety One and the rest without a
+    #: pattern per manager. That is the unlock — a template per ManCo would have
+    #: been eight modules.
+    #:
+    #: ⚠ It is a RE-HOST, so the document can lag its origin. Two checked during
+    #: design were about seven weeks behind and one was five years stale; the
+    #: Allan Gray sheet checked on 2026-09-07 was current (uploaded 19 August,
+    #: dated 31 July). `FreshnessValidator` is the guard — it warns past 120
+    #: days — and the fund page links users to the manager's own URL regardless.
+    #: Prefer an origin URL where one is known.
+    #:
     #: Adding a manager is one line, with no pattern to write. It is still a
     #: deliberate act: this list is also the fetch allowlist, so a host here can
     #: be downloaded from.
-    hosts = ("satrix.co.za", "www.satrix.co.za")
+    hosts = (
+        "satrix.co.za",
+        "www.satrix.co.za",
+        "resources.easyequities.co.za",
+    )
 
     def __init__(
         self,
@@ -399,8 +459,6 @@ class LlmFactsheetReader(FactsheetTemplate):
         self.model = model
         self.cache_dir = cache_dir
 
-    def matches(self, url: str) -> bool:
-        return any(host in url.lower() for host in self.hosts)
 
     # ── the text-only path, which this reader does not have ─────────────────
 
@@ -554,6 +612,22 @@ class LlmFactsheetReader(FactsheetTemplate):
             value, problem = _coerce(field, entry.get("value"))
             if problem is not None:
                 unresolved.append(Unresolved(field, problem))
+                continue
+
+            contradicting = [
+                word
+                for word in CONTRADICTED_BY.get(field, ())
+                if word in _comparable(quote) and field.split("_")[0] not in _comparable(quote)
+            ]
+            if contradicting:
+                unresolved.append(
+                    Unresolved(
+                        field,
+                        f"the line this was read from states a {contradicting[0].strip()}, "
+                        f"not a minimum — a capped tax-free fund prints both and they are "
+                        f"opposites. Quoted: {quote.strip()[:70]!r}",
+                    )
+                )
                 continue
 
             if field in VERBATIM and _comparable(value) not in _comparable(quote):

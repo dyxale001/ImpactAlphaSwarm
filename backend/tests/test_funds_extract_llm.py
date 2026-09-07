@@ -439,6 +439,133 @@ class TestTheNarrativeIsNotTheObjectiveAgain:
         assert extraction.fields["risk_narrative"].startswith("This portfolio holds")
 
 
+class TestTypesettersPunctuation:
+    """REGRESSION GUARD: a curly apostrophe is not a different sentence.
+
+    The Allan Gray sheet sets "The Fund's benchmark is..." with a curly
+    apostrophe; the reader quoted it with a straight one, the quote check failed,
+    and a correct `benchmark` reading was discarded as "not in the document".
+    Same class as the hyphenated line break: the words match, the glyphs do not.
+    """
+
+    @pytest.mark.parametrize(
+        "sheet,quoted",
+        [
+            ("The Fund\u2019s benchmark is the average", "The Fund's benchmark is the average"),
+            ("The Fund's benchmark is the average", "The Fund\u2019s benchmark is the average"),
+            ("South African \u2013 Multi Asset", "South African - Multi Asset"),
+            ("\u201cthe Management Company\u201d is", '"the Management Company" is'),
+            ("R1\u00a0234 per month minimum", "R1 234 per month minimum"),
+        ],
+    )
+    def test_the_same_words_match_whichever_glyphs_were_used(self, sheet, quoted, tmp_path):
+        extraction = reader(
+            {
+                "readings": [
+                    {"field": "objective", "value": "The Fund aims to grow", "quote": quoted}
+                ],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, sheet, "https://resources.easyequities.co.za/x.pdf")
+        # Found, therefore not refused for being absent.
+        assert not any(
+            "not in the document" in u.reason
+            for u in extraction.unresolved
+            if u.field == "objective"
+        )
+
+
+class TestAMaximumIsNotAMinimum:
+    """REGRESSION GUARD, and the nastiest failure found so far.
+
+    The Allan Gray Tax-Free Balanced Fund is capped by SARS, so its sheet prints
+    "Maximum lump sum per investor account R46 000" and "Maximum debit order*
+    R 3 833.33". The reader filed both under `min_`, and EVERY OTHER GUARD PASSED
+    IT: the quote was really on the page, the number was really in the quote, the
+    type was right. Only the meaning was inverted.
+
+    What it would have done: shown a beginner a R46 000 minimum on a fund whose
+    actual barrier to entry is nothing — the opposite of the fact, excluding
+    exactly the reader this catalogue exists for.
+    """
+
+    @pytest.mark.parametrize(
+        "field,line",
+        [
+            ("min_lump_sum", "Maximum lump sum per investor account R46 000"),
+            ("min_debit_order", "Maximum debit order* R 3 833.33"),
+        ],
+    )
+    def test_a_cap_is_refused_with_the_reason(self, field, line, tmp_path):
+        extraction = reader(
+            {
+                "readings": [{"field": field, "value": 46000, "quote": line}],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, line, "https://resources.easyequities.co.za/x.pdf")
+        assert field not in extraction.fields
+        reason = next(u.reason for u in extraction.unresolved if u.field == field)
+        assert "states a maximum" in reason
+
+    def test_a_real_minimum_is_still_read(self, tmp_path):
+        line = "Minimum lump sum investment R20 000"
+        extraction = reader(
+            {
+                "readings": [{"field": "min_lump_sum", "value": 20000, "quote": line}],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, line, "https://x")
+        assert extraction.fields["min_lump_sum"] == 20000.0
+
+    def test_a_line_stating_both_is_allowed_through(self, tmp_path):
+        """Some sheets print a minimum and a maximum on one line; the field's own
+        word being present means the reader had something to choose from."""
+        line = "Minimum R500 per month, maximum R3 000 per month"
+        extraction = reader(
+            {
+                "readings": [{"field": "min_debit_order", "value": 500, "quote": line}],
+                "unresolved": [],
+            },
+            tmp_path,
+        ).read(PDF, line, "https://x")
+        assert extraction.fields["min_debit_order"] == 500.0
+
+    def test_the_ask_warns_about_it_too(self, tmp_path):
+        """A code guard catches it; the prompt is what stops it happening."""
+        assert "MAXIMUM" in FIELDS["min_lump_sum"]
+        assert "SARS" in FIELDS["min_lump_sum"]
+
+
+class TestReachingAManagerWithNoTemplate:
+    """The case this reader was built for, and the one that pays for it.
+
+    EasyEquities re-hosts the Minimum Disclosure Documents of many management
+    companies at one predictable path, so one host reaches Allan Gray,
+    Coronation, Ninety One and the rest with no pattern per manager. A template
+    each would have been eight modules.
+    """
+
+    def test_the_rehost_is_claimed_when_the_flag_is_on(self):
+        url = "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf"
+        assert any(r.matches(url) for r in build_readers(llm_enabled=True))
+
+    def test_and_not_when_it_is_off(self):
+        """Reading an arbitrary manager needs the model; there is no pattern."""
+        url = "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf"
+        assert not any(r.matches(url) for r in build_readers(llm_enabled=False))
+
+    def test_a_host_nobody_confirmed_is_still_refused(self):
+        for url in (
+            "https://www.coronation.com/sheet.pdf",
+            "https://169.254.169.254/latest/meta-data",
+            "https://evil.example.com/resources.easyequities.co.za/x.pdf",
+        ):
+            assert not any(r.matches(url) for r in build_readers(llm_enabled=True)), url
+
+
 class TestEveryFieldIsAccountedFor:
     """INVARIANT: the form learns the state of every field, not just the good ones.
 
@@ -763,16 +890,54 @@ class TestFlagIsolation:
         assert result.returncode == 0, result.stderr
         assert "clean" in result.stdout
 
-    def test_the_fetch_allowlist_does_not_widen_when_the_flag_flips(self):
+    def test_the_flag_may_widen_the_allowlist_but_only_to_declared_hosts(self):
         """Turning the reader on must not turn the server into a general fetcher.
 
-        The model reader declares hosts the same way a template does, so the
-        allowlist and the set of readable managers stay one list. A new manager
-        is a host added on purpose, not a side effect of a flag.
+        This test used to assert the allowlist could not widen at all, which was
+        true only while the model reader claimed nothing a template did not.
+        It claims `resources.easyequities.co.za` now — deliberately, because that
+        one host re-hosts many managers' sheets and is the whole point of a
+        reader that needs no pattern.
+
+        So the invariant is the one that always mattered: every host reachable
+        with the flag on is a host some reader DECLARES. Widening is an edit to
+        a `hosts` tuple that a person makes and a diff shows, never a side
+        effect of flipping a flag.
         """
+        declared = {h for r in build_readers(llm_enabled=True) for h in r.hosts}
         off = {h for r in build_readers(llm_enabled=False) for h in r.hosts}
-        on = {h for r in build_readers(llm_enabled=True) for h in r.hosts}
-        assert on <= off
+
+        assert off <= declared, "turning the reader on must not drop a host"
+        gained = declared - off
+        assert gained == {"resources.easyequities.co.za"}, gained
+
+    def test_no_reader_claims_a_host_it_did_not_declare(self):
+        """The allowlist is a list of hostnames, not a substring search.
+
+        It was a substring search until 2026-09-07 — `host in url.lower()` over
+        the whole address — so `evil.example.com/resources.easyequities.co.za/x`
+        and `satrix.co.za.attacker.net` both matched. Since this same list is
+        what `fetch.check_allowed` trusts, that was the difference between "hosts
+        whose sheets we can read" and "anywhere, if the string appears in the
+        URL".
+        """
+        for url in (
+            "https://evil.example.com/resources.easyequities.co.za/x.pdf",
+            "https://satrix.co.za.attacker.net/x.pdf",
+            "https://evil.example.com/?ref=satrix.co.za",
+            "https://bcis.co.za.example.net/x.pdf",
+            "https://169.254.169.254/latest/meta-data",
+            "https://localhost/x.pdf",
+        ):
+            assert not any(r.matches(url) for r in build_readers(llm_enabled=True)), url
+
+    def test_a_declared_host_and_its_subdomains_are_claimed(self):
+        for url in (
+            "https://satrix.co.za/fund/mdd/STX40",
+            "https://www.satrix.co.za/fund/mdd/STX40",
+            "https://resources.easyequities.co.za/Unit%20Trusts/AGTBC.pdf",
+        ):
+            assert any(r.matches(url) for r in build_readers(llm_enabled=True)), url
 
     def test_the_reader_claims_satrix_and_not_a_manager_nobody_confirmed(self):
         one = LlmFactsheetReader()
