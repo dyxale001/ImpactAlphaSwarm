@@ -17,13 +17,19 @@
 -- a SQL one:
 --
 --   {
---     "version": 1,
---     "pinnedTicker": "NVDA",
+--     "version": 2,
 --     "widgets": [
---       { "id": "sentiment-trend", "size": "wide" },
+--       { "id": "sentiment-trend", "size": "wide",
+--         "settings": { "ticker": "NVDA" } },
 --       { "id": "watchlist", "size": "medium", "settings": { "sort": "added" } }
 --     ]
 --   }
+--
+-- Version 2 moved the chosen asset from one dashboard-wide "pinnedTicker" to a
+-- "ticker" inside each ticker-scoped widget's own settings, so two widgets can
+-- sit side by side on different assets. parseLayout in the frontend migrates a
+-- v1 row on read and writes v2 back, so no SQL is needed for that change and
+-- this file has not been altered beyond this comment.
 --
 -- Null means the user has never set a dashboard up. Every dashboard starts
 -- blank and nothing is arranged on anyone's behalf, so null is what puts the
