@@ -42,6 +42,23 @@ from src.funds.extract.llm import SYSTEM, _instruction  # noqa: E402
 # long enough to bury the rules — the admin form offers those as a dropdown.
 TOOL_LINE = "Call `record_factsheet` exactly once."
 
+# The four fields that are a list rather than a figure. Not part of the reader's
+# FIELDS — it returns one value per field — but they are boxes on the same form,
+# so a person recording a sheet by hand needs them asked for in the same pass.
+LISTS = """LISTS — give each under its own heading, one "label = number" per line:
+
+  WHAT IT HOLDS      the asset allocation. Percentages must account for the
+                     whole fund. If it is drawn as a chart with no figures in
+                     the text, say so — do not read a picture.
+  TOP HOLDINGS       the largest positions as listed. These do NOT add to 100;
+                     they are the top of a longer list.
+  PAST RETURNS       the ANNUALISED row, labelled 1y / 3y / 5y / 10y /
+                     inception. Sheets print cumulative and annualised side by
+                     side — say which one you took.
+  PAID OUT           distributions, as "YYYY-MM = cents per unit". Skip a month
+                     printed as a dash; keep one printed as 0.00, because a
+                     declared nothing and no declaration are different things."""
+
 ASK = """Give me each field as one line:
 
     field_name = value        <- the exact line on the sheet you read it from
@@ -54,7 +71,7 @@ manager: this is a transcription of one document."""
 def main() -> int:
     rules = SYSTEM.replace(TOOL_LINE, "").rstrip()
     fields = _instruction().split("For the ASISA classification")[0].rstrip()
-    print(f"{rules}\n\n{fields}\n\n{ASK}")
+    print(f"{rules}\n\n{fields}\n\n{LISTS}\n\n{ASK}")
     return 0
 
 
