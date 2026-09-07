@@ -183,7 +183,32 @@ function RecordSheet({
     fund_size_zar: "",
     distribution_frequency: "",
     recommended_min_term_years: "",
+    // The common core. Everything a Minimum Disclosure Document publishes that
+    // the earlier form discarded — most consequentially the NAV, which for a
+    // unit trust is the only price the fund has.
+    nav_cpu: "",
+    nav_date: "",
+    fee_period: "",
+    inception_date: "",
+    annual_management_fee: "",
+    return_high_12m: "",
+    return_low_12m: "",
+    return_extremes_basis: "",
+    risk_narrative: "",
+    horizon_words: "",
+    portfolio_manager: "",
   });
+
+  // A tri-state, not a checkbox: unit trust sheets print Regulation 28
+  // compliance and ETF sheets do not, so "the document does not say" has to be
+  // recordable and is the default. A checkbox would quietly record every ETF as
+  // non-compliant.
+  const [reg28, setReg28] = useState<"" | "yes" | "no">("");
+
+  // Cents per unit by month, as the sheet's distribution table prints it. Free
+  // rows because managers publish different windows — Satrix prints four
+  // quarters, FundRock prints twelve months with dashes for the empty ones.
+  const [income, setIncome] = useState<Array<{ month: string; cents: string }>>([]);
 
   // Asset classes vary by fund, so these are free-form rows. Periods do not, so
   // those are fixed below: a mix of "1y", "1 year" and "1Y" across funds would
@@ -203,8 +228,28 @@ function RecordSheet({
     // printed, so blanks are dropped rather than coerced.
     for (const [key, raw] of Object.entries(values)) {
       if (key === "as_of" || raw.trim() === "") continue;
-      const numeric = ["risk_indicator_1to5", "ter", "tc", "tic", "fund_size_zar", "recommended_min_term_years"];
+      const numeric = [
+        "risk_indicator_1to5",
+        "ter",
+        "tc",
+        "tic",
+        "fund_size_zar",
+        "recommended_min_term_years",
+        "nav_cpu",
+        "annual_management_fee",
+        "return_high_12m",
+        "return_low_12m",
+      ];
       (body as Record<string, unknown>)[key] = numeric.includes(key) ? Number(raw) : raw;
+    }
+
+    if (reg28) body.regulation_28 = reg28 === "yes";
+
+    const filledIncome = income.filter((r) => r.month.trim() && r.cents.trim());
+    if (filledIncome.length) {
+      body.income_distribution = Object.fromEntries(
+        filledIncome.map((r) => [r.month.trim(), Number(r.cents)]),
+      );
     }
 
     const filledAllocation = allocation.filter((r) => r.label.trim() && r.percent.trim());
@@ -346,8 +391,130 @@ function RecordSheet({
         <Field label="Fund size (R)" value={values.fund_size_zar} onChange={(v) => setValues({ ...values, fund_size_zar: v })} problems={problems} name="fund_size_zar" />
         <Field label="Distributions" value={values.distribution_frequency} onChange={(v) => setValues({ ...values, distribution_frequency: v })} problems={problems} name="distribution_frequency" />
         <Field label="Minimum term (years)" value={values.recommended_min_term_years} onChange={(v) => setValues({ ...values, recommended_min_term_years: v })} problems={problems} name="recommended_min_term_years" />
+        <Field label="Manager's fee %" value={values.annual_management_fee} onChange={(v) => setValues({ ...values, annual_management_fee: v })} problems={problems} name="annual_management_fee" />
+        {/* Which fee column the figures above came from. Managers print 1-Year
+            and 3-Year and the figures differ, so a cost recorded without its
+            period cannot be compared with another fund's. */}
+        <Choice
+          label="Fees cover"
+          value={values.fee_period}
+          onChange={(v) => setValues({ ...values, fee_period: v })}
+          problems={problems}
+          name="fee_period"
+          options={[
+            ["", "not stated on the sheet"],
+            ["1y", "1 year"],
+            ["3y", "3 years, annualised"],
+          ]}
+        />
       </div>
+
+      {/* ── The price, which for a unit trust is the only one there is ── */}
+      <div className="grid grid-cols-1 gap-3 border-t border-brand-border/40 pt-3 sm:grid-cols-2">
+        <Field label="NAV, cents a unit" value={values.nav_cpu} onChange={(v) => setValues({ ...values, nav_cpu: v })} problems={problems} name="nav_cpu" />
+        <Field label="Priced on (YYYY-MM-DD)" value={values.nav_date} onChange={(v) => setValues({ ...values, nav_date: v })} problems={problems} name="nav_date" />
+        <Field label="Started (YYYY-MM-DD)" value={values.inception_date} onChange={(v) => setValues({ ...values, inception_date: v })} problems={problems} name="inception_date" />
+        <Field label="Portfolio manager" value={values.portfolio_manager} onChange={(v) => setValues({ ...values, portfolio_manager: v })} problems={problems} name="portfolio_manager" />
+      </div>
+      <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+        A Satrix sheet prints the NAV in rand ("NAV Price R9.23") and a FundRock sheet prints it in
+        cents ("183.63 cents"). This field is cents, so R9.23 is 923.
+      </p>
+
+      {/* ── The strongest and weakest year, and how they were measured ── */}
+      <div className="grid grid-cols-1 gap-3 border-t border-brand-border/40 pt-3 sm:grid-cols-3">
+        <Field label="Strongest year %" value={values.return_high_12m} onChange={(v) => setValues({ ...values, return_high_12m: v })} problems={problems} name="return_high_12m" />
+        <Field label="Weakest year %" value={values.return_low_12m} onChange={(v) => setValues({ ...values, return_low_12m: v })} problems={problems} name="return_low_12m" />
+        <Choice
+          label="Measured over"
+          value={values.return_extremes_basis}
+          onChange={(v) => setValues({ ...values, return_extremes_basis: v })}
+          problems={problems}
+          name="return_extremes_basis"
+          options={[
+            ["", "pick one"],
+            ["rolling_12m", "rolling twelve-month periods"],
+            ["calendar_year", "calendar years"],
+          ]}
+        />
+      </div>
+      <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+        The sheet's own heading says which. "Highest/Lowest Annual Rolling Return" is rolling;
+        "Highest and Lowest: Calendar year performance" is calendar. A negative figure is often
+        printed in brackets — (4.49) is -4.49.
+      </p>
+
+      {/* ── Regulation 28 ── */}
+      <div className="border-t border-brand-border/40 pt-3">
+        <Choice
+          label="Regulation 28"
+          value={reg28}
+          onChange={(v) => setReg28(v as "" | "yes" | "no")}
+          problems={problems}
+          name="regulation_28"
+          options={[
+            ["", "the sheet does not say"],
+            ["yes", "complies"],
+            ["no", "does not comply"],
+          ]}
+        />
+        <p className="mt-1 text-[11px] leading-relaxed text-brand-secondary/70">
+          Unit trust sheets state this and ETF sheets do not. Leave it unset when the document is
+          silent — recorded as a published fact, and not used to filter matches.
+        </p>
+      </div>
+
       <Field label="Objective, in the manager's words" value={values.objective} onChange={(v) => setValues({ ...values, objective: v })} problems={problems} name="objective" />
+      <Field label="Risk, in the manager's words" value={values.risk_narrative} onChange={(v) => setValues({ ...values, risk_narrative: v })} problems={problems} name="risk_narrative" />
+      <Field label="Horizon, in the manager's words" value={values.horizon_words} onChange={(v) => setValues({ ...values, horizon_words: v })} problems={problems} name="horizon_words" />
+
+      {/* ── What it has paid out ── */}
+      <div className="space-y-2 border-t border-brand-border/40 pt-3">
+        <h3 className="text-xs font-bold text-brand-primary">What it has paid out</h3>
+        <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+          Cents per unit, by month as YYYY-MM. Skip a month the sheet shows as a dash; record a
+          month it prints as 0.00, because a declared nothing and no declaration are different
+          things.
+        </p>
+        {income.map((row, index) => (
+          <div key={index} className="flex gap-2">
+            <input
+              value={row.month}
+              onChange={(e) => {
+                const next = [...income];
+                next[index] = { ...next[index], month: e.target.value };
+                setIncome(next);
+              }}
+              placeholder="2026-06"
+              className="w-32 rounded-md border border-brand-border/60 bg-white px-2.5 py-1.5 text-xs"
+            />
+            <input
+              value={row.cents}
+              onChange={(e) => {
+                const next = [...income];
+                next[index] = { ...next[index], cents: e.target.value };
+                setIncome(next);
+              }}
+              placeholder="3.93"
+              className="w-24 rounded-md border border-brand-border/60 bg-white px-2.5 py-1.5 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setIncome(income.filter((_, i) => i !== index))}
+              className="text-[11px] font-semibold text-brand-secondary/70 hover:text-brand-primary"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setIncome([...income, { month: "", cents: "" }])}
+          className="text-[11px] font-semibold text-brand-primary hover:underline"
+        >
+          Add a month
+        </button>
+      </div>
 
       {/* ── What it holds ── */}
       <div className="space-y-2 border-t border-brand-border/40 pt-3">
@@ -501,6 +668,58 @@ function Field({
           mine.length ? "border-amber-500" : "border-brand-border/60"
         }`}
       />
+      {mine.map((p) => (
+        <span key={p.message} className="text-[11px] text-amber-700">
+          {p.message}
+        </span>
+      ))}
+    </label>
+  );
+}
+
+/**
+ * A field whose value is one of a closed set, and whose empty option means "the
+ * sheet does not state it" rather than a default.
+ *
+ * A select rather than a text box because these columns have check constraints
+ * behind them: a fee period typed as "1 year" or a basis typed as "rolling"
+ * would be refused by the database with a constraint name for an explanation,
+ * after the person had already read the sheet. And a select rather than a
+ * checkbox for Regulation 28, because the third state is real — ETF sheets do
+ * not print it, and a checkbox would record every one of them as non-compliant.
+ */
+function Choice({
+  label,
+  value,
+  onChange,
+  problems,
+  name,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  problems: FieldProblem[];
+  name: string;
+  options: Array<[string, string]>;
+}) {
+  const mine = problems.filter((p) => p.field === name);
+  return (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="font-semibold text-brand-secondary/80">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`rounded-md border bg-white px-2.5 py-1.5 text-brand-primary ${
+          mine.length ? "border-amber-500" : "border-brand-border/60"
+        }`}
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
       {mine.map((p) => (
         <span key={p.message} className="text-[11px] text-amber-700">
           {p.message}

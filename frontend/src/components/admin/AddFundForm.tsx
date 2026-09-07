@@ -41,9 +41,33 @@ const SHEET_FIELDS = [
   "fund_size_zar",
   "distribution_frequency",
   "objective",
+  // The common core. A fund added here gets the same fields as one whose sheet
+  // is recorded later, so which route was taken does not decide what is known
+  // about a fund.
+  "nav_cpu",
+  "nav_date",
+  "fee_period",
+  "inception_date",
+  "annual_management_fee",
+  "return_high_12m",
+  "return_low_12m",
+  "return_extremes_basis",
+  "risk_narrative",
+  "horizon_words",
+  "portfolio_manager",
 ] as const;
 
-const NUMERIC = new Set(["risk_indicator_1to5", "ter", "tc", "tic", "fund_size_zar"]);
+const NUMERIC = new Set([
+  "risk_indicator_1to5",
+  "ter",
+  "tc",
+  "tic",
+  "fund_size_zar",
+  "nav_cpu",
+  "annual_management_fee",
+  "return_high_12m",
+  "return_low_12m",
+]);
 
 export default function AddFundForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const { meta } = useFundCatalogueMeta();
@@ -344,8 +368,24 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
           <Field label="TIC %" name="tic" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
           <Field label="Fund size (R)" name="fund_size_zar" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
           <Field label="Distributions" name="distribution_frequency" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Manager's fee %" name="annual_management_fee" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Fees cover (1y or 3y)" name="fee_period" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="NAV, cents a unit" name="nav_cpu" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Priced on (YYYY-MM-DD)" name="nav_date" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Started (YYYY-MM-DD)" name="inception_date" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Portfolio manager" name="portfolio_manager" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Strongest year %" name="return_high_12m" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Weakest year %" name="return_low_12m" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Measured over (rolling_12m or calendar_year)" name="return_extremes_basis" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
         </div>
+        <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+          The NAV field is cents, so a sheet printing "R9.23" is 923. For the strongest and weakest
+          year, the sheet's own heading says how they were measured: "Annual Rolling Return" is
+          rolling_12m, "Calendar year performance" is calendar_year.
+        </p>
         <Field label="Objective, in the manager's words" name="objective" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+        <Field label="Risk, in the manager's words" name="risk_narrative" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+        <Field label="Horizon, in the manager's words" name="horizon_words" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
       </div>
 
       {unattached.map((p) => (

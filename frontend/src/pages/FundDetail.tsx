@@ -5,22 +5,31 @@ import FundsSkeleton from "../components/funds/FundsSkeleton";
 import FundPriceChart from "../components/funds/FundPriceChart";
 import FundAllocation from "../components/funds/FundAllocation";
 import FundPerformance from "../components/funds/FundPerformance";
+import FundSwings from "../components/funds/FundSwings";
+import FundIncomeHistory from "../components/funds/FundIncomeHistory";
 import { useFundDetail, useFundPrices } from "../hooks/useFundCatalogue";
 import {
   AS_AT,
   COST_LABEL,
   COST_TER_LABEL,
   DETAIL_BACK,
+  DETAIL_AMF_LABEL,
+  DETAIL_AMF_NOTE,
   DETAIL_BENCHMARK_LABEL,
   DETAIL_COSTS_LEAD,
   DETAIL_COSTS_TITLE,
   DETAIL_DISTRIBUTION_LABEL,
   DETAIL_FACTS_TITLE,
+  DETAIL_HORIZON_WORDS_LABEL,
+  DETAIL_INCEPTION_LABEL,
   DETAIL_HISTORY_LEAD,
   DETAIL_HISTORY_TITLE,
   DETAIL_ISIN_LABEL,
   DETAIL_JSE_LABEL,
+  DETAIL_MANAGER_LABEL,
   DETAIL_MANCO_LABEL,
+  DETAIL_NAV_LABEL,
+  DETAIL_NAV_NOTE,
   DETAIL_NOT_FOUND_LEAD,
   DETAIL_NOT_FOUND_TITLE,
   DETAIL_NO_FACTSHEET,
@@ -30,6 +39,10 @@ import {
   DETAIL_PROVENANCE_GAPS,
   DETAIL_PROVENANCE_MANUAL,
   DETAIL_PROVENANCE_TITLE,
+  DETAIL_REG28_LABEL,
+  DETAIL_REG28_NO,
+  DETAIL_REG28_YES,
+  DETAIL_RISK_WORDS_TITLE,
   DETAIL_SIZE_LABEL,
   DETAIL_TC_LABEL,
   DETAIL_WHY_TITLE,
@@ -40,8 +53,10 @@ import {
   TRACKER_BADGE,
   VEHICLE_LABEL,
   formatAsAt,
+  formatFeePeriod,
   formatFundSize,
   formatMinTerm,
+  formatNav,
   formatPercent,
 } from "../utils/fundsCopy";
 
@@ -111,6 +126,14 @@ export default function FundDetailPage() {
   const tc = formatPercent(snapshot?.tc ?? null);
   const size = formatFundSize(fund.fund_size_zar);
   const minTerm = formatMinTerm(fund.recommended_min_term_years);
+  const amf = formatPercent(snapshot?.annual_management_fee ?? null);
+  // The period the cost figures cover. Fifteen of the nineteen seeded sheets
+  // were transcribed before this was recorded, so it is genuinely unknown for
+  // them — and an unqualified cost is better than a cost qualified wrongly.
+  const feePeriod = formatFeePeriod(snapshot?.fee_period ?? null);
+  const nav = formatNav(snapshot?.nav_cpu ?? null);
+  const navDate = formatAsAt(snapshot?.nav_date ?? null);
+  const inception = formatAsAt(snapshot?.inception_date ?? null);
   // The dated document first; the manager's listing page is a fallback that
   // says so, because it lands on an index of hundreds rather than this fund.
   const factSheetUrl = fund.mdd_url ?? fund.mdd_page_url;
@@ -176,6 +199,11 @@ export default function FundDetailPage() {
              missing one means nobody has read it yet, which the provenance
              block below says outright. ── */}
       <FundPerformance performance={snapshot?.performance ?? null} asAt={asAt} />
+      <FundSwings
+        high={snapshot?.return_high_12m ?? null}
+        low={snapshot?.return_low_12m ?? null}
+        basis={snapshot?.return_extremes_basis ?? null}
+      />
       <FundAllocation allocation={snapshot?.asset_allocation ?? null} />
 
       {/* ── The manager's own objective ── */}
@@ -185,6 +213,39 @@ export default function FundDetailPage() {
           <blockquote className="border-l-2 border-brand-accent/50 pl-3 text-sm leading-relaxed text-brand-secondary">
             The fund aims {snapshot.objective}.
           </blockquote>
+          {asAt && (
+            <p className="text-[11px] text-brand-secondary/60">
+              {DETAIL_OBJECTIVE_ATTRIB} {asAt}.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ── The manager's own words on how risky it is, and for how long.
+             Quoted and attributed, never paraphrased. Two reasons it is a
+             quotation rather than our sentence: the wording is the manager's
+             regulated disclosure, and we are not licensed to characterise a
+             fund's risk in our own voice. The horizon line is the same — many
+             more sheets state a horizon in words than state a number, so this
+             is the only horizon most funds have. ── */}
+      {(snapshot?.risk_narrative || snapshot?.horizon_words) && (
+        <section className="soft-card space-y-3 p-6">
+          <h2 className="text-sm font-bold text-brand-primary">{DETAIL_RISK_WORDS_TITLE}</h2>
+          {snapshot.risk_narrative && (
+            <blockquote className="border-l-2 border-brand-accent/50 pl-3 text-sm leading-relaxed text-brand-secondary">
+              {snapshot.risk_narrative}
+            </blockquote>
+          )}
+          {snapshot.horizon_words && (
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase tracking-wide text-brand-secondary/70">
+                {DETAIL_HORIZON_WORDS_LABEL}
+              </p>
+              <blockquote className="border-l-2 border-brand-accent/50 pl-3 text-sm leading-relaxed text-brand-secondary">
+                {snapshot.horizon_words}
+              </blockquote>
+            </div>
+          )}
           {asAt && (
             <p className="text-[11px] text-brand-secondary/60">
               {DETAIL_OBJECTIVE_ATTRIB} {asAt}.
@@ -203,6 +264,24 @@ export default function FundDetailPage() {
             <Figure label={DETAIL_TC_LABEL} value={tc} />
             <Figure label={COST_LABEL} value={tic} emphasis />
           </dl>
+          {amf && (
+            <dl className="grid grid-cols-1 gap-3 border-t border-brand-border/40 pt-3 sm:grid-cols-3">
+              <Figure label={DETAIL_AMF_LABEL} value={amf} />
+            </dl>
+          )}
+          {amf && (
+            <p className="text-[11px] leading-relaxed text-brand-secondary/60">
+              {DETAIL_AMF_NOTE}
+            </p>
+          )}
+          {/* Which period these figures cover. Absent rather than assumed:
+              managers print 1-Year and 3-Year columns and the figures differ,
+              so naming the wrong one is worse than naming none. */}
+          {feePeriod && (
+            <p className="text-[11px] leading-relaxed text-brand-secondary/60">
+              {`All ${feePeriod}.`}
+            </p>
+          )}
           <p className="text-[11px] leading-relaxed text-brand-secondary/60">
             {DETAIL_PLATFORM_FEE_NOTE}
           </p>
@@ -225,8 +304,37 @@ export default function FundDetailPage() {
             <Row label={DETAIL_DISTRIBUTION_LABEL} value={fund.distribution_frequency} />
           )}
           {minTerm && <Row label={MIN_TERM_LABEL} value={minTerm} />}
+          {/* For a unit trust this is the only price there is: `fund_prices` is
+              fed from a JSE symbol, so the chart above covers listed ETFs and
+              nothing else. Shown with its own date rather than the sheet's,
+              because a manager can strike a price on a different day. */}
+          {nav && (
+            <Row
+              label={DETAIL_NAV_LABEL}
+              value={navDate ? `${nav} on ${navDate}` : nav}
+            />
+          )}
+          {inception && <Row label={DETAIL_INCEPTION_LABEL} value={inception} />}
+          {snapshot?.portfolio_manager && (
+            <Row label={DETAIL_MANAGER_LABEL} value={snapshot.portfolio_manager} />
+          )}
+          {/* Null means the document does not say, which is the normal case for
+              an ETF sheet — so absent, rather than rendered as "no". */}
+          {snapshot?.regulation_28 !== null && snapshot?.regulation_28 !== undefined && (
+            <Row
+              label={DETAIL_REG28_LABEL}
+              value={snapshot.regulation_28 ? DETAIL_REG28_YES : DETAIL_REG28_NO}
+            />
+          )}
         </dl>
+        {nav && (
+          <p className="text-[11px] leading-relaxed text-brand-secondary/60">
+            {DETAIL_NAV_NOTE}
+          </p>
+        )}
       </section>
+
+      <FundIncomeHistory distributions={snapshot?.income_distribution ?? null} />
 
       {/* ── Why it appears, in the backend's words ── */}
       {fund.why_this_appears && (
