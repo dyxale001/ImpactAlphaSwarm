@@ -3,11 +3,26 @@
 Purpose:
 - Save per-run JSON traces to disk for reproducibility and explainability.
 - Track collected messages, quant metrics, and scoring decisions.
+
+## Structure
+
+	TraceStore (ABC)        where a finished trace goes
+	├── FileTraceStore      one JSON file per run under TRACES_DIR
+	└── InMemoryTraceStore  keeps them in a dict; nothing touches disk
+
+`Tracer` collects; a `TraceStore` persists. Splitting them means a test can
+exercise the whole collection path without writing files and without a temp
+directory, by passing the in-memory store — the two are interchangeable
+everywhere `TraceStore` is accepted.
+
+Only the store knows where a trace ends up, so stamping that location into
+`artifacts` is the store's job, not the collector's.
 """
 
 import json
 import logging
 import os
+from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -80,6 +95,103 @@ class QuantMetrics:
 	quant_normalisation: Optional[str] = None
 
 
+class TraceStore(ABC):
+	"""Where a finished trace goes."""
+
+	@abstractmethod
+	def save(self, run_id: str, trace: Dict[str, Any]) -> str:
+		"""Persist the trace and return its location.
+
+		Implementations stamp ``trace["artifacts"]`` with where it went and when,
+		because the location is the store's knowledge, not the collector's.
+		"""
+
+	@abstractmethod
+	def load(self, run_id: str) -> Optional[Dict[str, Any]]:
+		"""Return a previously saved trace, or None if there is none."""
+
+	@abstractmethod
+	def list(self, limit: int = 10) -> List[str]:
+		"""Most recent trace locations, newest first."""
+
+	@staticmethod
+	def _stamp(trace: Dict[str, Any], location: str) -> None:
+		artifacts = trace.setdefault("artifacts", {})
+		artifacts["trace_path"] = location
+		artifacts["saved_at"] = datetime.utcnow().isoformat() + "Z"
+
+
+class FileTraceStore(TraceStore):
+	"""One JSON file per run, under ``TRACES_DIR``."""
+
+	def __init__(self, directory: Optional[Path] = None):
+		self._directory = directory
+
+	@property
+	def directory(self) -> Path:
+		# Resolved on use, not at construction, so a late TRACES_DIR change behaves
+		# the way it did when this was a module-level constant read per call.
+		return RUNS_DIR if self._directory is None else self._directory
+
+	def path_for(self, run_id: str) -> Path:
+		return self.directory / f"{run_id}.trace.json"
+
+	def save(self, run_id: str, trace: Dict[str, Any]) -> str:
+		self.directory.mkdir(parents=True, exist_ok=True)
+		trace_path = self.path_for(run_id)
+
+		self._stamp(trace, str(trace_path))
+
+		with open(trace_path, "w", encoding="utf-8") as f:
+			json.dump(trace, f, ensure_ascii=False, indent=2, default=str)
+
+		logger.info(f"Trace saved to {trace_path}")
+		return str(trace_path)
+
+	def load(self, run_id: str) -> Optional[Dict[str, Any]]:
+		trace_path = self.path_for(run_id)
+		if trace_path.exists():
+			with open(trace_path, "r", encoding="utf-8") as f:
+				return json.load(f)
+		return None
+
+	def list(self, limit: int = 10) -> List[str]:
+		directory = self.directory
+		if not directory.exists():
+			return []
+		traces = sorted(directory.glob("*.trace.json"), reverse=True)
+		return [str(t) for t in traces[:limit]]
+
+
+class InMemoryTraceStore(TraceStore):
+	"""Keeps traces in a dict. Nothing touches disk.
+
+	Exists so a test can drive the whole collection path — every ``add_*`` call and
+	``save`` — without a temp directory or cleanup, by handing ``Tracer`` this
+	instead of the file store.
+	"""
+
+	def __init__(self):
+		self.traces: Dict[str, Dict[str, Any]] = {}
+		self.order: List[str] = []
+
+	def save(self, run_id: str, trace: Dict[str, Any]) -> str:
+		location = f"memory://{run_id}.trace.json"
+		self._stamp(trace, location)
+		self.traces[run_id] = trace
+		if run_id in self.order:
+			self.order.remove(run_id)
+		self.order.append(run_id)
+		return location
+
+	def load(self, run_id: str) -> Optional[Dict[str, Any]]:
+		return self.traces.get(run_id)
+
+	def list(self, limit: int = 10) -> List[str]:
+		newest_first = list(reversed(self.order))
+		return [f"memory://{run_id}.trace.json" for run_id in newest_first[:limit]]
+
+
 class Tracer:
 	"""Trace collector and persister for analysis runs."""
 
@@ -90,7 +202,9 @@ class Tracer:
 		risk_tolerance: str = "Moderate",
 		universes: Optional[List[str]] = None,
 		tickers: Optional[List[str]] = None,
+		store: Optional[TraceStore] = None,
 	):
+		self.store = store or FileTraceStore()
 		self.run_id = run_id
 		self.user_id = user_id
 		self.risk_tolerance = risk_tolerance
@@ -151,29 +265,20 @@ class Tracer:
 		logger.debug(f"Added aggregates for {len(final_rankings)} top-ranked assets")
 
 	def save(self) -> str:
-		RUNS_DIR.mkdir(parents=True, exist_ok=True)
-		trace_path = RUNS_DIR / f"{self.run_id}.trace.json"
+		return self.store.save(self.run_id, self.trace)
 
-		self.trace["artifacts"]["trace_path"] = str(trace_path)
-		self.trace["artifacts"]["saved_at"] = datetime.utcnow().isoformat() + "Z"
 
-		with open(trace_path, "w", encoding="utf-8") as f:
-			json.dump(self.trace, f, ensure_ascii=False, indent=2, default=str)
+# ---------------------------------------------------------------------------
+# Published surface — thin delegations to the default file store
+# ---------------------------------------------------------------------------
+# `utils/__init__` re-exports both of these, so they keep their signatures.
 
-		logger.info(f"Trace saved to {trace_path}")
-		return str(trace_path)
+_DEFAULT_STORE = FileTraceStore()
 
 
 def load_trace(run_id: str) -> Optional[Dict[str, Any]]:
-	trace_path = RUNS_DIR / f"{run_id}.trace.json"
-	if trace_path.exists():
-		with open(trace_path, "r", encoding="utf-8") as f:
-			return json.load(f)
-	return None
+	return _DEFAULT_STORE.load(run_id)
 
 
 def list_traces(limit: int = 10) -> List[str]:
-	if not RUNS_DIR.exists():
-		return []
-	traces = sorted(RUNS_DIR.glob("*.trace.json"), reverse=True)
-	return [str(t) for t in traces[:limit]]
+	return _DEFAULT_STORE.list(limit)

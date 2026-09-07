@@ -39,7 +39,12 @@ export default function DualBar({
 
   const labelTone = onDark ? "text-brand-accent" : "text-primary";
   const valueTone = onDark ? "text-brand-bg" : "text-foreground";
-  const trackTone = onDark ? "bg-white/15" : "bg-background";
+  // The light track has to be darker than the surface it sits on, not lighter.
+  // It used to be `bg-background` (#f8f8f8) drawn on a soft-card of rgba(255,
+  // 255,255,0.8), about three levels of grey apart, so the track was invisible:
+  // the percentile read as a marker floating in space with no scale behind it,
+  // and the sentiment bar read as an arbitrary length rather than a proportion.
+  const trackTone = onDark ? "bg-white/15" : "bg-brand-border";
   const fillTone = onDark ? "bg-brand-accent" : "bg-primary";
 
   return (

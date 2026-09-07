@@ -242,6 +242,14 @@ class MentionScorer:
 					"replies": mention.replies,
 					"weight": mention.weight,
 					"created_at": mention.created_at,
+					# Carried through because the daily history dedupes on it. Omitting it
+					# here is not a missing field, it is a silent data loss: every day row
+					# then carries a high water mark of zero, and the accumulate RPC in
+					# migrations/019 rejects any sample that is not above the stored mark.
+					# Zero is never above zero, so only the FIRST write for a (ticker, day)
+					# survived and every later one was discarded without an error. News
+					# mentions carry None here, which is correct: nothing dedupes them.
+					"message_id": mention.message_id,
 					"tier": self.registry.tier_of(mention.source),
 					"sentiment_raw": round(signed_score, 4),
 					"sentiment_contribution": round((signed_score + 1) * 50, 2),

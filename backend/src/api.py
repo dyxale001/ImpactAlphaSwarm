@@ -45,6 +45,89 @@ app = FastAPI(title="AlphaSwarm API")
 DAILY_RUN_SECRET = os.getenv("DAILY_RUN_SECRET")
 # Only refresh users whose last run is within this many days.
 DAILY_ACTIVE_DAYS = int(os.getenv("DAILY_ACTIVE_DAYS", "7"))
+# How far back the backfill looks for tickers worth having a chart for: anything that
+# reached someone's ranked feed this recently.
+BACKFILL_RECENT_DAYS = int(os.getenv("SOCIAL_BACKFILL_RECENT_DAYS", "3"))
+# How far back the intraday tick looks for tickers worth topping up. Tighter than the
+# backfill's window: a tick is filling in the bar somebody is looking at right now, and a
+# name that has not been ranked since the day before yesterday is not that name.
+TICK_RECENT_DAYS = int(os.getenv("SOCIAL_TICK_RECENT_DAYS", "1"))
+
+_social_history_instance = None
+_social_backfiller_instance = None
+_news_history_instance = None
+_social_ticker_instance = None
+_day_summaries_instance = None
+
+
+def _social_history():
+    """The social history reader, built once on first use.
+
+    Imported lazily, as the discovery and batch entry points are, so a cold start does
+    not pay for the sentiment stack before a request asks for it.
+    """
+    global _social_history_instance
+    if _social_history_instance is None:
+        from src.utils.ss_daily import SocialHistory
+
+        _social_history_instance = SocialHistory()
+    return _social_history_instance
+
+
+def _news_history():
+    """The news history reader, built once on first use. Lazy for the same reason."""
+    global _news_history_instance
+    if _news_history_instance is None:
+        from src.utils.ns_daily import NewsHistory
+
+        _news_history_instance = NewsHistory()
+    return _news_history_instance
+
+
+def _social_backfiller():
+    """The backwards walker, built once on first use.
+
+    Deliberately reachable only from here: a scheduler endpoint and a GET on the asset
+    page. Nothing in the analysis run may hold one of these.
+    """
+    global _social_backfiller_instance
+    if _social_backfiller_instance is None:
+        from src.utils.ss_backfill import SocialBackfiller
+
+        _social_backfiller_instance = SocialBackfiller(history=_social_history())
+    return _social_backfiller_instance
+
+
+def _social_ticker():
+    """The intraday top-up, built once on first use.
+
+    Shares the history reader with the backfill, and through it the seed registry, so a
+    tick and a lazy seed landing on one ticker collapse into a single walk rather than two
+    against the same rate limiter.
+    """
+    global _social_ticker_instance
+    if _social_ticker_instance is None:
+        from src.utils.ss_tick import SocialTicker
+
+        _social_ticker_instance = SocialTicker(history=_social_history())
+    return _social_ticker_instance
+
+
+def _day_summaries():
+    """The generated day summaries, built once on first use.
+
+    Holds a Groq client, which is the main reason this is lazy rather than a module level
+    object: a deployment with summaries switched off should never construct one.
+    """
+    global _day_summaries_instance
+    if _day_summaries_instance is None:
+        from src.utils.day_summary import DaySummaryService
+
+        _day_summaries_instance = DaySummaryService(
+            history=_social_history(), news_history=_news_history()
+        )
+    return _day_summaries_instance
+
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
 origins = [u.strip() for u in _allowed.split(",") if u.strip()]
@@ -3509,6 +3592,284 @@ async def get_price_history(ticker: str):
     except Exception as exc:
         logger.warning("Price history fetch failed for %s: %s", ticker, exc)
         return {"ticker": ticker.upper(), "closes": [], "dates": []}
+
+
+@app.get("/api/sentiment/last-updated")
+async def get_sentiment_last_updated_endpoint():
+    """When sentiment data was last written, for the assets header.
+
+    Informational and unauthenticated, like the endpoints around it. "Last AI run" on
+    that header used to be the only freshness figure on the page, and it stopped being a
+    sufficient one the day the intraday tick shipped: a run can be many hours old while
+    the sentiment behind its recommendations was topped up an hour ago, and the header
+    had no way to say so. Global across every ticker, not scoped to the caller's own, for
+    the reasons in ``get_sentiment_last_updated``'s docstring.
+    """
+    loop = asyncio.get_running_loop()
+    from src.utils.supabase_client import get_sentiment_last_updated
+
+    try:
+        updated_at = await loop.run_in_executor(None, get_sentiment_last_updated)
+    except Exception as exc:
+        logger.warning("Sentiment last-updated fetch failed: %s", exc)
+        updated_at = None
+    return {"updated_at": updated_at}
+
+
+@app.get("/api/assets/{ticker}/sentiment-history")
+async def get_sentiment_history(ticker: str, days: int = 7):
+    """The daily social sentiment series for a ticker.
+
+    Informational and unauthenticated, mirroring the price history endpoint above.
+    Reads rows the runs already wrote, so it never calls StockTwits on the way to a
+    response and never waits on an AI run.
+
+    Every day in the window comes back, weekends included. A day with no row carries a
+    null score and a zero count, which the chart draws as a gap: a null and a zero mean
+    opposite things here, and drawing silence as a crash to zero was the single most
+    misleading thing the first version of this chart did.
+
+    A ticker nobody has ever walked gets its history filled in AFTER this response has
+    gone out, not before. The walk takes a few seconds and would be the only slow thing
+    on the page if it were awaited; instead the chart shows its building state and has
+    the full window on the next poll. The one thing that must never happen is this walk
+    moving onto a path someone waits on, which is what the reverted build did by putting
+    it inside the analysis run.
+    """
+    symbol = ticker.upper()
+    window = max(1, min(days, 30))
+    loop = asyncio.get_running_loop()
+
+    try:
+        points = await loop.run_in_executor(
+            None, _social_history().history, symbol, window
+        )
+    except Exception as exc:
+        logger.warning("Sentiment history fetch failed for %s: %s", symbol, exc)
+        return {"ticker": symbol, "points": [], "seeding": False}
+
+    # News is merged onto the days social already laid out, never allowed to define them.
+    # One side owns the window or the two drift apart, and social owns it because it is
+    # the series that pads its own quiet days.
+    #
+    # A failure here costs the news line and nothing else: the social points are already
+    # in hand, and returning them without news is exactly what an older client gets
+    # anyway. That is the whole reason this is a second try block rather than one.
+    try:
+        news_history = _news_history()
+        if news_history.enabled:
+            news_rows = await loop.run_in_executor(
+                None, news_history.history, symbol, window
+            )
+            points = [
+                {**point, **news_history.point(news_rows.get(point["date"]))}
+                for point in points
+            ]
+    except Exception as exc:
+        logger.info("News history merge failed for %s: %s", symbol, exc)
+
+    # Scheduled, not awaited. create_task queues the walk on the event loop and this
+    # handler returns immediately; the loop only picks the task up once the response is
+    # on its way, which is the same fire and forget shape start_analysis uses.
+    seeding = False
+    try:
+        backfiller = _social_backfiller()
+        if backfiller.enabled:
+            walked = await loop.run_in_executor(
+                None, backfiller.history.is_seeded, symbol
+            )
+            if not walked:
+                asyncio.create_task(_seed_job(symbol))
+                seeding = True
+    except Exception as exc:
+        logger.info("Seed check failed for %s: %s", symbol, exc)
+
+    return {"ticker": symbol, "points": points, "seeding": seeding}
+
+
+async def _seed_job(symbol: str) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+        rows = await loop.run_in_executor(None, _social_backfiller().seed_one, symbol)
+        logger.info("Lazy seed for %s wrote %d day rows", symbol, rows)
+    except Exception as exc:
+        logger.warning("Lazy seed for %s failed: %s", symbol, exc)
+
+
+@app.get("/api/assets/{ticker}/sentiment-summary")
+async def get_sentiment_summary(ticker: str, day: str):
+    """The generated paragraph for one day of one ticker's chart.
+
+    Informational and unauthenticated, like the history endpoint it sits beside. Reads a
+    stored summary and returns it; generates one only when there is nothing stored, or
+    when the day is still open and both the cooldown and the evidence say the stored one
+    has been overtaken. A settled day is generated once and never again, which is what
+    lets a reader click back and forth across a week for the price of that week.
+
+    ``summary`` comes back null for every uninteresting reason there is: summaries
+    switched off, a day outside the window, a day nothing was collected on, Groq
+    unconfigured, generation failed. The panel renders the same quiet fallback for all of
+    them, because to a reader they are the same thing and none is an error.
+
+    Synchronous, unlike the seed the history endpoint fires. A seed is a thirty page walk
+    nobody asked for; this is one short completion behind an explicit click, and a click
+    that shows a spinner for two seconds is a better trade than one that returns empty and
+    fills in later.
+    """
+    symbol = ticker.upper()
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="day must be YYYY-MM-DD")
+
+    loop = asyncio.get_running_loop()
+    try:
+        point = await loop.run_in_executor(
+            None, _day_summaries().summary_for, symbol, day
+        )
+    except Exception as exc:
+        logger.warning("Day summary failed for %s %s: %s", symbol, day, exc)
+        point = None
+
+    if point is None:
+        return {
+            "ticker": symbol,
+            "day": day,
+            "summary": None,
+            "is_final": False,
+            "generated_at": None,
+        }
+    return {"ticker": symbol, **point}
+
+
+@app.post("/api/social/tick")
+async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
+    """Top up today's social row for recently ranked tickers, during market hours.
+
+    Two Cloud Scheduler jobs on America/New_York time, weekdays only: just after the open
+    and again at midday. The timezone rather than UTC because the open moves an hour twice
+    a year and a tick that has drifted off the open is a tick that misses the loudest part
+    of the session.
+
+    This exists because today's bar is otherwise empty until 22:00 UTC. The nightly writes
+    the day that has just ended, so the day a reader is actually looking at has nothing in
+    it for most of the time they are looking.
+
+    Deliberately not the backfill on a second schedule. That job walks thirty pages back
+    over seven days and writes in replace mode, and its pending() would find nothing to do
+    anyway, since every ticker it would consider was seeded the night it appeared.
+
+    Overlapping anything else is harmless. This writes only social_sentiment_daily, through
+    the same accumulate RPC a run uses, which merges under a row lock.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Tick not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    loop = asyncio.get_running_loop()
+    from src.utils.supabase_client import get_recently_ranked_tickers
+
+    try:
+        tickers = await loop.run_in_executor(
+            None, get_recently_ranked_tickers, TICK_RECENT_DAYS
+        )
+    except Exception as exc:
+        logger.warning("Tick could not list recently ranked tickers: %s", exc)
+        return {"ok": False, "error": str(exc), "walked": 0}
+
+    try:
+        summary = await loop.run_in_executor(None, _social_ticker().tick, tickers, None)
+        return {"ok": True, **summary}
+    except Exception as exc:
+        logger.warning("Tick failed: %s", exc)
+        return {"ok": False, "error": str(exc), "walked": 0}
+
+
+@app.post("/api/sentiment/summaries")
+async def sentiment_summaries(x_daily_run_secret: Optional[str] = Header(None)):
+    """Fill in and settle day summaries for tickers people have actually opened.
+
+    Its own Cloud Scheduler job at 00:30 UTC, after the 22:00 nightly and the 23:00
+    backfill have both written the day that just closed. Half past midnight rather than
+    half eleven so the day being settled is genuinely over: run an hour earlier and
+    yesterday would sit marked "so far today" until the following night.
+
+    Only tickers that already have a stored summary, which is the entire cost control. A
+    name with no row is a name nobody has opened, and generating a week of prose against
+    the chance that somebody might is how a lazy feature turns into a nightly bill.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Summaries not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    loop = asyncio.get_running_loop()
+    from src.utils.supabase_client import get_recently_ranked_tickers
+
+    try:
+        tickers = await loop.run_in_executor(
+            None, get_recently_ranked_tickers, BACKFILL_RECENT_DAYS
+        )
+    except Exception as exc:
+        logger.warning("Summary top-up could not list recently ranked tickers: %s", exc)
+        return {"ok": False, "error": str(exc), "generated": 0}
+
+    try:
+        summary = await loop.run_in_executor(None, _day_summaries().top_up, tickers, None)
+        return {"ok": True, **summary}
+    except Exception as exc:
+        logger.warning("Summary top-up failed: %s", exc)
+        return {"ok": False, "error": str(exc), "generated": 0}
+
+
+@app.post("/api/social/backfill")
+async def social_backfill(x_daily_run_secret: Optional[str] = Header(None)):
+    """Fill in social history for tickers that have never been walked.
+
+    Its own Cloud Scheduler job at 23:00 UTC, an hour AFTER the nightly. That order is
+    deliberate: discovery runs at the top of run_daily, so a ticker discovered tonight
+    does not exist yet when an earlier job would look for it, and it would sit on one
+    bar out of seven until the following night. By 23:00 the batch has written its
+    recommendations and this picks the new names up the same night.
+
+    Overlapping a long nightly is harmless. This writes only social_sentiment_daily,
+    and the accumulate RPC merges under a row lock, so a run and a backfill landing on
+    the same day cannot lose each other's counts.
+
+    Nothing waits on this, which is the entire reason it can afford a thirty page walk
+    where the run is capped at six.
+    """
+    if not DAILY_RUN_SECRET:
+        raise HTTPException(status_code=503, detail="Backfill not configured")
+    if not x_daily_run_secret or not secrets.compare_digest(
+        x_daily_run_secret, DAILY_RUN_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid daily run secret")
+
+    loop = asyncio.get_running_loop()
+    from src.utils.supabase_client import get_recently_ranked_tickers
+
+    try:
+        tickers = await loop.run_in_executor(
+            None, get_recently_ranked_tickers, BACKFILL_RECENT_DAYS
+        )
+    except Exception as exc:
+        logger.warning("Backfill could not list recently ranked tickers: %s", exc)
+        return {"ok": False, "error": str(exc), "seeded": 0}
+
+    try:
+        summary = await loop.run_in_executor(
+            None, _social_backfiller().backfill, tickers, None
+        )
+        return {"ok": True, **summary}
+    except Exception as exc:
+        logger.warning("Backfill failed: %s", exc)
+        return {"ok": False, "error": str(exc), "seeded": 0}
 
 
 @app.post("/api/analysis/run-daily")
