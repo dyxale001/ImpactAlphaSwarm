@@ -9,3 +9,10 @@ pytest>=8.0
 # manager draws as a graphic rather than printing as text.
 pypdf>=4.0
 pymupdf>=1.24
+
+# Read a fact sheet with a model instead of a per-manager pattern, behind
+# FUND_LLM_EXTRACT_ENABLED. Dev-only for the same reason as the two above: this
+# is the admin curation path, and the deployed API that serves the catalogue
+# never opens a PDF. With the flag off nothing imports it, which a test proves.
+# Needed on the server only if the flag is turned on there.
+anthropic>=0.40

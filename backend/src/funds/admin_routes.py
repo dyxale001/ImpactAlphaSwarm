@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .config import FUNDS_ENABLED
-from .extract import FetchError, extract_from_url, readable_hosts
+from .extract import ExtractError, extract_from_url, readable_hosts
 from .repository import FundRepository
 from .validators import Problem, fund_validators, snapshot_validators
 
@@ -415,8 +415,13 @@ def extract_factsheet(body: ExtractIn, _admin: str = Depends(require_admin)):
     """
     try:
         extraction = extract_from_url(body.url)
-    except FetchError as exc:
-        # A bad link is the admin's to fix, not a server fault.
+    except ExtractError as exc:
+        # A bad link is the admin's to fix, and a misconfigured reader is the
+        # server's — but neither is a crash, and both have the same answer for
+        # the person at the form: here is what went wrong, type it in for now.
+        # Catching the base class matters: before it existed, a reader failure
+        # (a missing key, a refused workspace) came back as a 500 with no
+        # message, which is the one outcome that tells nobody anything.
         raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
 
     return extraction.as_dict()

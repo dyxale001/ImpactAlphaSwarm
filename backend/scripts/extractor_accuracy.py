@@ -1,24 +1,38 @@
-"""Measure the extractor against the hand-transcribed seed.
+"""Measure a reader against the hand-transcribed seed.
 
     venv/bin/python scripts/extractor_accuracy.py backend
+    venv/bin/python scripts/extractor_accuracy.py backend --reader llm
 
 The 19 seeded funds were read off their managers' documents by a person, one
-field at a time. That makes them a golden set: re-extracting the same sheets and
-diffing per field says how far the templates can be trusted, as a number rather
-than an impression.
+field at a time. That makes them a golden set: re-reading the same sheets and
+diffing per field says how far a reader can be trusted, as a number rather than
+an impression.
 
-Two rules keep the number honest.
+**The seed is never rewritten from reader output.** If it were, the benchmark
+would become a record of what the reader already does and the score would
+approach 100% while meaning nothing. Two of the known `benchmark` disagreements
+are cases where the reader is MORE faithful than the hand transcription, and
+they stay as disagreements for that reason.
 
-**The seed is never rewritten from extractor output.** If it were, the benchmark
-would become a record of what the extractor already does and the score would
-approach 100% while meaning nothing.
+## Two numbers, and the first one is the one to quote
 
-**A refusal is not an error.** A field the template deliberately declines — the
-Satrix risk rating, which is a graphic — is reported separately from a field it
-read wrongly. Conflating them would make refusing look as bad as guessing, which
-is the opposite of the incentive this design wants.
+This script used to print one figure — agreement over the fields the reader
+*attempted* — and that number was used to argue that regex templates beat a
+model at 94.6% to 80%. It is not a like-for-like comparison, and the argument
+was wrong. A refusal is a field the admin still has to read off the PDF
+themselves, so from the only position that matters, the person doing the work, a
+refusal and a miss cost the same.
+
+So the headline now counts refusals in the denominator, and both readers are
+scored that way. The old number is still printed underneath, labelled as what it
+is: how often the reader was right *when it committed to an answer*. That second
+number is a real and different property — it says whether a refusal can be
+trusted to mean "I could not read this" rather than "I gave up here" — but it is
+not accuracy and must not be quoted as accuracy.
 
 Downloads are cached under scripts/curation/.cache, so a re-run costs nothing.
+Model readings are cached against each document's sha256 by the reader itself,
+so `--reader llm` costs money once per sheet and nothing after that.
 """
 
 import argparse
@@ -30,13 +44,15 @@ from pathlib import Path
 BACKEND = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else Path.cwd()
 sys.path.insert(0, str(BACKEND))
 
-from src.funds.extract import extract_text, template_for  # noqa: E402
+from src.funds.extract import build_readers, extract_text  # noqa: E402
 from src.funds.extract.fetch import FetchError, fetch, normalise  # noqa: E402
 
 CACHE = BACKEND / "scripts" / "curation" / ".cache" / "accuracy"
 
-# Seed column -> extracted field. Only fields both sides carry are scored;
-# anything else would be measuring the seed's shape, not the extractor.
+# Seed column -> read field. Only fields both sides carry are scored; anything
+# else would be measuring the seed's shape, not the reader. A column blank in the
+# seed is skipped per fund, so widening this list cannot inflate the score — it
+# only scores what a person actually transcribed.
 COMPARED = {
     "as_of": "as_of",
     "isin": "isin",
@@ -45,6 +61,19 @@ COMPARED = {
     "tic": "tic",
     "benchmark": "benchmark",
     "risk_indicator_raw": "risk_indicator_raw",
+    # The common core added in migration 025. Populated for four funds, which is
+    # every fund whose document is readable locally.
+    "nav_cpu": "nav_cpu",
+    "nav_date": "nav_date",
+    "fee_period": "fee_period",
+    "inception_date": "inception_date",
+    "annual_management_fee": "annual_management_fee",
+    "return_high_12m": "return_high_12m",
+    "return_low_12m": "return_low_12m",
+    "return_extremes_basis": "return_extremes_basis",
+    "portfolio_manager": "portfolio_manager",
+    "fund_size_zar": "fund_size_zar",
+    "distribution_frequency": "distribution_frequency",
 }
 
 
@@ -87,9 +116,28 @@ def comparable(field: str, value) -> str:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Score the extractor against the seed.")
+    parser = argparse.ArgumentParser(description="Score a reader against the seed.")
     parser.add_argument("backend", nargs="?", default=".")
+    parser.add_argument(
+        "--reader",
+        choices=("regex", "llm"),
+        default="regex",
+        help=(
+            "regex: the per-manager templates. llm: the model-based reader, which "
+            "takes the Satrix hosts. FundRock keeps its template either way, so "
+            "the two runs differ only on the Satrix sheets."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    readers = build_readers(llm_enabled=args.reader == "llm")
+    print(f"reader: {args.reader} -> {', '.join(r.name for r in readers)}")
+
+    def reader_for(url: str):
+        for reader in readers:
+            if reader.matches(url):
+                return reader
+        return None
 
     data = BACKEND / "data" / "funds"
     snapshots = {r["isin"]: r for r in csv.DictReader(open(data / "snapshots.csv"))}
@@ -104,7 +152,7 @@ def main(argv: list[str]) -> int:
     for fund in funds:
         snapshot = snapshots.get(fund["isin"])
         url = (snapshot or {}).get("mdd_url") or ""
-        template = template_for(url) if url else None
+        template = reader_for(url) if url else None
         if not template:
             skipped += 1
             continue
@@ -114,7 +162,9 @@ def main(argv: list[str]) -> int:
             skipped += 1
             continue
 
-        extraction = template.extract(extract_text(content), url)
+        # Both the bytes and the text layer: a pattern template ignores the
+        # first, a model-based reader needs it.
+        extraction = template.read(content, extract_text(content), url)
         unresolved = {u.field for u in extraction.unresolved}
         covered += 1
 
@@ -133,17 +183,32 @@ def main(argv: list[str]) -> int:
             else:
                 differ.append(f"{fund['name'][:34]:36s} {field:20s} seed={expected!r} got={got!r}")
 
-    scored = sum(agree.values()) + len(differ) + sum(missed.values())
-    print(f"\n{covered} sheets read, {skipped} skipped (no template or unreachable)")
-    print(f"{scored} fields compared against the hand-transcribed seed")
-    if scored:
-        print(f"  agreed      {sum(agree.values()):4d}  ({sum(agree.values()) / scored:.1%})")
-        print(f"  disagreed   {len(differ):4d}")
-        print(f"  not found   {sum(missed.values()):4d}")
-    print(f"  refused     {sum(refused.values()):4d}  (declined on purpose, not scored above)")
+    right = sum(agree.values())
+    wrong = len(differ)
+    absent = sum(missed.values())
+    declined = sum(refused.values())
+
+    # The honest denominator: everything a person transcribed and therefore
+    # everything the reader had a chance at. A refusal counts against it because
+    # a refused field is still a field somebody has to read off the PDF.
+    transcribed = right + wrong + absent + declined
+    attempted = right + wrong + absent
+
+    print(f"\n{covered} sheets read, {skipped} skipped (no reader or unreachable)")
+    print(f"{transcribed} fields the seed has a transcription for\n")
+    if transcribed:
+        print(f"  READ CORRECTLY   {right:4d} / {transcribed}  ({right / transcribed:.1%})  <- the number to quote")
+        print(f"    disagreed      {wrong:4d}")
+        print(f"    not found      {absent:4d}")
+        print(f"    refused        {declined:4d}  (honest, and still work for a person)")
+    if attempted:
+        print(
+            f"\n  of the {attempted} it committed to an answer on: {right / attempted:.1%} right"
+        )
+        print("  (a property of how trustworthy its refusals are, NOT its accuracy)")
 
     if refused:
-        print("\nDeclined by field:")
+        print("\nRefused by field — each is a field an admin still has to type:")
         for field, count in refused.most_common():
             print(f"  {field:24s} {count}")
     if missed:

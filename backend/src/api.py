@@ -6,9 +6,21 @@ import secrets
 from typing import List, Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Load backend/.env before anything reads an environment variable.
+#
+# This used to happen only as a SIDE EFFECT: `src.orchestration.langgraph_orchestrator`
+# calls `load_dotenv()` at module level, and this module imports it lazily inside
+# a request handler — so the file was read at some point during the first
+# analysis run and not before. Every `os.getenv` at import time in this file was
+# therefore reading the shell environment only, and any handler needing a key
+# before that first run would have found nothing. Made explicit here so moving
+# that deferred import cannot quietly unset the server's configuration.
+load_dotenv()
 
 # REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
 from src.utils.supabase_client import (

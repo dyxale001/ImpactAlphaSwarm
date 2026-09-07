@@ -1,0 +1,4 @@
+# Model readings, cached against each document sha256. Machine output, and a
+# fresh read costs a few cents — not worth versioning.
+*
+!.gitignore

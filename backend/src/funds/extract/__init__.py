@@ -3,9 +3,16 @@
 Pre-fills the admin form; never writes to the catalogue. A person still approves
 every figure, and this only decides what they are looking at when they do.
 
-The rule the package is built around is in `base.py`: a field the template
-cannot read comes back as **unresolved with a reason**, never as a guess. A
-pre-filled wrong value gets nodded through; a blank has to be answered.
+The rule the package is built around is in `base.py`: a field a reader cannot
+read comes back as **unresolved with a reason**, never as a guess. A pre-filled
+wrong value gets nodded through; a blank has to be answered.
+
+Two kinds of reader sit behind one seam. A `FactsheetTemplate` matches patterns
+in the text layer, one module per management company. `llm.LlmFactsheetReader`
+opens the document itself and needs no pattern written first — it is behind
+`FUND_LLM_EXTRACT_ENABLED` and, when on, supersedes the Satrix template whose
+five refusals it handles better. `registry.py` holds the arrangement and the
+reasoning for it.
 
     from src.funds.extract import extract_from_url
     extraction = extract_from_url("https://satrix.co.za/fund/mdd/STX40")
@@ -16,17 +23,19 @@ pre-filled wrong value gets nodded through; a blank has to be answered.
 
 from __future__ import annotations
 
-from .base import Extraction, FactsheetTemplate, Reading, Unresolved
+from .base import Extraction, ExtractError, FactsheetTemplate, Reading, Unresolved
 from .fetch import FetchError, fetch
-from .registry import TEMPLATES, readable_hosts, template_for
+from .registry import TEMPLATES, build_readers, readable_hosts, template_for
 
 __all__ = [
+    "ExtractError",
     "Extraction",
     "FactsheetTemplate",
     "FetchError",
     "Reading",
     "TEMPLATES",
     "Unresolved",
+    "build_readers",
     "extract_from_url",
     "extract_text",
     "fetch",
@@ -51,7 +60,12 @@ def extract_text(pdf: bytes) -> str:
 
 
 def extract_from_url(url: str) -> Extraction:
-    """Fetch a fact sheet and read what its manager's template describes.
+    """Fetch a fact sheet and read it with whichever reader claims the host.
+
+    Both the document and its text layer are handed to the reader. A
+    pattern-matching template uses only the text; a model-based one needs the
+    bytes, because the figures a text layer loses are the ones printed as a
+    graphic — which is most of what a pattern has to refuse.
 
     Raises FetchError when the document cannot be had; a document that is
     fetched but unreadable is not an error — it comes back with everything
@@ -61,4 +75,4 @@ def extract_from_url(url: str) -> Extraction:
     if template is None:
         raise FetchError(f"No template reads {url}")
     fetched = fetch(url)
-    return template.extract(extract_text(fetched.content), fetched.url)
+    return template.read(fetched.content, extract_text(fetched.content), fetched.url)

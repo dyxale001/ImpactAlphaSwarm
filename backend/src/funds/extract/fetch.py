@@ -22,6 +22,7 @@ from urllib.parse import quote, urlparse, urlunparse
 
 import httpx
 
+from .base import ExtractError
 from .registry import template_for
 
 # Generous for a fact sheet (they run 100KB-1MB) and far below anything that
@@ -30,7 +31,7 @@ MAX_BYTES = 25 * 1024 * 1024
 TIMEOUT_SECONDS = 45
 
 
-class FetchError(Exception):
+class FetchError(ExtractError):
     """The document could not be fetched, with a reason worth showing an admin."""
 
 

@@ -35,6 +35,19 @@ from typing import Any, Optional
 EVIDENCE_WINDOW = 90
 
 
+class ExtractError(Exception):
+    """A reading could not be attempted, with a reason worth showing an admin.
+
+    One base class so the endpoint has one thing to catch, defined here rather
+    than in `fetch` or `llm` because `base` is the module every reader already
+    imports — a reader that must not be imported when its flag is off cannot be
+    where a shared exception lives.
+
+    Every message that reaches this is written for the person at the form, and
+    says what to do meanwhile: the form is open and waiting either way.
+    """
+
+
 @dataclass(frozen=True)
 class Reading:
     """One field read off a sheet, with the text it was read from."""
@@ -152,6 +165,21 @@ class FactsheetTemplate(ABC):
     @abstractmethod
     def matches(self, url: str) -> bool:
         """Whether this template should be used for a URL."""
+
+    def read(self, document: bytes, text: str, url: str) -> Extraction:
+        """Read a fetched document, in whatever way this reader works.
+
+        The seam exists because the two kinds of reader need different things. A
+        pattern-matching template needs only the text layer, and `extract` is
+        the whole of it. A model-based reader needs the **PDF itself**: the
+        figures a text layer loses are exactly the ones printed as a graphic —
+        the risk-profile scale, the allocation chart — which is most of what a
+        regex has to refuse.
+
+        Defaulting to `extract` keeps every existing template unchanged and
+        means a reader that wants the bytes overrides one method.
+        """
+        return self.extract(text, url)
 
     def extract(self, text: str, url: str) -> Extraction:
         """Read what the patterns describe; refuse what this template cannot."""
