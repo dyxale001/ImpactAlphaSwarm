@@ -42,7 +42,13 @@ SNAPSHOT_COLUMNS = (
     "id,fund_id,as_of,mdd_url,mdd_sha256,risk_indicator_raw,risk_indicator_1to5,"
     "recommended_min_term_years,objective,asset_allocation,benchmark,ter,tc,tic,"
     "performance,top_holdings,min_lump_sum,min_debit_order,distribution_frequency,"
-    "fund_size_zar,source,entered_by,reviewed_by,review_status,mdd_pdf_ref,created_at"
+    "fund_size_zar,source,entered_by,reviewed_by,review_status,mdd_pdf_ref,created_at,"
+    # The common core added in migration 025: the rest of what every Minimum
+    # Disclosure Document publishes. Selected explicitly rather than with `*`,
+    # so a column added to the table does not silently start reaching the page.
+    "nav_cpu,nav_date,fee_period,inception_date,annual_management_fee,"
+    "return_high_12m,return_low_12m,return_extremes_basis,risk_narrative,horizon_words,"
+    "portfolio_manager,regulation_28,income_distribution"
 )
 
 APPROVED = "approved"

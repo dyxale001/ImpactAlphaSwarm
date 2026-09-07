@@ -20,7 +20,7 @@ network.
 from __future__ import annotations
 
 import csv
-import json
+import importlib.util
 import subprocess
 import sys
 from datetime import date
@@ -36,7 +36,6 @@ from src.funds.matcher import FundMatcher  # noqa: E402
 from src.funds.models import FundCandidate, Goals, Profile  # noqa: E402
 from src.funds.risk_scale import normalize as normalize_risk_indicator  # noqa: E402
 from src.funds.validators import (  # noqa: E402
-    as_number,
     fund_validators,
     is_blank,
     snapshot_validators,
@@ -62,26 +61,33 @@ def snapshot_rows() -> list[dict[str, str]]:
     return read(DATA_DIR / "snapshots.csv")
 
 
-def as_snapshot(row: dict[str, str]) -> dict:
-    parsed = dict(row)
-    for column in ("risk_indicator_1to5", "recommended_min_term_years", "ter", "tc", "tic", "fund_size_zar"):
-        parsed[column] = None if is_blank(row.get(column)) else as_number(row[column])
-    if parsed["risk_indicator_1to5"] is not None:
-        parsed["risk_indicator_1to5"] = int(parsed["risk_indicator_1to5"])
-    for column in ("asset_allocation", "performance"):
-        value = row.get(column)
-        parsed[column] = None if is_blank(value) else json.loads(value)
-    return parsed
+def _load_loader():
+    """The seed loader itself, imported from the script it ships as.
+
+    Imported by path because `scripts/` is not a package. Worth the four lines:
+    this test used to keep its own copy of the CSV parsing, and the copy drifted
+    the moment migration 025 added columns — the test passed a JSON string
+    straight to a validator that expects an object, and reported it as a broken
+    seed rather than a broken test. Now the row the validators see here is the
+    row the loader would actually write.
+    """
+    spec = importlib.util.spec_from_file_location("_fund_seed_loader", LOADER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_LOADER = _load_loader()
+as_snapshot = _LOADER.parse_snapshot
+as_fund = _LOADER.parse_fund
 
 
 def candidates(fund_rows, snapshot_rows) -> list[FundCandidate]:
     by_isin = {row["isin"]: as_snapshot(row) for row in snapshot_rows}
     built = []
     for row in fund_rows:
-        fund = dict(row)
+        fund = as_fund(row)
         fund["id"] = row["isin"]
-        fund["is_index_tracker"] = row["is_index_tracker"].strip().lower() == "true"
-        fund["tfsa_eligible"] = row["tfsa_eligible"].strip().lower() == "true"
         built.append(FundCandidate(fund=fund, snapshot=by_isin.get(row["isin"])))
     return built
 
@@ -96,9 +102,7 @@ class TestTheSeedIsWellFormed:
         assert snapshot_rows, "snapshots.csv is empty"
 
     def test_every_fund_passes_its_validators(self, fund_rows):
-        findings = fund_validators().check_all([
-            {**row, "platforms": [p for p in row["platforms"].split(";") if p]} for row in fund_rows
-        ])
+        findings = fund_validators().check_all([as_fund(row) for row in fund_rows])
         blocking = [f"row {i}: {p}" for i, p in findings if p.blocking]
         assert blocking == []
 

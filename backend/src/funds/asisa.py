@@ -41,6 +41,25 @@ class AsisaCategory:
     name: str
 
 
+def _comparable_category(printed: str) -> str:
+    """A classification name reduced to what a PDF cannot vary.
+
+    Lower-cased, dashes unified, "SA" expanded, and whitespace collapsed — so a
+    name split across a line break, printed with an en dash, or abbreviated
+    compares equal to the published one.
+    """
+    text = " ".join(str(printed or "").split()).lower()
+    for dash in ("\u2013", "\u2014", "\u2212"):
+        text = text.replace(dash, "-")
+    text = " ".join(text.replace("-", " - ").split())
+    if text.startswith("sa - "):
+        text = "south african - " + text[len("sa - "):]
+    elif text.startswith("sa "):
+        text = "south african " + text[len("sa "):]
+    # A sheet that omits the separators entirely still names the same class.
+    return text.replace(" - ", " ")
+
+
 class AsisaClassification:
     """A versioned subset of the ASISA classification standard.
 
@@ -74,6 +93,36 @@ class AsisaClassification:
     def is_known(self, name: str) -> bool:
         return name in self._by_name
 
+    def resolve(self, printed: str) -> AsisaCategory | None:
+        """A category read off a sheet, snapped onto the published name.
+
+        Exact match first, then a comparison that ignores everything a PDF's
+        text layer varies: run-together whitespace, the dash the manager chose
+        (some sheets use an en dash where the standard prints a hyphen), and the
+        word "South African" abbreviated to "SA".
+
+        This exists because of the failure it fixes. The Satrix ILBI sheet prints
+        its classification wrapped across two lines — "South African - Interest
+        Bearing - Variable Term" then "ILB" — and a reader that stops at the
+        break produces a *different real category*, not an obvious error. Nothing
+        downstream can tell the two apart, so the fund was filed and matched
+        under the nominal class for weeks.
+
+        Returns None rather than a nearest guess: an unrecognised category is a
+        curation decision, not a lookup failure, and the caller's job is to say
+        so.
+        """
+        found = self._by_name.get(printed)
+        if found is not None:
+            return found
+        wanted = _comparable_category(printed)
+        if not wanted:
+            return None
+        for category in self.categories:
+            if _comparable_category(category.name) == wanted:
+                return category
+        return None
+
     def names(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.categories)
 
@@ -104,6 +153,12 @@ _CATEGORIES: tuple[AsisaCategory, ...] = (
     AsisaCategory("sa_ib_money_market",  "South African", "Interest Bearing", "Money Market",  "South African - Interest Bearing - Money Market"),
     AsisaCategory("sa_ib_short_term",    "South African", "Interest Bearing", "Short Term",    "South African - Interest Bearing - Short Term"),
     AsisaCategory("sa_ib_variable_term", "South African", "Interest Bearing", "Variable Term", "South African - Interest Bearing - Variable Term"),
+    # Inflation-linked bonds are their own tier-3 class, and the omission was not
+    # cosmetic: the Satrix ILBI ETF's sheet prints "…- Variable Term ILB" wrapped
+    # across two lines, so both the transcription and the regex reader truncated
+    # it at the break and the fund was filed under nominal Variable Term — a
+    # category its own document does not state.
+    AsisaCategory("sa_ib_variable_term_ilb", "South African", "Interest Bearing", "Variable Term ILB", "South African - Interest Bearing - Variable Term ILB"),
     AsisaCategory("sa_ma_income",        "South African", "Multi Asset",      "Income",        "South African - Multi Asset - Income"),
     AsisaCategory("sa_ma_low_equity",    "South African", "Multi Asset",      "Low Equity",    "South African - Multi Asset - Low Equity"),
     AsisaCategory("sa_ma_medium_equity", "South African", "Multi Asset",      "Medium Equity", "South African - Multi Asset - Medium Equity"),
@@ -140,6 +195,12 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
         "sa_ma_medium_equity",
         "sa_ma_high_equity",
         "sa_ib_variable_term",
+        # Placed alongside nominal Variable Term because it is the same asset
+        # class at the same published risk band, and because the ILBI ETF is
+        # what a moderate profile currently matches on — splitting the category
+        # out of the classification without placing it here would reopen the
+        # Moderate gap. ⚠ Belongs in the outstanding bracket-table sign-off.
+        "sa_ib_variable_term_ilb",
         # Broad-market equity reaches a moderate bracket only as an index
         # tracker (see TRACKER_ONLY): "tracks the market" is a published
         # objective, while a stock-picking equity fund in the same category is a
@@ -161,6 +222,7 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
         "sa_ma_medium_equity",
         "sa_ma_high_equity",
         "sa_ib_variable_term",
+        "sa_ib_variable_term_ilb",
         "sa_eq_general",
         "gl_eq_general",
         "sa_ma_flexible",
@@ -192,6 +254,7 @@ INCOME_DISTRIBUTING = frozenset({
     "sa_ma_income",
     "sa_ib_short_term",
     "sa_ib_variable_term",
+    "sa_ib_variable_term_ilb",
     "sa_re_general",
 })
 

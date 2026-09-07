@@ -25,7 +25,11 @@ const NEGATIVE = "#c0705f";
 // Longest first is how a fact sheet reads, and it puts the least noisy figure
 // first. Anything the sheet prints that is not in this list still renders,
 // after the known periods, in whatever order it arrived.
-const PERIOD_ORDER = ["10y", "5y", "3y", "1y"];
+//
+// "inception" is last rather than first despite being the longest period: it
+// covers a different span for every fund, so putting it beside the fixed
+// periods at the head of the row would read as one more comparable column.
+const PERIOD_ORDER = ["10y", "5y", "3y", "1y", "inception"];
 
 export default function FundPerformance({
   performance,

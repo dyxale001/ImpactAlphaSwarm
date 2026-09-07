@@ -135,6 +135,24 @@ class SnapshotIn(BaseModel):
     performance: Optional[dict[str, float]] = None
     top_holdings: Optional[dict[str, float]] = None
 
+    # The common core added in migration 025 — the rest of what every Minimum
+    # Disclosure Document publishes. All optional, because a sheet that omits one
+    # should still be recordable, and because a reader that refuses a field must
+    # be able to leave it blank rather than send a guess.
+    nav_cpu: Optional[float] = None
+    nav_date: Optional[str] = None
+    fee_period: Optional[str] = None
+    inception_date: Optional[str] = None
+    annual_management_fee: Optional[float] = None
+    return_high_12m: Optional[float] = None
+    return_low_12m: Optional[float] = None
+    return_extremes_basis: Optional[str] = None
+    risk_narrative: Optional[str] = None
+    horizon_words: Optional[str] = None
+    portfolio_manager: Optional[str] = None
+    regulation_28: Optional[bool] = None
+    income_distribution: Optional[dict[str, float]] = None
+
 
 # FundIn refers to SnapshotIn before it is defined, so the forward reference is
 # resolved once both exist.

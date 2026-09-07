@@ -137,6 +137,18 @@ class FactsheetTemplate(ABC):
     #: step of the ceiling that decides who is shown this fund.
     ambiguous: dict[str, tuple[str, str]] = {}
 
+    #: field -> a resolver that snaps read text onto a closed vocabulary,
+    #: returning None where the text names nothing the vocabulary covers.
+    #:
+    #: For fields whose value is not free text, a regex that merely *found* the
+    #: label is not enough — the captured text still has to be a value the rest
+    #: of the system recognises. The ASISA classification is the case: the Satrix
+    #: ILBI sheet wraps "…Variable Term ILB" across two lines, and a capture that
+    #: stops at the break yields a *different real category* rather than an
+    #: obvious error, which nothing downstream can detect. Resolving through the
+    #: vocabulary turns that into either the right answer or an honest refusal.
+    vocabulary: dict[str, Any] = {}
+
     @abstractmethod
     def matches(self, url: str) -> bool:
         """Whether this template should be used for a URL."""
@@ -170,6 +182,21 @@ class FactsheetTemplate(ABC):
             check = self.ambiguous.get(name)
             if check and re.search(check[0], raw, self.flags):
                 unresolved.append(Unresolved(name, check[1]))
+                continue
+
+            resolver = self.vocabulary.get(name)
+            if resolver is not None:
+                resolved = resolver(raw)
+                if resolved is None:
+                    unresolved.append(
+                        Unresolved(
+                            name,
+                            f"{raw!r} is not a value this field recognises — pick it "
+                            f"from the list on the form",
+                        )
+                    )
+                    continue
+                readings.append(Reading(name, resolved, _evidence(collapsed, match.start())))
                 continue
 
             value: Any = raw

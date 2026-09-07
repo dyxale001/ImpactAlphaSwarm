@@ -74,6 +74,62 @@ export interface FundSnapshot {
   /** How the row got here — `manual` for everything transcribed by hand. */
   source: string | null;
   entered_by: string | null;
+
+  // ── the regulated common core ────────────────────────────────────────────
+  // Everything below is read off the manager's own document and stored dated.
+
+  /** Cents per unit, as the manager priced it, with the day it was struck.
+   *  For a unit trust this is the ONLY price there is: `fund_prices` is fed
+   *  from a JSE symbol, so it covers listed ETFs and nothing else.
+   *
+   *  Display only. Deriving a return from a series of these is forbidden the
+   *  same way it is for `fund_prices` — one monthly observation is not a
+   *  performance history, and the manager's own published figures are the only
+   *  performance this page shows. */
+  nav_cpu: number | null;
+  nav_date: string | null;
+
+  /** Which period `ter`, `tc`, `tic` and `annual_management_fee` cover —
+   *  `"1y"` or `"3y"`. Managers print both columns and the figures differ, so
+   *  a cost shown without its period invites a comparison between two
+   *  different measures. Null on rows transcribed before this was recorded. */
+  fee_period: string | null;
+
+  inception_date: string | null;
+  /** The manager's own cut, which sits inside the TER. Worth its own line
+   *  because two funds with the same TER are different propositions if one's
+   *  is mostly management fee and the other's mostly trading. */
+  annual_management_fee: number | null;
+
+  /** The best and worst year the fund has had, as published — the most useful
+   *  volatility figure here, because a beginner cannot act on "Moderate" and
+   *  can act on "its worst year was -8%".
+   *
+   *  `return_extremes_basis` is not decoration: Satrix publishes rolling
+   *  one-year periods (`"rolling_12m"`) and FundRock publishes calendar years
+   *  (`"calendar_year"`). They answer the same question and are not the same
+   *  statistic, so showing one fund's beside another's without saying which is
+   *  the same not-like-for-like error the fee columns caused once already. */
+  return_high_12m: number | null;
+  return_low_12m: number | null;
+  return_extremes_basis: string | null;
+
+  /** The manager's own plain English, quoted and never paraphrased. Absent for
+   *  the Satrix ETFs, which draw the risk profile as a graphic with no prose. */
+  risk_narrative: string | null;
+  /** The horizon in words, which sheets state far more often than they state a
+   *  number — only five of nineteen give `recommended_min_term_years`. */
+  horizon_words: string | null;
+
+  portfolio_manager: string | null;
+  /** Printed on unit trust sheets, absent from ETF sheets — so null means "the
+   *  document does not say", not "no". Shown as a published fact and
+   *  deliberately not used to filter matches. */
+  regulation_28: boolean | null;
+  /** Cents per unit by month, as the distribution table prints it. A month the
+   *  sheet leaves as a dash is omitted; a month it prints as 0.00 is kept, and
+   *  the two mean different things. */
+  income_distribution: Record<string, number> | null;
 }
 
 /** One fund, its newest fact sheet, and the dates it has been published on. */

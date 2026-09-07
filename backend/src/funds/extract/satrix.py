@@ -20,6 +20,7 @@ which step is filled in.
 
 from __future__ import annotations
 
+from ..asisa import ASISA
 from .base import FactsheetTemplate
 
 
@@ -31,7 +32,16 @@ class SatrixTemplate(FactsheetTemplate):
         "as_of": r"Minimum Disclosure Document\s*\n\s*(\d{1,2} \w+ 20\d\d)",
         "isin": r"ISIN Code\s*([A-Z]{2}[A-Z0-9]{9}\d)",
         "jse_code": r"JSE Code\s*([A-Z0-9]+)",
-        "asisa_category": r"ASISA Classification\s*(.{4,60}?)(?:\n[A-Z]{2,}|\nInception|\nIncome|$)",
+        # The terminator names the labels that actually follow this line in the
+        # fund-facts block. It used to stop at any newline followed by capitals,
+        # which is why "…Variable Term \nILB" came back as nominal Variable Term:
+        # "ILB" is itself a run of capitals. The vocabulary resolver below is the
+        # second guard, so a capture that goes wrong refuses instead of lying.
+        "asisa_category": (
+            r"ASISA Classification\s*(.{4,80}?)"
+            r"(?=\n(?:Distribution|Inception|Income|Rebalance|Scrip|Portfolio|"
+            r"Securities|NAV|Modified|Yield|Highest|Lowest|Benchmark)|$)"
+        ),
         "benchmark": r"\nBenchmark\s*([^\n]{2,70})",
         # Where a fee has been cut the sheet prints two TER rows: the historic
         # one and one marked effective from a date. The TIC row already reflects
@@ -46,6 +56,8 @@ class SatrixTemplate(FactsheetTemplate):
     }
 
     numeric = frozenset({"ter", "tc", "tic"})
+
+    vocabulary = {"asisa_category": lambda raw: getattr(ASISA.resolve(raw), "name", None)}
 
     dates = frozenset({"as_of"})
 

@@ -50,6 +50,36 @@ MAX_PLAUSIBLE_TERM_YEARS = 30.0
 ALLOCATION_MIN_TOTAL = 95.0
 ALLOCATION_MAX_TOTAL = 105.0
 
+# A rolling one-year return, as a percentage. Wide on purpose: a South African
+# property fund's worst year ran close to -50%, and a best year near +100% is
+# implausible without being impossible. This catches a misplaced decimal point
+# and a dropped sign, not an opinion about markets.
+MIN_PLAUSIBLE_ANNUAL_RETURN = -100.0
+MAX_PLAUSIBLE_ANNUAL_RETURN = 200.0
+
+# Net asset value per unit, in cents. The range is only an absurdity check — see
+# NavValidator on why a unit error cannot be caught by range alone.
+MIN_PLAUSIBLE_NAV_CPU = 1.0
+MAX_PLAUSIBLE_NAV_CPU = 10_000_000.0
+
+# Under a rand a unit. Real for a few funds and not an error, but also exactly
+# what a rand figure stored without converting looks like, so it is worth a look.
+NAV_CPU_SECOND_LOOK = 100.0
+
+# Which period the stored fee figures cover. Mirrors the check constraint in
+# migration 025, in both places on purpose: the database refuses the row and this
+# says which column to look at.
+FEE_PERIODS = ("1y", "3y")
+
+# On what basis the best and worst year were measured. Not a formatting choice:
+# Satrix publishes rolling one-year periods and FundRock publishes calendar
+# years, and the two are different statistics for the same question.
+RETURN_EXTREMES_BASES = ("rolling_12m", "calendar_year")
+
+# No collective investment scheme in this catalogue predates the legislation that
+# created them. A date before this is a mistyped year, not a very old fund.
+EARLIEST_PLAUSIBLE_INCEPTION = date(1965, 1, 1)
+
 
 @dataclass(frozen=True)
 class Problem:
@@ -288,14 +318,30 @@ class AsisaCategoryValidator(RowValidator):
         name = row.get("asisa_category")
         if is_blank(name):
             return [Problem("asisa_category", "is required; the match is a lookup on it")]
-        category = ASISA.by_name(str(name).strip())
+        printed = str(name).strip()
+        category = ASISA.by_name(printed)
         if category is None:
+            # Named the right class in the wrong words is the common case, and it
+            # deserves a message naming the words to use rather than the same
+            # "not covered" as a genuinely new category. A near miss is still an
+            # error: the column is joined by name, with no foreign key behind it,
+            # so a loose name stores cleanly and then matches nobody.
+            near = ASISA.resolve(printed)
+            if near is not None:
+                return [
+                    Problem(
+                        "asisa_category",
+                        f"{printed!r} is the published name of {near.name!r} written "
+                        f"differently. Record it verbatim — this column is joined by "
+                        f"name, so a near miss stores fine and then matches nobody.",
+                    )
+                ]
             return [
                 Problem(
                     "asisa_category",
                     f"{name!r} is not in the classification we cover. Either it is "
                     f"mistyped, or the catalogue is growing into a new category and "
-                    f"asisa.py and migration 024 both need it.",
+                    f"asisa.py and the migration seed both need it.",
                 )
             ]
         problems: list[Problem] = []
@@ -437,6 +483,347 @@ class FreshnessValidator(RowValidator):
         return []
 
 
+class NavValidator(RowValidator):
+    """A price must be dated, and its unit has to be watched rather than checked.
+
+    A unit trust is not traded, so the NAV its manager publishes on the sheet is
+    the only price it has — eleven of the nineteen seeded funds had no price
+    anywhere in the system while their own documents printed one. That makes this
+    column load-bearing, and its unit with it: managers print unit trusts in
+    cents ("1 234,56 cpu") and ETFs in rand ("NAV Price R9.23").
+
+    **A range cannot catch a unit error here, and the first version of this
+    validator pretended otherwise.** It had a floor of one cent with a comment
+    claiming that caught an unconverted rand figure; Satrix's R9.23 passed it
+    cleanly, because plausible rand prices and plausible cent prices overlap
+    across almost their whole range. So the range is an absurdity check only, and
+    the sub-rand case gets a warning that names the conversion rather than an
+    error that would refuse the several funds legitimately priced there. The
+    conversion itself belongs in one named place in the reader, beside the quote
+    the reviewer sees.
+
+    A check constraint already requires the date. It cannot say which date is
+    implausible, and this can.
+    """
+
+    name = "nav"
+
+    def __init__(self, today: date | None = None):
+        self._today = today
+        self._range = NumericRangeValidator(
+            "nav_cpu", MIN_PLAUSIBLE_NAV_CPU, MAX_PLAUSIBLE_NAV_CPU, unit="cents"
+        )
+
+    @property
+    def today(self) -> date:
+        return self._today or date.today()
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        nav = row.get("nav_cpu")
+        raw_date = row.get("nav_date")
+
+        if is_blank(nav):
+            if not is_blank(raw_date):
+                return [
+                    Problem(
+                        "nav_cpu",
+                        "a NAV date was recorded with no price; either give the price "
+                        "the sheet prints or clear the date",
+                    )
+                ]
+            return []
+
+        problems = list(self._range.check(row))
+        if is_blank(raw_date):
+            problems.append(
+                Problem(
+                    "nav_date",
+                    "a price means nothing without the day it was struck; use the "
+                    "sheet's own as-at date if it prints no other",
+                )
+            )
+            return problems
+
+        value = as_number(nav)
+        if value is not None and value < NAV_CPU_SECOND_LOOK:
+            problems.append(
+                Problem(
+                    "nav_cpu",
+                    f"{value} cents is under a rand a unit. Real for a few funds, but "
+                    f"also what a rand figure looks like stored without converting — if "
+                    f"the sheet printed 'R{value}', this should be {round(value * 100, 2)}.",
+                    WARNING,
+                )
+            )
+
+        priced = _as_date(raw_date)
+        if priced is None:
+            problems.append(Problem("nav_date", f"{raw_date!r} is not a YYYY-MM-DD date"))
+        elif priced > self.today:
+            problems.append(Problem("nav_date", f"{priced.isoformat()} is in the future"))
+        return problems
+
+
+class FeePeriodValidator(RowValidator):
+    """Which period the fees cover, asked for as soon as any fee is recorded.
+
+    Managers print the expense ratio, transaction cost and total investment
+    charge in two columns — 1-Year and 3-Year — and the figures differ. Before
+    this column existed the catalogue mixed them, so two funds' costs could be
+    compared when one number was annual and the other three-year annualised.
+    Recording the period is what makes that comparison honest, or makes it
+    visibly refusable.
+
+    A warning rather than an error, because the figures themselves are still the
+    manager's own and a sheet with an unlabelled single figure should not be
+    unrecordable. Wrong vocabulary IS an error: it means a column was guessed at.
+    """
+
+    name = "fee_period"
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        period = row.get("fee_period")
+        has_fees = any(
+            not is_blank(row.get(field))
+            for field in ("ter", "tc", "tic", "annual_management_fee")
+        )
+
+        if is_blank(period):
+            if has_fees:
+                return [
+                    Problem(
+                        "fee_period",
+                        "fees were recorded without saying which period they cover; one "
+                        f"of {', '.join(FEE_PERIODS)}. Where the sheet prints both "
+                        "columns, take the 1-Year one.",
+                        WARNING,
+                    )
+                ]
+            return []
+
+        if str(period).strip() not in FEE_PERIODS:
+            return [
+                Problem("fee_period", f"{period!r} is not one of {', '.join(FEE_PERIODS)}")
+            ]
+        if not has_fees:
+            return [
+                Problem(
+                    "fee_period",
+                    "names a fee period but no fee figures were recorded",
+                    WARNING,
+                )
+            ]
+        return []
+
+
+class ManagementFeeValidator(NumericRangeValidator):
+    """The manager's own cut, which sits inside the total expense ratio.
+
+    Kept as its own field because a reader comparing two funds' costs is
+    comparing different things if one fund's TER is mostly management fee and the
+    other's is mostly trading.
+
+    The containment relation is a warning, not an error. The TER is calculated
+    including VAT and net of fee waivers, so an unusual sheet can legitimately
+    print the two close together or even inverted, and refusing a fact sheet over
+    that would be refusing the document.
+    """
+
+    def __init__(self):
+        super().__init__("annual_management_fee", 0, MAX_PLAUSIBLE_FEE_PERCENT, unit="%")
+        self.name = "management_fee"
+
+    def extra_checks(self, row: dict[str, Any], number: float) -> list[Problem]:
+        ter = as_number(row.get("ter"))
+        if ter is not None and number > ter:
+            return [
+                Problem(
+                    "annual_management_fee",
+                    f"{number}% is above the total expense ratio {ter}%, which normally "
+                    f"contains it; check the two were not read off different fee columns",
+                    WARNING,
+                )
+            ]
+        return []
+
+
+class RollingReturnValidator(RowValidator):
+    """The best and worst twelve months the fund has had, as published.
+
+    The most useful volatility figure this catalogue carries, because a beginner
+    cannot act on the word "Moderate" and can act on "its worst year was -8%".
+
+    Each is range-checked, and the pair is checked for order: a highest below a
+    lowest means the two rows were read the wrong way round. That is an easy
+    mistake to make, because managers print them adjacent and print the negative
+    one in brackets rather than with a minus sign.
+
+    And the basis is required with the figures, because managers do not publish
+    the same statistic. Satrix prints "Highest/Lowest Annual Rolling Return"
+    over ten non-overlapping one-year periods; FundRock prints "Highest and
+    Lowest: Calendar year performance since inception". Storing both in one pair
+    of columns and showing them side by side would repeat, exactly, the fee-column
+    mistake that `fee_period` was added to stop.
+    """
+
+    name = "rolling_returns"
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        problems: list[Problem] = []
+        basis = row.get("return_extremes_basis")
+        has_extremes = any(
+            not is_blank(row.get(field)) for field in ("return_high_12m", "return_low_12m")
+        )
+        if not is_blank(basis) and str(basis).strip() not in RETURN_EXTREMES_BASES:
+            problems.append(
+                Problem(
+                    "return_extremes_basis",
+                    f"{basis!r} is not one of {', '.join(RETURN_EXTREMES_BASES)}",
+                )
+            )
+        elif has_extremes and is_blank(basis):
+            problems.append(
+                Problem(
+                    "return_extremes_basis",
+                    "a best and worst year were recorded without saying how they were "
+                    f"measured; one of {', '.join(RETURN_EXTREMES_BASES)}. Read the "
+                    "sheet's own heading — 'Annual Rolling Return' is rolling_12m, "
+                    "'Calendar year performance' is calendar_year.",
+                )
+            )
+        elif not has_extremes and not is_blank(basis):
+            problems.append(
+                Problem(
+                    "return_extremes_basis",
+                    "names a basis but no best or worst year was recorded",
+                    WARNING,
+                )
+            )
+        if problems:
+            return problems
+
+        for field_name in ("return_high_12m", "return_low_12m"):
+            problems.extend(
+                NumericRangeValidator(
+                    field_name,
+                    MIN_PLAUSIBLE_ANNUAL_RETURN,
+                    MAX_PLAUSIBLE_ANNUAL_RETURN,
+                    unit="%",
+                ).check(row)
+            )
+        if problems:
+            return problems
+
+        high = as_number(row.get("return_high_12m"))
+        low = as_number(row.get("return_low_12m"))
+        if high is not None and low is not None and high < low:
+            problems.append(
+                Problem(
+                    "return_high_12m",
+                    f"the highest annual return {high}% is below the lowest {low}%; the "
+                    f"two look swapped. Sheets print the negative one in brackets — "
+                    f"(4.49) means -4.49.",
+                )
+            )
+        return problems
+
+
+class InceptionDateValidator(RowValidator):
+    """When the fund started, which is also why a five-year return can be blank."""
+
+    name = "inception"
+
+    def __init__(self, today: date | None = None):
+        self._today = today
+
+    @property
+    def today(self) -> date:
+        return self._today or date.today()
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        raw = row.get("inception_date")
+        if is_blank(raw):
+            return []
+        started = _as_date(raw)
+        if started is None:
+            return [Problem("inception_date", f"{raw!r} is not a YYYY-MM-DD date")]
+        if started > self.today:
+            return [Problem("inception_date", f"{started.isoformat()} is in the future")]
+        if started < EARLIEST_PLAUSIBLE_INCEPTION:
+            return [
+                Problem(
+                    "inception_date",
+                    f"{started.isoformat()} is before collective investment schemes "
+                    f"existed here; check the year",
+                )
+            ]
+        as_of = _as_date(row.get("as_of"))
+        if as_of is not None and started > as_of:
+            return [
+                Problem(
+                    "inception_date",
+                    f"{started.isoformat()} is after the sheet's own date "
+                    f"{as_of.isoformat()}; a fund cannot report before it launched",
+                )
+            ]
+        return []
+
+
+class IncomeDistributionValidator(RowValidator):
+    """The cents-per-unit history, as the sheet's distribution table prints it.
+
+    A mapping of period to cents per unit. Zero is a real published value — a
+    fund can declare nothing for a month, and the Satrix ILBI sheet prints
+    exactly that for February — so only a negative distribution is wrong, and
+    that would mean a figure was read out of an adjacent returns column.
+    """
+
+    name = "income_distribution"
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        history = row.get("income_distribution")
+        if history in (None, "", {}, []):
+            return []
+        if not isinstance(history, dict):
+            return [
+                Problem(
+                    "income_distribution",
+                    f"expected an object of period to cents per unit, got "
+                    f"{type(history).__name__}",
+                )
+            ]
+        problems: list[Problem] = []
+        for period, value in history.items():
+            number = as_number(value)
+            if number is None:
+                problems.append(
+                    Problem("income_distribution", f"{period!r} is not a number: {value!r}")
+                )
+            elif number < 0:
+                problems.append(
+                    Problem(
+                        "income_distribution",
+                        f"{period!r} is {number} cents; a distribution is never negative, "
+                        f"so this was probably read off a returns column",
+                    )
+                )
+        return problems
+
+
+def _as_date(value: Any) -> date | None:
+    """A date column out of a CSV cell, a JSON string or a database value."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if is_blank(value):
+        return None
+    try:
+        return datetime.strptime(str(value).strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 class ValidatorChain:
     """Runs a set of validators over a row and collects everything they find.
 
@@ -494,6 +881,13 @@ def snapshot_validators(today: date | None = None) -> ValidatorChain:
             NumericRangeValidator("tic", 0, MAX_PLAUSIBLE_FEE_PERCENT, unit="%"),
             FeeRelationValidator(),
             AllocationValidator(),
+            # The common core added in migration 025.
+            NavValidator(today=today),
+            FeePeriodValidator(),
+            ManagementFeeValidator(),
+            RollingReturnValidator(),
+            InceptionDateValidator(today=today),
+            IncomeDistributionValidator(),
         ),
         label="snapshot",
     )

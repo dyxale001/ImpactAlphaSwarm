@@ -48,7 +48,7 @@ SNAPSHOTS_CSV = DATA_DIR / "snapshots.csv"
 PDF_DIR = DATA_DIR / "mdd"
 
 # Columns that are JSON objects in the CSV.
-JSON_COLUMNS = ("asset_allocation", "performance", "top_holdings")
+JSON_COLUMNS = ("asset_allocation", "performance", "top_holdings", "income_distribution")
 # Columns that are numbers, blank meaning "the sheet does not publish it".
 NUMERIC_COLUMNS = (
     "risk_indicator_1to5",
@@ -59,8 +59,34 @@ NUMERIC_COLUMNS = (
     "fund_size_zar",
     "min_lump_sum",
     "min_debit_order",
+    "nav_cpu",
+    "annual_management_fee",
+    "return_high_12m",
+    "return_low_12m",
 )
 BOOLEAN_COLUMNS = ("is_index_tracker", "tfsa_eligible")
+# Date columns on a snapshot. `as_of` is not here: it is required, so a blank is
+# an error the validators must report rather than a None to write.
+SNAPSHOT_DATE_COLUMNS = ("nav_date", "inception_date")
+# Free text a sheet may simply not print. Blank means absent, not empty string —
+# an empty string reads as "the manager published nothing here", which is a
+# different claim from "we have not recorded it".
+SNAPSHOT_TEXT_COLUMNS = (
+    "risk_indicator_raw",
+    "objective",
+    "benchmark",
+    "distribution_frequency",
+    "entered_by",
+    "fee_period",
+    "return_extremes_basis",
+    "risk_narrative",
+    "horizon_words",
+    "portfolio_manager",
+)
+# Booleans on a snapshot, where blank is a third state: unit trust sheets print
+# Regulation 28 compliance and ETF sheets do not, so absent means "the document
+# does not say", not False.
+SNAPSHOT_TRISTATE_COLUMNS = ("regulation_28",)
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -93,9 +119,15 @@ def parse_snapshot(row: dict[str, str]) -> dict:
     for column in JSON_COLUMNS:
         value = parsed.get(column)
         parsed[column] = None if is_blank(value) else json.loads(value)
-    for column in ("risk_indicator_raw", "objective", "benchmark", "distribution_frequency", "entered_by"):
+    for column in SNAPSHOT_DATE_COLUMNS:
         if is_blank(parsed.get(column)):
             parsed[column] = None
+    for column in SNAPSHOT_TEXT_COLUMNS:
+        if is_blank(parsed.get(column)):
+            parsed[column] = None
+    for column in SNAPSHOT_TRISTATE_COLUMNS:
+        value = parsed.get(column)
+        parsed[column] = None if is_blank(value) else str(value).strip().lower() == "true"
     return parsed
 
 

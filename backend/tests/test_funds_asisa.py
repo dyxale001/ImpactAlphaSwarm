@@ -33,7 +33,14 @@ from src.funds.asisa import (  # noqa: E402
     AsisaClassification,
 )
 
-MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "024_funds.sql"
+MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
+
+# Every migration that seeds categories, in the order they are applied. 024 laid
+# down the first fourteen; 025 added the fifteenth, Variable Term ILB, after a
+# fund was found filed under the nominal class because its own sheet wraps the
+# name across two lines. Discovered by globbing rather than listed, so a later
+# migration that adds a category is covered without editing this file — which is
+# the point of the tripwire, and a hard-coded list would quietly stop being one.
 
 # Matches one seeded row: ('version', 'code', 'tier1', 'tier2', 'tier3', 'name')
 _SEED_ROW = re.compile(
@@ -46,11 +53,40 @@ _SEED_ROW = re.compile(
 )
 
 
+_SEED_STATEMENT = "insert into public.asisa_categories"
+_SEED_END = "on conflict (version, code) do nothing"
+
+
+def seeding_migrations() -> list[Path]:
+    """The migrations that seed categories, in application order."""
+    found = [
+        path
+        for path in sorted(MIGRATIONS.glob("*.sql"))
+        if _SEED_STATEMENT in path.read_text(encoding="utf-8")
+    ]
+    assert found, f"no migration under {MIGRATIONS} seeds asisa_categories"
+    return found
+
+
 def seeded_rows() -> list[dict[str, str]]:
-    sql = MIGRATION.read_text(encoding="utf-8")
-    start = sql.index("insert into public.asisa_categories")
-    end = sql.index("on conflict (version, code) do nothing", start)
-    return [m.groupdict() for m in _SEED_ROW.finditer(sql[start:end])]
+    """Every category row seeded across the migration set.
+
+    Ordering matters only in that a later migration may not restate a row from an
+    earlier one; `test_no_category_is_seeded_twice` holds that.
+    """
+    rows: list[dict[str, str]] = []
+    for path in seeding_migrations():
+        sql = path.read_text(encoding="utf-8")
+        cursor = 0
+        while True:
+            try:
+                start = sql.index(_SEED_STATEMENT, cursor)
+            except ValueError:
+                break
+            end = sql.index(_SEED_END, start)
+            rows.extend(m.groupdict() for m in _SEED_ROW.finditer(sql[start:end]))
+            cursor = end
+    return rows
 
 
 class TestMigrationAgreesWithCode:
@@ -82,6 +118,36 @@ class TestMigrationAgreesWithCode:
 
     def test_the_version_is_the_same_in_both(self):
         assert {row["version"] for row in seeded_rows()} == {ASISA_VERSION}
+
+    def test_no_category_is_seeded_twice(self):
+        """Two migrations must not both claim the same code.
+
+        The seed statements end in `on conflict (version, code) do nothing`, so a
+        later migration restating an earlier row applies cleanly and changes
+        nothing — including when the restated row DISAGREES. That is the one way
+        the code-versus-database comparison above could pass while the database
+        holds something else, so it is checked separately rather than trusted.
+        """
+        codes = [row["code"] for row in seeded_rows()]
+        assert len(codes) == len(set(codes)), f"seeded twice: {sorted(set(codes))}"
+
+    def test_the_fifteenth_category_is_the_ilb_one(self):
+        """REGRESSION GUARD: Variable Term ILB is a category, not a suffix.
+
+        The Satrix ILBI ETF's sheet prints "South African - Interest Bearing -
+        Variable Term ILB" wrapped across a line break. Both the transcription
+        and the regex reader stopped at the break, so the fund was filed under
+        nominal Variable Term — a real, different category that its own document
+        does not state, and one nothing downstream could tell apart.
+        """
+        nominal = ASISA.by_code("sa_ib_variable_term")
+        linked = ASISA.by_code("sa_ib_variable_term_ilb")
+        assert nominal is not None and linked is not None
+        assert nominal.name != linked.name
+        assert linked.tier3 == "Variable Term ILB"
+        # And the truncated form must not resolve to the linked one.
+        assert ASISA.resolve(nominal.name) is nominal
+        assert ASISA.resolve(linked.name) is linked
 
 
 class TestClassification:

@@ -138,6 +138,23 @@ export interface SnapshotInput {
   asset_allocation?: Record<string, number>;
   /** Period ("1y", "3y", …) → annualised percent, as the sheet prints them. */
   performance?: Record<string, number>;
+
+  // The common core, all optional: a sheet that omits one must still be
+  // recordable, and a reader that refuses a field has to be able to leave it
+  // blank rather than send a guess.
+  nav_cpu?: number | null;
+  nav_date?: string | null;
+  fee_period?: string | null;
+  inception_date?: string | null;
+  annual_management_fee?: number | null;
+  return_high_12m?: number | null;
+  return_low_12m?: number | null;
+  return_extremes_basis?: string | null;
+  risk_narrative?: string | null;
+  horizon_words?: string | null;
+  portfolio_manager?: string | null;
+  regulation_28?: boolean | null;
+  income_distribution?: Record<string, number> | null;
 }
 
 interface Saved<T> {
