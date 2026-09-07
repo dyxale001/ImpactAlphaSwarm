@@ -231,6 +231,7 @@ export default function LearningPage() {
     progressByArticleId[articleId]?.quiz_score ?? null;
 
   const handleTakeQuiz = (article: LearningArticle) => {
+    setSelectedArticle(null);
     setSelectedQuizArticle(article);
   };
 
@@ -413,14 +414,16 @@ export default function LearningPage() {
                             >
                               Read Article
                             </button>
-                            <button
-                              type="button"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => handleTakeQuiz(article)}
-                              className="rounded-full bg-brand-primary px-2.5 py-1 text-[11px] font-semibold text-brand-bg transition-opacity hover:opacity-90"
-                            >
-                              Take Quiz
-                            </button>
+                            {(article.quiz_question_count ?? 0) > 0 ? (
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleTakeQuiz(article)}
+                                className="rounded-full bg-brand-primary px-2.5 py-1 text-[11px] font-semibold text-brand-bg transition-opacity hover:opacity-90"
+                              >
+                                Take Quiz
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -491,7 +494,11 @@ export default function LearningPage() {
       </div>
 
       <ArticleViewerModal
-        article={selectedArticle}
+        article={selectedQuizArticle ? null : selectedArticle}
+        onStartQuiz={handleTakeQuiz}
+        quizStatus={
+          selectedArticle ? progressByArticleId[selectedArticle.id]?.status : undefined
+        }
         onClose={() => setSelectedArticle(null)}
       />
 

@@ -28,6 +28,8 @@ export type LearningArticle = {
   difficulty_level: LearningDifficultyLevel;
   created_at: string;
   questions: LearningQuestion[];
+  /** Catalogue count only; full questions are loaded when the quiz opens. */
+  quiz_question_count?: number;
 };
 
 export type LearningCategory = {

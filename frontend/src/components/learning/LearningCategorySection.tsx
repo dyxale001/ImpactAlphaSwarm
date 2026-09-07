@@ -41,7 +41,7 @@ text-sm text-brand-muted-fg
               article={article}
               onOpenArticle={onOpenArticle}
               onTakeQuiz={onTakeQuiz}
-              canTakeQuiz={true}
+              canTakeQuiz={(article.quiz_question_count ?? 0) > 0}
               hasPerfectScore={getArticleQuizScore(article.id) === 100}
             />
           </div>
