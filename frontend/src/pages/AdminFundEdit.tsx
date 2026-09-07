@@ -11,6 +11,7 @@ import {
   type SnapshotInput,
 } from "../services/api/adminFundCatalogue";
 import { getCatalogueFund, type CatalogueFundDetail } from "../services/api/fundCatalogue";
+import FactsheetCrops from "../components/admin/FactsheetCrops";
 
 /**
  * Edit one fund, and record a fact sheet against it.
@@ -372,6 +373,13 @@ function RecordSheet({
             </div>
           )}
         </div>
+      )}
+
+      {/* The blocks a person still has to read, cut out of the document. Shown
+          after the reading rather than beside each field: the crops are wide,
+          and three of the four cover fields that are blank anyway. */}
+      {extraction?.crops && extraction.crops.length > 0 && (
+        <FactsheetCrops crops={extraction.crops} />
       )}
 
       {supersedes && (

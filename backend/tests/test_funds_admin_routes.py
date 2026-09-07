@@ -411,8 +411,11 @@ class TestExtractingToPrefill:
 
         monkeypatch.setattr(
             admin_routes,
-            "extract_from_url",
-            lambda url: Extraction(template="fake", url=url, readings=(Reading("isin", "X", "ev"),)),
+            "read_and_crop",
+            lambda url: (
+                Extraction(template="fake", url=url, readings=(Reading("isin", "X", "ev"),)),
+                (),
+            ),
         )
         res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
         assert res.status_code == 200
@@ -422,19 +425,35 @@ class TestExtractingToPrefill:
                 for name, *_ in client.app.state.fake.calls_on(table)
             )
 
-    def test_it_returns_values_evidence_and_refusals_separately(self, client, monkeypatch):
-        # Three things, not one: what to fill, what it was read from, and what
-        # the reviewer has to supply themselves.
+    def test_it_returns_values_evidence_refusals_and_crops_separately(self, client, monkeypatch):
+        # Four things, not one: what to fill, what it was read from, what the
+        # reviewer has to supply themselves, and a picture of the block they
+        # have to supply it from.
         from src.funds import admin_routes
+        from src.funds.extract.crops import Crop
 
         monkeypatch.setattr(
             admin_routes,
-            "extract_from_url",
-            lambda url: Extraction(
-                template="satrix",
-                url=url,
-                readings=(Reading("isin", "ZAE000240123", "ISIN Code ZAE000240123"),),
-                unresolved=(Unresolved("risk_indicator_raw", "drawn as a graphic — read the sheet"),),
+            "read_and_crop",
+            lambda url: (
+                Extraction(
+                    template="satrix",
+                    url=url,
+                    readings=(Reading("isin", "ZAE000240123", "ISIN Code ZAE000240123"),),
+                    unresolved=(
+                        Unresolved("risk_indicator_raw", "drawn as a graphic — read the sheet"),
+                    ),
+                ),
+                (
+                    Crop(
+                        field="risk_indicator_raw",
+                        label="Risk profile",
+                        note="Read which step is shaded.",
+                        page=1,
+                        anchor="RISK PROFILE",
+                        png=b"\x89PNG pretend",
+                    ),
+                ),
             ),
         )
         body = client.post(
@@ -444,16 +463,61 @@ class TestExtractingToPrefill:
         assert "ISIN Code" in body["evidence"]["isin"]
         assert body["unresolved"][0]["field"] == "risk_indicator_raw"
 
+        # The crop is attached to the field it belongs beside, carries the page
+        # it came from, and arrives as base64 so the form needs no second call.
+        crop = body["crops"][0]
+        assert crop["field"] == "risk_indicator_raw"
+        assert crop["page"] == 1
+        assert crop["png_base64"]
+
+    def test_a_sheet_that_cannot_be_rendered_still_returns_its_reading(self, client, monkeypatch):
+        """The crops are an aid. Losing them degrades the form, not the request."""
+        from src.funds import admin_routes
+
+        monkeypatch.setattr(
+            admin_routes,
+            "read_and_crop",
+            lambda url: (
+                Extraction(template="fundrock", url=url, readings=(Reading("ter", 1.26, "TER 1.26"),)),
+                (),
+            ),
+        )
+        body = client.post(
+            "/api/admin/fund-catalogue/extract", json={"url": "https://bcis.co.za/x"}
+        ).json()
+        assert body["fields"] == {"ter": 1.26}
+        assert body["crops"] == []
+
     def test_a_bad_link_is_the_admins_to_fix_not_a_server_fault(self, client, monkeypatch):
         from src.funds import admin_routes
 
         def explode(_url):
             raise FetchError("That address did not return a PDF.")
 
-        monkeypatch.setattr(admin_routes, "extract_from_url", explode)
+        monkeypatch.setattr(admin_routes, "read_and_crop", explode)
         res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
         assert res.status_code == 422
         assert "PDF" in res.json()["detail"]["message"]
+
+    def test_a_reader_failure_is_reported_with_its_message_not_as_a_crash(
+        self, client, monkeypatch
+    ):
+        """A misconfigured reader is the server's fault and still not a 500.
+
+        Before the errors shared a base class this came back as a 500 with no
+        body, which tells the person at the form nothing at all — and the
+        messages are written precisely so they can act.
+        """
+        from src.funds import admin_routes
+        from src.funds.extract.llm import LlmExtractError
+
+        def explode(_url):
+            raise LlmExtractError("ANTHROPIC_API_KEY is not set on the server.")
+
+        monkeypatch.setattr(admin_routes, "read_and_crop", explode)
+        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
+        assert res.status_code == 422
+        assert "ANTHROPIC_API_KEY" in res.json()["detail"]["message"]
 
     def test_the_readable_hosts_are_listed_for_the_form(self, client):
         hosts = client.get("/api/admin/fund-catalogue/extract/hosts").json()["hosts"]

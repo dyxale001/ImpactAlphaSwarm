@@ -24,20 +24,25 @@ reasoning for it.
 from __future__ import annotations
 
 from .base import Extraction, ExtractError, FactsheetTemplate, Reading, Unresolved
+from .crops import Crop, crop_specs_for, crops_from_pdf
 from .fetch import FetchError, fetch
 from .registry import TEMPLATES, build_readers, readable_hosts, template_for
 
 __all__ = [
+    "Crop",
     "ExtractError",
     "Extraction",
     "FactsheetTemplate",
     "FetchError",
+    "crop_specs_for",
+    "crops_from_pdf",
     "Reading",
     "TEMPLATES",
     "Unresolved",
     "build_readers",
     "extract_from_url",
     "extract_text",
+    "read_and_crop",
     "fetch",
     "readable_hosts",
     "template_for",
@@ -76,3 +81,26 @@ def extract_from_url(url: str) -> Extraction:
         raise FetchError(f"No template reads {url}")
     fetched = fetch(url)
     return template.read(fetched.content, extract_text(fetched.content), fetched.url)
+
+
+def read_and_crop(url: str) -> tuple[Extraction, tuple[Crop, ...]]:
+    """One fetch, one reading, and pictures of the blocks worth a person's eyes.
+
+    Together rather than as two endpoints because they come off the same
+    download, and because the crops are only useful next to the reading: the
+    fields a reader refuses are exactly the ones the crops cover.
+
+    A sheet that cannot be rendered still returns its reading. The crops are an
+    aid, and losing them should degrade the form rather than break it.
+    """
+    template = template_for(url)
+    if template is None:
+        raise FetchError(f"No template reads {url}")
+
+    fetched = fetch(url)
+    extraction = template.read(fetched.content, extract_text(fetched.content), fetched.url)
+    try:
+        crops = crops_from_pdf(fetched.content)
+    except Exception:  # noqa: BLE001 - a rendering failure must not lose the reading
+        crops = ()
+    return extraction, crops

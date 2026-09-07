@@ -10,6 +10,7 @@ import {
   type SnapshotInput,
 } from "../../services/api/adminFundCatalogue";
 import { useFundCatalogueMeta } from "../../hooks/useFundCatalogue";
+import FactsheetCrops from "./FactsheetCrops";
 
 /**
  * Add a fund, starting from its fact sheet.
@@ -358,6 +359,14 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
           it. Without a date here the fund is saved on its own — it will be listed but cannot be
           matched to anyone until a sheet is recorded.
         </p>
+        {/* Before the fields, here: on a new fund the risk rating is one of the
+            things that has to be typed, and it is the field a reader always
+            refuses. Having the scale on screen while filling the box in is the
+            difference between reading the sheet and remembering it. */}
+        {extraction?.crops && extraction.crops.length > 0 && (
+          <FactsheetCrops crops={extraction.crops} />
+        )}
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="As at (YYYY-MM-DD)" name="as_of" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
           <Field label="Risk, as printed" name="risk_indicator_raw" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
