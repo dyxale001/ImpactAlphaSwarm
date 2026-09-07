@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { LayoutGrid, Loader2, Pin, RotateCcw } from "lucide-react";
+import { LayoutGrid, Loader2, RotateCcw } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { parseLayout } from "../dashboard/layoutSchema";
 import { WIDGET_SPEC, widgetById } from "../dashboard/widgetRegistry";
@@ -79,16 +79,10 @@ export default function DashboardPreferencesSection() {
                 <LayoutGrid className="h-2.5 w-2.5" />
                 Your layout
               </span>
-              <span className="chip bg-brand-border/30 text-brand-muted-fg">
+              <span className="chip">
                 {layout.widgets.length} widget
                 {layout.widgets.length === 1 ? "" : "s"}
               </span>
-              {layout.pinnedTicker ? (
-                <span className="chip bg-brand-border/30 font-mono text-brand-muted-fg">
-                  <Pin className="h-2.5 w-2.5" />
-                  {layout.pinnedTicker}
-                </span>
-              ) : null}
             </div>
 
             {layout.widgets.length > 0 ? (

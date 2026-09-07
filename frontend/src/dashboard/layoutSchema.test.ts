@@ -14,14 +14,18 @@ import {
 const SPEC: WidgetSpecMap = {
   "top-pick": { sizes: ["medium", "wide"], defaultSize: "wide" },
   "run-status": { sizes: ["small", "medium"], defaultSize: "small" },
+  "social-buzz": {
+    sizes: ["medium", "wide"],
+    defaultSize: "medium",
+    needsTicker: true,
+  },
 };
 
 describe("parseLayout", () => {
   it("reads a well-formed layout", () => {
     const parsed = parseLayout(
       {
-        version: 1,
-        pinnedTicker: "NVDA",
+        version: 2,
         widgets: [
           { id: "top-pick", size: "medium" },
           { id: "run-status", size: "small", settings: { foo: 1 } },
@@ -31,8 +35,7 @@ describe("parseLayout", () => {
     );
 
     expect(parsed).toEqual({
-      version: 1,
-      pinnedTicker: "NVDA",
+      version: 2,
       widgets: [
         { id: "top-pick", size: "medium" },
         { id: "run-status", size: "small", settings: { foo: 1 } },
@@ -91,16 +94,71 @@ describe("parseLayout", () => {
     expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
   });
 
-  it("normalises the pinned ticker and rejects a blank one", () => {
-    expect(
-      parseLayout({ pinnedTicker: " nvda ", widgets: [] }, SPEC)?.pinnedTicker,
-    ).toBe("NVDA");
-    expect(
-      parseLayout({ pinnedTicker: "   ", widgets: [] }, SPEC)?.pinnedTicker,
-    ).toBeNull();
-    expect(
-      parseLayout({ pinnedTicker: 42, widgets: [] }, SPEC)?.pinnedTicker,
-    ).toBeNull();
+  it("normalises a widget's own ticker and drops a blank one", () => {
+    const ticker = (raw: unknown) =>
+      parseLayout(
+        { widgets: [{ id: "social-buzz", size: "medium", settings: { ticker: raw } }] },
+        SPEC,
+      )?.widgets[0].settings?.ticker;
+
+    expect(ticker(" nvda ")).toBe("NVDA");
+    expect(ticker("   ")).toBeUndefined();
+    expect(ticker(42)).toBeUndefined();
+  });
+
+  it("leaves a settings key alone when it drops an unusable ticker", () => {
+    const parsed = parseLayout(
+      {
+        widgets: [
+          { id: "social-buzz", size: "medium", settings: { ticker: "", sort: "added" } },
+        ],
+      },
+      SPEC,
+    );
+
+    expect(parsed?.widgets).toEqual([
+      { id: "social-buzz", size: "medium", settings: { sort: "added" } },
+    ]);
+  });
+
+  it("migrates a v1 dashboard-wide pinnedTicker onto the ticker-scoped widgets", () => {
+    // The old layout pointed every ticker widget at one asset. That has to
+    // survive the upgrade, or a dashboard that was showing NVDA everywhere
+    // comes back empty and asking to be set up again.
+    const parsed = parseLayout(
+      {
+        version: 1,
+        pinnedTicker: "nvda",
+        widgets: [
+          { id: "social-buzz", size: "medium" },
+          { id: "run-status", size: "small" },
+        ],
+      },
+      SPEC,
+    );
+
+    expect(parsed?.widgets).toEqual([
+      { id: "social-buzz", size: "medium", settings: { ticker: "NVDA" } },
+      // Not ticker-scoped, so it gets nothing.
+      { id: "run-status", size: "small" },
+    ]);
+    // The field itself does not survive, so the migration runs exactly once.
+    expect(parsed).not.toHaveProperty("pinnedTicker");
+  });
+
+  it("lets a widget's own ticker win over the migrated one", () => {
+    const parsed = parseLayout(
+      {
+        version: 1,
+        pinnedTicker: "NVDA",
+        widgets: [
+          { id: "social-buzz", size: "medium", settings: { ticker: "GOOG" } },
+        ],
+      },
+      SPEC,
+    );
+
+    expect(parsed?.widgets[0].settings?.ticker).toBe("GOOG");
   });
 
   it("returns null rather than throwing on anything that is not a layout", () => {
@@ -138,11 +196,7 @@ describe("parseLayout", () => {
 
   it("defaults a missing version", () => {
     const parsed = parseLayout({ widgets: [] }, SPEC);
-    expect(parsed).toEqual({
-      version: LAYOUT_VERSION,
-      pinnedTicker: null,
-      widgets: [],
-    });
+    expect(parsed).toEqual({ version: LAYOUT_VERSION, widgets: [] });
   });
 
   it("reads straight past a deck field left by an older build", () => {

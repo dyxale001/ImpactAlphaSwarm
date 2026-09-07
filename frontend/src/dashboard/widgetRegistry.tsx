@@ -8,13 +8,10 @@ import {
   Eye,
   Landmark,
   LineChart,
-  ListOrdered,
   MessageCircle,
   Newspaper,
   RefreshCw,
-  Search,
   Sparkles,
-  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -24,16 +21,11 @@ import type {
   WidgetSpecMap,
 } from "./layoutSchema";
 import {
-  TopPickWidget,
-  RankedFeedWidget,
+  ShortlistWidget,
   AlsoScoredWidget,
   RunStatusWidget,
 } from "../components/dashboard/widgets/signalWidgets";
-import {
-  WatchlistWidget,
-  WatchlistSearchWidget,
-  WatchlistTopPicksWidget,
-} from "../components/dashboard/widgets/watchlistWidgets";
+import { WatchlistWidget } from "../components/dashboard/widgets/watchlistWidgets";
 import {
   SentimentTrendWidget,
   NewsInfluentialWidget,
@@ -84,7 +76,9 @@ export interface WidgetDef {
   group: WidgetGroup;
   sizes: WidgetSize[];
   defaultSize: WidgetSize;
-  /** Points at the dashboard's pinned ticker, and says so when there is none. */
+  /** Scoped to one asset, which it stores in its own settings and picks for
+   *  itself. Each such widget is independent: retargeting one leaves the rest
+   *  where they were. */
   needsTicker?: boolean;
   /** Renders its own surface rather than sitting inside the standard card. Only
    *  the top pick, which needs the dark forest hero treatment. */
@@ -99,25 +93,20 @@ const SMALL_MEDIUM: WidgetSize[] = ["small", "medium"];
 export const WIDGETS: WidgetDef[] = [
   // ── Signals ────────────────────────────────────────────────────────────
   {
+    // Was two widgets, "top-pick" and "ranked-feed". Keeping the "top-pick" id
+    // means a saved layout carrying it still resolves; parseLayout quietly
+    // drops the retired "ranked-feed", and a layout holding both ends up with
+    // one shortlist rather than a duplicate.
     id: "top-pick",
-    title: "Top pick",
-    blurb: "The single strongest name in your latest run, with the reasoning behind it.",
+    title: "Your shortlist",
+    blurb:
+      "The strongest name in your latest run with the reasoning behind it, then ranks two to five as cards.",
     icon: Sparkles,
     group: "Signals",
     sizes: MEDIUM_UP,
     defaultSize: "wide",
     bare: true,
-    Component: TopPickWidget,
-  },
-  {
-    id: "ranked-feed",
-    title: "Your shortlist",
-    blurb: "Ranks two to five from your latest run, as full cards.",
-    icon: ListOrdered,
-    group: "Signals",
-    sizes: MEDIUM_UP,
-    defaultSize: "wide",
-    Component: RankedFeedWidget,
+    Component: ShortlistWidget,
   },
   {
     id: "also-scored",
@@ -144,39 +133,28 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "watchlist",
     title: "Your watchlist",
-    blurb: "Every asset you track, with a fortnight of price history on each.",
+    blurb:
+      "Search any ticker to add it, and every asset you track with a fortnight of price history on each.",
     icon: Eye,
     group: "Watchlist",
     sizes: ALL,
     defaultSize: "wide",
     Component: WatchlistWidget,
   },
-  {
-    id: "watchlist-search",
-    title: "Quick add",
-    blurb: "Search any ticker and add it without leaving the dashboard.",
-    icon: Search,
-    group: "Watchlist",
-    sizes: SMALL_MEDIUM,
-    defaultSize: "medium",
-    Component: WatchlistSearchWidget,
-  },
-  {
-    id: "watchlist-top-picks",
-    title: "From your latest analysis",
-    blurb: "The ranked names from your last completed run, as compact rows.",
-    icon: TrendingUp,
-    group: "Watchlist",
-    sizes: MEDIUM_UP,
-    defaultSize: "wide",
-    Component: WatchlistTopPicksWidget,
-  },
+  // Retired: "watchlist-search" ("Quick add") is now the search bar at the top
+  // of the watchlist widget itself, so adding an asset and seeing the list it
+  // joins are one card. parseLayout drops the id from any saved layout.
+  //
+  // Retired: "watchlist-top-picks" ("From your latest analysis") duplicated the
+  // Signals group's "top-pick" widget, which already covers the same ranked run
+  // as a hero plus cards. parseLayout drops the id from any saved layout that
+  // still holds it.
 
   // ── Sentiment ──────────────────────────────────────────────────────────
   {
     id: "sentiment-trend",
     title: "Sentiment trend",
-    blurb: "Seven days of news and social sentiment for the asset you pin.",
+    blurb: "Seven days of news and social sentiment for the asset you focus on.",
     icon: LineChart,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -187,7 +165,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "news-influential",
     title: "Influential news",
-    blurb: "The articles driving your pinned asset's most recent coverage.",
+    blurb: "The articles driving your focused asset's most recent coverage.",
     icon: Newspaper,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -198,7 +176,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "social-buzz",
     title: "Social buzz",
-    blurb: "What people are posting about your pinned asset, and which way it leans.",
+    blurb: "What people are posting about your focused asset, and which way it leans.",
     icon: MessageCircle,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -221,7 +199,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "whale-cluster",
     title: "Insider cluster buying",
-    blurb: "Whether several insiders have been buying your pinned asset at once.",
+    blurb: "Whether several insiders have been buying your focused asset at once.",
     icon: Users,
     group: "Whales",
     sizes: MEDIUM_UP,
@@ -232,7 +210,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "institutional-owners",
     title: "Who owns it",
-    blurb: "Institutional and insider ownership of your pinned asset.",
+    blurb: "Institutional and insider ownership of your focused asset.",
     icon: Building2,
     group: "Whales",
     sizes: MEDIUM_UP,
@@ -283,5 +261,8 @@ export function widgetById(id: string): WidgetDef | undefined {
 /** The shape parseLayout validates against. Derived rather than maintained, so
  *  it can never fall out of step with the registry above. */
 export const WIDGET_SPEC: WidgetSpecMap = Object.fromEntries(
-  WIDGETS.map((w) => [w.id, { sizes: w.sizes, defaultSize: w.defaultSize }]),
+  WIDGETS.map((w) => [
+    w.id,
+    { sizes: w.sizes, defaultSize: w.defaultSize, needsTicker: w.needsTicker },
+  ]),
 );

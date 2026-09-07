@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Pencil, Pin, RefreshCw } from "lucide-react";
+import { BookOpen, Pencil, RefreshCw, Terminal } from "lucide-react";
 import { useAuthStore } from "../../../store/authStore";
 import { useSignals } from "../../../dashboard/DashboardDataContext";
 import { useAnalysisRefresh } from "../../../hooks/useAnalysisRefresh";
 import { useSentimentLastUpdated } from "../../../hooks/useSentimentLastUpdated";
 import { getUsdZarExchangeRate } from "../../../services/api/analysis";
 import { MarketClock } from "../../research/MarketClock";
-import DashboardGridMotif from "./DashboardGridMotif";
+import RallyMotif from "./RallyMotif";
 
 function greeting(hour: number = new Date().getHours()): string {
   if (hour < 12) return "Good morning";
@@ -32,13 +32,11 @@ function greeting(hour: number = new Date().getHours()): string {
  */
 export default function TodayStrip({
   widgetCount,
-  pinnedTicker,
   onCustomise,
   onOpenGuide,
   isEditing,
 }: {
   widgetCount: number;
-  pinnedTicker: string | null;
   onCustomise: () => void;
   /** Reopens the setup manual. Null while it is already on screen, which is
    *  what keeps the banner from offering to show something already shown. */
@@ -91,7 +89,7 @@ export default function TodayStrip({
 
   return (
     <div className="hero-card overflow-hidden px-5 py-6 sm:px-7">
-      <DashboardGridMotif className="h-full" />
+      <RallyMotif className="h-full" />
 
       {/* Same proportions as the Assets hero: a title column that owns the FX
           pill directly beneath its own subtitle, and a right-hand column,
@@ -103,14 +101,29 @@ export default function TodayStrip({
           <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-brand-accent">
             Your dashboard
           </p>
+          {/* Accent icon then the title, the lockup every other hub header
+              uses: CandlestickChart on Assets, Waves on Whale Watching, Eye on
+              Watchlist. This one takes the product's own >_ mark rather than a
+              page glyph — the dashboard is the app's front door, and the title
+              beside it is a greeting rather than a section name, so the brand
+              is what belongs in the slot. Same mark as the sidebar. */}
           <h1 className="flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl">
+            <Terminal className="h-7 w-7 shrink-0 text-brand-accent" />
             {greeting()}
             {profile?.first_name ? `, ${profile.first_name}` : ""}
           </h1>
+
+          {/* Description sits on its own line directly under the title, the
+              same plain paragraph the sibling heroes use, rather than sharing a
+              row with the buttons. */}
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
+            {description}
+          </p>
+
           {/* Market and FX footing for every price this dashboard shows,
               exactly the pill Assets.tsx anchors under its own subtitle. */}
           {!isEditing ? (
-            <div className="-ml-1 mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <div className="inline-flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
                 {exchangeRate !== null ? (
                   <>
@@ -129,60 +142,35 @@ export default function TodayStrip({
                 </span>
                 <MarketClock tone="dark" bare />
               </div>
-
-              {pinnedTicker ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-brand-bg/80">
-                  <Pin className="h-3 w-3 text-brand-accent" />
-                  Pinned to{" "}
-                  <span className="font-mono font-semibold text-brand-bg">
-                    {pinnedTicker}
-                  </span>
-                </span>
-              ) : null}
             </div>
           ) : null}
 
-          {/* Description, the Customise entry point and the way back to the
-              manual share one line, divided by hairlines: three short facts
-              read left to right rather than a sentence with a button
-              somewhere else on the card and a link somewhere else again. */}
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-relaxed text-brand-bg/75">
-            <span className="max-w-2xl">{description}</span>
+          {/* The two ways into editing, on their own row beneath the footing
+              pill so the title block reads straight down: name, what it is,
+              what it is built on, what you can do to it. */}
+          {!isEditing ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={onCustomise}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              >
+                <Pencil className="h-3 w-3" />
+                Customise
+              </button>
 
-            {!isEditing ? (
-              <>
-                <span
-                  className="hidden h-4 w-px bg-white/15 sm:block"
-                  aria-hidden="true"
-                />
+              {onOpenGuide ? (
                 <button
                   type="button"
-                  onClick={onCustomise}
-                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                  onClick={onOpenGuide}
+                  className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-accent transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
                 >
-                  <Pencil className="h-3 w-3" />
-                  Customise
+                  <BookOpen className="h-3 w-3" />
+                  How to set this up
                 </button>
-
-                {onOpenGuide ? (
-                  <>
-                    <span
-                      className="hidden h-4 w-px bg-white/15 sm:block"
-                      aria-hidden="true"
-                    />
-                    <button
-                      type="button"
-                      onClick={onOpenGuide}
-                      className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-accent transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-                    >
-                      <BookOpen className="h-3 w-3" />
-                      How to set this up
-                    </button>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {/* Run time and its refresh share one pill: the button acts on the

@@ -12,8 +12,10 @@ export type WidgetSize = "small" | "medium" | "wide";
 
 export const WIDGET_SIZES: WidgetSize[] = ["small", "medium", "wide"];
 
-/** Bumped when a stored layout needs reshaping in code. */
-export const LAYOUT_VERSION = 1;
+/** Bumped when a stored layout needs reshaping in code. 2 moved the chosen
+ *  asset from one dashboard-wide `pinnedTicker` to a per-widget
+ *  `settings.ticker`; see migrateTicker below. */
+export const LAYOUT_VERSION = 2;
 
 export type WidgetSettings = Record<string, unknown>;
 
@@ -25,8 +27,6 @@ export interface LayoutEntry {
 
 export interface DashboardLayout {
   version: number;
-  /** The asset every ticker-scoped widget points at. */
-  pinnedTicker: string | null;
   widgets: LayoutEntry[];
 }
 
@@ -34,17 +34,32 @@ export interface DashboardLayout {
 export interface WidgetSpec {
   sizes: WidgetSize[];
   defaultSize: WidgetSize;
+  /** Scoped to one asset, and so carries a `ticker` in its settings. */
+  needsTicker?: boolean;
 }
 
 /** What every widget component is handed. Lives here rather than in the registry
  *  so widgets can import it without importing the registry that imports them. */
 export interface WidgetProps {
   size: WidgetSize;
-  /** The asset the ticker-scoped widgets point at. Null until one is pinned. */
-  pinnedTicker: string | null;
-  setPinnedTicker: (ticker: string | null) => void;
+  /**
+   * The asset THIS widget points at, and how it changes it. Null until one is
+   * chosen. Backed by `settings.ticker`, so each ticker-scoped widget holds its
+   * own: choosing an asset for the sentiment trend leaves the news and insider
+   * widgets on whatever they were showing.
+   */
+  ticker: string | null;
+  setTicker: (ticker: string | null) => void;
   settings: WidgetSettings;
   updateSettings: (patch: WidgetSettings) => void;
+}
+
+/** Uppercase and trim a stored ticker, rejecting anything blank or not a
+ *  string. Shared by the settings reader and the v1 migration. */
+export function normaliseTicker(value: unknown): string | null {
+  return typeof value === "string" && value.trim()
+    ? value.trim().toUpperCase()
+    : null;
 }
 
 export type WidgetSpecMap = Record<string, WidgetSpec>;
@@ -55,7 +70,7 @@ export type WidgetSpecMap = Record<string, WidgetSpec>;
  *  the user has never touched their dashboard, and is what puts the setup guide
  *  in front of them; this means they have one and it happens to be empty. */
 export function emptyLayout(): DashboardLayout {
-  return { version: LAYOUT_VERSION, pinnedTicker: null, widgets: [] };
+  return { version: LAYOUT_VERSION, widgets: [] };
 }
 
 function isSize(value: unknown): value is WidgetSize {
@@ -74,6 +89,12 @@ function isSize(value: unknown): value is WidgetSize {
  * the registry silently retires it from everybody's saved dashboard instead of
  * breaking it. Sizes the widget does not offer fall back to its default for the
  * same reason.
+ *
+ * A v1 row's dashboard-wide `pinnedTicker` is migrated here: every ticker-scoped
+ * widget that has no `ticker` of its own inherits it, so a dashboard that was
+ * showing one asset everywhere keeps showing it, and only then diverges as the
+ * reader retargets widgets one at a time. The field itself does not survive the
+ * parse, so the migration runs once and the next write is clean v2.
  */
 export function parseLayout(
   raw: unknown,
@@ -83,6 +104,8 @@ export function parseLayout(
 
   const record = raw as Record<string, unknown>;
   if (!Array.isArray(record.widgets)) return null;
+
+  const legacyTicker = normaliseTicker(record.pinnedTicker);
 
   const seen = new Set<string>();
   const widgets: LayoutEntry[] = [];
@@ -104,10 +127,23 @@ export function parseLayout(
         ? entry.size
         : widgetSpec.defaultSize;
 
-    const settings =
+    const stored =
       entry.settings && typeof entry.settings === "object" && !Array.isArray(entry.settings)
         ? (entry.settings as WidgetSettings)
         : undefined;
+
+    let settings = stored;
+
+    if (widgetSpec.needsTicker) {
+      // Normalised on the way in so a widget never has to defend against a
+      // lowercase, padded or non-string ticker at render time.
+      const ticker = normaliseTicker(stored?.ticker) ?? legacyTicker;
+      if (ticker) settings = { ...stored, ticker };
+      else if (stored && "ticker" in stored) {
+        const { ticker: _drop, ...rest } = stored;
+        settings = Object.keys(rest).length > 0 ? rest : undefined;
+      }
+    }
 
     widgets.push(settings ? { id, size, settings } : { id, size });
   }
@@ -115,14 +151,11 @@ export function parseLayout(
   // A `deck` field on an older row is read straight past. Starter decks were
   // removed in favour of everyone beginning from a blank page, so the field no
   // longer means anything, and dropping it here is what retires it from a saved
-  // layout the next time that layout is written back.
+  // layout the next time that layout is written back. `pinnedTicker` leaves the
+  // same way, having been migrated into the widgets above.
   return {
     version:
       typeof record.version === "number" ? record.version : LAYOUT_VERSION,
-    pinnedTicker:
-      typeof record.pinnedTicker === "string" && record.pinnedTicker.trim()
-        ? record.pinnedTicker.trim().toUpperCase()
-        : null,
     widgets,
   };
 }
@@ -150,10 +183,19 @@ export function arrayMove<T>(items: T[], from: number, to: number): T[] {
   return next;
 }
 
-/** Tailwind column spans against the six-column `.bento-grid` in index.css. */
+/**
+ * Tailwind column spans against the six-column `.bento-grid` in index.css.
+ *
+ * "small" moves to its own two-column span as soon as the grid leaves its
+ * single-column phone layout, rather than waiting for `lg`. Sharing
+ * `md:col-span-3` with "medium" meant three smalls on a tablet-width screen
+ * tiled two to a row with a third stranded alone on the next, its other half
+ * empty; going straight to col-span-2 at `md` makes three fill a row exactly
+ * (2+2+2 of 6) at every width where the grid is multi-column at all.
+ */
 export const SIZE_CLASS: Record<WidgetSize, string> = {
-  small: "col-span-6 md:col-span-3 lg:col-span-2",
-  medium: "col-span-6 md:col-span-3 lg:col-span-3",
+  small: "col-span-6 md:col-span-2",
+  medium: "col-span-6 md:col-span-3",
   wide: "col-span-6",
 };
 

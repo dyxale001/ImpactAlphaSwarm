@@ -15,7 +15,7 @@ import ScoredAssetRow from "../ScoredAssetRow";
 import SignalScorecard from "../SignalScorecard";
 import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
 
-// Widgets over the latest AI run. All four read the one shared feed from
+// Widgets over the latest AI run. All three read the one shared feed from
 // DashboardDataContext rather than fetching their own, so a dashboard carrying
 // every signal widget still costs a single set of queries.
 
@@ -39,18 +39,15 @@ function NoRunYet() {
   );
 }
 
-/** The single strongest name in the run, on the dark forest hero surface. */
-export function TopPickWidget({ size }: WidgetProps) {
-  const { topPick, isLoadingRecs, isRunInProgress } = useSignals();
-
-  if (isLoadingRecs) return <WidgetLoading rows={4} />;
-  if (isRunInProgress) {
-    return (
-      <WidgetEmpty message="An analysis run is in progress. Your top pick appears here as soon as it lands." />
-    );
-  }
-  if (!topPick) return <NoRunYet />;
-
+/** The single strongest name in the run, on the dark forest hero surface. Only
+ *  ever rendered by ShortlistWidget, which owns the loading and empty states. */
+function TopPickHero({
+  topPick,
+  size,
+}: {
+  topPick: NonNullable<ReturnType<typeof useSignals>["topPick"]>;
+  size: WidgetProps["size"];
+}) {
   const showScorecard = SCORECARD_ENABLED && topPick.hasSignalTerms;
   const quantPercentile =
     topPick.quantLean != null ? ((topPick.quantLean + 1) / 2) * 100 : null;
@@ -165,13 +162,33 @@ export function TopPickWidget({ size }: WidgetProps) {
   );
 }
 
-/** Ranks two to five: the rest of the shortlist, as cards. */
-export function RankedFeedWidget({ size }: WidgetProps) {
-  const { filteredRecs, isLoadingRecs } = useSignals();
-  const shortlisted = filteredRecs.filter((r) => r.rank <= SHORTLIST_SIZE);
+/**
+ * The whole shortlist as one widget: the top pick on its hero surface, then
+ * ranks two to five as cards underneath.
+ *
+ * These were two separate widgets, which meant a reader could place the runners
+ * up without the name they run up to, or see the same run's ranking split
+ * across two cards that could be dragged apart. The ranking is one thought, so
+ * it is one widget, and the loading and empty states are stated once instead of
+ * twice over the same feed.
+ */
+export function ShortlistWidget({ size }: WidgetProps) {
+  const { topPick, filteredRecs, isLoadingRecs, isRunInProgress } = useSignals();
 
-  if (isLoadingRecs) return <WidgetLoading rows={2} />;
-  if (shortlisted.length === 0) return <NoRunYet />;
+  // Rank one is the hero, so the cards below start at two. Falling back to the
+  // top pick's own rank keeps that true even if a run's ranking is not 1-based.
+  const heroRank = topPick?.rank ?? 1;
+  const runnersUp = filteredRecs.filter(
+    (r) => r.rank > heroRank && r.rank <= SHORTLIST_SIZE,
+  );
+
+  if (isLoadingRecs) return <WidgetLoading rows={4} />;
+  if (isRunInProgress) {
+    return (
+      <WidgetEmpty message="An analysis run is in progress. Your shortlist appears here as soon as it lands." />
+    );
+  }
+  if (!topPick) return <NoRunYet />;
 
   // The widget already occupies a share of the six-column page grid, so its own
   // columns are set by how wide it is rather than by the viewport alone.
@@ -181,15 +198,26 @@ export function RankedFeedWidget({ size }: WidgetProps) {
       : "grid-cols-1";
 
   return (
-    <div className={`grid gap-4 ${columns}`}>
-      {shortlisted.map((asset, i) => (
-        <RecommendationCard
-          key={asset.assetId}
-          asset={asset}
-          sizeClass=""
-          delay={i}
-        />
-      ))}
+    <div className="space-y-5">
+      <TopPickHero topPick={topPick} size={size} />
+
+      {runnersUp.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+            Next best {runnersUp.length === 1 ? "name" : `${runnersUp.length} names`}
+          </h3>
+          <div className={`grid gap-4 ${columns}`}>
+            {runnersUp.map((asset, i) => (
+              <RecommendationCard
+                key={asset.assetId}
+                asset={asset}
+                sizeClass=""
+                delay={i}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -270,17 +298,13 @@ export function RunStatusWidget() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="chip bg-brand-border/30 text-brand-muted-fg">
-          {recommendations.length} scored
-        </span>
+        <span className="chip">{recommendations.length} scored</span>
         {stale ? (
           <span className="chip bg-semantic-warning/15 text-semantic-warning">
             Out of date
           </span>
         ) : latestRunCreatedAt ? (
-          <span className="chip bg-brand-primary/10 text-brand-primary">
-            Current
-          </span>
+          <span className="chip">Current</span>
         ) : null}
       </div>
 

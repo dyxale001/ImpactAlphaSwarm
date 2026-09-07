@@ -296,15 +296,6 @@ export function useDashboardLayout() {
     [mutate],
   );
 
-  const setPinnedTicker = useCallback(
-    (ticker: string | null) =>
-      mutate((current) => ({
-        ...current,
-        pinnedTicker: ticker ? ticker.toUpperCase() : null,
-      })),
-    [mutate],
-  );
-
   /** Widgets not currently placed, for the add drawer. */
   const availableWidgets = useMemo(() => {
     const placed = new Set((layout?.widgets ?? []).map((w) => w.id));
@@ -341,7 +332,6 @@ export function useDashboardLayout() {
     cycleSize,
     moveWidget,
     updateSettings,
-    setPinnedTicker,
     // Kept for the settings page, which resets and then wants the store fresh.
     refetchProfile: fetchProfile,
   };

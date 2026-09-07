@@ -64,7 +64,7 @@ export default function WidgetFrame({
         "relative flex h-full flex-col gap-3 transition-shadow",
         surface,
         isEditing
-          ? "rounded-2xl outline-2 outline-dashed outline-offset-2 outline-brand-accent/70"
+          ? "rounded-2xl outline-2 outline-dashed outline-offset-2 outline-brand-accent"
           : "",
         isDropTarget && !isDragging ? "outline-brand-accent" : "",
         isDragging ? "opacity-40" : "",
@@ -113,7 +113,7 @@ export default function WidgetFrame({
                 onClick={onCycleSize}
                 aria-label={`Resize ${def.title}, currently ${size}`}
                 title={`Size: ${size}`}
-                className="rounded-full border border-brand-border/60 px-2 py-0.5 font-mono text-[10px] font-bold text-brand-muted-fg transition-colors hover:border-brand-primary/50 hover:text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
+                className="rounded-full bg-brand-primary px-2 py-0.5 font-mono text-[10px] font-bold text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
               >
                 {SIZE_LABEL[size]}
               </button>
@@ -138,10 +138,19 @@ export default function WidgetFrame({
         </header>
       ) : null}
 
-      {/* Dimmed in edit mode so the controls read as the active layer, and inert
+      {/* flex-1 so the content owns the rest of the card's height rather than
+          hugging its own. A widget sharing a grid row with a taller neighbour is
+          stretched to that row, and without this its dashed empty state stopped
+          at its own text with bare card below it. min-h-0 undoes the automatic
+          min-height flex items get, which would otherwise stop the wrapper ever
+          being shorter than its content.
+
+          Dimmed in edit mode so the controls read as the active layer, and inert
           so a click meant for the frame cannot follow a link out of the page. */}
       <div
-        className={isEditing ? "pointer-events-none opacity-60" : ""}
+        className={`flex min-h-0 flex-1 flex-col ${
+          isEditing ? "pointer-events-none opacity-60" : ""
+        }`}
         inert={isEditing ? true : undefined}
       >
         {children}

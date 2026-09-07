@@ -23,7 +23,7 @@ import { WidgetEmpty, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChr
 const MAX_ROWS = 5;
 
 /**
- * Insider cluster buying for the pinned asset.
+ * Insider cluster buying for this widget's asset.
  *
  * The single most actionable thing on the dashboard, and until now it was buried
  * three levels into the whale-watching page. Several different insiders buying
@@ -35,11 +35,11 @@ const MAX_ROWS = 5;
  * on the asset page, so the two can never disagree about what a cluster is.
  */
 export function WhaleClusterWidget({
-  pinnedTicker,
-  setPinnedTicker,
+  ticker,
+  setTicker,
 }: WidgetProps) {
   const { transactions, isLoading, error } = useWhaleData(
-    pinnedTicker ?? undefined,
+    ticker ?? undefined,
   );
 
   const clusterCount = useMemo(
@@ -59,15 +59,15 @@ export function WhaleClusterWidget({
     [transactions],
   );
 
-  if (!pinnedTicker) {
-    return <PinPrompt what="insider dealings" setPinnedTicker={setPinnedTicker} />;
+  if (!ticker) {
+    return <PinPrompt what="insider dealings" setTicker={setTicker} />;
   }
   if (isLoading) return <WidgetLoading rows={3} />;
   if (error) {
     return (
-      <div className="space-y-3">
-        <PinnedHeader ticker={pinnedTicker} setPinnedTicker={setPinnedTicker} />
-        <WidgetEmpty message={error} />
+      <div className="flex h-full flex-col gap-3">
+        <PinnedHeader ticker={ticker} setTicker={setTicker} />
+        <WidgetEmpty grow message={error} />
       </div>
     );
   }
@@ -75,7 +75,7 @@ export function WhaleClusterWidget({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PinnedHeader ticker={pinnedTicker} setPinnedTicker={setPinnedTicker} />
+        <PinnedHeader ticker={ticker} setTicker={setTicker} />
         <Link
           to="/whale-watching"
           className="text-xs font-semibold text-brand-primary hover:underline"
@@ -97,7 +97,7 @@ export function WhaleClusterWidget({
       ) : (
         <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3">
           <p className="text-xs leading-snug text-brand-muted-fg">
-            No cluster buying at {pinnedTicker} in the last {CLUSTER_WINDOW_DAYS}{" "}
+            No cluster buying at {ticker} in the last {CLUSTER_WINDOW_DAYS}{" "}
             days.{" "}
             {clusterCount === 1
               ? "One insider bought on the open market, which on its own says less."
@@ -113,7 +113,7 @@ export function WhaleClusterWidget({
               key={`${t.name}-${t.filing_date}-${i}`}
               className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5"
             >
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-primary/15 px-2 py-1 text-[11px] font-semibold text-brand-primary">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-primary px-2 py-1 text-[11px] font-semibold text-white">
                 <ArrowUpRight className="h-3 w-3" />
                 Buy
               </span>
@@ -136,52 +136,62 @@ export function WhaleClusterWidget({
   );
 }
 
-/** Who institutionally owns the pinned asset, and how that is moving. */
+/** Who institutionally owns this widget's asset, and how that is moving. */
 export function InstitutionalOwnersWidget({
-  pinnedTicker,
-  setPinnedTicker,
+  ticker,
+  setTicker,
 }: WidgetProps) {
   const { data, isLoading, error } = useInstitutionalData(
-    pinnedTicker ?? undefined,
+    ticker ?? undefined,
   );
 
-  if (!pinnedTicker) {
+  if (!ticker) {
     return (
-      <PinPrompt what="institutional ownership" setPinnedTicker={setPinnedTicker} />
+      <PinPrompt what="institutional ownership" setTicker={setTicker} />
     );
   }
   if (isLoading) return <WidgetLoading rows={3} />;
   if (error || !data) {
     return (
-      <div className="space-y-3">
-        <PinnedHeader ticker={pinnedTicker} setPinnedTicker={setPinnedTicker} />
-        <WidgetEmpty message={error ?? "Unable to load institutional ownership."} />
+      <div className="flex h-full flex-col gap-3">
+        <PinnedHeader ticker={ticker} setTicker={setTicker} />
+        <WidgetEmpty
+          grow
+          message={error ?? "Unable to load institutional ownership."}
+        />
       </div>
     );
   }
 
   const holders = (data.holders ?? []).slice(0, MAX_ROWS);
 
+  // Holder bars are scaled to the biggest holder shown, the same way the top
+  // funds widget scales its own, so the two whale widgets read as one family.
+  const largestHeld = Math.max(0, ...holders.map((h) => h.pct_held ?? 0));
+
   return (
     <div className="space-y-3">
-      <PinnedHeader ticker={pinnedTicker} setPinnedTicker={setPinnedTicker} />
+      <PinnedHeader ticker={ticker} setTicker={setTicker} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+      {/* The two headline percentages are what this widget is for, so they take
+          the forest hero rather than a pair of grey tiles, split by a hairline
+          instead of a gap. */}
+      <div className="hero-card grid grid-cols-2 divide-x divide-white/10 overflow-hidden">
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-accent">
             Institutions
           </p>
-          <p className="mt-0.5 font-mono text-sm font-semibold text-brand-fg">
+          <p className="mt-0.5 font-mono text-lg font-bold text-brand-bg">
             {data.institutions_pct != null
               ? `${data.institutions_pct.toFixed(1)}%`
               : "—"}
           </p>
         </div>
-        <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-accent">
             Insiders
           </p>
-          <p className="mt-0.5 font-mono text-sm font-semibold text-brand-fg">
+          <p className="mt-0.5 font-mono text-lg font-bold text-brand-bg">
             {data.insiders_pct != null
               ? `${data.insiders_pct.toFixed(1)}%`
               : "—"}
@@ -190,31 +200,50 @@ export function InstitutionalOwnersWidget({
       </div>
 
       {holders.length === 0 ? (
-        <WidgetEmpty
-          message={`No 13F holders on record for ${pinnedTicker}.`}
-        />
+        <WidgetEmpty message={`No 13F holders on record for ${ticker}.`} />
       ) : (
         <ul className="space-y-1.5">
-          {holders.map((h, i) => (
-            <li
-              key={`${h.holder}-${i}`}
-              className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2"
-            >
-              <Building2 className="h-3.5 w-3.5 shrink-0 text-brand-muted-fg" />
-              <p className="min-w-0 flex-1 truncate text-xs text-brand-fg">
-                {h.holder}
-              </p>
-              <p className="shrink-0 font-mono text-xs font-semibold text-brand-fg">
-                {h.pct_held != null ? `${h.pct_held.toFixed(2)}%` : "—"}
-              </p>
-            </li>
-          ))}
+          {holders.map((h, i) => {
+            const lead = i === 0;
+            const share =
+              largestHeld > 0 ? ((h.pct_held ?? 0) / largestHeld) * 100 : 0;
+
+            return (
+              <li
+                key={`${h.holder}-${i}`}
+                className={`rounded-2xl border bg-brand-bg/55 px-3 py-2 ${
+                  lead ? "border-brand-accent" : "border-brand-border/60"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
+                  <p className="min-w-0 flex-1 truncate text-xs text-brand-fg">
+                    {h.holder}
+                  </p>
+                  <p className="shrink-0 font-mono text-xs font-semibold text-brand-primary">
+                    {h.pct_held != null ? `${h.pct_held.toFixed(2)}%` : "—"}
+                  </p>
+                </div>
+
+                {h.pct_held != null ? (
+                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-brand-border/40">
+                    <div
+                      className={`h-full rounded-full ${
+                        lead ? "bg-brand-accent" : "bg-brand-primary"
+                      }`}
+                      style={{ width: `${share}%` }}
+                    />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
 
       {/* 13F filings lag by up to 45 days, so a reader should never take these as
           today's positions. The page this came from says so and so does this. */}
-      <p className="text-[11px] leading-relaxed text-brand-muted-fg">
+      <p className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5 text-[11px] leading-relaxed text-brand-muted-fg">
         From 13F filings, which lag the market by up to 45 days.
       </p>
     </div>
@@ -235,28 +264,70 @@ export function TopFundsWidget() {
     .sort((a, b) => (b.total_value ?? 0) - (a.total_value ?? 0))
     .slice(0, MAX_ROWS);
 
+  // Every row is measured against the largest holding rather than the total, so
+  // the leader's bar is always full and the rest read as a share of it. A list
+  // of five near-identical numbers says much less than five bars beside them.
+  const largest = top[0]?.total_value ?? 0;
+
   return (
     <div className="space-y-3">
       <ul className="space-y-1.5">
-        {top.map((fund) => (
-          <li
-            key={fund.fund}
-            className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-brand-fg">
-                {fund.fund}
-              </p>
-              <p className="text-[11px] text-brand-muted-fg">
-                {fund.positions.length} tracked position
-                {fund.positions.length === 1 ? "" : "s"}
-              </p>
-            </div>
-            <p className="shrink-0 font-mono text-xs font-semibold text-brand-fg">
-              {formatUsd(fund.total_value)}
-            </p>
-          </li>
-        ))}
+        {top.map((fund, i) => {
+          const share =
+            largest > 0 ? ((fund.total_value ?? 0) / largest) * 100 : 0;
+          // The biggest holder carries the lime accent, the rest forest. Accent
+          // as a fill behind dark text rather than as text: lime on white is
+          // the one place this palette has no contrast to spare.
+          const lead = i === 0;
+
+          return (
+            <li
+              key={fund.fund}
+              className={`rounded-2xl border bg-brand-bg/55 px-3 py-2.5 ${
+                lead ? "border-brand-accent" : "border-brand-border/60"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {/* The same disc the ranked asset rows use for their position
+                    numbers, so a rank reads the same everywhere. */}
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full font-mono text-[10px] font-bold ${
+                    lead
+                      ? "bg-brand-accent text-brand-fg"
+                      : "bg-brand-primary text-white"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-brand-fg">
+                    {fund.fund}
+                  </p>
+                  <p className="text-[11px] text-brand-muted-fg">
+                    {fund.positions.length} tracked position
+                    {fund.positions.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <p className="shrink-0 font-mono text-xs font-semibold text-brand-primary">
+                  {formatUsd(fund.total_value)}
+                </p>
+              </div>
+
+              <div
+                className="mt-2 h-1 w-full overflow-hidden rounded-full bg-brand-border/40"
+                role="img"
+                aria-label={`${Math.round(share)}% of the largest holding shown`}
+              >
+                <div
+                  className={`h-full rounded-full ${
+                    lead ? "bg-brand-accent" : "bg-brand-primary"
+                  }`}
+                  style={{ width: `${share}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <Link
         to="/whale-watching"

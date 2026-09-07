@@ -111,7 +111,7 @@ export default function SetupGuide({
           aria-label="Setup progress"
         >
           <div
-            className="h-full rounded-full bg-brand-accent transition-[width] duration-500"
+            className="h-full rounded-full bg-brand-primary transition-[width] duration-500"
             style={{ width: `${percent}%` }}
           />
         </div>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { LayoutGrid, Plus } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { useDashboardLayout } from "../hooks/useDashboardLayout";
-import { SIZE_CLASS } from "../dashboard/layoutSchema";
+import { SIZE_CLASS, normaliseTicker } from "../dashboard/layoutSchema";
 import { DashboardDataProvider } from "../dashboard/DashboardDataContext";
 import SetupGuide from "../components/dashboard/deck/SetupGuide";
 import TodayStrip from "../components/dashboard/deck/TodayStrip";
@@ -46,7 +46,6 @@ export default function DashboardPage() {
     cycleSize,
     moveWidget,
     updateSettings,
-    setPinnedTicker,
   } = useDashboardLayout();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -64,7 +63,6 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  const pinnedTicker = layout?.pinnedTicker ?? null;
   const showGuide = (needsGuide || guideRequested) && !guideHidden;
 
   /** Closing the guide also claims the blank page, so it does not reopen on the
@@ -88,7 +86,6 @@ export default function DashboardPage() {
       <div className={`${PAGE} space-y-6`}>
         <TodayStrip
           widgetCount={placedWidgets.length}
-          pinnedTicker={pinnedTicker}
           isEditing={isEditing}
           onCustomise={() => setIsEditing(true)}
           onOpenGuide={
@@ -206,8 +203,15 @@ export default function DashboardPage() {
                 >
                   <def.Component
                     size={entry.size}
-                    pinnedTicker={pinnedTicker}
-                    setPinnedTicker={setPinnedTicker}
+                    // Each ticker-scoped widget carries its own asset in its
+                    // own settings, so choosing one here changes this widget
+                    // and nothing else on the page.
+                    ticker={normaliseTicker(entry.settings?.ticker)}
+                    setTicker={(next) =>
+                      updateSettings(entry.id, {
+                        ticker: normaliseTicker(next),
+                      })
+                    }
                     settings={entry.settings ?? {}}
                     updateSettings={(patch) => updateSettings(entry.id, patch)}
                   />
@@ -222,7 +226,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 disabled={availableWidgets.length === 0}
-                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-border/70 text-brand-muted-fg transition-colors hover:border-brand-accent hover:text-brand-primary disabled:opacity-40 lg:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-accent text-brand-muted-fg transition-colors hover:bg-brand-accent/10 hover:text-brand-primary disabled:opacity-40 md:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
               >
                 <Plus className="h-5 w-5" />
                 <span className="text-xs font-semibold">
