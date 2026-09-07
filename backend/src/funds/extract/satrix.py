@@ -52,7 +52,12 @@ class SatrixTemplate(FactsheetTemplate):
         ),
         "tc": r"Transaction Cost \(TC\)\s*([\d.]+)",
         "tic": r"Total Investment Charge \(TIC\)\s*([\d.]+)",
-        "distribution_frequency": r"Distribution Frequency\s*([^\n]{2,40})",
+        # "Distribution Frequency" on the ILBI sheet, "DistributionFrequency"
+        # with the space missing on the Property and 40 sheets. Same template,
+        # same block, different kerning in the text layer — so the space is
+        # optional rather than assumed. Without it this read nothing at all for
+        # two of the three Satrix sheets in the catalogue.
+        "distribution_frequency": r"Distribution ?Frequency\s*([^\n]{2,40})",
     }
 
     numeric = frozenset({"ter", "tc", "tic"})
