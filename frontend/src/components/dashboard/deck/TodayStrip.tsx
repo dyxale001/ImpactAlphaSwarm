@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Pencil, RefreshCw, Terminal } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { BookOpen, LogOut, Pencil, RefreshCw, Terminal } from "lucide-react";
 import { useAuthStore } from "../../../store/authStore";
+import { supabase } from "../../../lib/supabase";
 import { useSignals } from "../../../dashboard/DashboardDataContext";
 import { useAnalysisRefresh } from "../../../hooks/useAnalysisRefresh";
 import { useSentimentLastUpdated } from "../../../hooks/useSentimentLastUpdated";
@@ -43,7 +45,27 @@ export default function TodayStrip({
   onOpenGuide: (() => void) | null;
   isEditing: boolean;
 }) {
-  const { profile } = useAuthStore();
+  const { profile, setSession } = useAuthStore();
+  const navigate = useNavigate();
+
+  /**
+   * Clear the Supabase session as well as the local store.
+   *
+   * setSession(null) alone only empties this tab's state: the token stays in
+   * storage and the next load signs straight back in. The admin pages already
+   * pair the two, and this follows them. The swallow is deliberate — a failed
+   * network call must not strand someone on a page they asked to leave, and
+   * the local session is cleared either way.
+   */
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      /* leaving anyway */
+    }
+    setSession(null);
+    navigate("/", { replace: true });
+  };
 
   const description = isEditing
     ? "Drag a widget to move it, or use the arrows. The letter button changes how wide it is."
@@ -169,6 +191,19 @@ export default function TodayStrip({
                   How to set this up
                 </button>
               ) : null}
+
+              {/* Outlined in the hero's own white-on-forest, not the lime that
+                  Customise wears: leaving is always available but never the
+                  thing being encouraged, and two accent buttons side by side
+                  would read as two equal invitations. */}
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold text-brand-bg/80 transition-colors hover:border-white/30 hover:bg-white/10 hover:text-brand-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              >
+                <LogOut className="h-3 w-3" />
+                Sign out
+              </button>
             </div>
           ) : null}
         </div>
