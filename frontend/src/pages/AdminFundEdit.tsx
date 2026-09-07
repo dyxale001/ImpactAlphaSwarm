@@ -12,6 +12,7 @@ import {
 } from "../services/api/adminFundCatalogue";
 import { getCatalogueFund, type CatalogueFundDetail } from "../services/api/fundCatalogue";
 import FactsheetCrops from "../components/admin/FactsheetCrops";
+import PairRows, { asObject, type Pair } from "../components/admin/PairRows";
 
 /**
  * Edit one fund, and record a fact sheet against it.
@@ -211,6 +212,11 @@ function RecordSheet({
   // quarters, FundRock prints twelve months with dashes for the empty ones.
   const [income, setIncome] = useState<Array<{ month: string; cents: string }>>([]);
 
+  // The largest positions. Accepted by the API, shown on the fund page, present
+  // in the seed for four funds — and until now enterable nowhere in the app, so
+  // the only way one ever arrived was by editing the seed CSV by hand.
+  const [holdings, setHoldings] = useState<Pair[]>([]);
+
   // Asset classes vary by fund, so these are free-form rows. Periods do not, so
   // those are fixed below: a mix of "1y", "1 year" and "1Y" across funds would
   // make the figures unchartable later for no gain now.
@@ -245,6 +251,9 @@ function RecordSheet({
     }
 
     if (reg28) body.regulation_28 = reg28 === "yes";
+
+    const topHoldings = asObject(holdings);
+    if (topHoldings) body.top_holdings = topHoldings;
 
     const filledIncome = income.filter((r) => r.month.trim() && r.cents.trim());
     if (filledIncome.length) {
@@ -475,6 +484,15 @@ function RecordSheet({
       <Field label="Objective, in the manager's words" value={values.objective} onChange={(v) => setValues({ ...values, objective: v })} problems={problems} name="objective" />
       <Field label="Risk, in the manager's words" value={values.risk_narrative} onChange={(v) => setValues({ ...values, risk_narrative: v })} problems={problems} name="risk_narrative" />
       <Field label="Horizon, in the manager's words" value={values.horizon_words} onChange={(v) => setValues({ ...values, horizon_words: v })} problems={problems} name="horizon_words" />
+
+      <PairRows
+        title="Top holdings"
+        note="The largest positions, as the sheet lists them. These do not add to 100 — they are the top of a longer list, and the sheet usually prints ten."
+        rows={holdings}
+        onChange={setHoldings}
+        labelPlaceholder="Naspers Ltd"
+        valuePlaceholder="%"
+      />
 
       {/* ── What it has paid out ── */}
       <div className="space-y-2 border-t border-brand-border/40 pt-3">

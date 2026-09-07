@@ -11,6 +11,7 @@ import {
 } from "../../services/api/adminFundCatalogue";
 import { useFundCatalogueMeta } from "../../hooks/useFundCatalogue";
 import FactsheetCrops from "./FactsheetCrops";
+import PairRows, { asObject, type Pair } from "./PairRows";
 
 /**
  * Add a fund, starting from its fact sheet.
@@ -77,6 +78,15 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
   const [problems, setProblems] = useState<FieldProblem[]>([]);
 
   const [url, setUrl] = useState("");
+
+  // The parts of a sheet that are a list rather than a figure. None of these
+  // were on this form: adding a fund meant saving it, reopening it and
+  // recording a SECOND fact sheet to enter the allocation, which lands a second
+  // snapshot row for the same document.
+  const [allocation, setAllocation] = useState<Pair[]>([]);
+  const [holdings, setHoldings] = useState<Pair[]>([]);
+  const [income, setIncome] = useState<Pair[]>([]);
+  const [performance, setPerformance] = useState<Pair[]>([]);
   const [reading, setReading] = useState(false);
   const [extraction, setExtraction] = useState<Extraction | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
@@ -181,6 +191,17 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
         snapshot[key] = NUMERIC.has(key) ? Number(raw) : raw;
       }
       if (url.trim()) snapshot.mdd_url = url.trim();
+
+      const lists: Array<[string, Pair[]]> = [
+        ["asset_allocation", allocation],
+        ["top_holdings", holdings],
+        ["income_distribution", income],
+        ["performance", performance],
+      ];
+      for (const [key, rows] of lists) {
+        const value = asObject(rows);
+        if (value) snapshot[key] = value;
+      }
       // Only sent when there is a dated sheet to attach it to; as_of is what
       // makes a snapshot a snapshot.
       if (snapshot.as_of) body.snapshot = snapshot as SnapshotInput;
@@ -395,6 +416,43 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
         <Field label="Objective, in the manager's words" name="objective" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
         <Field label="Risk, in the manager's words" name="risk_narrative" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
         <Field label="Horizon, in the manager's words" name="horizon_words" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+
+        <PairRows
+          title="What it holds"
+          note="Optional — many tracker sheets print no breakdown, and the index is the answer. If you do enter one it has to account for the whole fund: a partial breakdown reads as a fund holding some of nothing. It is a chart on the sheet, so read it from the crop above."
+          rows={allocation}
+          onChange={setAllocation}
+          labelPlaceholder="Domestic equity"
+          valuePlaceholder="%"
+          total
+        />
+
+        <PairRows
+          title="Top holdings"
+          note="The largest positions, as the sheet lists them. These do not add to 100 — they are the top of a longer list."
+          rows={holdings}
+          onChange={setHoldings}
+          labelPlaceholder="Naspers Ltd"
+          valuePlaceholder="%"
+        />
+
+        <PairRows
+          title="Past returns, as published"
+          note="The manager's own annualised figures. Use 1y / 3y / 5y / 10y / inception as the labels so figures stay comparable between funds."
+          rows={performance}
+          onChange={setPerformance}
+          labelPlaceholder="1y"
+          valuePlaceholder="%"
+        />
+
+        <PairRows
+          title="What it has paid out"
+          note="Cents per unit, by month as YYYY-MM. Skip a month the sheet shows as a dash; record one it prints as 0.00 — a declared nothing and no declaration are different things."
+          rows={income}
+          onChange={setIncome}
+          labelPlaceholder="2026-06"
+          valuePlaceholder="3.93"
+        />
       </div>
 
       {unattached.map((p) => (
