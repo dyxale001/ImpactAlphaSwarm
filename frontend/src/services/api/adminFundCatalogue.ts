@@ -98,6 +98,10 @@ export interface AdminFundList {
 }
 
 export interface FundInput {
+  /** The fund's first fact sheet, read off the same document as the fields
+   *  below. Sent in the same request so a fund is never created without the
+   *  figures that make it matchable. */
+  snapshot?: SnapshotInput;
   isin: string;
   name: string;
   fund_house: string;

@@ -72,6 +72,14 @@ async def require_admin(authorization: Optional[str] = Header(None)) -> str:
 
 
 class FundIn(BaseModel):
+    #: The fund's first fact sheet, read off the same document as the fields
+    #: below. Optional, because a fund can legitimately be added before its
+    #: sheet is to hand — but supplying it is the normal path, since a fund
+    #: without one cannot be matched to anybody.
+    #:
+    #: Declared after SnapshotIn, which is why the annotation is a string.
+    snapshot: Optional["SnapshotIn"] = None
+
     isin: str
     name: str
     fund_house: str
@@ -126,6 +134,11 @@ class SnapshotIn(BaseModel):
     asset_allocation: Optional[dict[str, float]] = None
     performance: Optional[dict[str, float]] = None
     top_holdings: Optional[dict[str, float]] = None
+
+
+# FundIn refers to SnapshotIn before it is defined, so the forward reference is
+# resolved once both exist.
+FundIn.model_rebuild()
 
 
 def _reject(problems: list[Problem]) -> None:
@@ -210,15 +223,61 @@ def list_funds_for_admin(
     }
 
 
+def _snapshot_row(fund: dict[str, Any], body: SnapshotIn, admin_id: str, fund_id: str) -> dict[str, Any]:
+    """One fact-sheet row, ready to write, with its provenance filled in.
+
+    Shared by the two ways a sheet gets recorded — with a new fund, or against
+    an existing one — so the hash rule and the review fields cannot drift apart
+    between them.
+    """
+    row = body.model_dump()
+    row["fund_id"] = fund_id
+    row["source"] = "manual"
+    row["entered_by"] = admin_id
+    row["reviewed_by"] = admin_id
+    row["review_status"] = "approved"
+    # Stands in for the document's own hash, which only exists once a PDF is
+    # archived. Covers the transcribed values so that a corrected reading is a
+    # new row rather than a duplicate — the same rule the seed loader uses.
+    row["mdd_sha256"] = repo_hash(fund.get("isin") or fund_id, row)
+    return row
+
+
+def repo_hash(isin: str, row: dict[str, Any]) -> str:
+    """Indirection so the hash rule has one name here as well as one home."""
+    return FundRepository.transcription_hash(isin, row)
+
+
 @router.post("/funds", status_code=201)
 def create_fund(
     body: FundIn,
     admin_id: str = Depends(require_admin),
     repo: FundRepository = Depends(get_repository),
 ):
-    """Add a fund. Validated exactly as the seed loader validates a CSV row."""
+    """Add a fund, and its first fact sheet in the same request.
+
+    The sheet is optional but is the normal path, because a fund without one is
+    a half-thing: it is listed and browsable and can be matched to nobody, since
+    matching compares a published risk label that does not exist yet.
+
+    Both halves come off the same document — the ISIN and ASISA category from
+    its fund-facts block, the fees and risk from its fee and risk blocks — so
+    splitting them across two requests made the admin re-read one sheet twice.
+
+    **Everything is validated before anything is written**, which is the seed
+    loader's contract: a half-loaded catalogue is worse than an empty one. The
+    tables are in separate writes because PostgREST has no cross-table
+    transaction, so validation up front is what actually protects the invariant;
+    a write that fails after the fund is created is reported rather than hidden.
+    """
     row = body.model_dump()
+    sheet = row.pop("snapshot", None)
+
     problems = fund_validators().check(row)
+    sheet_body: Optional[SnapshotIn] = None
+    if sheet is not None:
+        sheet_body = SnapshotIn(**sheet)
+        problems = problems + snapshot_validators().check(sheet_body.model_dump())
     _reject(problems)
 
     if repo.get_by_isin(row["isin"]):
@@ -228,7 +287,33 @@ def create_fund(
         )
 
     written = repo.upsert_fund(row)
-    return {"fund": written[0] if written else None, "warnings": _warnings(problems)}
+    fund = written[0] if written else None
+    if fund is None:
+        raise HTTPException(status_code=500, detail={"message": "The fund did not save."})
+
+    recorded = None
+    if sheet_body is not None:
+        try:
+            rows = repo.insert_snapshot(_snapshot_row(fund, sheet_body, admin_id, fund["id"]))
+            recorded = rows[0] if rows else None
+        except Exception as exc:  # noqa: BLE001
+            # The fund exists but has no figures. Say so plainly rather than
+            # return a 201 that implies both landed.
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": (
+                        f"{row['name']} was added, but its fact sheet did not save: {exc}. "
+                        "Open the fund and record the sheet."
+                    )
+                },
+            ) from exc
+
+    return {
+        "fund": fund,
+        "snapshot": recorded,
+        "warnings": _warnings(problems),
+    }
 
 
 @router.patch("/funds/{fund_id}")
@@ -282,21 +367,10 @@ def add_snapshot(
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
 
-    row = body.model_dump()
-    problems = snapshot_validators().check(row)
+    problems = snapshot_validators().check(body.model_dump())
     _reject(problems)
 
-    row["fund_id"] = fund_id
-    row["source"] = "manual"
-    row["entered_by"] = admin_id
-    row["reviewed_by"] = admin_id
-    row["review_status"] = "approved"
-    # Stands in for the document's own hash, which only exists once a PDF is
-    # archived. Covers the transcribed values so that a corrected reading is a
-    # new row rather than a duplicate — the same rule the seed loader uses.
-    row["mdd_sha256"] = repo.transcription_hash(fund.get("isin") or fund_id, row)
-
-    written = repo.insert_snapshot(row)
+    written = repo.insert_snapshot(_snapshot_row(fund, body, admin_id, fund_id))
     return {"snapshot": written[0] if written else None, "warnings": _warnings(problems)}
 
 

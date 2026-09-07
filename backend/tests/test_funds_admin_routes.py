@@ -41,6 +41,7 @@ from src.funds.admin_routes import (  # noqa: E402
     require_admin,
     router,
 )
+from src.funds.admin_routes import SnapshotIn  # noqa: E402
 from src.funds.extract import FetchError  # noqa: E402
 from src.funds.extract.base import Extraction, Reading, Unresolved  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
@@ -293,6 +294,113 @@ class TestTheStalenessOrdering:
         # Failing toward "current" would hide a fund from the list that exists
         # to surface exactly this.
         assert _staleness("not a date", TODAY)["status"] == "unreadable"
+
+
+class TestAddingAFundAndItsFirstSheetTogether:
+    """INVARIANT: a fund and its first fact sheet arrive in one request.
+
+    Both halves come off the same document — the ISIN and ASISA category from
+    its fund-facts block, the fees and risk from its fee and risk blocks. When
+    they were two requests on two screens, adding a fund left it listed,
+    browsable and matchable to nobody until somebody went back and recorded the
+    sheet separately.
+
+    The important claim is the seed loader's: **everything is validated before
+    anything is written.** The two tables are separate writes because PostgREST
+    has no cross-table transaction, so up-front validation is what actually
+    stops a half-loaded fund existing.
+    """
+
+    SHEET = {
+        "as_of": "2026-07-31",
+        "risk_indicator_raw": "Low",
+        "risk_indicator_1to5": 1,
+        "ter": 0.5,
+        "tc": 0.1,
+        "tic": 0.6,
+    }
+
+    def test_both_are_written_in_one_request(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": self.SHEET},
+        )
+        assert res.status_code == 201
+        body = res.json()
+        assert body["fund"] is not None
+        assert body["snapshot"] is not None
+
+        fake = client.app.state.fake
+        assert any(name == "upsert" for name, *_ in fake.calls_on("funds"))
+        assert any(name == "upsert" for name, *_ in fake.calls_on("fund_factsheet_snapshots"))
+
+    def test_a_bad_sheet_stops_the_fund_being_created(self, client):
+        # The whole point. ter + tc cannot exceed tic, so this sheet is refused
+        # — and the fund must not be written either, or the catalogue gains a
+        # fund with no figures because of a typo in a different field.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": {**self.SHEET, "tic": 0.1}},
+        )
+        assert res.status_code == 422
+        assert not any(
+            name in ("insert", "upsert") for name, *_ in client.app.state.fake.calls_on("funds")
+        )
+
+    def test_a_bad_fund_stops_the_sheet_being_written(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "isin": "nonsense", "snapshot": self.SHEET},
+        )
+        assert res.status_code == 422
+        assert not any(
+            name in ("insert", "upsert")
+            for name, *_ in client.app.state.fake.calls_on("fund_factsheet_snapshots")
+        )
+
+    def test_problems_from_both_halves_come_back_at_once(self, client):
+        # One pass to fix everything, rather than one field per attempt.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "isin": "nonsense", "snapshot": {**self.SHEET, "tic": 0.1}},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert "isin" in fields
+        assert any(f in fields for f in ("tic", "ter", "tc"))
+
+    def test_the_sheet_stays_optional(self, client):
+        # A fund can legitimately be added before its sheet is to hand.
+        res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
+        assert res.status_code == 201
+        assert res.json()["snapshot"] is None
+
+    def test_the_sheet_carries_its_provenance(self, client):
+        client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": self.SHEET},
+        )
+        call = [
+            c for c in client.app.state.fake.calls_on("fund_factsheet_snapshots") if c[0] == "upsert"
+        ][0]
+        row = call[1][0]
+        assert row["source"] == "manual"
+        assert row["entered_by"] == "admin-1"
+        assert row["review_status"] == "approved"
+        # The stand-in hash, without which the row cannot de-duplicate.
+        assert row["mdd_sha256"]
+
+    def test_the_hash_is_the_same_rule_both_paths_use(self, client):
+        # Recorded with a new fund and recorded against an existing one must
+        # produce the same identity, or a correction made through one path would
+        # not supersede a reading made through the other.
+        from src.funds.admin_routes import _snapshot_row
+        from src.funds.repository import FundRepository as Repo
+
+        fund = {"isin": "ZAE000000002", "id": "f-new"}
+        row = _snapshot_row(fund, SnapshotIn(**self.SHEET), "admin-1", "f-new")
+        expected = Repo.transcription_hash("ZAE000000002", {k: v for k, v in row.items()})
+        assert row["mdd_sha256"] == expected
 
 
 class TestExtractingToPrefill:

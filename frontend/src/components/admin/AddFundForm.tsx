@@ -1,36 +1,62 @@
 import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Link2 } from "lucide-react";
 import {
   ValidationError,
   createAdminFund,
+  extractFactsheet,
+  type Extraction,
   type FieldProblem,
   type FundInput,
+  type SnapshotInput,
 } from "../../services/api/adminFundCatalogue";
 import { useFundCatalogueMeta } from "../../hooks/useFundCatalogue";
 
 /**
- * Add a fund to the catalogue.
+ * Add a fund, starting from its fact sheet.
  *
- * The ASISA category is a dropdown rather than a text box, and picking one sets
- * the geography and asset class from the same record. Those three fields are
- * one fact split across three columns, so letting them be typed separately
- * invites a row that passes every individual check and is still incoherent —
- * "Global" geography on a South African category, say.
+ * The URL comes first because the document is the source of both halves of what
+ * gets created: the ISIN and ASISA category identify the fund, the fees and
+ * risk rating are its first dated sheet. They used to be two forms on two
+ * screens, which meant reading one document twice and leaving the fund listed
+ * but matchable to nobody in between.
  *
- * Everything else is validated by the backend, which runs the same chain the
- * seed loader runs. Nothing is checked twice here: a second opinion in the
- * browser would be the one that drifts.
+ * Both are sent in one request. The backend validates everything before it
+ * writes anything, which is the seed loader's rule — a half-loaded catalogue is
+ * worse than an empty one.
  *
- * A fund is created without a fact sheet. That is the honest order — the fund
- * exists as soon as it is identified, but it cannot be matched to anyone until
- * a dated document is recorded against it, which happens on its own page.
+ * What the extractor declines to read stays empty and says why. A pre-filled
+ * wrong value gets nodded through; an empty box has to be answered.
  */
+
+/** Snapshot fields the extractor can fill. Kept explicit so a new extractor
+ *  field cannot silently start populating something this form does not show. */
+const SHEET_FIELDS = [
+  "as_of",
+  "benchmark",
+  "risk_indicator_raw",
+  "risk_indicator_1to5",
+  "ter",
+  "tc",
+  "tic",
+  "fund_size_zar",
+  "distribution_frequency",
+  "objective",
+] as const;
+
+const NUMERIC = new Set(["risk_indicator_1to5", "ter", "tc", "tic", "fund_size_zar"]);
+
 export default function AddFundForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const { meta } = useFundCatalogueMeta();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
-  const [values, setValues] = useState<FundInput>({
+
+  const [url, setUrl] = useState("");
+  const [reading, setReading] = useState(false);
+  const [extraction, setExtraction] = useState<Extraction | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+
+  const [fund, setFund] = useState<Record<string, string>>({
     isin: "",
     name: "",
     fund_house: "",
@@ -41,17 +67,18 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
     asisa_category: "",
     jse_code: "",
     yahoo_symbol: "",
-    is_index_tracker: false,
-    tfsa_eligible: false,
-    platforms: ["EasyEquities"],
     mdd_page_url: "",
     curation_rule: "",
   });
+  const [flags, setFlags] = useState({ is_index_tracker: false, tfsa_eligible: false });
+  const [sheet, setSheet] = useState<Record<string, string>>(
+    Object.fromEntries(SHEET_FIELDS.map((f) => [f, ""])),
+  );
 
   function pickCategory(name: string) {
     const category = meta?.categories.find((c) => c.name === name);
-    setValues({
-      ...values,
+    setFund({
+      ...fund,
       asisa_category: name,
       // Taken from the same record rather than typed, so the three columns
       // cannot disagree with each other.
@@ -60,23 +87,86 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
     });
   }
 
+  async function readSheet() {
+    setReading(true);
+    setReadError(null);
+    setExtraction(null);
+    try {
+      const read = await extractFactsheet(url);
+      setExtraction(read);
+
+      // Only fills what is still blank. Anything already typed by hand wins:
+      // the person is the authority, the extractor is a convenience.
+      setFund((current) => {
+        const next = { ...current };
+        for (const key of ["isin", "jse_code"] as const) {
+          const value = read.fields[key];
+          if (value !== undefined && !next[key].trim()) next[key] = String(value);
+        }
+        // The sheet's category wording is the manager's abbreviation ("SA Multi
+        // Asset Income"); the catalogue needs the canonical ASISA name. Matched
+        // loosely so the dropdown lands on the right one, and left blank rather
+        // than guessed when nothing matches.
+        const raw = read.fields.asisa_category;
+        if (raw && !next.asisa_category) {
+          const words = String(raw).toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean);
+          const hit = meta?.categories.find((c) => {
+            const target = c.name.toLowerCase();
+            return words.every((w) => (w === "sa" ? true : target.includes(w)));
+          });
+          if (hit) {
+            next.asisa_category = hit.name;
+            next.asisa_geography = hit.tier1;
+            next.asisa_asset_class = hit.tier2;
+          }
+        }
+        return next;
+      });
+
+      setSheet((current) => {
+        const next = { ...current };
+        for (const key of SHEET_FIELDS) {
+          const value = read.fields[key];
+          if (value !== undefined && !next[key].trim()) next[key] = String(value);
+        }
+        return next;
+      });
+    } catch (e) {
+      setReadError(e instanceof ValidationError ? e.message : "That sheet could not be read.");
+    } finally {
+      setReading(false);
+    }
+  }
+
   async function submit() {
     setSaving(true);
     setProblems([]);
     try {
-      // Empty optional fields are dropped rather than sent as "", which would
-      // record an empty string where the answer is "we do not have one".
-      const body = Object.fromEntries(
-        Object.entries(values).filter(([, v]) => v !== "" && v !== null),
-      ) as unknown as FundInput;
-      await createAdminFund(body);
-      setValues({ ...values, isin: "", name: "", jse_code: "", yahoo_symbol: "" });
+      const body: Record<string, unknown> = { ...flags };
+      for (const [key, value] of Object.entries(fund)) {
+        if (value.trim() !== "") body[key] = value;
+      }
+      body.platforms = ["EasyEquities"];
+
+      // Empty means "the sheet does not state it", which is not zero.
+      const snapshot: Record<string, unknown> = {};
+      for (const key of SHEET_FIELDS) {
+        const raw = sheet[key];
+        if (raw.trim() === "") continue;
+        snapshot[key] = NUMERIC.has(key) ? Number(raw) : raw;
+      }
+      if (url.trim()) snapshot.mdd_url = url.trim();
+      // Only sent when there is a dated sheet to attach it to; as_of is what
+      // makes a snapshot a snapshot.
+      if (snapshot.as_of) body.snapshot = snapshot as SnapshotInput;
+
+      await createAdminFund(body as unknown as FundInput);
       setOpen(false);
+      setExtraction(null);
+      setUrl("");
       await onCreated();
     } catch (e) {
       if (e instanceof ValidationError) {
-        // Covers a duplicate ISIN too: the client attaches that to the isin
-        // field so it shows on the box rather than in the footer.
         setProblems(e.problems);
       } else {
         console.error("Could not add the fund:", e);
@@ -99,85 +189,163 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
     );
   }
 
+  const isEtf = fund.vehicle === "etf";
   const unattached = problems.filter((p) => !p.field);
-  const isEtf = values.vehicle === "etf";
 
   return (
-    <section className="soft-card space-y-3 p-5">
+    <section className="soft-card space-y-4 p-5">
       <h2 className="text-sm font-bold text-brand-primary">Add a fund</h2>
-      <p className="text-xs leading-relaxed text-brand-secondary/70">
-        Identify the fund from its own fact sheet. It will be listed straight away and can be
-        matched to someone once a fact sheet is recorded against it, which happens on its page.
-      </p>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="ISIN" value={values.isin} onChange={(v) => setValues({ ...values, isin: v })} problems={problems} name="isin" />
-        <Field label="Fund name" value={values.name} onChange={(v) => setValues({ ...values, name: v })} problems={problems} name="name" />
-        <Field label="Manager (the brand)" value={values.fund_house} onChange={(v) => setValues({ ...values, fund_house: v })} problems={problems} name="fund_house" />
-        <Field label="Management company (issues the sheet)" value={values.manco} onChange={(v) => setValues({ ...values, manco: v })} problems={problems} name="manco" />
-
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-semibold text-brand-secondary/80">Fund type</span>
-          <select
-            value={values.vehicle}
-            onChange={(e) => setValues({ ...values, vehicle: e.target.value })}
-            className="rounded-md border border-brand-border/60 px-2.5 py-1.5 text-brand-primary"
+      {/* ── Start from the document ── */}
+      <div className="space-y-2 rounded-md bg-brand-bg/50 p-3">
+        <p className="text-xs leading-relaxed text-brand-secondary/80">
+          Paste the fact sheet from the manager's own site. Everything below comes off that one
+          document — what identifies the fund, and its first dated set of figures.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-1 flex-col gap-1 text-xs" style={{ minWidth: 240 }}>
+            <span className="font-semibold text-brand-secondary/80">Fact sheet URL</span>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://satrix.co.za/fund/mdd/STX40"
+              className="rounded-md border border-brand-border/60 px-2.5 py-1.5 text-brand-primary"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void readSheet()}
+            disabled={reading || !url.trim()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-brand-border/60 px-3 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-bg disabled:opacity-50"
           >
-            {(meta?.vehicles ?? []).map((v) => (
-              <option key={v.value} value={v.value}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-semibold text-brand-secondary/80">ASISA category</span>
-          <select
-            value={values.asisa_category}
-            onChange={(e) => pickCategory(e.target.value)}
-            className={`rounded-md border px-2.5 py-1.5 text-brand-primary ${
-              problems.some((p) => p.field.startsWith("asisa")) ? "border-amber-500" : "border-brand-border/60"
-            }`}
-          >
-            <option value="">Choose…</option>
-            {(meta?.categories ?? []).map((c) => (
-              <option key={c.code} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {values.asisa_category && (
-            <span className="text-[11px] text-brand-secondary/60">
-              {values.asisa_geography} · {values.asisa_asset_class}
-            </span>
-          )}
-        </label>
-
-        {/* Both are required for an ETF and neither applies to a unit trust,
-            so the labels follow the chosen vehicle rather than claiming
-            "optional" for a field the validators will insist on. */}
-        <Field
-          label={isEtf ? "JSE code (required)" : "JSE code (unit trusts may print one)"}
-          value={values.jse_code ?? ""}
-          onChange={(v) => setValues({ ...values, jse_code: v })}
-          problems={problems}
-          name="jse_code"
-        />
-        <Field
-          label={isEtf ? "Price symbol, e.g. STX40.JO (required)" : "Price symbol (ETFs only)"}
-          value={values.yahoo_symbol ?? ""}
-          onChange={(v) => setValues({ ...values, yahoo_symbol: v })}
-          problems={problems}
-          name="yahoo_symbol"
-        />
-        <Field label="Manager's fund page" value={values.mdd_page_url ?? ""} onChange={(v) => setValues({ ...values, mdd_page_url: v })} problems={problems} name="mdd_page_url" />
-        <Field label="Why it is in the catalogue" value={values.curation_rule ?? ""} onChange={(v) => setValues({ ...values, curation_rule: v })} problems={problems} name="curation_rule" />
+            <Link2 className="h-3 w-3" />
+            {reading ? "Reading…" : "Read the sheet"}
+          </button>
+        </div>
+        {readError && (
+          <p className="flex items-start gap-1.5 text-[11px] text-amber-700">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            {readError}
+          </p>
+        )}
+        {extraction && (
+          <div className="space-y-1 border-t border-brand-border/40 pt-2 text-[11px]">
+            <p className="text-brand-secondary">
+              Filled {Object.keys(extraction.fields).length} field
+              {Object.keys(extraction.fields).length === 1 ? "" : "s"} using the{" "}
+              <span className="font-semibold">{extraction.template}</span> template. Check each
+              against the document before saving.
+            </p>
+            {extraction.unresolved.length > 0 && (
+              <>
+                <p className="font-semibold text-brand-primary">
+                  Left blank on purpose — read these off the document yourself:
+                </p>
+                <ul className="space-y-0.5">
+                  {extraction.unresolved.map((u) => (
+                    <li key={u.field} className="text-brand-secondary">
+                      <span className="font-semibold">{u.field}</span> — {u.reason}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-4 text-xs">
-        <Check label="Index tracker" checked={values.is_index_tracker ?? false} onChange={(b) => setValues({ ...values, is_index_tracker: b })} />
-        <Check label="Tax-free eligible" checked={values.tfsa_eligible ?? false} onChange={(b) => setValues({ ...values, tfsa_eligible: b })} />
+      {/* ── What identifies the fund ── */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-bold text-brand-primary">What identifies the fund</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="ISIN" name="isin" values={fund} set={setFund} problems={problems} evidence={extraction} />
+          <Field label="Fund name" name="name" values={fund} set={setFund} problems={problems} evidence={extraction} />
+          <Field label="Manager (the brand)" name="fund_house" values={fund} set={setFund} problems={problems} evidence={extraction} />
+          <Field label="Management company" name="manco" values={fund} set={setFund} problems={problems} evidence={extraction} />
+
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-semibold text-brand-secondary/80">Fund type</span>
+            <select
+              value={fund.vehicle}
+              onChange={(e) => setFund({ ...fund, vehicle: e.target.value })}
+              className="rounded-md border border-brand-border/60 px-2.5 py-1.5 text-brand-primary"
+            >
+              {(meta?.vehicles ?? []).map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-semibold text-brand-secondary/80">ASISA category</span>
+            <select
+              value={fund.asisa_category}
+              onChange={(e) => pickCategory(e.target.value)}
+              className={`rounded-md border px-2.5 py-1.5 text-brand-primary ${
+                problems.some((p) => p.field.startsWith("asisa")) ? "border-amber-500" : "border-brand-border/60"
+              }`}
+            >
+              <option value="">Choose…</option>
+              {(meta?.categories ?? []).map((c) => (
+                <option key={c.code} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {fund.asisa_category && (
+              <span className="text-[11px] text-brand-secondary/60">
+                {fund.asisa_geography} · {fund.asisa_asset_class}
+              </span>
+            )}
+          </label>
+
+          <Field
+            label={isEtf ? "JSE code (required)" : "JSE code (unit trusts may print one)"}
+            name="jse_code"
+            values={fund}
+            set={setFund}
+            problems={problems}
+            evidence={extraction}
+          />
+          <Field
+            label={isEtf ? "Price symbol, e.g. STX40.JO (required)" : "Price symbol (ETFs only)"}
+            name="yahoo_symbol"
+            values={fund}
+            set={setFund}
+            problems={problems}
+          />
+          <Field label="Manager's fund page" name="mdd_page_url" values={fund} set={setFund} problems={problems} />
+          <Field label="Why it is in the catalogue" name="curation_rule" values={fund} set={setFund} problems={problems} />
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-xs">
+          <Check label="Index tracker" checked={flags.is_index_tracker} onChange={(b) => setFlags({ ...flags, is_index_tracker: b })} />
+          <Check label="Tax-free eligible" checked={flags.tfsa_eligible} onChange={(b) => setFlags({ ...flags, tfsa_eligible: b })} />
+        </div>
+      </div>
+
+      {/* ── Its first fact sheet ── */}
+      <div className="space-y-3 border-t border-brand-border/40 pt-3">
+        <h3 className="text-xs font-bold text-brand-primary">Its first fact sheet</h3>
+        <p className="text-[11px] leading-relaxed text-brand-secondary/70">
+          Dated figures from the same document. Leave a field empty where the sheet does not state
+          it. Without a date here the fund is saved on its own — it will be listed but cannot be
+          matched to anyone until a sheet is recorded.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="As at (YYYY-MM-DD)" name="as_of" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Risk, as printed" name="risk_indicator_raw" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Risk level 1-5" name="risk_indicator_1to5" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Benchmark" name="benchmark" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="TER %" name="ter" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Transaction cost %" name="tc" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="TIC %" name="tic" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Fund size (R)" name="fund_size_zar" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+          <Field label="Distributions" name="distribution_frequency" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
+        </div>
+        <Field label="Objective, in the manager's words" name="objective" values={sheet} set={setSheet} problems={problems} evidence={extraction} />
       </div>
 
       {unattached.map((p) => (
@@ -194,7 +362,7 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
           disabled={saving}
           className="rounded-md bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
         >
-          {saving ? "Adding…" : "Add fund"}
+          {saving ? "Adding…" : sheet.as_of.trim() ? "Add fund and sheet" : "Add fund only"}
         </button>
         <button
           type="button"
@@ -211,30 +379,38 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
   );
 }
 
+/** One input, with its validation message and — when the extractor filled it —
+ *  the line of the document it was read from. */
 function Field({
   label,
-  value,
-  onChange,
-  problems,
   name,
+  values,
+  set,
+  problems,
+  evidence,
 }: {
   label: string;
-  value: string;
-  onChange: (v: string) => void;
-  problems: FieldProblem[];
   name: string;
+  values: Record<string, string>;
+  set: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  problems: FieldProblem[];
+  evidence?: Extraction | null;
 }) {
   const mine = problems.filter((p) => p.field === name);
+  const quote = evidence?.evidence?.[name];
   return (
     <label className="flex flex-col gap-1 text-xs">
       <span className="font-semibold text-brand-secondary/80">{label}</span>
       <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={values[name] ?? ""}
+        onChange={(e) => set({ ...values, [name]: e.target.value })}
         className={`rounded-md border px-2.5 py-1.5 text-brand-primary ${
           mine.length ? "border-amber-500" : "border-brand-border/60"
         }`}
       />
+      {quote && (
+        <span className="text-[10px] leading-snug text-brand-secondary/60">read from “{quote}”</span>
+      )}
       {mine.map((p) => (
         <span key={p.message} className="text-[11px] text-amber-700">
           {p.message}
