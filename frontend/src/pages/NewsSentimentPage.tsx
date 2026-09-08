@@ -122,6 +122,7 @@ export default function NewsSentimentPage() {
         icon={Newspaper}
         title="News Sentiment"
         subtitle={`How coverage of ${tickerLabel} moved over the last ${SOCIAL_HISTORY_DAYS} days.`}
+        backHref={`/asset/${tickerLabel}?tab=sentiment`}
       />
 
       <SentimentTrendChart

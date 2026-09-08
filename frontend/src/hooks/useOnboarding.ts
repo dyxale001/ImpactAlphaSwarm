@@ -130,6 +130,9 @@ export function useOnboarding() {
       },
       ai_derived_expertise: psychometrics.calculatedExpertise,
       is_active: true,
+      // dashboard_layout is deliberately left unwritten. A new account arrives
+      // on a blank dashboard with the setup guide, which is what a null column
+      // means: nothing is arranged on anyone's behalf.
     }
 
     const { error: analysisError } = await supabase
