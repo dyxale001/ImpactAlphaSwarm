@@ -627,6 +627,36 @@ _ASK_BLOCKLIST = (
 # prompt spells out the ALLOW/BLOCK distinction explicitly rather than
 # relying on the blocklist alone to be exhaustive.
 
+
+# Ask request/response models. Defined here, at the top of the Ask section,
+# because the helpers below annotate their return type as AskResponse and
+# annotations are evaluated at def time — declaring these after the helpers
+# raises NameError at import.
+class AskRequest(BaseModel):
+    query: str
+
+
+class AskSource(BaseModel):
+    title: str
+    publisher: str
+    url: str
+    retrieved_at: str
+
+
+class AskResponse(BaseModel):
+    intent: str
+    narration: str
+    data: dict
+    source: str
+    # Structured source metadata for externally-grounded LEARNING_QUESTION
+    # answers (trusted-knowledge fallback). Empty for every other path —
+    # `source` (a short string label) stays the field older/other consumers
+    # read, this is purely additive so no existing consumer breaks.
+    sources: List[AskSource] = []
+    is_blocked: bool = False
+    redirect_suggestions: List[str] = []
+
+
 _ASK_REDIRECT_SUGGESTIONS = [
     "Show me technology assets in my universe",
     "Tell me about NVDA",
@@ -1764,31 +1794,6 @@ def _ask_learning_question(query: str) -> AskResponse:
         data={}, source="none", sources=[], is_blocked=False,
         redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
     )
-
-
-class AskRequest(BaseModel):
-    query: str
-
-
-class AskSource(BaseModel):
-    title: str
-    publisher: str
-    url: str
-    retrieved_at: str
-
-
-class AskResponse(BaseModel):
-    intent: str
-    narration: str
-    data: dict
-    source: str
-    # Structured source metadata for externally-grounded LEARNING_QUESTION
-    # answers (trusted-knowledge fallback). Empty for every other path —
-    # `source` (a short string label) stays the field older/other consumers
-    # read, this is purely additive so no existing consumer breaks.
-    sources: List[AskSource] = []
-    is_blocked: bool = False
-    redirect_suggestions: List[str] = []
 
 
 @app.post("/api/ask", response_model=AskResponse)
