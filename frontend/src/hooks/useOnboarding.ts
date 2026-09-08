@@ -120,24 +120,7 @@ export function useOnboarding() {
         return
       }
 
-    const currentUserId = sessionData.session.user.id
-
-    const analysisPayload = {
-      user_id: currentUserId,
-      risk_tolerance: psychometrics.riskTolerance,
-      investment_universe: formData.universe,
-      survey_answers: {
-        ...formData.surveyAnswers,
-        // Store onboarding metadata for future use without affecting scoring
-        _investor_path: investorPath,
-        _familiar_assets: familiarAssets.join(','),
-      },
-      ai_derived_expertise: psychometrics.calculatedExpertise,
-      is_active: true,
-      // dashboard_layout is deliberately left unwritten. A new account arrives
-      // on a blank dashboard with the setup guide, which is what a null column
-      // means: nothing is arranged on anyone's behalf.
-    }
+      const currentUserId = sessionData.session.user.id
 
       const analysisPayload: UserAnalysis = {
         user_id: currentUserId,
@@ -151,6 +134,9 @@ export function useOnboarding() {
         },
         ai_derived_expertise: psychometrics.calculatedExpertise,
         is_active: true,
+        // dashboard_layout is deliberately left unwritten. A new account arrives
+        // on a blank dashboard with the setup guide, which is what a null column
+        // means: nothing is arranged on anyone's behalf.
       }
 
       const { error: analysisError } = await supabase

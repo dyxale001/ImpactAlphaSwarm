@@ -10,6 +10,15 @@ async function getToken() {
   return data?.session?.access_token ?? null;
 }
 
+export interface StartAnalysisResponse {
+  run_id: string;
+  /**
+   * True when a run was already in flight for this user and the id below is that
+   * existing run rather than a new one. Callers poll it the same way either way.
+   */
+  already_running?: boolean;
+}
+
 export async function startAnalysis(payload: {
   universes: string[];
   watchlist?: string[];
@@ -32,13 +41,13 @@ export async function startAnalysis(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<AnalysisStatus>;
+  return res.json() as Promise<StartAnalysisResponse>;
 }
 
 export async function getStatus(runId: string) {
   const res = await fetch(`${BASE}/api/analysis/status/${runId}`);
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<AnalysisStatus>;
 }
 
 export async function getResult(runId: string) {
