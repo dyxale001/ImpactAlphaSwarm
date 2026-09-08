@@ -58,16 +58,20 @@ export function SourcePageHeader({
   icon: Icon,
   title,
   subtitle,
+  backHref,
 }: {
   ticker: string;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
+  // Where "Back to <ticker>" goes. Defaults to the asset page's own default tab;
+  // the sentiment source pages point it back at the sentiment tab they came from.
+  backHref?: string;
 }) {
   return (
     <>
       <Link
-        to={`/asset/${ticker}`}
+        to={backHref ?? `/asset/${ticker}`}
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to {ticker}

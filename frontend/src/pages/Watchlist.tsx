@@ -1,15 +1,13 @@
-import { useState } from "react";
-import { Eye, RefreshCw, ArrowUpDown, TrendingUp } from "lucide-react";
-import {
-  useWatchlistData,
-  type SortOption,
-  type TopPick,
-} from "../hooks/useWatchlistData";
-import { Link } from "react-router-dom";
-import WatchlistSearch from "../components/watchlist/WatchlistSearch";
-import WatchedAssetCard from "../components/watchlist/WatchedAssetCard";
-import RadarMotif from "../components/watchlist/RadarMotif";
-import WatchlistSkeleton from "../components/watchlist/WatchlistSkeleton";
+import { useState, useEffect } from 'react'
+import { Eye, RefreshCw, ArrowUpDown, TrendingUp, Search, Sparkles } from 'lucide-react'
+import { useWatchlistData, type SortOption, type TopPick } from '../hooks/useWatchlistData'
+import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
+import { Link } from 'react-router-dom'
+import WatchlistSearch from '../components/watchlist/WatchlistSearch'
+import AskAlphaSwarm from '../components/watchlist/AskAlphaSwarm'
+import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
+import TopPickRow from '../components/watchlist/TopPickRow'
+import RadarMotif from '../components/watchlist/RadarMotif'
 
 const SECTOR_DOT: Record<string, string> = {
   Technology: "bg-blue-400",
@@ -105,7 +103,27 @@ export default function WatchlistPage() {
     sectors,
   } = useWatchlistData();
 
-  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  // Session-scoped, same reasoning as useAskAlphaSwarm's history persistence:
+  // this page unmounts on route navigation, so plain useState reset the tab
+  // choice back to 'ticker' every time the user came back. sessionStorage
+  // survives that unmount/remount within the same browser tab.
+  const [searchMode, setSearchMode] = useState<'ticker' | 'ask'>(() => {
+    try {
+      const stored = window.sessionStorage.getItem('watchlist.searchMode')
+      return stored === 'ask' ? 'ask' : 'ticker'
+    } catch {
+      return 'ticker'
+    }
+  })
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem('watchlist.searchMode', searchMode)
+    } catch {
+      // best-effort (private browsing / storage disabled)
+    }
+  }, [searchMode])
+  const ask = useAskAlphaSwarm()
 
   const sortLabels: Record<SortOption, string> = {
     added: "Recently added",
@@ -151,13 +169,51 @@ export default function WatchlistPage() {
 
       {/* ── Search + Browse ─────────────────────────────────────────── */}
       <div className="space-y-4">
-        <WatchlistSearch
-          search={search}
-          setSearch={setSearch}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
-          onAdd={addToWatchlist}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSearchMode('ticker')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              searchMode === 'ticker'
+                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
+                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            Search by ticker
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchMode('ask')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              searchMode === 'ask'
+                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
+                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Ask AlphaSwarm
+          </button>
+        </div>
+
+        {searchMode === 'ticker' ? (
+          <WatchlistSearch
+            search={search}
+            setSearch={setSearch}
+            searchResults={searchResults}
+            searchLoading={searchLoading}
+            onAdd={addToWatchlist}
+          />
+        ) : (
+          <AskAlphaSwarm
+            query={ask.query}
+            setQuery={ask.setQuery}
+            result={ask.result}
+            loading={ask.loading}
+            error={ask.error}
+            onAsk={ask.ask}
+          />
+        )}
       </div>
 
       {/* ── Error ───────────────────────────────────────────────────── */}

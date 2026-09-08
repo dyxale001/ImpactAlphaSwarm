@@ -238,8 +238,15 @@
     border-radius: var(--radius-brand);
     background-color: var(--color-brand-primary);
   }
+  /* Forest fill, white text. Set here rather than at each call site so a chip
+     written without colour classes is already on-brand. Utilities still win
+     over this (they sit in a later layer), which is what leaves the semantic
+     chips — warning, danger, success — free to override it with their own
+     tone. */
   .chip {
     @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase transition-colors;
+    background-color: var(--color-brand-primary);
+    color: var(--color-neutral-0);
   }
   .bento-grid {
     @apply grid grid-cols-6 gap-4;

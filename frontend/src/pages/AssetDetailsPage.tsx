@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -376,7 +376,16 @@ export default function AssetDetailsPage() {
   // independently of the AI run, so the card renders without waiting on it and the
   // chart fills itself in when the series arrives.
   const history = useSentimentHistory(ticker);
-  const [tab, setTab] = useState<AnalysisTab>("ranking");
+  // Opens on the tab named in ?tab= when there is one, so returning from the news or
+  // social source pages lands back on Sentiment rather than the default. Read once on
+  // mount; switching tabs afterwards is local state and does not touch the URL.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<AnalysisTab>(() => {
+    const requested = searchParams.get("tab");
+    return requested === "sentiment" || requested === "quant"
+      ? requested
+      : "ranking";
+  });
 
   // Per-day news for the chart's second line: the history the backend stored where it
   // has any, and only otherwise the figure derived here from the run's article list.

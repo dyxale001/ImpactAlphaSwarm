@@ -127,23 +127,29 @@ class GroqClient:
         client library raises on a transport or API error. Both are failures; callers
         that have a fallback should catch broadly rather than distinguish them.
         """
+        import time
+
         from langchain_core.messages import HumanMessage
 
+        started = time.perf_counter()
         response = self._llm.invoke([HumanMessage(content=prompt)])
+        elapsed_ms = (time.perf_counter() - started) * 1000
         content = (response.content or "").strip()
         finish = (response.response_metadata or {}).get("finish_reason")
         usage = getattr(response, "usage_metadata", None) or {}
         reasoning_tokens = (usage.get("output_token_details") or {}).get("reasoning")
 
-        # This sees a budget being eaten by thinking before it runs out.
+        # This sees a budget being eaten by thinking before it runs out, and
+        # (via elapsed_ms) which call sites are actually the latency cost.
         logger.info(
-            "Groq %s: model=%s finish=%s output_tokens=%s reasoning_tokens=%s chars=%d",
+            "Groq %s: model=%s finish=%s output_tokens=%s reasoning_tokens=%s chars=%d elapsed_ms=%.0f",
             self._purpose,
             self._model,
             finish,
             usage.get("output_tokens"),
             reasoning_tokens,
             len(content),
+            elapsed_ms,
         )
 
         if not content:
