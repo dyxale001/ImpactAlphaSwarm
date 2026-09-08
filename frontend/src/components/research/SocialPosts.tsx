@@ -190,7 +190,13 @@ export function SocialPostRow({
             <PostText text={p.text} ticker={ticker} />
           </p>
 
-          <div className="mt-3 flex items-center gap-5 text-[12px] text-brand-muted-fg">
+          {/* Wraps, because it does not fit. Three engagement counts, the share of
+              the score and the external-link glyph come to roughly 250px, against
+              about 215px of row once the page gutter, the panel, the list border and
+              the avatar have taken theirs on a 360px phone. Unwrapped, the counts
+              squashed and "of score" spilled past the card. The influence figure
+              keeps its ml-auto, so on a wide screen the row is unchanged. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-brand-muted-fg">
             <span className="flex items-center gap-1.5" title="Likes">
               <Heart className="h-4 w-4" />
               {p.likes ?? 0}

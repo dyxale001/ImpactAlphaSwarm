@@ -50,8 +50,15 @@ export default function DualBar({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <div className="flex justify-between">
-          <span className="relative group inline-block" tabIndex={0}>
+        {/* Both label/value rows below carry gap-2 and a shrink-proof value,
+            because the widest pair does not fit a phone: "Quant Position vs Peers"
+            at tracking-widest plus "84th percentile" is about 270px against the
+            264px this component gets inside the signal widget on a 360px screen.
+            justify-between with no gap let the two run together and then split the
+            figure mid-word. Now the label wraps instead, and the figure stays whole
+            and pinned right. */}
+        <div className="flex justify-between gap-2">
+          <span className="relative group inline-block min-w-0" tabIndex={0}>
             <span
               className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
             >
@@ -65,7 +72,9 @@ export default function DualBar({
               </div>
             </div>
           </span>
-          <span className={`font-mono font-semibold ${valueTone}`}>
+          <span
+            className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
+          >
             {sentimentScore}%
           </span>
         </div>
@@ -78,8 +87,8 @@ export default function DualBar({
       </div>
 
       <div className="space-y-1">
-        <div className="flex justify-between">
-          <span className="relative group inline-block" tabIndex={0}>
+        <div className="flex justify-between gap-2">
+          <span className="relative group inline-block min-w-0" tabIndex={0}>
             <span
               className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
             >
@@ -93,7 +102,9 @@ export default function DualBar({
               </div>
             </div>
           </span>
-          <span className={`font-mono font-semibold ${valueTone}`}>
+          <span
+            className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
+          >
             {hasPercentile
               ? `${Math.round(quantPercentile as number)}th percentile`
               : `${quantitativeScore}%`}

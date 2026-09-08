@@ -354,7 +354,17 @@ export default function AssetsPage() {
                 both lines are footing for the SAME prices, exchange, currency and
                 now whether the exchange trading them is open, so one strip reads
                 as one fact about the page rather than two competing pills. */}
-            <div className="mt-3 inline-flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
+            {/* Full-width block on a phone, pill from sm. The strip carries about
+                470px of text against roughly 290px of hero on a 360px screen, so it
+                has to wrap — and `inline-flex` + `w-fit` cannot wrap cleanly. Width
+                resolves from the items' max-content size capped by max-w-full, but
+                the wrapped lines then lay out wider than the box that sizing
+                produced, so the text spilled straight through the px-4 padding and
+                out the right edge. A full-width block has a width to wrap inside,
+                and the rounded-full curve is dropped while it is multi-line because
+                a 30px radius on a three-line box eats its own corner words. From sm
+                there is room for one line and the original pill returns. */}
+            <div className="mt-3 flex w-full max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-brand-bg/70 sm:inline-flex sm:w-fit sm:rounded-full sm:py-1.5">
               {exchangeRate !== null ? (
                 <>
                   US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
@@ -381,7 +391,15 @@ export default function AssetsPage() {
               tick shipped: a run can be hours old while the sentiment behind it was
               topped up an hour ago, and a reader needs both dates to know which one
               answers which question. */}
-          <div className="lg:shrink-0 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-5 pr-1.5">
+          {/* Two shapes, because the row does not fit a phone. The freshness grid
+              is about 245px and the button another 105px, against roughly 290px of
+              hero on a 360px screen: the button wrapped under the grid, leaving a
+              rounded-full box two rows tall whose pl-5 / pr-1.5 padding — measured
+              for text-then-button on ONE line — left the wrapped button jammed
+              against the right edge. Below sm it is a plain rounded block with even
+              padding and a full-width button; from sm the single-row pill returns
+              unchanged. */}
+          <div className="lg:shrink-0 flex w-full max-w-full flex-col items-stretch gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:w-fit sm:flex-row sm:flex-wrap sm:items-center sm:rounded-full sm:p-0 sm:py-2 sm:pl-5 sm:pr-1.5">
             {/* A two-column grid, not two lines of inline text: "Last AI run" and
                 "Sentiment updated" are different lengths, so as plain text the two
                 values started at two different x positions and the pair read as
@@ -390,7 +408,12 @@ export default function AssetsPage() {
                 two, and the divider marks where that column ends: grid items stretch
                 to fill their track by default, so a border on the label spans draws
                 one continuous vertical rule rather than a short underline per row. */}
-            <div className="grid grid-cols-[auto_auto] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
+            {/* minmax(0,auto) on the value track: a locale timestamp is ~120px and
+                the labels ~105px, which is wider than a small phone leaves once the
+                block's own padding is out. A bare `auto` track refuses to go below
+                its content and pushed the grid past the card; this lets the value
+                wrap under itself instead. */}
+            <div className="grid grid-cols-[auto_minmax(0,auto)] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
               <span className="border-r border-brand-bg/15 pr-2 mr-2">
                 Last AI run
               </span>
@@ -413,7 +436,7 @@ export default function AssetsPage() {
             <button
               onClick={handleRefresh}
               disabled={isRunning}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               <RefreshCw className="w-4 h-4 text-brand-fg" />
               {isRunning ? "Running..." : "Refresh"}
