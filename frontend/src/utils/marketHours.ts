@@ -29,32 +29,54 @@ const EARLY_CLOSE_MINUTES = 13 * 60; // 13:00
 // is not, rather than quietly asserting that an unlisted year has no holidays.
 //
 // Verify against nyse.com/markets/hours-calendars when extending.
-const FULL_CLOSURES: Record<number, string[]> = {
-  2026: [
-    "2026-01-01", // New Year's Day
-    "2026-01-19", // Martin Luther King Jr. Day
-    "2026-02-16", // Washington's Birthday
-    "2026-04-03", // Good Friday
-    "2026-05-25", // Memorial Day
-    "2026-06-19", // Juneteenth
-    "2026-07-03", // Independence Day observed, the 4th is a Saturday
-    "2026-09-07", // Labor Day
-    "2026-11-26", // Thanksgiving
-    "2026-12-25", // Christmas
-  ],
-  2027: [
-    "2027-01-01", // New Year's Day
-    "2027-01-18", // Martin Luther King Jr. Day
-    "2027-02-15", // Washington's Birthday
-    "2027-03-26", // Good Friday
-    "2027-05-31", // Memorial Day
-    "2027-06-18", // Juneteenth observed, the 19th is a Saturday
-    "2027-07-05", // Independence Day observed, the 4th is a Sunday
-    "2027-09-06", // Labor Day
-    "2027-11-25", // Thanksgiving
-    "2027-12-24", // Christmas observed, the 25th is a Saturday
-  ],
+//
+// Keyed by date to its name rather than a bare list of dates: the names used to live in
+// the comments, where nothing could read them. The sentiment trend chart labels a shut
+// column with the holiday it is shut for, and `marketStatus` names it in the pill's
+// title, so the name is now data. An "(observed)" suffix is kept because it is the
+// honest answer to "why is the market shut on the 3rd of July".
+const FULL_CLOSURES: Record<number, Record<string, string>> = {
+  2026: {
+    "2026-01-01": "New Year's Day",
+    "2026-01-19": "Martin Luther King Jr. Day",
+    "2026-02-16": "Washington's Birthday",
+    "2026-04-03": "Good Friday",
+    "2026-05-25": "Memorial Day",
+    "2026-06-19": "Juneteenth",
+    // The 4th is a Saturday.
+    "2026-07-03": "Independence Day (observed)",
+    "2026-09-07": "Labor Day",
+    "2026-11-26": "Thanksgiving",
+    "2026-12-25": "Christmas",
+  },
+  2027: {
+    "2027-01-01": "New Year's Day",
+    "2027-01-18": "Martin Luther King Jr. Day",
+    "2027-02-15": "Washington's Birthday",
+    "2027-03-26": "Good Friday",
+    "2027-05-31": "Memorial Day",
+    // The 19th is a Saturday.
+    "2027-06-18": "Juneteenth (observed)",
+    // The 4th is a Sunday.
+    "2027-07-05": "Independence Day (observed)",
+    "2027-09-06": "Labor Day",
+    "2027-11-25": "Thanksgiving",
+    // The 25th is a Saturday.
+    "2027-12-24": "Christmas (observed)",
+  },
 };
+
+/**
+ * The name of the NYSE holiday closing this day, or null if it trades.
+ *
+ * Takes a "YYYY-MM-DD" New York date. Null covers three different cases on purpose --
+ * an ordinary trading day, a weekend (which is computed, never listed) and a year the
+ * table does not reach -- because every caller wants the same thing from all three:
+ * no holiday name to show. Ask `holidaysKnownFor` to tell the last case apart.
+ */
+export function marketHolidayName(day: string): string | null {
+  return FULL_CLOSURES[Number(day.slice(0, 4))]?.[day] ?? null;
+}
 
 // Days the session ends at 13:00 instead of 16:00.
 const EARLY_CLOSES: Record<number, string[]> = {
@@ -180,8 +202,9 @@ export function marketStatus(now: Date = new Date()): MarketStatus {
     return closed("weekend", "The New York Stock Exchange does not trade at weekends.");
   }
 
-  if ((FULL_CLOSURES[year] ?? []).includes(ny.day)) {
-    return closed("holiday", "The New York Stock Exchange is shut for a public holiday.");
+  const holiday = marketHolidayName(ny.day);
+  if (holiday) {
+    return closed("holiday", `The New York Stock Exchange is shut for ${holiday}.`);
   }
 
   if (ny.minutes < OPEN_MINUTES) {

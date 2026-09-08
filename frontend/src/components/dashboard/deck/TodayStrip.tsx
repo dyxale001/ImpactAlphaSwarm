@@ -146,7 +146,11 @@ export default function TodayStrip({
               exactly the pill Assets.tsx anchors under its own subtitle. */}
           {!isEditing ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="inline-flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
+              {/* Full-width block on a phone, pill from sm, matching Assets.tsx.
+                  `inline-flex` + `w-fit` sized this from the items' max-content and
+                  the wrapped lines then ran out through the px-4 padding; a
+                  full-width block has a width to wrap inside. */}
+              <div className="flex w-full max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-brand-bg/70 sm:inline-flex sm:w-fit sm:rounded-full sm:py-1.5">
                 {exchangeRate !== null ? (
                   <>
                     US Stock Exchanges · FX (USD/ZAR) from {exchangeRateSource}:{" "}
@@ -213,10 +217,17 @@ export default function TodayStrip({
             of its own, matching Assets.tsx exactly — a run can be hours old
             while sentiment was topped up an hour ago, and a reader needs both
             dates to know which answers which. Right-aligned and shrink-shy,
-            the same as the single pill on Assets. */}
+            the same as the single pill on Assets.
+
+            Two shapes, also the same as Assets.tsx. Grid plus button is ~350px
+            against roughly 290px of hero on a 360px screen, so the button wrapped
+            under the grid and the pl-5 / pr-1.5 padding, measured for one row, left
+            it jammed right inside a two-row lozenge. Block below sm, pill from sm. */}
         {!isEditing ? (
-          <div className="flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-5 pr-1.5 lg:shrink-0">
-            <div className="grid grid-cols-[auto_auto] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
+          <div className="flex w-full max-w-full flex-col items-stretch gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:w-fit sm:flex-row sm:flex-wrap sm:items-center sm:rounded-full sm:p-0 sm:py-2 sm:pl-5 sm:pr-1.5 lg:shrink-0">
+            {/* minmax(0,auto) on the value track so a locale timestamp wraps under
+                itself rather than pushing the grid past the card on a small phone. */}
+            <div className="grid grid-cols-[auto_minmax(0,auto)] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
               <span className="mr-2 border-r border-brand-bg/15 pr-2">
                 Last AI run
               </span>
@@ -240,7 +251,7 @@ export default function TodayStrip({
               type="button"
               onClick={() => void runAnalysis()}
               disabled={busy}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent sm:w-auto"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`}
