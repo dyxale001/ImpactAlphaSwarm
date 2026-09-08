@@ -444,6 +444,7 @@ class AssetRepository(Repository):
 # How long a run may sit in 'running' before it is presumed abandoned and may be
 # claimed by a new one. Mirrors api.STALE_RUN_MINUTES, which heals such rows.
 RUN_LOCK_STALE_MINUTES = int(os.getenv("STALE_RUN_MINUTES", "15"))
+_progress_update_lock = threading.Lock()
 
 
 class AiRunRepository(Repository):
@@ -473,7 +474,7 @@ class AiRunRepository(Repository):
         crashed pipeline would lock the user out until manual intervention.
         """
         now_iso = self._now_iso()
-        claim = {"status": "running", "created_at": now_iso}
+        claim = {"status": "running", "created_at": now_iso, "progress": {}}
 
         # 1. Claim the row only if it is NOT already running. One winner by construction.
         try:
@@ -532,7 +533,7 @@ class AiRunRepository(Repository):
         #    constraint, so fall back to reading the winner's row.
         try:
             resp = self.table().insert(
-                {"user_id": user_id, "status": "running"}
+                {"user_id": user_id, "status": "running", "progress": {}}
             ).execute()
             data = resp.data or []
             if data:
@@ -575,6 +576,42 @@ class AiRunRepository(Repository):
         self.table().update({
             "status": status,
         }).eq("id", run_id).execute()
+
+    def update_progress(self, run_id: str, progress: dict) -> None:
+        """Persist only the safe, user-facing analysis progress snapshot."""
+        try:
+            with _progress_update_lock:
+                self.table().update({"progress": progress}).eq("id", run_id).execute()
+        except Exception as error:
+            print(f"Could not update analysis progress for {run_id}: {error}")
+
+    def complete_progress_branch(self, run_id: str, branch: str) -> None:
+        """Remove one concurrent analysis branch and publish the safe message."""
+        try:
+            with _progress_update_lock:
+                row = (
+                    self.table()
+                    .select("progress")
+                    .eq("id", run_id)
+                    .limit(1)
+                    .execute()
+                    .data
+                    or []
+                )
+                progress = row[0].get("progress") if row else {}
+                progress = progress if isinstance(progress, dict) else {}
+                active = [item for item in progress.get("active", []) if item != branch]
+                if active == ["sentiment"]:
+                    message = "Market analysis complete — reviewing sentiment signals"
+                elif active == ["quant"]:
+                    message = "Sentiment analysis complete — finishing market analysis"
+                else:
+                    message = "Market and sentiment analysis complete"
+                self.table().update({
+                    "progress": {**progress, "phase": "analysis", "message": message, "active": active},
+                }).eq("id", run_id).execute()
+        except Exception as error:
+            print(f"Could not update analysis progress for {run_id}: {error}")
 
 
 # Disclosed ranking-v2 fields written per recommendation (migration 010). Kept as
@@ -1104,6 +1141,14 @@ def create_ai_run(user_id: str, status: str = "running") -> str:
 
 def update_ai_run_status(run_id: str, status: str) -> None:
     _ai_runs.update_status(run_id, status)
+
+
+def update_ai_run_progress(run_id: str, progress: dict) -> None:
+    _ai_runs.update_progress(run_id, progress)
+
+
+def complete_ai_run_progress_branch(run_id: str, branch: str) -> None:
+    _ai_runs.complete_progress_branch(run_id, branch)
 
 
 def get_last_news_for_asset(asset_id: str) -> Optional[Dict[str, Any]]:

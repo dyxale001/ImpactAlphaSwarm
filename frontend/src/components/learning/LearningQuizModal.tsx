@@ -185,8 +185,19 @@ export default function LearningQuizModal({
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 sm:py-6">
           {loadingQuestions ? (
-            <div className="space-y-4 py-8 text-center text-sm text-brand-muted-fg">
-              Loading quiz questions...
+            <div className="space-y-5 py-6 text-left">
+              <p className="text-sm font-semibold text-brand-fg">
+                Preparing quiz questions...
+              </p>
+              <div className="motion-safe:animate-pulse space-y-4">
+                <div className="h-6 w-4/5 rounded bg-brand-border/35" />
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-12 rounded-xl border border-brand-border/60 bg-brand-bg/45"
+                  />
+                ))}
+              </div>
             </div>
           ) : result ? (
             <div className="space-y-6 text-center">

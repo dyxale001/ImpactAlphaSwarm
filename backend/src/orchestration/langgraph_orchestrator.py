@@ -26,7 +26,12 @@ from ..agents.sentiment_scout import analyze_tickers as analyze_sentiment_ticker
 from ..utils.gr_reasoningtracestyle import HOUSE_STYLE
 from ..utils.llm_client import GroqClient
 from ..utils.traces import QuantMetrics, SocialMention, Tracer
-from ..utils.supabase_client import save_top_assets, update_ai_run_status
+from ..utils.supabase_client import (
+    complete_ai_run_progress_branch,
+    save_top_assets,
+    update_ai_run_progress,
+    update_ai_run_status,
+)
 
 load_dotenv()
 
@@ -650,11 +655,23 @@ class InitializePhase(Phase):
         self.scoper = scoper or _SCOPER
 
     def run(self, state: AnalysisState) -> dict[str, Any]:
+        update_ai_run_progress(
+            state["run_id"],
+            {"phase": "initializing", "message": "Preparing your analysis", "active": []},
+        )
         print("- Phase 1: Initializing session and scoping data...")
 
         tickers = self.scoper.scope(state["universes"], state["watchlist"])
 
         print(f"Curated {len(tickers)} tickers for analysis")
+        update_ai_run_progress(
+            state["run_id"],
+            {"phase": "initializing", "message": f"Selected {len(tickers)} assets for analysis", "active": [], "selected_assets": len(tickers)},
+        )
+        update_ai_run_progress(
+            state["run_id"],
+            {"phase": "analysis", "message": f"Analysing market data and sentiment across {len(tickers)} assets", "active": ["quant", "sentiment"], "selected_assets": len(tickers)},
+        )
         tracer = get_tracer()
         if tracer:
             tracer.tickers = tickers
@@ -695,11 +712,13 @@ class QuantPhase(Phase):
                 tracer.log_step(self.name, {"count": len(quant_results), "tickers": list(quant_results.keys())})
 
             print(f"  ✓ Computed metrics for {len(quant_results)} assets")
+            complete_ai_run_progress_branch(state["run_id"], "quant")
             return {"quant_results": quant_results}
 
         except Exception as e:
             logger.warning("Quant analyst failed: %s", e)
             print("Quant analyst failed; no quant results available")
+            complete_ai_run_progress_branch(state["run_id"], "quant")
             return {"quant_results": {}}
 
     @staticmethod
@@ -752,6 +771,7 @@ class SentimentPhase(Phase):
             )
 
         print(f"  ✓ Analyzed sentiment for {len(sentiment_results)} assets")
+        complete_ai_run_progress_branch(state["run_id"], "sentiment")
         return {"sentiment_results": sentiment_results}
 
 
@@ -762,6 +782,10 @@ class SynthesizePhase(Phase):
     label = "Phase 3"
 
     def run(self, state: AnalysisState) -> dict[str, Any]:
+        update_ai_run_progress(
+            state["run_id"],
+            {"phase": "synthesis", "message": "Synthesising signals and applying your investor profile", "active": []},
+        )
         print("- Phase 3: Synthesizing results and applying business logic...")
 
         top_5, unified_scores = synthesize_rankings(
@@ -802,6 +826,10 @@ class OutputPhase(Phase):
     label = "Phase 4"
 
     def run(self, state: AnalysisState) -> dict[str, Any]:
+        update_ai_run_progress(
+            state["run_id"],
+            {"phase": "output", "message": "Ranking opportunities and preparing recommendations", "active": []},
+        )
         print("- Phase 4: Formatting output with reasoning traces...")
 
         output = {
@@ -833,6 +861,10 @@ class OutputPhase(Phase):
             # looked like nothing had happened. api.py still marks it too; the update is
             # idempotent.
             update_ai_run_status(state["run_id"], "complete")
+            update_ai_run_progress(
+                state["run_id"],
+                {"phase": "complete", "message": "Analysis complete", "active": []},
+            )
         except Exception as e:
             logger.error(f"Failed to save ranked assets to Supabase: {e}")
 
