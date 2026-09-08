@@ -494,6 +494,94 @@ def test_an_empty_day_in_the_table_is_said_once_rather_than_spelled_out():
 	assert "nothing collected" in prompt
 
 
+# ── days the market was shut ─────────────────────────────────────────────────
+#
+# Fixed dates rather than the relative ones above, because the claim IS the calendar:
+# 2026-11-26 is Thanksgiving, the 27th is the Friday after it, and the 28th and 29th are
+# the weekend. Offsets from the real today would drift off the holiday within a day.
+
+CLOSED_WEEK = (
+	WeekDay("2026-11-25", 63, 51, 60, 4),   # Wednesday, trading
+	WeekDay("2026-11-26", 57, 6, None, 0),  # Thanksgiving
+	WeekDay("2026-11-27", 59, 18, 57, 1),   # Friday, trading
+	WeekDay("2026-11-28", None, 0, None, 0),  # Saturday
+	WeekDay("2026-11-29", None, 0, None, 0),  # Sunday
+)
+
+
+def test_the_week_table_names_the_holiday_and_the_weekend_days():
+	"""Without this the model is shown a dead Thursday in November and has no way to
+	know why. It reads the thin day as waning interest, which is the same mistake the
+	"nothing collected" phrasing exists to prevent, one step further out."""
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-25", week=CLOSED_WEEK), partial=False
+	)
+
+	assert "market closed, Thanksgiving" in prompt
+	assert "market closed, Saturday" in prompt
+	assert "market closed, Sunday" in prompt
+
+
+def test_a_closed_day_is_named_even_when_it_carried_posts():
+	"""A holiday still gets chatter, so the closure has to be stated on a row that has
+	numbers on it too, not only on the empty ones."""
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-25", week=CLOSED_WEEK), partial=False
+	)
+
+	assert "market closed, Thanksgiving; social score 57 from 6 posts" in prompt
+
+
+def test_a_trading_day_is_not_marked_closed():
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-25", week=CLOSED_WEEK), partial=False
+	)
+
+	assert "Wed 25 Nov: social score 63" in prompt
+
+
+def test_the_days_own_figures_say_it_was_a_public_holiday():
+	"""Stated among the day's figures, not only in the week table: it is a fact about
+	the day being written about rather than a comparison with the others."""
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-26", social_score=57, post_count=6, week=CLOSED_WEEK),
+		partial=False,
+	)
+
+	assert "CLOSED on this day for the US public holiday Thanksgiving" in prompt
+
+
+def test_the_days_own_figures_say_it_was_a_weekend():
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-28", social_score=None, post_count=0, week=CLOSED_WEEK),
+		partial=False,
+	)
+
+	assert "CLOSED on this day because it was a Saturday" in prompt
+
+
+def test_the_prompt_forbids_reading_a_closed_day_as_lost_interest():
+	"""The instruction the two blocks above exist to feed. Naming the closure is only
+	half of it: the model also has to be told what the closure means, or it reports the
+	holiday and still calls the day a decline in the same sentence."""
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-26", week=CLOSED_WEEK), partial=False
+	)
+
+	assert "never evidence that interest fell away" in prompt
+	assert "Do not describe trading, volume or market moves on a closed day" in prompt
+
+
+def test_an_ordinary_day_carries_no_closure_line_at_all():
+	"""Most days are trading days, and a standing note about closures on every one of
+	them would be noise the model has to read past."""
+	prompt = DaySummaryPromptBuilder().build(
+		evidence(day="2026-11-25", week=CLOSED_WEEK), partial=False
+	)
+
+	assert "CLOSED on this day" not in prompt
+
+
 # ── the newly discovered asset ───────────────────────────────────────────────
 
 
