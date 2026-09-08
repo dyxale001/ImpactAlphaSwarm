@@ -1,5 +1,5 @@
 import { Trophy } from "lucide-react";
-import type { LearningArticle } from "../../types/learning";
+import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
 
 type Props = {
   article: LearningArticle;
@@ -7,6 +7,7 @@ type Props = {
   onTakeQuiz: (article: LearningArticle) => void;
   canTakeQuiz: boolean;
   hasPerfectScore: boolean;
+  quizStatus?: LearningQuizStatus;
 };
 
 export default function LearningCard({
@@ -15,6 +16,7 @@ export default function LearningCard({
   onTakeQuiz,
   canTakeQuiz,
   hasPerfectScore,
+  quizStatus,
 }: Props) {
   return (
     <article className="glass-card relative flex h-full flex-col rounded-2xl p-5">
@@ -82,7 +84,7 @@ transition-opacity
 hover:opacity-90
 "
           >
-            Take Quiz
+            {quizStatus === "COMPLETED" ? "Retake Quiz" : "Take Quiz"}
           </button>
         ) : null}
       </div>

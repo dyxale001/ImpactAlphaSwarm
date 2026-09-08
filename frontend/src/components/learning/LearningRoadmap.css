@@ -1,0 +1,62 @@
+/* One continuous trunk; branches indicate reading order, not prerequisites. */
+.learning-journey .journey-path {
+  position: relative;
+  min-width: 0;
+}
+.learning-journey .journey-path::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 24px;
+  left: 19px;
+  width: 2px;
+  background: var(--color-brand-border, #d7e0da);
+}
+.learning-journey .journey-category { position: relative; padding-bottom: 32px; }
+.learning-journey .journey-milestone { position: relative; padding-left: 52px; margin-bottom: 24px; }
+.learning-journey .journey-milestone-icon,
+.learning-journey .journey-node {
+  position: absolute;
+  left: 0;
+  top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-brand-card, #fff);
+  color: var(--color-brand-primary, #1b3530);
+  border: 2px solid var(--color-brand-border, #d7e0da);
+  z-index: 1;
+}
+.learning-journey .journey-milestone-icon { top: 16px; background: var(--color-brand-primary, #1b3530); color: var(--color-brand-bg, #f6f8f5); }
+.learning-journey .journey-lessons { list-style: none; margin: 0; padding: 0; }
+.learning-journey .journey-stop { position: relative; padding-left: 52px; margin-bottom: 20px; min-width: 0; }
+.learning-journey .journey-stop::before { content: ""; position: absolute; left: 20px; top: 37px; width: 32px; height: 2px; background: var(--color-brand-border, #d7e0da); }
+.learning-journey .journey-lesson { min-width: 0; }
+.learning-journey .journey-node-complete { background: var(--color-brand-primary, #1b3530); border-color: var(--color-brand-primary, #1b3530); color: var(--color-brand-bg, #f6f8f5); }
+.learning-journey .journey-node-next { border-color: var(--color-brand-primary, #1b3530); background: var(--color-brand-accent, #d0e89b); box-shadow: 0 0 0 5px var(--color-brand-bg, #f6f8f5); }
+@media (min-width: 768px) {
+  .learning-journey .journey-path::before { left: calc(50% - 1px); }
+  .learning-journey .journey-milestone { width: 70%; margin-inline: auto; padding: 56px 0 0; }
+  .learning-journey .journey-milestone-icon { left: calc(50% - 20px); top: 0; }
+  .learning-journey .journey-stop { display: grid; grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); padding: 0; }
+  .learning-journey .journey-stop-left .journey-lesson { grid-column: 1; }
+  .learning-journey .journey-stop-right .journey-lesson { grid-column: 3; }
+  .learning-journey .journey-node { left: calc(50% - 20px); }
+  .learning-journey .journey-stop::before { left: calc(50% - 40px); width: 40px; }
+  .learning-journey .journey-stop-right::before { left: 50%; }
+}
+
+.learning-journey .journey-advanced {
+  position: relative;
+  margin-left: 52px;
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .learning-journey .journey-advanced {
+    width: 70%;
+    margin-inline: auto;
+  }
+}

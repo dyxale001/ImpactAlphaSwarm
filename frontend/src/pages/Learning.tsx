@@ -6,6 +6,7 @@ import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
+import LearningRoadmap from "../components/learning/LearningRoadmap";
 import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
 import {
@@ -105,10 +106,11 @@ class LearningCentreSearchEngine {
 const learningCentreSearchEngine = new LearningCentreSearchEngine();
 
 export default function LearningPage() {
-  const { session, profile, fetchProfile } = useAuthStore();
+  const { session, profile, analysis, isProfileLoading, fetchProfile } = useAuthStore();
   const userId = profile?.id ?? session?.user?.id ?? null;
 
   const [categories, setCategories] = useState<LearningCategory[]>([]);
+  const [activeTab, setActiveTab] = useState<"roadmap" | "library">("roadmap");
   const [search, setSearch] = useState("");
   const [selectedArticle, setSelectedArticle] =
     useState<LearningArticle | null>(null);
@@ -352,6 +354,59 @@ export default function LearningPage() {
           </div>
         </div>
 
+        <div role="tablist" aria-label="Learning Centre views" className="flex gap-2 border-b border-brand-border pb-3">
+          {(["roadmap", "library"] as const).map((tab, index) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              id={`learning-tab-${tab}`}
+              aria-controls={`learning-panel-${tab}`}
+              aria-selected={activeTab === tab}
+              tabIndex={activeTab === tab ? 0 : -1}
+              onClick={() => setActiveTab(tab)}
+              onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? "roadmap" : event.key === "End" ? "library" : index === 0 ? "library" : "roadmap";
+                setActiveTab(next);
+                document.getElementById(`learning-tab-${next}`)?.focus();
+              }}
+              className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${activeTab === tab ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"}`}
+            >
+              {tab === "roadmap" ? "My Roadmap" : "Library"}
+            </button>
+          ))}
+        </div>
+
+        {loadWarnings.length > 0 ? (
+          <section className="rounded-2xl border border-semantic-danger/35 bg-semantic-danger/10 p-4">
+            <p className="text-sm font-semibold text-semantic-danger">
+              Some learning data could not be loaded.
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-semantic-danger">
+              {loadWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <div id="learning-panel-roadmap" role="tabpanel" aria-labelledby="learning-tab-roadmap" hidden={activeTab !== "roadmap"} tabIndex={0}>
+          <LearningRoadmap
+            badges={badges}
+            earnedBadgeIds={earnedBadgeIds}
+            xp={learningXp}
+            categories={categories}
+            progress={progressByArticleId}
+            expertise={analysis?.user_id === userId ? analysis.ai_derived_expertise : undefined}
+            dataAvailable={loadWarnings.length === 0 && !isProfileLoading}
+            onOpenArticle={setSelectedArticle}
+            onStartQuiz={handleTakeQuiz}
+          />
+        </div>
+
+        <div id="learning-panel-library" role="tabpanel" aria-labelledby="learning-tab-library" hidden={activeTab !== "library"} tabIndex={0} className="space-y-8">
         <section className="relative z-40">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
@@ -421,7 +476,7 @@ export default function LearningPage() {
                                 onClick={() => handleTakeQuiz(article)}
                                 className="rounded-full bg-brand-primary px-2.5 py-1 text-[11px] font-semibold text-brand-bg transition-opacity hover:opacity-90"
                               >
-                                Take Quiz
+                                {progressByArticleId[article.id]?.status === "COMPLETED" ? "Retake Quiz" : "Take Quiz"}
                               </button>
                             ) : null}
                           </div>
@@ -438,19 +493,6 @@ export default function LearningPage() {
             </div>
           ) : null}
         </section>
-
-        {loadWarnings.length > 0 ? (
-          <section className="rounded-2xl border border-semantic-danger/35 bg-semantic-danger/10 p-4">
-            <p className="text-sm font-semibold text-semantic-danger">
-              Some learning data could not be loaded.
-            </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-semantic-danger">
-              {loadWarnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
 
         <LearningBadgeGallery
           badges={badges}
@@ -487,9 +529,11 @@ export default function LearningPage() {
                 onOpenArticle={setSelectedArticle}
                 onTakeQuiz={handleTakeQuiz}
                 getArticleQuizScore={getArticleQuizScore}
+                getArticleQuizStatus={(articleId) => progressByArticleId[articleId]?.status}
               />
             ))
           )}
+        </div>
         </div>
       </div>
 

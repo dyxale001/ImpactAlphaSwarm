@@ -248,7 +248,7 @@ export default function LearningQuizModal({
 
               {questions.length === 0 ? (
                 <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-6 text-sm text-brand-muted-fg">
-                  <p>This article currently has no quiz questions.</p>
+                  <p>{errorMessage || "This article currently has no quiz questions."}</p>
                   <button
                     type="button"
                     onClick={() => setReloadKey((current) => current + 1)}
