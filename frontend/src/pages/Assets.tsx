@@ -7,6 +7,7 @@ import {
   RefreshCw,
   BrainCircuit,
   CandlestickChart,
+  ChevronDown,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
@@ -22,6 +23,7 @@ import { CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
 import LadderMotif from "../components/dashboard/LadderMotif";
+import ScoredAssetRow from "../components/dashboard/ScoredAssetRow";
 
 import {
   startAnalysis,
@@ -31,11 +33,29 @@ import {
 } from "../services/api/analysis";
 import { pollUntilComplete } from "../services/api/poll";
 import { useAnalysisRefresh } from "../hooks/useAnalysisRefresh";
+import { rememberHubPage } from "../utils/lastHubPage";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
+import { MarketClock } from "../components/research/MarketClock";
+import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
+
+/** Assets that got an LLM-written trace, and so are shown as full cards. Mirrors
+ *  REASONING_TRACE_TOP_N on the backend; everything below this rank carries the
+ *  deterministic trace instead and is shown as a row. */
+const SHORTLIST_SIZE = 5;
+/** Rows shown before the "Show all" toggle, matching the house pattern in
+ *  FundHoldingsView. */
+const INITIAL_ROWS = 12;
 
 export default function AssetsPage() {
+  // Names this as the page an asset's "Back to X" link should return to. See
+  // lastHubPage.ts: every route into /asset/:ticker shares this without being
+  // threaded through individually.
+  useEffect(() => {
+    rememberHubPage("/assets");
+  }, []);
+
   const {
     search,
     setSearch,
@@ -45,8 +65,21 @@ export default function AssetsPage() {
     isRunInProgress,
     recommendationError,
     latestRunCreatedAt,
+    recommendations,
     refreshRecommendations,
-  } = useDashboardStats();
+    // The whole ranked feed, not the dashboard's five. The page's own subtitle
+    // promises everything the committee ranked, and a run scores about thirty.
+  } = useDashboardStats({ limit: null });
+
+  // Ranks 2 to 5: shortlisted, shown as cards alongside the hero at rank 1.
+  const shortlisted = filteredRecs.filter((r) => r.rank <= SHORTLIST_SIZE);
+  // Everything else the run scored. Same data, lighter treatment.
+  const alsoScored = filteredRecs.filter((r) => r.rank > SHORTLIST_SIZE);
+
+  const [showAllScored, setShowAllScored] = useState(false);
+  const visibleScored = showAllScored
+    ? alsoScored
+    : alsoScored.slice(0, INITIAL_ROWS);
 
   // Temporary toggle to hide header controls during this iteration
   const hideHeaderControls = true;
@@ -96,6 +129,8 @@ export default function AssetsPage() {
   // all — the page looked blank while a multi-minute analysis went on — and the
   // auto-refresh guard could not see its own run.
   const { refresh, isRunning: isAutoRefreshRunning } = useAnalysisRefresh();
+  const { updatedAt: sentimentUpdatedAt, isLoading: isSentimentUpdatedLoading } =
+    useSentimentLastUpdated();
   const anyRunInFlight = isRunning || isAutoRefreshRunning;
   const isStale = isRunStale(latestRunCreatedAt);
 
@@ -181,7 +216,7 @@ export default function AssetsPage() {
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
-              AI Recommendations
+              Personalized Recommendations
             </p>
             <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
               <CandlestickChart className="w-7 h-7 shrink-0 text-brand-accent" />
@@ -189,10 +224,20 @@ export default function AssetsPage() {
             </h1>
             <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
               Everything your AI Investment Committee ranked in the latest run.
+              {recommendations.length > 0 ? (
+                <span className="font-medium text-brand-bg">
+                  {" "}
+                  {recommendations.length} assets scored.
+                </span>
+              ) : null}
             </p>
             {/* Market and FX footing for every price on the page, so it reads
-                as part of the run rather than a stray note below the header. */}
-            <div className="mt-3 inline-flex w-fit max-w-full flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
+                as part of the run rather than a stray note below the header. The
+                market clock joins it, separated rather than in a pill of its own:
+                both lines are footing for the SAME prices, exchange, currency and
+                now whether the exchange trading them is open, so one strip reads
+                as one fact about the page rather than two competing pills. */}
+            <div className="mt-3 inline-flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-brand-bg/70">
               {exchangeRate !== null ? (
                 <>
                   US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
@@ -205,20 +250,47 @@ export default function AssetsPage() {
                   US Stock Exchanges • Fetching USD/ZAR rate...
                 </span>
               )}
+              <span className="text-brand-bg/30" aria-hidden="true">
+                •
+              </span>
+              <MarketClock tone="dark" bare />
             </div>
           </div>
 
           {/* Run time and its refresh share one pill: the button acts on the
-              timestamp beside it, so they read as a single control. */}
-          <div className="lg:shrink-0 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-1.5 pl-5 pr-1.5">
-            <span className="text-xs text-brand-bg/60">
-              Last AI run{" "}
+              timestamp beside it, so they read as a single control. The sentiment
+              line joins it rather than getting a pill of its own, because "Last AI
+              run" stopped being a sufficient freshness answer the day the intraday
+              tick shipped: a run can be hours old while the sentiment behind it was
+              topped up an hour ago, and a reader needs both dates to know which one
+              answers which question. */}
+          <div className="lg:shrink-0 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-5 pr-1.5">
+            {/* A two-column grid, not two lines of inline text: "Last AI run" and
+                "Sentiment updated" are different lengths, so as plain text the two
+                values started at two different x positions and the pair read as
+                unrelated rather than as one small table of freshness facts. The grid
+                gives both labels one shared column width, sized to the longer of the
+                two, and the divider marks where that column ends: grid items stretch
+                to fill their track by default, so a border on the label spans draws
+                one continuous vertical rule rather than a short underline per row. */}
+            <div className="grid grid-cols-[auto_auto] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
+              <span className="border-r border-brand-bg/15 pr-2 mr-2">Last AI run</span>
               <span className="font-semibold text-brand-bg">
                 {latestRunCreatedAt
                   ? new Date(latestRunCreatedAt).toLocaleString()
                   : "—"}
               </span>
-            </span>
+              <span className="border-r border-brand-bg/15 pr-2 mr-2">
+                Sentiment updated
+              </span>
+              <span className="font-semibold text-brand-bg">
+                {sentimentUpdatedAt
+                  ? new Date(sentimentUpdatedAt).toLocaleString()
+                  : isSentimentUpdatedLoading
+                    ? "…"
+                    : "—"}
+              </span>
+            </div>
             <button
               onClick={handleRefresh}
               disabled={isRunning}
@@ -358,11 +430,9 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* The rest of the shortlist, ranks 2 to 5. Headed by the block above,
+          alongside the hero it continues. */}
       <div>
-        <h2 className="text-2xl font-semibold text-brand-fg mb-4">
-          Personalized Recommendations
-        </h2>
         {recommendationError ? (
           <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-semantic-danger p-6 rounded-lg text-sm text-primary">
             <p className="font-semibold text-primary mb-2">
@@ -376,7 +446,7 @@ export default function AssetsPage() {
           </div>
         ) : (
           <div className="bento-grid">
-            {filteredRecs.map((asset: AssetRecommendation, i: number) => {
+            {shortlisted.map((asset: AssetRecommendation, i: number) => {
               const cardSize = "col-span-6 md:col-span-3 lg:col-span-3";
               return (
                 <RecommendationCard
@@ -390,6 +460,51 @@ export default function AssetsPage() {
           </div>
         )}
       </div>
+
+      {/* Everything else the run scored. Rendered only when there is something
+          past the shortlist, so a run that stored only five (any run predating
+          the whole-feed write) shows a coherent page rather than an empty
+          heading. */}
+      {alsoScored.length > 0 ? (
+        <div className="mt-10">
+          <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
+            <h2 className="text-2xl font-semibold text-brand-fg">Also scored</h2>
+            <span className="text-xs text-brand-muted-fg">
+              {alsoScored.length} more
+            </span>
+          </div>
+          <p className="text-sm text-brand-muted-fg mb-4">
+            Ranked in the same run but outside the shortlist above. The committee
+            writes its full reasoning for the top {SHORTLIST_SIZE}; these carry the
+            summary it recorded for every asset it scored.
+          </p>
+
+          <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 overflow-hidden">
+            {visibleScored.map((asset: AssetRecommendation) => (
+              <ScoredAssetRow key={asset.ticker} asset={asset} />
+            ))}
+          </ul>
+
+          {alsoScored.length > INITIAL_ROWS && (
+            <button
+              type="button"
+              onClick={() => setShowAllScored((v) => !v)}
+              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-2.5 text-xs font-semibold text-brand-muted-fg hover:text-brand-fg hover:border-brand-primary/40 transition-colors"
+            >
+              {showAllScored ? (
+                <>
+                  Show fewer <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                </>
+              ) : (
+                <>
+                  Show all {alsoScored.length} assets{" "}
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {/* Disclaimer Footer */}
       <div className="mt-12 pt-8 border-t border-brand-border/30">

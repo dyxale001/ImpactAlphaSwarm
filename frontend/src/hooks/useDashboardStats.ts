@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
+import { isRecentlyDiscovered } from "../utils/discovery";
 import type { ConvergenceState } from "../data/signalCopy";
 
 export interface AssetRecommendation {
@@ -39,7 +40,16 @@ export interface AssetRecommendation {
 export const SCORECARD_ENABLED =
   (import.meta.env.VITE_UNIFIED_SCORECARD ?? "false") === "true";
 
-export function useDashboardStats() {
+export interface DashboardStatsOptions {
+  /** How many ranked assets to read. Null reads the whole feed. */
+  limit?: number | null;
+}
+
+/** Defaults to five, so the dashboard keeps its top five by calling this with no
+ * arguments. The assets page passes `limit: null` to read everything the run
+ * scored. A run scores about thirty tickers, well inside PostgREST's default page
+ * size, so the uncapped read needs no pagination. */
+export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
   const { profile } = useAuthStore();
   const [recs, setRecs] = useState<AssetRecommendation[]>([]);
   const [isLoadingRecs, setIsLoadingRecs] = useState(true);
@@ -97,8 +107,8 @@ export function useDashboardStats() {
         return;
       }
 
-      // 2. Fetch top 5 assets and join with the dictionary.
-      const { data: recommendations, error: recError } = await supabase
+      // 2. Fetch the ranked assets and join with the dictionary.
+      const recQuery = supabase
         .from("ai_recommendation")
         .select(
           `
@@ -121,8 +131,10 @@ export function useDashboardStats() {
           `,
         )
         .eq("run_id", latestRunId)
-        .order("rank", { ascending: true })
-        .limit(5);
+        .order("rank", { ascending: true });
+
+      const { data: recommendations, error: recError } =
+        limit == null ? await recQuery : await recQuery.limit(limit);
 
       if (recError) {
         throw recError;
@@ -139,7 +151,9 @@ export function useDashboardStats() {
       const { data: assets, error: assetsError } = assetIds.length
         ? await supabase
             .from("assets")
-            .select("id, ticker, name, origin, discovery_sources")
+            .select(
+              "id, ticker, name, origin, discovery_sources, first_discovered_at",
+            )
             .in("id", assetIds)
         : { data: [], error: null };
 
@@ -175,7 +189,10 @@ export function useDashboardStats() {
             // CSV "Hype Flag" column have always read false regardless of the data.
             isHype: (rec.hype_penalty ?? 0) < 0,
             rank: rec.rank ?? 0,
-            isDiscovered: asset?.origin === "discovered",
+            // Recently discovered, not "ever discovered". `origin` is set once
+            // and never cleared, so testing it alone kept the badge on names the
+            // agent surfaced months ago (MU, GOOG) as though they were fresh.
+            isDiscovered: isRecentlyDiscovered(asset ?? {}),
             discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,
@@ -202,7 +219,7 @@ export function useDashboardStats() {
     } finally {
       setIsLoadingRecs(false);
     }
-  }, [profile?.id]);
+  }, [profile?.id, limit]);
 
   useEffect(() => {
     fetchRecommendations();

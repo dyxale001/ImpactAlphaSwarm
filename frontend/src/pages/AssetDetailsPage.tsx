@@ -1,4 +1,5 @@
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -8,6 +9,7 @@ import {
   TriangleAlert,
   HelpCircle,
   Scale,
+  ArrowRight,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import SignalScorecard, {
@@ -21,13 +23,27 @@ import {
 } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
-import NewsArticles from "../components/research/NewsArticles";
-import SocialPosts from "../components/research/SocialPosts";
 import SentimentCalculation from "../components/research/SentimentCalculation";
+import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
+import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
+import { MarketClock } from "../components/research/MarketClock";
+import {
+  newsDayIndex,
+  newsDaysFromHistory,
+} from "../components/research/newsDaily";
+import {
+  sentimentVerdict,
+  TONE_ON_FOREST,
+  type SentimentTone,
+} from "../components/research/sentimentDisplay";
 import { useAssetDetails } from "../hooks/useAssetDetails";
+import { useSentimentHistory } from "../hooks/useSentimentHistory";
+import { HUB_PAGE_LABELS, readLastHubPage } from "../utils/lastHubPage";
 import {
   NEWS_LOOKBACK_DAYS,
   NEWS_WEIGHT_PCT,
+  SOCIAL_HISTORY_DAYS,
+  SOCIAL_LOOKBACK_DAYS,
   SOCIAL_WEIGHT_PCT,
 } from "../data/sentimentMethodology";
 
@@ -39,42 +55,113 @@ function formatMetric(value: unknown, digits = 2) {
   return String(value);
 }
 
-function SignalBar({
+// A score bar anchored at 50, not at 0.
+//
+// The old bar filled from zero, so 62 drew as a track two thirds full and 38 as a
+// track a third full: the encoding said "how much of the maximum" when the number
+// means "which side of neutral, and by how far". Growing out from a centre tick makes
+// direction the thing the eye reads first, which is the actual question, and it is the
+// same convention the trend chart already uses with its dashed neutral 50 line.
+function AnchoredBar({
+  score,
+  tone,
+}: {
+  score: number | null | undefined;
+  tone: SentimentTone;
+}) {
+  const value =
+    typeof score === "number" ? Math.max(0, Math.min(100, score)) : 50;
+  const from = Math.min(value, 50);
+  const to = Math.max(value, 50);
+
+  return (
+    <div
+      className="relative h-2 w-full rounded-full overflow-hidden"
+      style={{ background: "rgba(255,255,255,0.10)" }}
+    >
+      {typeof score === "number" && (
+        <div
+          className="absolute inset-y-0 rounded-full"
+          style={{
+            left: `${from}%`,
+            width: `${to - from}%`,
+            background: TONE_ON_FOREST[tone].fill,
+          }}
+        />
+      )}
+      {/* The anchor itself. Without a visible 50 the bar is just an offset block and
+          the reader has no reference to measure the direction against. Drawn over the
+          fill so it stays findable when the score sits close to neutral. */}
+      <div
+        className="absolute inset-y-0 w-px"
+        style={{ left: "50%", background: "rgba(255,255,255,0.45)" }}
+      />
+    </div>
+  );
+}
+
+// One of the two halves of the blended score: what it is, how much of the score it
+// carries, where it sits against neutral, and what that means in words.
+// It also carries the way through to that signal's own page. The card used to list the
+// articles and posts inline, which made it long and duplicated pages that already do
+// the job properly.
+//
+// That route is a named, underlined link saying what it opens, not the row itself with
+// a chevron on it. A whole row that happens to navigate is only discoverable by
+// hovering it, which never happens on touch and rarely happens on a panel where
+// nothing else is interactive: the reader has to already suspect the link is there to
+// find it. Naming the destination and the count is what makes it findable.
+function ContributorRow({
   label,
   weightPct,
   score,
-  emphasis = false,
   rightText,
+  to,
+  linkText,
 }: {
   label: string;
-  weightPct?: number;
+  weightPct: number;
   score: number | null | undefined;
-  emphasis?: boolean;
   rightText?: string;
+  to: string;
+  linkText: string;
 }) {
-  const pct =
-    typeof score === "number" ? Math.max(0, Math.min(100, score)) : 0;
+  const verdict = sentimentVerdict(rightText ? null : score);
   return (
     <div>
-      <div className="flex justify-between items-center gap-2">
-        <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-2 min-w-0 flex-wrap">
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <span className="text-xs font-semibold text-white flex items-center gap-1.5">
           {label}
-          {weightPct != null && (
-            <span className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium">
-              {weightPct}% weight
-            </span>
+          <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-[10px] font-medium text-forest-900">
+            {weightPct}%
+          </span>
+        </span>
+        <span className="text-xs whitespace-nowrap">
+          {rightText ? (
+            <span style={{ color: "rgba(255,255,255,0.55)" }}>{rightText}</span>
+          ) : (
+            <>
+              <span className="font-mono font-semibold tabular-nums text-white">
+                {formatMetric(score, 0)}
+              </span>{" "}
+              <span style={{ color: TONE_ON_FOREST[verdict.tone].text }}>
+                {verdict.label}
+              </span>
+            </>
           )}
         </span>
-        <span className="text-foreground font-mono font-semibold text-sm whitespace-nowrap">
-          {rightText ?? `${formatMetric(score, 0)} / 100`}
-        </span>
       </div>
-      <div className="h-1.5 w-full bg-background rounded-full overflow-hidden mt-1">
-        <div
-          className={emphasis ? "h-full bg-primary" : "h-full bg-primary/50"}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <AnchoredBar score={rightText ? null : score} tone={verdict.tone} />
+      {/* Underlined by default rather than on hover. This is the only route off the
+          card to the evidence, so it should read as a link before the pointer arrives
+          anywhere near it. */}
+      <Link
+        to={to}
+        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-lime-500 underline underline-offset-2 decoration-lime-500/50 transition-colors hover:text-lime-400 hover:decoration-lime-400"
+      >
+        {linkText}
+        <ArrowRight className="w-3 h-3 shrink-0" />
+      </Link>
     </div>
   );
 }
@@ -92,13 +179,62 @@ function ExplainerLink({
   return (
     <Link
       to={`/asset/${ticker}/how-it-works#${section}`}
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-primary/90"
       title="How is this calculated?"
     >
       <HelpCircle className="w-3.5 h-3.5" />
       <span className="hidden sm:inline">How is this calculated?</span>
       <span className="sm:hidden">How?</span>
     </Link>
+  );
+}
+
+type AnalysisTab = "ranking" | "sentiment" | "quant";
+
+// The page carried three unrelated arguments stacked vertically: why the asset placed
+// where it did, what the sentiment sources say, and what the price history measures.
+// Read end to end that is a long scroll in which the reader loses which question they
+// were answering, so each gets its own panel and only one is on screen at a time.
+function AnalysisTabs({
+  value,
+  onChange,
+  rankingLabel,
+}: {
+  value: AnalysisTab;
+  onChange: (tab: AnalysisTab) => void;
+  rankingLabel: string;
+}) {
+  const tabs: { key: AnalysisTab; label: string }[] = [
+    { key: "ranking", label: rankingLabel },
+    { key: "sentiment", label: "Sentiment" },
+    { key: "quant", label: "Quant" },
+  ];
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Analysis sections"
+      // self-start, not just inline-flex: the parent is a flex column, and a flex
+      // child stretches to the full line width unless told otherwise, which turned
+      // the pill into a full page-width bar.
+      className="self-start inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          role="tab"
+          aria-selected={value === tab.key}
+          onClick={() => onChange(tab.key)}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            value === tab.key
+              ? "bg-brand-accent text-brand-fg"
+              : "text-brand-muted-fg hover:text-brand-fg"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -128,7 +264,10 @@ function SectionCard({
             {title}
             {badge}
           </p>
-          <p className="text-sm text-brand-muted-fg">{description}</p>
+          {/* Same weight as the body text in the panels below, not the muted grey the
+              label above it uses. It is a sentence the reader is meant to read, and at
+              muted it sat closer to the eyebrow label than to the prose it introduces. */}
+          <p className="text-sm text-brand-fg/90">{description}</p>
         </div>
         {action}
       </div>
@@ -137,19 +276,88 @@ function SectionCard({
   );
 }
 
-function MetricPill({
-  label,
-  value,
+// The verdict block at the top of the sentiment tab: the blended score as a figure
+// worth looking at, with the two signals that make it up beside it.
+//
+// It replaces three near-identical thin bars. Those gave the headline score exactly
+// the same weight as its own components, so nothing anchored the tab, and none of them
+// said whether the number was good.
+function SentimentVerdict({
+  blended,
+  newsScore,
+  socialScore,
+  newsRightText,
+  ticker,
+  newsCount,
 }: {
-  label: string;
-  value: React.ReactNode;
+  blended: number | null | undefined;
+  newsScore: number | null | undefined;
+  socialScore: number | null | undefined;
+  newsRightText?: string;
+  ticker: string;
+  newsCount?: number;
 }) {
+  const verdict = sentimentVerdict(blended);
   return (
-    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3">
-      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
-        {label}
+    // The same forest panel the trend chart sits on. The verdict and the week it came
+    // from are one argument, and giving them one ground is what stops the top of the
+    // tab reading as a light box with an unrelated dark box under it.
+    <div className="hero-card p-5 flex flex-col gap-5 sm:flex-row sm:items-center">
+      {/* The figure, in the signature lime. It is the one number the whole tab exists
+          to deliver, and at brand-fg on a light card it looked like every other
+          number on the page. */}
+      <div className="sm:w-44 shrink-0">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-5xl font-bold tabular-nums text-lime-500 leading-none">
+            {formatMetric(blended, 0)}
+          </span>
+          <span
+            className="text-sm"
+            style={{ color: "rgba(255,255,255,0.55)" }}
+          >
+            / 100
+          </span>
+        </div>
+        <p
+          className="text-sm font-semibold mt-2"
+          style={{ color: TONE_ON_FOREST[verdict.tone].text }}
+        >
+          {verdict.label}
+        </p>
+        <p
+          className="text-[10px] uppercase tracking-widest font-semibold mt-1"
+          style={{ color: "rgba(255,255,255,0.55)" }}
+        >
+          Blended sentiment
+        </p>
       </div>
-      <div className="text-sm font-semibold text-brand-fg">{value}</div>
+
+      <div className="flex-1 min-w-0 space-y-3.5">
+        <ContributorRow
+          label="News"
+          weightPct={NEWS_WEIGHT_PCT}
+          score={newsScore}
+          rightText={newsRightText}
+          to={`/asset/${ticker}/news`}
+          // The count is worth naming: it tells the reader how much is behind the
+          // link, which is the difference between an invitation and a bare label.
+          linkText={
+            newsCount
+              ? `Read all ${newsCount} articles`
+              : "Read the news breakdown"
+          }
+        />
+        <ContributorRow
+          label="Social"
+          weightPct={SOCIAL_WEIGHT_PCT}
+          score={socialScore}
+          to={`/asset/${ticker}/social`}
+          // No count here. The card only ever holds a capped handful of posts, and the
+          // real per-day totals live on the page this links to, so any number quoted
+          // from here would be describing the wrong thing.
+          linkText="Read every post, day by day"
+        />
+      </div>
     </div>
   );
 }
@@ -159,6 +367,61 @@ export default function AssetDetailsPage() {
   const navigate = useNavigate();
   const { asset, recommendation, isLoading, latestRunCreatedAt } =
     useAssetDetails(ticker);
+
+  // Read once per mount, not on every render: it only changes by navigating to a
+  // different hub page, which unmounts this page anyway.
+  const [backTo] = useState(readLastHubPage);
+
+  // Called before the early returns below, as every hook must be. The history loads
+  // independently of the AI run, so the card renders without waiting on it and the
+  // chart fills itself in when the series arrives.
+  const history = useSentimentHistory(ticker);
+  // Opens on the tab named in ?tab= when there is one, so returning from the news or
+  // social source pages lands back on Sentiment rather than the default. Read once on
+  // mount; switching tabs afterwards is local state and does not touch the URL.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<AnalysisTab>(() => {
+    const requested = searchParams.get("tab");
+    return requested === "sentiment" || requested === "quant"
+      ? requested
+      : "ranking";
+  });
+
+  // Per-day news for the chart's second line: the history the backend stored where it
+  // has any, and only otherwise the figure derived here from the run's article list.
+  //
+  // Preferring the stored series is the point of migrations/021. The derivation is a
+  // workaround that weights by an influence computed across the whole window, rewrites
+  // its own past whenever a run fetches a different set of articles, and cannot reach
+  // beyond the news lookback. It stays as the fallback because NEWS_HISTORY_ENABLED
+  // starts off, so a deployment that has not run the migration still gets a news line
+  // rather than losing one it already had.
+  const newsDays = useMemo(() => {
+    const stored = newsDaysFromHistory(history.points);
+    return stored.size > 0
+      ? stored
+      : newsDayIndex(recommendation?.news_articles);
+  }, [history.points, recommendation?.news_articles]);
+
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  // Default to the most recent day that carries anything at all, the same rule the
+  // social page uses. Not simply the last day in the window: if nothing has been
+  // collected today the summary panel would open on an empty day and let a reader
+  // conclude the asset has gone quiet.
+  //
+  // Wider than the social page's test, because this panel covers both signals. A day
+  // with five articles and no chatter has plenty to say, and gating on posts alone
+  // would skip past it on exactly the assets nobody posts about.
+  const defaultDay = useMemo(() => {
+    const withData = history.points.filter(
+      (p) => p.post_count > 0 || (newsDays.get(p.date)?.count ?? 0) > 0,
+    );
+    return withData[withData.length - 1]?.date ?? null;
+  }, [history.points, newsDays]);
+
+  const activeDay = selectedDay ?? defaultDay;
+  const activePoint = history.points.find((p) => p.date === activeDay);
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -235,10 +498,10 @@ export default function AssetDetailsPage() {
   return (
     <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
-        to="/dashboard"
+        to={backTo}
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        <ArrowLeft className="w-4 h-4" /> Back to {HUB_PAGE_LABELS[backTo]}
       </Link>
 
       <div className="flex flex-col gap-6">
@@ -248,6 +511,12 @@ export default function AssetDetailsPage() {
             <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary max-w-full truncate">
               {asset.name}
             </span>
+            {/* Right aligned from sm up, so on a wide header it reads as a status strip
+                opposite the ticker. On a phone it wraps onto its own line under the name
+                instead of being squeezed against it. */}
+            <div className="w-full sm:w-auto sm:ml-auto">
+              <MarketClock />
+            </div>
           </div>
           {/* Guarded: `recommendation` is nullable (see the checks below and the
               optional chaining above), and an asset only has one once it has
@@ -271,6 +540,19 @@ export default function AssetDetailsPage() {
         </div>
 
         {recommendation ? (
+          <AnalysisTabs
+            value={tab}
+            onChange={setTab}
+            rankingLabel={showScorecard ? "Why it ranks here" : "Assessment"}
+          />
+        ) : null}
+      </div>
+
+      {/* The three panels are siblings at page level so the gap under the tab bar is
+          the same whichever one is showing. Nested one level deeper, ranking sat in
+          the header's flex gap and the other two in the page's, and the spacing
+          jumped as you switched tabs. */}
+      {recommendation && tab === "ranking" ? (
           <div className="soft-card w-full p-5 space-y-5">
             {/* The top card had no explainer of its own, even though it carries the
                 headline judgement. It gets the ranking walkthrough. */}
@@ -312,7 +594,7 @@ export default function AssetDetailsPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4">
+                  <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
                     <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
                       <BrainCircuit className="w-3 h-3 text-brand-primary" />
                       Reasoning Trace
@@ -327,7 +609,7 @@ export default function AssetDetailsPage() {
                       penalties — the mechanism convergence replaced — so it
                       described arithmetic that no longer happens. */}
                   {showScorecard ? (
-                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Scale className="w-3 h-3 text-brand-primary" />
                         What moved this asset
@@ -357,7 +639,7 @@ export default function AssetDetailsPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-4 space-y-3">
+                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Flame className="w-3 h-3 text-brand-primary" />
                         Risk and Hype
@@ -389,135 +671,150 @@ export default function AssetDetailsPage() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="soft-card w-full p-5">
-            <p className="text-brand-muted-fg text-sm italic">
-              No recent AI analysis found for this asset.
-            </p>
-          </div>
-        )}
-      </div>
+        ) : null}
 
-      {recommendation && (
+      {!recommendation && (
+        <div className="soft-card w-full p-5">
+          <p className="text-brand-muted-fg text-sm italic">
+            No recent AI analysis found for this asset.
+          </p>
+        </div>
+      )}
+
+      {recommendation && tab === "sentiment" && (
         <>
           <SectionCard
             title="Sentiment Data"
-            description={`A blend of trusted financial news and social posts from the past ${NEWS_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
+            description={`A blend of trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
             icon={MessageSquare}
             badge={
               <span
-                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary font-medium"
-                title={`Every score in this card is calculated from news and posts published in the last ${NEWS_LOOKBACK_DAYS} days. Older items are not counted.`}
+                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-fg font-medium"
+                title={`News from the last ${NEWS_LOOKBACK_DAYS} days and social posts from the last ${SOCIAL_LOOKBACK_DAYS} days. Older items are not counted at all. The trend chart covers a longer window than the score does, because history is filled in outside the run.`}
               >
-                Last {NEWS_LOOKBACK_DAYS} days
+                News {NEWS_LOOKBACK_DAYS}d · social {SOCIAL_LOOKBACK_DAYS}d
               </span>
             }
             action={
               <ExplainerLink ticker={asset.ticker} section="sentiment" />
             }
           >
-            {/* Headline: the blended, news-weighted score. */}
-            <SignalBar
-              label="Blended Score"
-              score={recommendation.sentiment_score}
-              emphasis
-            />
+            {/* One wrapper, so this card controls its own spacing. Handing SectionCard
+                a flat list of children put every one of them on the card's uniform
+                space-y-4: the headline score, the working panel, both sub-signals and
+                the sources row all sat exactly as far apart as each other, and the
+                mt-5 / mt-3 written on them to say otherwise never applied, because
+                Tailwind's space-y selector outspecifies a plain margin class. With
+                nothing spaced by how closely it is related, nothing grouped. */}
+            <div className="space-y-5">
+              {/* The verdict, then the week, then the evidence for one day of it.
+                  The two signals no longer own separate stacked blocks: they are two
+                  lines on one chart, and the day you pick on it is what the lists
+                  below are about. That is what joins the tab together, and it is only
+                  possible because the news lookback and the chart window are both
+                  seven days. */}
+              <SentimentVerdict
+                blended={recommendation.sentiment_score}
+                newsScore={
+                  recommendation.news_count
+                    ? recommendation.news_sentiment_score
+                    : null
+                }
+                newsRightText={
+                  recommendation.news_count ? undefined : "No recent news"
+                }
+                socialScore={
+                  recommendation.social_sentiment_score ??
+                  recommendation.sentiment_score
+                }
+                ticker={asset.ticker}
+                newsCount={
+                  typeof recommendation.news_count === "number"
+                    ? recommendation.news_count
+                    : undefined
+                }
+              />
 
-            {/* Collapsible "show your working": the full per-asset derivation,
-                reconstructed from the same per-item numbers listed below. */}
-            <SentimentCalculation
-              newsArticles={recommendation.news_articles ?? []}
-              socialPosts={recommendation.social_posts ?? []}
-              newsScore={recommendation.news_sentiment_score}
-              socialScore={
-                recommendation.social_sentiment_score ??
-                recommendation.sentiment_score
-              }
-              blendedScore={recommendation.sentiment_score}
-            />
+              {/* Outside the forest panel, not inside it: this is a light detail table
+                  of a dozen rows, and the disclosure it opens has no business being
+                  rendered on a dark ground. It stays directly under the score it
+                  derives, which is the only adjacency that matters. */}
+              <SentimentCalculation
+                newsArticles={recommendation.news_articles ?? []}
+                socialPosts={recommendation.social_posts ?? []}
+                newsScore={recommendation.news_sentiment_score}
+                socialScore={
+                  recommendation.social_sentiment_score ??
+                  recommendation.sentiment_score
+                }
+                blendedScore={recommendation.sentiment_score}
+              />
 
-            <div className="mt-5 space-y-5">
-              {/* News sub-signal (weighted higher). */}
+              {/* Only what nothing else on the card says. The windows are already in
+                  the badge and the description above, so repeating them here would be
+                  the third telling; what is genuinely new is that the chart reaches
+                  further back than the scores do, and that its news line is not the
+                  news score the reader just looked at. */}
               <div className="space-y-2">
-                <SignalBar
-                  label="News"
-                  weightPct={NEWS_WEIGHT_PCT}
-                  score={
-                    recommendation.news_count
-                      ? recommendation.news_sentiment_score
-                      : null
-                  }
-                  rightText={
-                    recommendation.news_count ? undefined : "No recent news"
-                  }
+                <p className="text-[11px] text-brand-muted-fg">
+                  The chart covers {SOCIAL_HISTORY_DAYS} days. Its news line is each
+                  day's own coverage, not the weighted news score above.
+                </p>
+                {/* Selecting a day is wired again, and drives the panel below rather
+                    than the article and post lists it used to. Those lists were removed
+                    because the tab was a stack of everything; a written account of one
+                    day is the thing a reader actually wanted from them, and it is one
+                    paragraph rather than forty rows. The full lists still live on the
+                    news and social pages, a click away. */}
+                <SentimentTrendChart
+                  points={history.points}
+                  daysWithData={history.daysWithData}
+                  isLoading={history.isLoading}
+                  isSeeding={history.isSeeding}
+                  error={history.error}
+                  newsDays={newsDays}
+                  selectedDay={activeDay}
+                  onSelectDay={setSelectedDay}
+                  selectHint="Click a day to read what happened"
                 />
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <MetricPill
-                    label="Articles"
-                    value={formatMetric(recommendation.news_count, 0)}
+                {/* Held back until the chart itself has something to show. While the
+                    history is loading or still being built the chart draws its own
+                    waiting state, and a second panel underneath saying the same thing
+                    in different words would read as two separate failures. */}
+                {activeDay && !history.isLoading && !history.error && (
+                  <DaySummaryPanel
+                    ticker={asset.ticker}
+                    day={activeDay}
+                    point={activePoint}
+                    newsDay={newsDays.get(activeDay)}
                   />
-                  <MetricPill
-                    label="Positive"
-                    value={formatMetric(recommendation.news_bullish, 0)}
-                  />
-                  <MetricPill
-                    label="Negative"
-                    value={formatMetric(recommendation.news_bearish, 0)}
-                  />
-                </div>
-                <NewsArticles
-                  articles={recommendation.news_articles ?? []}
-                  ticker={asset.ticker}
-                />
+                )}
               </div>
 
-              {/* Social sub-signal. */}
-              <div className="space-y-2">
-                <SignalBar
-                  label="Social"
-                  weightPct={SOCIAL_WEIGHT_PCT}
-                  score={
-                    recommendation.social_sentiment_score ??
-                    recommendation.sentiment_score
-                  }
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <MetricPill
-                    label="Bullish posts"
-                    value={formatMetric(recommendation.bullish_posts, 0)}
-                  />
-                  <MetricPill
-                    label="Bearish posts"
-                    value={formatMetric(recommendation.bearish_posts, 0)}
-                  />
-                </div>
-                <SocialPosts
-                  posts={recommendation.social_posts ?? []}
-                  ticker={asset.ticker}
-                />
+              {/* Sources apply to the whole card, not just one signal. On one line at
+                  footnote weight: it is provenance, not a fourth signal, and the
+                  uppercase label it used to carry gave it the same billing as News
+                  and Social. */}
+              <div className="pt-3 border-t border-brand-border/50 text-[11px] text-brand-muted-fg">
+                Sources:{" "}
+                <span className="text-brand-fg font-medium">
+                  {recommendation.sources ? String(recommendation.sources) : "—"}
+                </span>
               </div>
             </div>
-
-            {/* Sources apply to the whole card, not just one signal. */}
-            <div className="mt-5 pt-3 border-t border-brand-border/50 flex items-center justify-between gap-3">
-              <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-                Sources
-              </span>
-              <span className="text-sm font-medium text-brand-fg">
-                {recommendation.sources ? String(recommendation.sources) : "—"}
-              </span>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Quantitative Data"
-            description="What the price history shows: measurements and peer context, not a recommendation."
-            icon={BarChart3}
-            action={<ExplainerLink ticker={asset.ticker} section="quant" />}
-          >
-            <QuantMetricsPanel recommendation={recommendation} />
           </SectionCard>
         </>
+      )}
+
+      {recommendation && tab === "quant" && (
+        <SectionCard
+          title="Quantitative Data"
+          description="What the price history shows: measurements and peer context, not a recommendation."
+          icon={BarChart3}
+          action={<ExplainerLink ticker={asset.ticker} section="quant" />}
+        >
+          <QuantMetricsPanel recommendation={recommendation} />
+        </SectionCard>
       )}
 
       {/* This page had no disclaimer of its own — the only not-advice statement on

@@ -84,10 +84,15 @@ export default function AddToWatchlistButton({ ticker }: Props) {
       onClick={handleClick}
       disabled={loading || working}
       title={isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
-      className={`flex items-center gap-1 text-xs font-semibold transition-all disabled:opacity-50 ${
+      // Watched used to be `text-brand-accent`, which is lime-500 (#c7f269) as
+      // TEXT on a near-white card and effectively unreadable. The Discovered
+      // chip uses the same green the other way round, as a fill behind dark
+      // text, so it borrows that treatment here. Both states are chips so the
+      // control does not change size when it is toggled.
+      className={`chip transition-all disabled:opacity-50 ${
         isWatched
-          ? 'text-brand-accent hover:text-brand-accent/70'
-          : 'text-brand-muted-fg hover:text-brand-fg'
+          ? 'bg-brand-accent text-brand-fg hover:bg-brand-accent/80'
+          : 'bg-brand-bg border border-brand-border/60 text-brand-muted-fg hover:text-brand-fg hover:border-brand-primary/40'
       }`}
     >
       {loading || working ? (

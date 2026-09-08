@@ -58,16 +58,20 @@ export function SourcePageHeader({
   icon: Icon,
   title,
   subtitle,
+  backHref,
 }: {
   ticker: string;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
+  // Where "Back to <ticker>" goes. Defaults to the asset page's own default tab;
+  // the sentiment source pages point it back at the sentiment tab they came from.
+  backHref?: string;
 }) {
   return (
     <>
       <Link
-        to={`/asset/${ticker}`}
+        to={backHref ?? `/asset/${ticker}`}
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to {ticker}
@@ -86,20 +90,44 @@ export function SourcePageHeader({
 // Grid of stat pills so the page stands alone without going back.
 export function SummaryStrip({
   pills,
+  accent = false,
 }: {
   pills: { label: string; value: React.ReactNode }[];
+  // Colours the figures brand forest green, on a soft tint of the same. Opt in rather
+  // than the default: it belongs on the page that carries the trend chart, and on the
+  // news page there is nothing for it to agree with.
+  //
+  // forest-700 rather than the forest-500 the chart draws its bars in. The bars are
+  // deliberately recessive against a dark panel; the same tone on a light card at text
+  // size reads washed out, and these are the figures the page is about.
+  accent?: boolean;
 }) {
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-      {pills.map((pill) => (
+    // One strip on the page's own background, no outer border: the only rules are
+    // the neon-lime ones dividing the figures, the same accent the framed panels use.
+    <div className="grid grid-cols-2 sm:grid-cols-4 bg-brand-bg">
+      {pills.map((pill, i) => (
         <div
           key={pill.label}
-          className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
+          className={[
+            "px-4 py-3 border-brand-accent",
+            // Vertical rule between the two mobile columns, then before every
+            // column on the single desktop row.
+            i % 2 === 1 ? "border-l" : "",
+            i > 0 ? "sm:border-l" : "",
+            // Horizontal rule between the two mobile rows only; the desktop row is
+            // unbroken.
+            i >= 2 ? "border-t sm:border-t-0" : "",
+          ].join(" ")}
         >
-          <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
+          <div className="text-[10px] uppercase tracking-widest text-brand-fg font-semibold mb-1">
             {pill.label}
           </div>
-          <div className="text-sm font-semibold text-brand-fg">
+          <div
+            className={`text-sm font-semibold ${
+              accent ? "text-brand-primary" : "text-brand-fg"
+            }`}
+          >
             {pill.value}
           </div>
         </div>
@@ -216,9 +244,13 @@ export function SortToggle({
         <button
           key={opt.key}
           onClick={() => onChange(opt.key)}
+          // Selected uses the accent green as a fill behind dark text, the same way
+          // the Discovered chip and the Watched chip do. A washed 15% tint of the
+          // primary read as disabled next to those, which is the opposite of what a
+          // selected control should say.
           className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
             value === opt.key
-              ? "bg-brand-primary/15 text-brand-primary"
+              ? "bg-brand-accent text-brand-fg"
               : "text-brand-muted-fg hover:text-brand-fg"
           }`}
         >
@@ -230,9 +262,29 @@ export function SortToggle({
 }
 
 // Bordered list container shared by both pages' source rows.
-export function SourceList({ children }: { children: React.ReactNode }) {
+//
+// brand-accent, the same outline the Reasoning Trace and Why It Ranks Here panels use,
+// so a list of evidence is framed the way the conclusions drawn from it are. Kept in
+// step with those: if they move, this moves.
+export function SourceList({
+  children,
+  // Set when the list is already inside an accent-outlined panel (the social page
+  // frames the day's posts the way DaySummaryPanel frames its prose). A second
+  // neon border inside the first reads as a mistake, so the nested list drops to
+  // the quiet inner-box treatment the AI summary box uses.
+  nested = false,
+}: {
+  children: React.ReactNode;
+  nested?: boolean;
+}) {
   return (
-    <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 bg-brand-bg/40 overflow-x-auto">
+    <ul
+      className={`divide-y divide-brand-border/40 overflow-x-auto ${
+        nested
+          ? "rounded-xl border border-brand-border/60 bg-brand-surface/70"
+          : "rounded-2xl border border-brand-accent bg-brand-bg/40"
+      }`}
+    >
       {children}
     </ul>
   );

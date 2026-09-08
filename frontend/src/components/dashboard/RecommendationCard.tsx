@@ -44,8 +44,26 @@ export default function RecommendationCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-brand-bg/70 border border-brand-border/60 flex items-center justify-center text-[10px] font-bold font-mono">
-            {asset.ticker.slice(0, 3)}
+          {/* Solid forest with the ticker knocked out in the page background,
+              matching the universe tiles on Whale Watching. The tinted version
+              read as grey. */}
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center text-[10px] font-bold font-mono text-brand-bg">
+              {asset.ticker.slice(0, 3)}
+            </div>
+            {/* Discovered used to sit in the badge row below DualBar, where its
+                presence added a line only some cards had, so the reasoning trace box
+                landed at a different height per card in the same row (see CSCO vs
+                RTX). Anchored on the avatar instead: out of document flow, so it can
+                never move anything below it, on this card or any other. */}
+            {asset.isDiscovered ? (
+              <span
+                className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-accent ring-2 ring-white flex items-center justify-center"
+                title={discoveryProvenance(asset.discoverySources)}
+              >
+                <Sparkles className="w-2.5 h-2.5 text-brand-fg" />
+              </span>
+            ) : null}
           </div>
 
           <div className="min-w-0">
@@ -60,9 +78,9 @@ export default function RecommendationCard({
             </p>
           </div>
         </div>
-        <div
-          className={`chip ${asset.rank === 1 ? "bg-brand-primary/15 text-brand-primary" : "bg-primary/15 text-primary"}`}
-        >
+        {/* Accent green behind dark text, the same fill the Discovered chip
+            uses. The tinted versions read as grey. */}
+        <div className="chip bg-brand-accent text-brand-fg">
           Rank {asset.rank}
         </div>
       </div>
@@ -113,14 +131,6 @@ export default function RecommendationCard({
       />
 
       <div className="flex flex-wrap gap-2">
-        {asset.isDiscovered ? (
-          <span
-            className="chip bg-brand-accent text-brand-fg"
-            title={discoveryProvenance(asset.discoverySources)}
-          >
-            <Sparkles className="w-2.5 h-2.5" /> Discovered
-          </span>
-        ) : null}
         {asset.isHype ? (
           <span className="chip bg-semantic-warning/15 text-semantic-warning">
             <Flame className="w-3 h-3" /> Hype flagged
@@ -128,7 +138,7 @@ export default function RecommendationCard({
         ) : null}
       </div>
 
-      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-border/50">
+      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-accent">
         <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold flex items-center gap-1.5">
           <BrainCircuit className="w-3 h-3 text-brand-primary" />
           Why it ranks here
