@@ -17,6 +17,7 @@ type Props = {
   xp: number;
   onOpenArticle: (article: LearningArticle) => void;
   onStartQuiz: (article: LearningArticle) => void;
+  onOpenFinancialTools: () => void;
 };
 
 // Present the existing criterion relationship; never determine or mutate awards here.
@@ -27,7 +28,7 @@ function matchesCategory(badge: LearningBadge, category: LearningCategory) {
 }
 
 
-export default function LearningRoadmap({ categories, progress, expertise, dataAvailable, badges, earnedBadgeIds, xp, onOpenArticle, onStartQuiz }: Props) {
+export default function LearningRoadmap({ categories, progress, expertise, dataAvailable, badges, earnedBadgeIds, xp, onOpenArticle, onStartQuiz, onOpenFinancialTools }: Props) {
   const { articles, completedCount, recommended } = deriveLearningRoadmap(categories, progress, expertise);
 
   if (!dataAvailable) {
@@ -102,6 +103,15 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
           </div>
         </section>
       ) : <div className="flex items-center gap-3 rounded-2xl border border-brand-primary/20 bg-brand-primary/5 p-6 text-brand-fg"><Trophy className="h-6 w-6 shrink-0 text-brand-primary" aria-hidden="true" />You’ve completed every available lesson. Revisit any article below to refresh your knowledge.</div>}
+
+      <section className="flex flex-col gap-4 rounded-3xl border border-brand-border bg-brand-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-primary">Put it into practice · Optional exploration</p>
+          <h2 className="text-lg font-semibold text-brand-fg">Financial Tools</h2>
+          <p className="max-w-2xl text-sm leading-relaxed text-brand-muted-fg">Explore potential outcomes with the Investment Growth & Goal Planner, or understand your contribution room with the TFSA Planner.</p>
+        </div>
+        <button type="button" onClick={onOpenFinancialTools} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-full border border-brand-primary/20 bg-brand-primary/5 px-5 py-3 text-sm font-semibold text-brand-primary hover:bg-brand-primary/10">Explore Financial Tools<ArrowRight className="h-4 w-4" aria-hidden="true" /></button>
+      </section>
 
       <section aria-label="Your connected learning journey">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3">

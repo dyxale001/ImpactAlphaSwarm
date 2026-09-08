@@ -6,6 +6,7 @@ import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
+import FinancialTools from "../components/learning/FinancialTools";
 import LearningRoadmap from "../components/learning/LearningRoadmap";
 import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
@@ -103,6 +104,9 @@ class LearningCentreSearchEngine {
   }
 }
 
+const learningTabs = ["roadmap", "library", "tools"] as const;
+const learningTabLabels = { roadmap: "My Roadmap", library: "Library", tools: "Financial Tools" };
+
 const learningCentreSearchEngine = new LearningCentreSearchEngine();
 
 export default function LearningPage() {
@@ -110,7 +114,7 @@ export default function LearningPage() {
   const userId = profile?.id ?? session?.user?.id ?? null;
 
   const [categories, setCategories] = useState<LearningCategory[]>([]);
-  const [activeTab, setActiveTab] = useState<"roadmap" | "library">("roadmap");
+  const [activeTab, setActiveTab] = useState<(typeof learningTabs)[number]>("roadmap");
   const [search, setSearch] = useState("");
   const [selectedArticle, setSelectedArticle] =
     useState<LearningArticle | null>(null);
@@ -354,8 +358,8 @@ export default function LearningPage() {
           </div>
         </div>
 
-        <div role="tablist" aria-label="Learning Centre views" className="flex gap-2 border-b border-brand-border pb-3">
-          {(["roadmap", "library"] as const).map((tab, index) => (
+        <div role="tablist" aria-label="Learning Centre views" className="flex flex-wrap gap-2 border-b border-brand-border pb-3">
+          {learningTabs.map((tab, index) => (
             <button
               key={tab}
               type="button"
@@ -368,13 +372,14 @@ export default function LearningPage() {
               onKeyDown={(event) => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                 event.preventDefault();
-                const next = event.key === "Home" ? "roadmap" : event.key === "End" ? "library" : index === 0 ? "library" : "roadmap";
+                const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? learningTabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + learningTabs.length) % learningTabs.length;
+                const next = learningTabs[nextIndex];
                 setActiveTab(next);
                 document.getElementById(`learning-tab-${next}`)?.focus();
               }}
               className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${activeTab === tab ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"}`}
             >
-              {tab === "roadmap" ? "My Roadmap" : "Library"}
+              {learningTabLabels[tab]}
             </button>
           ))}
         </div>
@@ -403,6 +408,10 @@ export default function LearningPage() {
             dataAvailable={loadWarnings.length === 0 && !isProfileLoading}
             onOpenArticle={setSelectedArticle}
             onStartQuiz={handleTakeQuiz}
+            onOpenFinancialTools={() => {
+              setActiveTab("tools");
+              document.getElementById("learning-tab-tools")?.focus();
+            }}
           />
         </div>
 
@@ -534,6 +543,9 @@ export default function LearningPage() {
             ))
           )}
         </div>
+        </div>
+        <div id="learning-panel-tools" role="tabpanel" aria-labelledby="learning-tab-tools" hidden={activeTab !== "tools"} tabIndex={0}>
+          <FinancialTools />
         </div>
       </div>
 
