@@ -59,6 +59,41 @@ LISTS = """LISTS — give each under its own heading, one "label = number" per l
                      printed as a dash; keep one printed as 0.00, because a
                      declared nothing and no declaration are different things."""
 
+# Optional: let the chat fill gaps from elsewhere, tagged so a person can see
+# which values are the manager's own and which are not.
+#
+# The split is not squeamishness. An ISIN is a permanent identifier, so finding
+# one the PDF omitted is retrieval. A fee, a NAV or a return is dated AND
+# class-specific — the Allan Gray sheet is Class A and the platform lists others
+# — and the fund page shows every figure under the sheet's as-at date, which
+# asserts it came off that document. A researched figure silently breaks that.
+RESEARCH = """WHEN A FIELD IS NOT ON THE SHEET, you may look it up — but tag
+every value so I can see where it came from, and never blend the two:
+
+    [SHEET]      quoted from the document, with the line
+    [RESEARCHED] found elsewhere, with the URL and what that source says
+    [NOT FOUND]  neither
+
+WHAT YOU MAY RESEARCH — identifiers and things that do not change:
+  ISIN · JSE code · fund name · manager brand · management company ·
+  vehicle (unit trust / ETF) · inception date · whether it tracks an index ·
+  whether it is tax-free eligible · the manager's fund page URL ·
+  ASISA category IF the sheet omits it
+
+WHAT YOU MUST NOT RESEARCH — leave these [NOT FOUND] if the sheet is silent:
+  TER · transaction cost · TIC · management fee · fee period · NAV · NAV date ·
+  fund size · returns · strongest/weakest year · risk rating · risk level ·
+  allocation · top holdings · distributions · minimums
+
+  Every one of those is DATED and CLASS-SPECIFIC. The sheet is one share class
+  at one month end; a figure from a web page may be a different class or a
+  different month, and it would be shown to users under this sheet's date as
+  though the manager had published it. If the sheet does not state it, the honest
+  answer is that we do not have it.
+
+For anything researched, say plainly how confident you are that the source
+describes THIS fund and THIS share class — same name is not the same class."""
+
 ASK = """Give me each field as one line:
 
     field_name = value        <- the exact line on the sheet you read it from
@@ -69,9 +104,11 @@ manager: this is a transcription of one document."""
 
 
 def main() -> int:
+    research = "--research" in sys.argv[1:]
     rules = SYSTEM.replace(TOOL_LINE, "").rstrip()
     fields = _instruction().split("For the ASISA classification")[0].rstrip()
-    print(f"{rules}\n\n{fields}\n\n{LISTS}\n\n{ASK}")
+    parts = [rules, fields, LISTS] + ([RESEARCH] if research else []) + [ASK]
+    print("\n\n".join(parts))
     return 0
 
 
