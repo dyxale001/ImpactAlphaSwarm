@@ -20,21 +20,16 @@ import {
  */
 export default function FundIncomeHistory({
   distributions,
+  className = "",
 }: {
   distributions: Record<string, number> | null;
+  className?: string;
 }) {
-  if (!distributions || Object.keys(distributions).length === 0) return null;
-
-  // Newest first. The keys are "YYYY-MM", so a string sort is a date sort.
-  const entries = Object.entries(distributions)
-    .map(([month, cents]) => ({ month, cents: Number(cents) }))
-    .filter((d) => Number.isFinite(d.cents))
-    .sort((a, b) => b.month.localeCompare(a.month));
-
+  const entries = months(distributions);
   if (entries.length === 0) return null;
 
   return (
-    <section className="soft-card space-y-3 p-6">
+    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <h2 className="text-sm font-bold text-brand-primary">{DETAIL_INCOME_TITLE}</h2>
       <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_INCOME_LEAD}</p>
       <ul className="space-y-1.5">
@@ -54,4 +49,23 @@ export default function FundIncomeHistory({
       </ul>
     </section>
   );
+}
+
+/** Newest first. The keys are "YYYY-MM", so a string sort is a date sort. */
+function months(distributions: Record<string, number> | null | undefined) {
+  if (!distributions) return [];
+  return Object.entries(distributions)
+    .map(([month, cents]) => ({ month, cents: Number(cents) }))
+    .filter((d) => Number.isFinite(d.cents))
+    .sort((a, b) => b.month.localeCompare(a.month));
+}
+
+/** Whether there is anything here to draw.
+ *
+ *  Exported because the fund page has to know whether a whole tab would be
+ *  empty before it renders the tab's label, and answering that with a second
+ *  copy of the condition above is how the two would eventually disagree. The
+ *  component and the page now ask the same function. */
+export function hasIncome(distributions: Record<string, number> | null | undefined) {
+  return months(distributions).length > 0;
 }

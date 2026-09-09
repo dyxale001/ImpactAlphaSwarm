@@ -25,14 +25,17 @@ import {
  * mistake the fee columns made before `fee_period` existed, so the rule here is
  * the strict one: no basis, no section.
  */
+
 export default function FundSwings({
   high,
   low,
   basis,
+  className = "",
 }: {
   high: number | null;
   low: number | null;
   basis: string | null;
+  className?: string;
 }) {
   const strongest = formatSignedPercent(high);
   const weakest = formatSignedPercent(low);
@@ -43,10 +46,10 @@ export default function FundSwings({
   if (!strongest && !weakest) return null;
 
   return (
-    <section className="soft-card space-y-3 p-6">
+    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <h2 className="text-sm font-bold text-brand-primary">{DETAIL_SWINGS_TITLE}</h2>
       <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_SWINGS_LEAD}</p>
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-3">
         {strongest && (
           <div className="rounded-xl border border-brand-border/40 p-3">
             <dt className="text-[11px] uppercase tracking-wide text-brand-secondary/70">
@@ -70,7 +73,24 @@ export default function FundSwings({
           </div>
         )}
       </dl>
-      <p className="text-[11px] leading-relaxed text-brand-secondary/60">{note}</p>
+      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">{note}</p>
     </section>
   );
+}
+
+/** Whether there is anything here to draw.
+ *
+ *  Exported because the fund page has to know whether a whole tab would be
+ *  empty before it renders the tab's label, and answering that with a second
+ *  copy of the condition above is how the two would eventually disagree. The
+ *  component and the page now ask the same function. */
+export function hasSwings(
+  high: number | null | undefined,
+  low: number | null | undefined,
+  basis: string | null | undefined,
+) {
+  // The basis first, because it is the strict half: a figure whose basis we
+  // cannot name is a figure nobody can use, whatever its value.
+  if (!formatExtremesBasis(basis)) return false;
+  return Boolean(formatSignedPercent(high) || formatSignedPercent(low));
 }

@@ -34,26 +34,17 @@ const PERIOD_ORDER = ["10y", "5y", "3y", "1y", "inception"];
 export default function FundPerformance({
   performance,
   asAt,
+  className = "",
 }: {
   performance: Record<string, number> | null;
   asAt: string | null;
+  className?: string;
 }) {
-  if (!performance || Object.keys(performance).length === 0) return null;
-
-  const entries = Object.entries(performance)
-    .map(([period, value]) => ({ period, value: Number(value) }))
-    .filter((d) => Number.isFinite(d.value));
-
+  const entries = periods(performance);
   if (entries.length === 0) return null;
 
-  entries.sort((a, b) => {
-    const ai = PERIOD_ORDER.indexOf(a.period);
-    const bi = PERIOD_ORDER.indexOf(b.period);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
-
   return (
-    <section className="soft-card space-y-3 p-6">
+    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-bold text-brand-primary">{DETAIL_PERFORMANCE_TITLE}</h2>
         {asAt && <span className="text-[11px] text-brand-secondary/70">to {asAt}</span>}
@@ -77,7 +68,7 @@ export default function FundPerformance({
               <LabelList
                 dataKey="value"
                 position="top"
-                formatter={(v: number) => `${v}%`}
+                formatter={(value: unknown) => `${Number(value)}%`}
                 style={{ fontSize: 11, fill: "rgba(0,0,0,0.65)" }}
               />
             </Bar>
@@ -85,9 +76,34 @@ export default function FundPerformance({
         </ResponsiveContainer>
       </div>
 
-      <p className="text-[11px] leading-relaxed text-brand-secondary/60">
+      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">
         {DETAIL_PERFORMANCE_NOTE}
       </p>
     </section>
   );
+}
+
+/** The periods this sheet prints, in reading order. One function, so the
+ *  predicate below and the chart cannot disagree about what counts. */
+function periods(performance: Record<string, number> | null | undefined) {
+  if (!performance) return [];
+  const entries = Object.entries(performance)
+    .map(([period, value]) => ({ period, value: Number(value) }))
+    .filter((d) => Number.isFinite(d.value));
+  entries.sort((a, b) => {
+    const ai = PERIOD_ORDER.indexOf(a.period);
+    const bi = PERIOD_ORDER.indexOf(b.period);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  return entries;
+}
+
+/** Whether there is anything here to draw.
+ *
+ *  Exported because the fund page has to know whether a whole tab would be
+ *  empty before it renders the tab's label, and answering that with a second
+ *  copy of the condition above is how the two would eventually disagree. The
+ *  component and the page now ask the same function. */
+export function hasPerformance(performance: Record<string, number> | null | undefined) {
+  return periods(performance).length > 0;
 }

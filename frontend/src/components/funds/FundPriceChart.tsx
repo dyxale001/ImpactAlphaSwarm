@@ -25,8 +25,15 @@ import { DETAIL_PRICE_TITLE } from "../../utils/fundsCopy";
  * anywhere: the manager's published performance is the only performance shown,
  * and it is measured to the fact sheet's own date.
  */
-export default function FundPriceChart({ prices }: { prices: FundPrices }) {
-  if (!prices.listed || prices.closes.length < 2) return null;
+
+export default function FundPriceChart({
+  prices,
+  className = "",
+}: {
+  prices: FundPrices;
+  className?: string;
+}) {
+  if (!hasPrices(prices)) return null;
 
   const data = prices.closes.map((point) => ({
     date: point.date,
@@ -39,7 +46,7 @@ export default function FundPriceChart({ prices }: { prices: FundPrices }) {
   const pad = (high - low) * 0.08 || 1;
 
   return (
-    <section className="soft-card space-y-3 p-6">
+    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-bold text-brand-primary">{DETAIL_PRICE_TITLE}</h2>
         <span className="text-[11px] text-brand-secondary/70">
@@ -67,7 +74,7 @@ export default function FundPriceChart({ prices }: { prices: FundPrices }) {
               tickFormatter={(v: number) => `R${v.toFixed(0)}`}
             />
             <Tooltip
-              formatter={(v: number) => [`R${v.toFixed(2)}`, "Close"]}
+              formatter={(value: unknown) => [`R${Number(value).toFixed(2)}`, "Close"]}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
             <Line
@@ -85,4 +92,16 @@ export default function FundPriceChart({ prices }: { prices: FundPrices }) {
       <p className="text-[11px] leading-relaxed text-brand-secondary/60">{prices.note}</p>
     </section>
   );
+}
+
+/** Whether there is anything here to draw.
+ *
+ *  Exported because the fund page has to know whether a whole tab would be
+ *  empty before it renders the tab's label, and answering that with a second
+ *  copy of the condition above is how the two would eventually disagree. The
+ *  component and the page now ask the same function. */
+export function hasPrices(prices: FundPrices | null | undefined) {
+  // Two closes is the floor for a line. One point is a dot, and a dot drawn on
+  // a price axis reads as a flat year.
+  return Boolean(prices?.listed) && (prices?.closes.length ?? 0) >= 2;
 }

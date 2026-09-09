@@ -30,23 +30,19 @@ const SLICE_COLORS = [
 
 export default function FundAllocation({
   allocation,
+  className = "",
 }: {
   allocation: Record<string, number> | null;
+  className?: string;
 }) {
-  if (!allocation || Object.keys(allocation).length === 0) return null;
-
-  const data = Object.entries(allocation)
-    .map(([name, value]) => ({ name, value: Number(value) }))
-    .filter((d) => Number.isFinite(d.value) && d.value > 0)
-    .sort((a, b) => b.value - a.value);
-
+  const data = slices(allocation);
   if (data.length === 0) return null;
 
   return (
-    <section className="soft-card space-y-3 p-6">
+    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <h2 className="text-sm font-bold text-brand-primary">{DETAIL_ALLOCATION_TITLE}</h2>
-      <div className="flex flex-col items-center gap-4 sm:flex-row">
-        <div className="h-40 w-40 shrink-0">
+      <div className="flex flex-col items-center gap-4 xl:flex-row xl:items-start">
+        <div className="h-36 w-36 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -63,20 +59,22 @@ export default function FundAllocation({
                 ))}
               </Pie>
               <Tooltip
-                formatter={(v: number) => [`${v}%`, ""]}
+                formatter={(value: unknown) => [`${Number(value)}%`, ""]}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <ul className="flex-1 space-y-1.5 text-xs">
+        <ul className="w-full min-w-0 flex-1 space-y-1.5 text-xs">
           {data.map((entry, index) => (
             <li key={entry.name} className="flex items-center gap-2">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-sm"
                 style={{ backgroundColor: SLICE_COLORS[index % SLICE_COLORS.length] }}
               />
-              <span className="flex-1 text-brand-secondary">{entry.name}</span>
+              <span className="min-w-0 flex-1 truncate text-brand-secondary" title={entry.name}>
+                {entry.name}
+              </span>
               <span className="font-semibold text-brand-primary">{entry.value}%</span>
             </li>
           ))}
@@ -84,4 +82,24 @@ export default function FundAllocation({
       </div>
     </section>
   );
+}
+
+/** The slices, largest first. One function, so the predicate and the donut
+ *  cannot disagree about whether there is an allocation. */
+function slices(allocation: Record<string, number> | null | undefined) {
+  if (!allocation) return [];
+  return Object.entries(allocation)
+    .map(([name, value]) => ({ name, value: Number(value) }))
+    .filter((d) => Number.isFinite(d.value) && d.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Whether there is anything here to draw.
+ *
+ *  Exported because the fund page has to know whether a whole tab would be
+ *  empty before it renders the tab's label, and answering that with a second
+ *  copy of the condition above is how the two would eventually disagree. The
+ *  component and the page now ask the same function. */
+export function hasAllocation(allocation: Record<string, number> | null | undefined) {
+  return slices(allocation).length > 0;
 }
