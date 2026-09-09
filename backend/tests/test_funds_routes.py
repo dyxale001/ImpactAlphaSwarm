@@ -197,7 +197,8 @@ class TestBrowse:
 
     def test_the_page_states_how_the_list_was_chosen(self, client):
         body = client.get("/api/fund-catalogue").json()
-        assert "largest funds by fund size" in body["inclusion_rule"]
+        assert "recognise" in body["inclusion_rule"]
+        assert "partial" in body["inclusion_rule"]
         assert "not a licensed financial services provider" in body["not_licensed"]
         assert "medium- to long-term" in body["disclaimer"]
 

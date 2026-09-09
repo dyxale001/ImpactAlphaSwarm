@@ -146,11 +146,24 @@ PRICE_NOTE = (
     "fact sheet and is measured to the sheet's own date."
 )
 
+# Why these funds, in the user's words. It has to be answerable from the page:
+# whichever funds a catalogue of twenty holds, "why these" gets asked, and a
+# curated list with no stated rule reads as a recommendation.
+#
+# The rule is recognition for now, not size. That is a weaker rule than the one
+# it replaces and the wording says so rather than dressing it up — a fund is
+# here because a reader will have heard of its manager and can buy it on the
+# platform, which is a fact about the catalogue and not a judgement about the
+# fund. Naming the list as partial matters for the same reason: a category
+# showing three funds where the market has forty could otherwise read as those
+# three having been picked out of the forty.
 INCLUSION_RULE = (
-    "How this list is chosen: for each category below we include the largest "
-    "funds by fund size that are available on EasyEquities, using the fund size "
-    "each manager publishes on its own fact sheet. Ordering is alphabetical. No "
-    "fund is placed above another by its past returns."
+    "How this list is chosen: while the catalogue is being built, these are "
+    "funds from managers most South African investors will recognise that are "
+    "available on EasyEquities. Appearing here is not a judgement about a fund. "
+    "The list is partial, and a category showing a few funds may hold dozens. "
+    "Ordering is alphabetical. No fund is placed above another by its past "
+    "returns."
 )
 
 NOT_COVERED = (

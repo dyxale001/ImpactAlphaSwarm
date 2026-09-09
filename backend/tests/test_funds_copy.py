@@ -144,9 +144,25 @@ class TestTheShippedCopy:
     def test_the_inclusion_rule_is_stated_and_excludes_performance(self):
         # "Why these funds" has to be answerable from the page, and the answer
         # must not be past returns.
-        assert "largest funds by fund size" in copy.INCLUSION_RULE
+        #
+        # The rule is recognition rather than fund size for now, which is the
+        # weaker of the two: it cannot be checked against a published figure the
+        # way "largest by fund size" could. So the copy carries two admissions
+        # the size rule did not need, and they are asserted rather than trusted
+        # to survive an edit — that the list is partial, and that being on it is
+        # not a judgement about the fund.
+        assert "recognise" in copy.INCLUSION_RULE
+        assert "partial" in copy.INCLUSION_RULE
+        assert "not a judgement" in copy.INCLUSION_RULE
         assert "alphabetical" in copy.INCLUSION_RULE.lower()
         assert "past returns" in copy.INCLUSION_RULE
+
+    def test_the_inclusion_rule_no_longer_claims_to_rank_by_size(self):
+        """The old rule said "the largest funds by fund size", and a seed of
+        well-known names is not that. A page that kept the claim would be
+        describing a rule the catalogue does not follow."""
+        assert "fund size" not in copy.INCLUSION_RULE
+        assert "largest" not in copy.INCLUSION_RULE
 
     def test_the_header_answers_market_and_currency(self):
         assert "rand" in copy.HEADER_STRIP.lower()

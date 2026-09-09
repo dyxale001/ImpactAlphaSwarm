@@ -96,6 +96,57 @@ def profile(risk: str, **goals) -> Profile:
     return Profile(user_id="u-1", risk_tolerance=risk, goals=Goals(**goals) if goals else None)
 
 
+class TestReloadingCannotReviveARetiredFund:
+    """INVARIANT: the loader never writes `is_active`, so a re-run cannot revive.
+
+    This matters because retiring is the only removal the schema allows. The
+    whole catalogue was retired on 2026-09-09 to start a new seed, while these
+    CSVs still hold the 19 funds that were retired. If the loader wrote
+    `is_active`, running it again — which is meant to be a safe no-op — would
+    quietly put all 19 back on the public page.
+
+    It does not, for two independent reasons, and both are asserted because
+    either one alone could be undone by a plausible edit: the CSV has no such
+    column, and `upsert_fund` sends only the columns it is given. A PostgREST
+    upsert names just the payload's columns in its `on conflict do update`, so a
+    column that is never sent keeps the value the database already holds.
+
+    Asserted rather than reasoned about because a live check was not available:
+    verifying it against the real database would have meant running the loader
+    against it, which is exactly the write this is here to make safe.
+    """
+
+    def test_the_seed_has_no_is_active_column(self, fund_rows):
+        for row in fund_rows:
+            assert "is_active" not in row, sorted(row)
+
+    def test_a_parsed_fund_row_carries_no_is_active(self, fund_rows):
+        for row in fund_rows:
+            assert "is_active" not in as_fund(row), row["isin"]
+
+    def test_upserting_a_seed_row_never_sends_is_active(self, fund_rows):
+        """Through the real repository, so the payload is the one that ships."""
+        from fund_fakes import FakeClient
+
+        from src.funds.repository import FundRepository
+
+        if not fund_rows:
+            pytest.skip("the seed is empty, so there is no row to upsert")
+
+        client = FakeClient()
+        repo = FundRepository(client)
+        for row in fund_rows:
+            fund = as_fund(row)
+            fund.pop("id", None)
+            repo.upsert_fund(fund)
+
+        upserts = [c for c in client.calls_on("funds") if c[0] == "upsert"]
+        assert len(upserts) == len(fund_rows)
+        for call in upserts:
+            payload = call[1][0]
+            assert "is_active" not in payload, sorted(payload)
+
+
 class TestTheSeedIsWellFormed:
     def test_there_is_a_seed_at_all(self, fund_rows, snapshot_rows):
         assert fund_rows, "funds.csv is empty"
