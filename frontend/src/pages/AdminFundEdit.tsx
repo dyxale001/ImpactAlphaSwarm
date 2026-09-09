@@ -296,6 +296,22 @@ function CurrentSheet({ fund }: { fund: CatalogueFundDetail }) {
 }
 
 /** Record a sheet. Never an overwrite — see the module docstring. */
+/** A stored value as the form holds it: a string, with null as empty.
+ *
+ *  Empty means "the sheet does not state it" everywhere in this form, which is
+ *  why null and 0 must not collapse — a fund that declared a distribution of
+ *  0.00 published a figure, and one that declared none did not. */
+function asText(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+/** The rows of a stored jsonb object, in the shape PairRows edits. */
+function asPairs(stored: Record<string, number> | null | undefined): Pair[] {
+  if (!stored) return [];
+  return Object.entries(stored).map(([label, value]) => ({ label, value: String(value) }));
+}
+
 function RecordSheet({
   fundId,
   fund,
@@ -305,66 +321,87 @@ function RecordSheet({
   fund: CatalogueFundDetail;
   onSaved: () => Promise<void>;
 }) {
+  // Prefilled from the sheet on file, and that is what makes a correction
+  // possible at all. Nothing here overwrites: a recorded sheet is evidence, so
+  // a fix is another row for the same date and the read layer prefers the
+  // newest. But the form used to open BLANK, which meant correcting one figure
+  // required retyping all thirty — so in practice a recorded sheet could not be
+  // corrected, and the reason looked like a rule when it was a missing default.
+  //
+  // Saved unchanged this is a no-op, not a duplicate: the transcription hash
+  // covers every value, so an identical reading collides with the stored row
+  // and `insert_snapshot` ignores it.
+  const onFile = fund.snapshot;
   const [values, setValues] = useState<Record<string, string>>({
-    as_of: "",
-    mdd_url: "",
-    risk_indicator_raw: "",
-    risk_indicator_1to5: "",
-    ter: "",
-    tc: "",
-    tic: "",
-    objective: "",
-    benchmark: "",
-    fund_size_zar: "",
-    distribution_frequency: "",
-    recommended_min_term_years: "",
-    // The platform minimums. Accepted by the API and stored since 024, and
-    // until now typeable nowhere — so a sheet that printed them had them read
-    // and then dropped. `min_debit_order` is not decoration: the matcher checks
-    // it against the platform's own minimum.
-    min_lump_sum: "",
-    min_debit_order: "",
-    // The common core. Everything a Minimum Disclosure Document publishes that
-    // the earlier form discarded — most consequentially the NAV, which for a
-    // unit trust is the only price the fund has.
-    nav_cpu: "",
-    nav_date: "",
-    fee_period: "",
-    inception_date: "",
-    annual_management_fee: "",
-    return_high_12m: "",
-    return_low_12m: "",
-    return_extremes_basis: "",
-    risk_narrative: "",
-    horizon_words: "",
-    portfolio_manager: "",
+    as_of: asText(onFile?.as_of),
+    mdd_url: asText(onFile?.mdd_url),
+    risk_indicator_raw: asText(onFile?.risk_indicator_raw),
+    risk_indicator_1to5: asText(onFile?.risk_indicator_1to5),
+    ter: asText(onFile?.ter),
+    tc: asText(onFile?.tc),
+    tic: asText(onFile?.tic),
+    objective: asText(onFile?.objective),
+    benchmark: asText(onFile?.benchmark),
+    fund_size_zar: asText(onFile?.fund_size_zar),
+    distribution_frequency: asText(onFile?.distribution_frequency),
+    recommended_min_term_years: asText(onFile?.recommended_min_term_years),
+    min_lump_sum: asText(onFile?.min_lump_sum),
+    min_debit_order: asText(onFile?.min_debit_order),
+    nav_cpu: asText(onFile?.nav_cpu),
+    nav_date: asText(onFile?.nav_date),
+    fee_period: asText(onFile?.fee_period),
+    inception_date: asText(onFile?.inception_date),
+    annual_management_fee: asText(onFile?.annual_management_fee),
+    return_high_12m: asText(onFile?.return_high_12m),
+    return_low_12m: asText(onFile?.return_low_12m),
+    return_extremes_basis: asText(onFile?.return_extremes_basis),
+    risk_narrative: asText(onFile?.risk_narrative),
+    horizon_words: asText(onFile?.horizon_words),
+    portfolio_manager: asText(onFile?.portfolio_manager),
   });
 
   // A tri-state, not a checkbox: unit trust sheets print Regulation 28
   // compliance and ETF sheets do not, so "the document does not say" has to be
   // recordable and is the default. A checkbox would quietly record every ETF as
   // non-compliant.
-  const [reg28, setReg28] = useState<"" | "yes" | "no">("");
+  const [reg28, setReg28] = useState<"" | "yes" | "no">(
+    onFile?.regulation_28 === true ? "yes" : onFile?.regulation_28 === false ? "no" : "",
+  );
 
   // Cents per unit by month, as the sheet's distribution table prints it. Free
   // rows because managers publish different windows — Satrix prints four
   // quarters, FundRock prints twelve months with dashes for the empty ones.
-  const [income, setIncome] = useState<Array<{ month: string; cents: string }>>([]);
+  const [income, setIncome] = useState<Array<{ month: string; cents: string }>>(
+    Object.entries(onFile?.income_distribution ?? {}).map(([month, cents]) => ({
+      month,
+      cents: String(cents),
+    })),
+  );
 
   // The largest positions. Accepted by the API, shown on the fund page, present
   // in the seed for four funds — and until now enterable nowhere in the app, so
   // the only way one ever arrived was by editing the seed CSV by hand.
-  const [holdings, setHoldings] = useState<Pair[]>([]);
+  const [holdings, setHoldings] = useState<Pair[]>(asPairs(onFile?.top_holdings));
 
   // Asset classes vary by fund, so these are free-form rows. Periods do not, so
   // those are fixed below: a mix of "1y", "1 year" and "1Y" across funds would
   // make the figures unchartable later for no gain now.
-  const [allocation, setAllocation] = useState<Array<{ label: string; percent: string }>>([]);
-  const [performance, setPerformance] = useState<Record<string, string>>({
-    "1y": "",
-    "3y": "",
-    "5y": "",
-    "10y": "",
+  const [allocation, setAllocation] = useState<Array<{ label: string; percent: string }>>(
+    Object.entries(onFile?.asset_allocation ?? {}).map(([label, percent]) => ({
+      label,
+      percent: String(percent),
+    })),
+  );
+  // Fixed labels so figures stay comparable between funds, seeded from the
+  // stored object. A stored period outside this set would be invisible here, so
+  // any extra key is carried in rather than dropped.
+  const [performance, setPerformance] = useState<Record<string, string>>(() => {
+    const stored = onFile?.performance ?? {};
+    const seeded: Record<string, string> = { "1y": "", "3y": "", "5y": "", "10y": "" };
+    for (const [period, value] of Object.entries(stored)) {
+      seeded[period] = String(value);
+    }
+    return seeded;
   });
 
   const { problems, warnings, saved, saving, save } = useSaver(async () => {
@@ -424,11 +461,22 @@ function RecordSheet({
 
   return (
     <section className="soft-card space-y-3 p-5">
-      <h2 className="text-sm font-bold text-brand-primary">Record a fact sheet</h2>
+      <h2 className="text-sm font-bold text-brand-primary">
+        {onFile ? "Correct this sheet, or record a newer one" : "Record a fact sheet"}
+      </h2>
       <p className="text-xs leading-relaxed text-brand-secondary/70">
         Transcribe the figures from the manager's own document. Leave a field empty when the sheet
         does not state it — an empty field means "not published", which is not the same as zero.
       </p>
+      {onFile && (
+        <p className="rounded-md bg-brand-bg/70 p-2.5 text-[11px] leading-relaxed text-brand-secondary">
+          Filled in from the sheet dated <span className="font-semibold">{onFile.as_of}</span>.
+          Change a figure and save to correct that reading; change the date first to record a
+          newer month instead. Nothing is overwritten either way — the fund page shows the newest
+          reading for a date, and the earlier one is kept as the record of what the page said at
+          the time.
+        </p>
+      )}
       {/* The document the figures are read from. Stored with the sheet, so
           every number on the fund's page can be traced back to it. */}
       <div className="rounded-md bg-brand-bg/50 p-3">

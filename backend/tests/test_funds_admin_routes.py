@@ -557,6 +557,150 @@ class TestEditingAFundFromItsOwnPage:
         assert "isin" not in FundPatch.model_fields
 
 
+class TestCorrectingASheetOnFile:
+    """INVARIANT: re-saving a prefilled sheet unchanged writes nothing.
+
+    The edit form opens with the stored sheet filled in, because a correction
+    that required retyping all thirty figures was not a correction anyone would
+    make. That only works if an unchanged save is inert, and what decides it is
+    `transcription_hash`: it covers every transcribed value, so an identical
+    reading collides on (fund_id, as_of, mdd_sha256) and is ignored, while a
+    changed figure lands as a new row that the read layer prefers.
+
+    The risk is narrow and worth a test rather than an argument. The hash
+    formats values with `repr`, so a figure that came back from the database and
+    went out through a text input has to arrive as the SAME Python type it went
+    in as. `923.0` reaching the hash as `923` is a different string, and the
+    result would be a fund quietly accumulating a "correction" per visit —
+    permanently, since migration 024 grants no delete.
+    """
+
+    NUMERIC = {
+        "risk_indicator_1to5",
+        "ter",
+        "tc",
+        "tic",
+        "fund_size_zar",
+        "recommended_min_term_years",
+        "min_lump_sum",
+        "min_debit_order",
+        "nav_cpu",
+        "annual_management_fee",
+        "return_high_12m",
+        "return_low_12m",
+    }
+
+    #: A sheet with the shapes that could round-trip badly: an integral float,
+    #: a real zero, a value with decimals, and an int.
+    FULL = {
+        "as_of": "2026-07-31",
+        "mdd_url": "https://alpha.invalid/mm.pdf",
+        "risk_indicator_raw": "Low",
+        "risk_indicator_1to5": 1,
+        "ter": 0.3,
+        "tc": 0.0,
+        "tic": 0.3,
+        "nav_cpu": 923.0,
+        "nav_date": "2026-07-31",
+        "fund_size_zar": 527491584.0,
+        "annual_management_fee": 0.25,
+        "fee_period": "1y",
+        "return_high_12m": 14.41,
+        "return_low_12m": -4.49,
+        "return_extremes_basis": "calendar_year",
+        "min_lump_sum": 500.0,
+        "min_debit_order": 0.0,
+        "regulation_28": True,
+        "distribution_frequency": "Quarterly",
+        "top_holdings": {"Naspers Ltd": 7.2},
+        "income_distribution": {"2026-06": 0.0},
+    }
+
+    @staticmethod
+    def _as_input_text(value):
+        """What the form's text input holds, matching JavaScript's String().
+
+        The difference that matters: JS renders an integral float without its
+        fractional part, so a stored 923.0 reaches the box as "923".
+        """
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    def _resubmit(self, stored: dict) -> dict:
+        """The stored row as the prefilled form would send it back."""
+        body: dict = {}
+        for key, value in stored.items():
+            if key in ("regulation_28", "top_holdings", "income_distribution"):
+                continue
+            text = self._as_input_text(value)
+            if key != "as_of" and text.strip() == "":
+                continue
+            body[key] = float(text) if key in self.NUMERIC else text
+        body["regulation_28"] = stored["regulation_28"]
+        body["top_holdings"] = stored["top_holdings"]
+        body["income_distribution"] = stored["income_distribution"]
+        return body
+
+    def test_a_prefilled_sheet_resubmitted_unchanged_keeps_its_hash(self):
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        again = _snapshot_row(FUND, SnapshotIn(**self._resubmit(first)), "admin-1", "f-1")
+        assert again["mdd_sha256"] == first["mdd_sha256"], (
+            "an unchanged re-save would land as a correction, one per visit, "
+            "and 024 grants no delete"
+        )
+
+    def test_changing_one_figure_does_change_the_hash(self):
+        """The other half: a correction has to be able to land."""
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        corrected = {**self._resubmit(first), "ter": 0.31}
+        again = _snapshot_row(FUND, SnapshotIn(**corrected), "admin-1", "f-1")
+        assert again["mdd_sha256"] != first["mdd_sha256"]
+
+    def test_a_declared_zero_survives_the_round_trip(self):
+        """0.00 is a published figure and blank is not, so they must not merge.
+
+        `tc` and `min_debit_order` are zero in the fixture above. If either came
+        back as blank the hash would change, and the stored zero would be
+        replaced by a row that says the sheet did not state it.
+        """
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        resent = self._resubmit(first)
+        assert resent["tc"] == 0.0
+        assert resent["min_debit_order"] == 0.0
+        again = _snapshot_row(FUND, SnapshotIn(**resent), "admin-1", "f-1")
+        assert again["mdd_sha256"] == first["mdd_sha256"]
+
+    def test_recording_the_same_sheet_twice_is_ignored_not_duplicated(self, client):
+        """End to end: the second identical save must not add a row."""
+        body = {"as_of": "2026-07-31", "ter": 0.3, "tc": 0.0, "tic": 0.3}
+        for _ in range(2):
+            res = client.post(
+                "/api/admin/fund-catalogue/funds/f-1/snapshots", json=body
+            )
+            assert res.status_code == 201, res.json()
+
+        upserts = [
+            call
+            for call in client.app.state.fake.calls_on("fund_factsheet_snapshots")
+            if call[0] == "upsert"
+        ]
+        assert len(upserts) == 2
+        for call in upserts:
+            assert call[2]["ignore_duplicates"] is True
+            assert call[2]["on_conflict"] == "fund_id,as_of,mdd_sha256"
+
+
 class TestTheStoredRowIsReadableForEditing:
     """INVARIANT: the edit screen can read every field it offers to write.
 
