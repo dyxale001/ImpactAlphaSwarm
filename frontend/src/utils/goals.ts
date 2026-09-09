@@ -112,14 +112,14 @@ export function goalsFromSurveyAnswers(surveyAnswers: unknown): Goals | undefine
   return answered ? candidate : undefined;
 }
 
-const PURPOSE_WORDS: Record<GoalPurpose, string> = {
+export const PURPOSE_WORDS: Record<GoalPurpose, string> = {
   emergency_fund: "money you may need at short notice",
   goal: "saving towards a particular goal",
   growth: "long-term growth",
   income: "an income",
 };
 
-const BAND_WORDS: Record<HorizonBand, string> = {
+export const BAND_WORDS: Record<HorizonBand, string> = {
   under_2: "under 2 years",
   "2_to_5": "2 to 5 years",
   "5_plus": "5 years or more",

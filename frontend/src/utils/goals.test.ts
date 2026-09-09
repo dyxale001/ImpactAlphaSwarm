@@ -8,6 +8,7 @@ import {
   horizonTargetYear,
   type Goals,
 } from './goals'
+import { BAND_WORDS, PURPOSE_WORDS } from './goals'
 import { GOAL_QUESTIONS, SURVEY_QUESTIONS } from './onboardingData'
 import { determinePsychometrics } from './scoringEngine'
 
@@ -85,6 +86,37 @@ describe('the risk score cannot see the goal answers', () => {
   it('produces the same classification with a nested goals object present', () => {
     const withNested = { ...riskAnswers, goals: JSON.stringify({ purpose: 'growth' }) }
     expect(determinePsychometrics(withNested)).toEqual(determinePsychometrics(riskAnswers))
+  })
+})
+
+describe('every stored answer has a word for the screen', () => {
+  // The funds page echoes the horizon and purpose back to the reader, and falls
+  // through to the stored value when a word is missing. That fallback would put
+  // `emergency_fund` on screen — a database enum shown to a user as though it
+  // were English. Driven off the questions themselves so adding a fourth
+  // purpose option fails here rather than in the interface.
+
+  it('covers every purpose the questions offer', () => {
+    const question = GOAL_QUESTIONS.find((q) => q.id === 'goal_purpose')
+    expect(question).toBeDefined()
+    for (const option of question!.options) {
+      expect(PURPOSE_WORDS[option.value as keyof typeof PURPOSE_WORDS]).toBeTruthy()
+    }
+  })
+
+  it('covers every horizon band the questions offer', () => {
+    const question = GOAL_QUESTIONS.find((q) => q.id === 'goal_horizon')
+    expect(question).toBeDefined()
+    for (const option of question!.options) {
+      expect(BAND_WORDS[option.value as keyof typeof BAND_WORDS]).toBeTruthy()
+    }
+  })
+
+  it('says none of them in database wording', () => {
+    // A word containing an underscore is the stored value leaking through.
+    for (const word of [...Object.values(PURPOSE_WORDS), ...Object.values(BAND_WORDS)]) {
+      expect(word).not.toMatch(/_/)
+    }
   })
 })
 

@@ -5,6 +5,7 @@ import FundFilters from "../components/funds/FundFilters";
 import FundsSkeleton from "../components/funds/FundsSkeleton";
 import AsisaTree from "../components/funds/AsisaTree";
 import CompleteProfilePrompt from "../components/funds/CompleteProfilePrompt";
+import MatchInputs from "../components/funds/MatchInputs";
 import { useFundCatalogue, useFundCatalogueMeta, useFundMatches } from "../hooks/useFundCatalogue";
 import {
   EMPTY_CATALOGUE,
@@ -64,20 +65,21 @@ export default function FundsPage() {
         </div>
       </div>
 
+      {/* ── What the match is filtered on ──
+          Under the header on purpose: the reader meets the answers before the
+          funds those answers chose. Absent when no bracket came back, since
+          CompleteProfilePrompt already speaks to that state. */}
+      {matchState.bracket && <MatchInputs bracket={matchState.bracket} />}
+
       {/* ── Matched to the user's profile ── */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-bold text-brand-primary">
             {matchState.sectionTitle ?? "Funds whose published risk label matches your profile"}
           </h2>
-          {matchState.bracket && (
-            <span className="text-[11px] text-brand-secondary/70">
-              {matchState.bracket.risk_tolerance}
-              {matchState.bracket.ceiling_label
-                ? ` · up to ${matchState.bracket.ceiling_label} risk`
-                : ""}
-            </span>
-          )}
+          {/* The risk profile and ceiling used to be captioned here. They
+              are in the panel above now, stated once and with the other two
+              answers beside them. */}
         </div>
 
         {matchState.isLoading && <FundsSkeleton count={3} />}

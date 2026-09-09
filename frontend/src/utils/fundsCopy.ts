@@ -82,6 +82,38 @@ export const LOAD_FAILED = "Unable to load the funds catalogue right now.";
 export const MATCHES_LOAD_FAILED =
   "Unable to work out which categories your profile maps to right now. Every category we cover is listed below.";
 
+/** The block under the header that shows what the match is filtered on.
+ *
+ *  Here because a reader asking "why these funds" deserves to see the three
+ *  answers doing the filtering rather than infer them. Every value in it is
+ *  something the user said or something their answers scored to, so the panel
+ *  describes a filter and never a proposal. */
+export const MATCH_INPUTS_TITLE = "What this list is filtered on";
+
+export const MATCH_INPUTS_LEAD =
+  "Three answers of yours decide which funds appear above, compared against the risk label each manager publishes on its own fact sheet. Nothing else from your account is used.";
+
+export const MATCH_INPUT_RISK_LABEL = "Your risk profile";
+export const MATCH_INPUT_HORIZON_LABEL = "When you need the money";
+export const MATCH_INPUT_PURPOSE_LABEL = "What the money is for";
+export const MATCH_INPUT_CEILING_LABEL = "Highest published risk label shown";
+
+export const MATCH_INPUT_UNANSWERED = "Not answered yet";
+
+/** Shown only when the horizon or the purpose narrowed the bracket below what
+ *  the risk answers alone scored to. Worth saying plainly: a reader who sees
+ *  "Aggressive" beside a short list would otherwise think the page was wrong.
+ *
+ *  Deliberately about the CATEGORIES and not the ceiling. A short horizon caps
+ *  which categories are in play and leaves the risk ceiling where the risk
+ *  answers put it; only an emergency fund lowers both. An earlier draft said
+ *  "that is why the list stops at {ceiling}", which read as true and was wrong
+ *  in the commoner of the two cases. */
+export const MATCH_INPUTS_NARROWED =
+  "Your risk answers score as {answered}. The other two narrow which fund categories are in play to the {effective} set, so this list is shorter than your risk profile alone would give.";
+
+export const MATCH_INPUTS_ACTION = "Change these answers";
+
 export const COMPLETE_PROFILE_TITLE = "Two more answers sharpens this";
 
 export const COMPLETE_PROFILE_LEAD =
@@ -219,6 +251,15 @@ export function allStrings(): string[] {
     EMPTY_FILTERED,
     LOAD_FAILED,
     MATCHES_LOAD_FAILED,
+    MATCH_INPUTS_TITLE,
+    MATCH_INPUTS_LEAD,
+    MATCH_INPUT_RISK_LABEL,
+    MATCH_INPUT_HORIZON_LABEL,
+    MATCH_INPUT_PURPOSE_LABEL,
+    MATCH_INPUT_CEILING_LABEL,
+    MATCH_INPUT_UNANSWERED,
+    MATCH_INPUTS_NARROWED,
+    MATCH_INPUTS_ACTION,
     COMPLETE_PROFILE_TITLE,
     COMPLETE_PROFILE_LEAD,
     COMPLETE_PROFILE_ACTION,
