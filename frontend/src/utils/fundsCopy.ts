@@ -91,7 +91,7 @@ export const MATCHES_LOAD_FAILED =
 export const MATCH_INPUTS_TITLE = "What this list is filtered on";
 
 export const MATCH_INPUTS_LEAD =
-  "Three answers of yours decide which funds appear above, compared against the risk label each manager publishes on its own fact sheet. Nothing else from your account is used.";
+  "Three of your answers decide which funds appear above, weighed against the risk label each manager publishes. Nothing else from your account is used.";
 
 export const MATCH_INPUT_RISK_LABEL = "Your risk profile";
 export const MATCH_INPUT_HORIZON_LABEL = "When you need the money";
@@ -131,10 +131,10 @@ export const MATCH_APPLIED_UNCHANGED = "Your risk answers are applied as they sc
  *  _change_the_applied_bracket` on the backend is what keeps this pair
  *  complete. */
 export const MATCH_NARROWED_BY_HORIZON =
-  "Lowered from {answered} because you need this money in {band}. A shorter horizon narrows which fund categories are in play, whatever risk you told us you can take.";
+  "Lowered from {answered} by your time horizon: needing the money sooner narrows which fund categories are in play, whatever risk you told us you can take.";
 
 export const MATCH_NARROWED_BY_PURPOSE =
-  "Lowered from {answered} because this money is an emergency fund. Money you may need at short notice is a question about access before it is one about risk, so the categories drop to money market and short term.";
+  "Lowered from {answered} because this money is an emergency fund: money you may need at short notice is a question about access before it is one about risk.";
 
 export const COMPLETE_PROFILE_TITLE = "Two more answers sharpens this";
 

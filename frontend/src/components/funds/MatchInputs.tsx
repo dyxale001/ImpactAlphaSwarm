@@ -26,15 +26,23 @@ import {
  * that chose the funds — deriving them in the browser would eventually
  * disagree with the list they claim to explain.
  *
- * The applied rating is the emphasis rather than the answered one, because
- * those two differ often enough to matter and the difference is the page's most
- * confusing moment: somebody who answered Aggressive, looking at three cautious
- * funds, would reasonably think it was broken.
+ * ## Why it is laid out in two columns
  *
- * `ceiling` is shown as its own value and is deliberately NOT part of the
- * headline. It moves independently of the applied bracket: `HorizonRule` caps
- * the category set and leaves the ceiling where the risk answers put it, while
- * an emergency fund lowers both.
+ * One consequence on the left, the answers behind it on the right. The first
+ * version stacked four blocks down the card with a paragraph wedged between the
+ * rating and the answers, which made it tall, put the explanation before the
+ * thing it explained, and nested a panel inside a panel. Cause and effect now
+ * sit side by side and the card is about half the height.
+ *
+ * The reason sentence deliberately does not repeat the horizon band or the
+ * purpose: both are labelled values a few centimetres to the right, and saying
+ * them twice was most of the wasted space.
+ *
+ * `ceiling` is ruled off from the two answers because it is derived rather than
+ * answered, and it moves independently of the applied bracket — `HorizonRule`
+ * caps the category set and leaves the ceiling where the risk answers put it,
+ * while an emergency fund lowers both. Pairing it with the headline would
+ * suggest they change together.
  */
 export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) {
   const horizon = bracket.horizon_band
@@ -52,16 +60,13 @@ export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) 
   // `test_only_two_rules_can_change_the_applied_bracket` holds that pair
   // complete on the server, where the rules live.
   const because = !narrowed
-    ? null
+    ? MATCH_APPLIED_UNCHANGED
     : bracket.purpose === "emergency_fund"
       ? MATCH_NARROWED_BY_PURPOSE.replace("{answered}", bracket.risk_tolerance)
-      : MATCH_NARROWED_BY_HORIZON.replace("{answered}", bracket.risk_tolerance).replace(
-          "{band}",
-          horizon ?? "less time than the funds above ask for",
-        );
+      : MATCH_NARROWED_BY_HORIZON.replace("{answered}", bracket.risk_tolerance);
 
   return (
-    <section className="soft-card space-y-4 p-5">
+    <section className="soft-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="flex items-center gap-2 text-sm font-bold text-brand-primary">
           <SlidersHorizontal className="h-4 w-4 shrink-0 text-brand-accent" />
@@ -75,64 +80,63 @@ export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) 
         </Link>
       </div>
 
-      {/* ── The applied rating, and the drop when there is one ── */}
-      <div className="rounded-lg bg-brand-bg/60 p-4">
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-          {narrowed && (
-            <>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-secondary/60">
-                  {MATCH_ANSWERED_LABEL}
-                </p>
-                <p className="text-lg font-semibold leading-tight text-brand-secondary/50 line-through decoration-brand-secondary/40">
-                  {bracket.risk_tolerance}
-                </p>
-              </div>
-              <ArrowRight
-                className="mb-1 h-4 w-4 shrink-0 text-brand-secondary/40"
-                aria-hidden="true"
-              />
-            </>
-          )}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-accent">
-              {MATCH_APPLIED_LABEL}
-            </p>
-            <p className="text-2xl font-bold leading-tight text-brand-primary lg:text-3xl">
-              {bracket.effective}
-            </p>
-          </div>
-        </div>
-
-        <p className="mt-2.5 max-w-3xl text-[11px] leading-relaxed text-brand-secondary">
-          {because ?? MATCH_APPLIED_UNCHANGED}
-        </p>
-      </div>
-
-      <p className="max-w-3xl text-xs leading-relaxed text-brand-secondary/80">
+      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-brand-secondary/75">
         {MATCH_INPUTS_LEAD}
       </p>
 
-      {/* The two goal answers, and the ceiling they combine with. The risk
-          answer is not repeated here — it is the headline above. */}
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-brand-border/40 pt-3 sm:grid-cols-3">
-        <Input label={MATCH_INPUT_HORIZON_LABEL} value={horizon} />
-        <Input label={MATCH_INPUT_PURPOSE_LABEL} value={purpose} />
-        <Input
-          label={MATCH_INPUT_CEILING_LABEL}
-          value={
-            bracket.ceiling_label ? `${bracket.ceiling_label} (${bracket.ceiling} of 5)` : null
-          }
-          derived
-        />
-      </dl>
+      <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-brand-border/40 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* ── The consequence ── */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-accent">
+            {MATCH_APPLIED_LABEL}
+          </p>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            {narrowed && (
+              <>
+                <span className="text-base font-semibold text-brand-secondary/45 line-through decoration-brand-secondary/35">
+                  {bracket.risk_tolerance}
+                </span>
+                <ArrowRight
+                  className="h-3.5 w-3.5 shrink-0 self-center text-brand-secondary/40"
+                  aria-hidden="true"
+                />
+              </>
+            )}
+            <span className="text-2xl font-bold leading-none text-brand-primary lg:text-[28px]">
+              {bracket.effective}
+            </span>
+          </div>
+          {narrowed && (
+            <p className="mt-0.5 text-[10px] uppercase tracking-[0.06em] text-brand-secondary/50">
+              {MATCH_ANSWERED_LABEL}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-brand-secondary">{because}</p>
+        </div>
+
+        {/* ── The answers behind it ── */}
+        <dl className="space-y-2 self-start lg:border-l lg:border-brand-border/40 lg:pl-8">
+          <Row label={MATCH_INPUT_HORIZON_LABEL} value={horizon} />
+          <Row label={MATCH_INPUT_PURPOSE_LABEL} value={purpose} />
+          <div className="border-t border-brand-border/40 pt-2">
+            <Row
+              label={MATCH_INPUT_CEILING_LABEL}
+              value={
+                bracket.ceiling_label ? `${bracket.ceiling_label} (${bracket.ceiling} of 5)` : null
+              }
+              derived
+            />
+          </div>
+        </dl>
+      </div>
     </section>
   );
 }
 
-/** One answer, or an honest blank. An unanswered question is not a zero: it is
- *  the reason the list above is wider than it could be. */
-function Input({
+/** One answer on a line, label left and value right. An unanswered question is
+ *  not a zero: it is the reason the list above is wider than it could be, so it
+ *  is stated rather than hidden. */
+function Row({
   label,
   value,
   derived = false,
@@ -142,13 +146,13 @@ function Input({
   derived?: boolean;
 }) {
   return (
-    <div className="space-y-0.5">
+    <div className="flex items-baseline justify-between gap-4">
       <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-secondary/60">
         {label}
       </dt>
       <dd
-        className={`text-sm font-semibold ${
-          value ? (derived ? "text-brand-accent" : "text-brand-primary") : "text-brand-secondary/50"
+        className={`shrink-0 text-right text-xs font-semibold ${
+          value ? (derived ? "text-brand-accent" : "text-brand-primary") : "text-brand-secondary/45"
         }`}
       >
         {value ?? MATCH_INPUT_UNANSWERED}
