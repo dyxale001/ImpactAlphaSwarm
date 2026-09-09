@@ -75,35 +75,93 @@ Your job is transcription, not analysis. Rules, in order of importance:
 # The fields to ask for. The ASISA classification is deliberately absent: the
 # list of categories is long enough to bury the rules above, and the admin form
 # offers it as a dropdown anyway.
-FIELDS = """THE FACT SHEET - the dated figures. Every one of these belongs to
-the sheet's own as-at date, so they come from THIS document and no other. Where
-the sheet is silent, say so rather than reaching for a figure you know:
+FIELDS = """FORM SECTION 3: "Its first fact sheet"
 
-- as_of: the sheet's own as-at date, as YYYY-MM-DD
-- risk_indicator_raw: the risk rating in the sheet's OWN WORDS, and only if it is printed as text you can quote — e.g. FundRock prints 'RISK PROFILE Moderate - High Risk'. REFUSE it if the rating is shown by shading or colouring one step of a scale, because every step's label is printed whatever the rating and there is no line of text that states the answer
-- risk_indicator_1to5: that same rating as a number on our scale: 1 Low, 2 Low to Moderate, 3 Moderate, 4 Moderate to High, 5 High. Give it ONLY where you gave risk_indicator_raw, and map the sheet's own words rather than your impression of the fund: 'Moderate - High Risk' is 4. A house that words its scale by temperament needs care, because Satrix runs CONSERVATIVE / CAUTIOUS / MODERATE / MODERATE-AGGRESSIVE / AGGRESSIVE where 'conservative' is the LOWEST step, the opposite of what the same word means as a saver's own risk tolerance
-- benchmark: the benchmark index the fund measures itself against
-- objective: the fund's stated objective, in the manager's own words
-- ter: total expense ratio, as a percentage
-- tc: transaction cost, as a percentage
-- tic: total investment charge, as a percentage
-- annual_management_fee: the manager's own annual fee (may be labelled 'Annual Management Fee' or 'Annual Service Fee'), as a percentage
-- fee_period: '1y' or '3y' — which column the four fee figures above were taken from
-- fund_size_zar: the fund's size in rand as a plain number. 'Portfolio Value R362 million' is 362000000
-- nav_cpu: the net asset value per unit, IN CENTS. A sheet printing 'NAV Price R9.23' is 923; a sheet printing '183.63 cents' is 183.63
-- nav_date: the date that NAV was struck, as YYYY-MM-DD
-- inception_date: the date the fund launched, as YYYY-MM-DD
-- distribution_frequency: how often the fund distributes income
-- recommended_min_term_years: the minimum term in years, only if the sheet states a NUMBER
-- min_lump_sum: the MINIMUM lump sum in rand, if stated. A tax-free fund prints a MAXIMUM instead, because SARS caps contributions — leave this out rather than recording a cap as a minimum
-- min_debit_order: the MINIMUM monthly debit order in rand, if stated. As above: a maximum is not a minimum
-- return_high_12m: the highest annual return the sheet publishes
-- return_low_12m: the lowest annual return the sheet publishes. Printed in brackets when negative: (4.49) is -4.49
-- return_extremes_basis: 'rolling_12m' if the heading says rolling or non-overlapping one-year periods; 'calendar_year' if it says calendar year
-- risk_narrative: the manager's prose describing the fund's RISK, from the sheet's risk block, quoted. Only if that block is written as sentences. Leave it out if the risk profile is only a diagram, and never repeat the investment objective here — they are different fields and a reader is shown both
-- horizon_words: the manager's wording about how long to hold the fund, quoted
-- portfolio_manager: who manages the portfolio
-- regulation_28: true or false, only if the sheet states Regulation 28 compliance"""
+Every figure here belongs to the sheet's own as-at date, so it comes from THIS
+document and no other. Where the sheet is silent, say so rather than reaching
+for a figure you know. Labels and field names read as above.
+
+  "As at (YYYY-MM-DD)"  (as_of)
+      the sheet's own as-at date. It dates every other figure in this section.
+
+  "Risk, as printed"  (risk_indicator_raw)
+      the risk rating in the sheet's OWN WORDS, and only if it is printed as
+      text you can quote - FundRock prints "RISK PROFILE Moderate - High Risk".
+      REFUSE it if the rating is shown by shading or colouring one step of a
+      scale: every step's label is printed whatever the rating, so no line of
+      text states the answer.
+
+  "Risk level 1-5"  (risk_indicator_1to5)
+      that same rating as a number on our scale: 1 Low, 2 Low to Moderate,
+      3 Moderate, 4 Moderate to High, 5 High. Give it ONLY where you gave the
+      words above, and map those words rather than your impression of the fund:
+      "Moderate - High Risk" is 4. A house that words its scale by temperament
+      needs care - Satrix runs CONSERVATIVE / CAUTIOUS / MODERATE /
+      MODERATE-AGGRESSIVE / AGGRESSIVE, where "conservative" is the LOWEST step,
+      the opposite of what that word means as a saver's own risk tolerance.
+
+  "Benchmark"  (benchmark)
+      the benchmark index the fund measures itself against
+
+  "TER %"  (ter)
+      total expense ratio, as a percentage
+
+  "Transaction cost %"  (tc)
+      transaction cost, as a percentage
+
+  "TIC %"  (tic)
+      total investment charge, as a percentage
+
+  "Manager's fee %"  (annual_management_fee)
+      the manager's own annual fee, which may be labelled "Annual Management
+      Fee" or "Annual Service Fee", as a percentage
+
+  "Fees cover (1y or 3y)"  (fee_period)
+      which column the four fee figures above came from: 1y or 3y
+
+  "Fund size (R)"  (fund_size_zar)
+      the fund's size in rand as a plain number.
+      "Portfolio Value R362 million" is 362000000
+
+  "Distributions"  (distribution_frequency)
+      how often the fund distributes income
+
+  "NAV, cents a unit"  (nav_cpu)
+      the net asset value per unit, IN CENTS. A sheet printing "NAV Price R9.23"
+      is 923; a sheet printing "183.63 cents" is 183.63.
+
+  "Priced on (YYYY-MM-DD)"  (nav_date)
+      the date that NAV was struck
+
+  "Started (YYYY-MM-DD)"  (inception_date)
+      the date the fund launched, which is also why a five-year return can be
+      blank
+
+  "Portfolio manager"  (portfolio_manager)
+      who manages the portfolio
+
+  "Strongest year %"  (return_high_12m)
+      the highest annual return the sheet publishes
+
+  "Weakest year %"  (return_low_12m)
+      the lowest annual return the sheet publishes. Printed in brackets when
+      negative: (4.49) is -4.49.
+
+  "Measured over (rolling_12m or calendar_year)"  (return_extremes_basis)
+      rolling_12m if the heading says rolling or non-overlapping one-year
+      periods; calendar_year if it says calendar year
+
+  "Objective, in the manager's words"  (objective)
+      the fund's stated objective, in the manager's own words
+
+  "Risk, in the manager's words"  (risk_narrative)
+      the manager's prose describing the fund's RISK, from the sheet's risk
+      block, quoted. Only if that block is written as sentences. Leave it out if
+      the risk profile is only a diagram, and never repeat the investment
+      objective here: they are different fields and a reader is shown both.
+
+  "Horizon, in the manager's words"  (horizon_words)
+      the manager's wording about how long to hold the fund, quoted"""
 
 # The four fields that are a list rather than a figure. Not part of the reader's
 # FIELDS — it returns one value per field — but they are boxes on the same form,
@@ -115,40 +173,96 @@ the sheet is silent, say so rather than reaching for a figure you know:
 # `asisa_geography` and `asisa_asset_class` are deliberately NOT asked for. The
 # form fills both from whichever category is picked, off one record, so the three
 # columns cannot disagree. Asking a model for them invites exactly that.
-IDENTITY = """IDENTITY - what the fund IS. These are separate from the figures
-below, and most are on the sheet's cover or in its small print:
+URL_BOX = """FORM SECTION 1: the box at the top, "Fact sheet URL"  (mdd_url)
 
-  isin                 the twelve-character ISIN
-  name                 the fund's name as the sheet prints it, share class
-                       included: "Allan Gray Balanced Fund - Class A"
-  fund_house           the brand a reader would recognise: "Allan Gray"
-  manco                the management company in the legal small print, which
-                       is often longer and different: "Allan Gray Unit Trust
-                       Management (RF) Proprietary Limited"
-  vehicle              exactly one of: unit_trust  |  etf
-  asisa_category       one of the fifteen names listed at the bottom, copied
-                       EXACTLY. The sheet usually prints an abbreviation ("SA
-                       Multi Asset Income"); give me the full canonical name
-  jse_code             the JSE or fund code. REQUIRED if vehicle is etf. A unit
-                       trust may print one too, for dealing - that is not a
-                       listing, so record it without changing the vehicle
-  yahoo_symbol         ETFs ONLY, as ticker + ".JO": STX40.JO. Leave BLANK for a
-                       unit trust - it is not traded, so it has no price feed
-  mdd_page_url         the manager's own page for this fund, not the PDF link
-  is_index_tracker     true or false: does the fund track an index
-  tfsa_eligible        true or false, only if the sheet or the manager's page
-                       says so. Leave blank rather than reasoning it out
+I paste that myself - it is the address of the document you are reading, and
+asking you to type a link back is a way to introduce a typo into the one field
+that makes every figure below checkable. Nothing for you to answer here."""
 
-  curation_rule        NOT from the sheet. One line on why this fund is in our
-                       catalogue. The stated rule is that these are funds from
-                       managers most South African investors will recognise and
-                       that are available on EasyEquities, so say that in the
-                       fund's own terms. Do NOT claim the availability was
-                       verified - a person checks that on the platform."""
+
+IDENTITY = """FORM SECTION 2: "What identifies the fund"
+
+Each line is a box in that section, in the order they appear on screen. The
+quoted text is the box's own label; the name in brackets is what the field is
+called underneath, which is what I will quote back if the form refuses one.
+
+  "ISIN"  (isin)
+      the twelve-character ISIN
+
+  "Fund name"  (name)
+      the fund's name as the sheet prints it, share class included:
+      "Allan Gray Balanced Fund - Class A"
+
+  "Manager (the brand)"  (fund_house)
+      the brand a reader would recognise: "Allan Gray"
+
+  "Management company"  (manco)
+      the management company from the legal small print, which is often longer
+      and different: "Allan Gray Unit Trust Management (RF) Proprietary Limited"
+
+  "Fund type"  (vehicle) - a dropdown. Give one of these two words exactly:
+      Unit trust
+      Exchange traded fund
+
+  "ASISA category"  (asisa_category) - a dropdown of fifteen names, listed at
+      the very bottom of this prompt. Copy one EXACTLY. The sheet usually prints
+      an abbreviation ("SA Multi Asset Income"); give the full canonical name.
+      Choosing it fills the geography and asset-class labels beside it on its
+      own, so do not give those separately.
+
+  "JSE code"  (jse_code)
+      the JSE or fund code. The label reads "(required)" once the fund type is
+      an ETF. A unit trust may print one too, for dealing - that is not a
+      listing, so record it without changing the fund type.
+
+  "Price symbol"  (yahoo_symbol)
+      ETFs ONLY, as ticker + ".JO": STX40.JO. Leave BLANK for a unit trust: it
+      is not traded, so it has no price feed and the form refuses one.
+
+  "Manager's fund page"  (mdd_page_url)
+      the manager's own page for this fund, not the link to the PDF
+
+  "Why it is in the catalogue"  (curation_rule)
+      NOT from the sheet. One line on why this fund is in the catalogue. The
+      stated rule is that these are funds from managers most South African
+      investors will recognise and that are available on EasyEquities, so say
+      that in this fund's own terms. Do NOT claim the availability was verified:
+      a person checks that on the platform.
+
+  "Index tracker"  (is_index_tracker) - a checkbox, so answer yes or no
+      does the fund track an index
+
+  "Tax-free eligible"  (tfsa_eligible) - a checkbox, so answer yes or no
+      only if the sheet or the manager's page says so. Say you do not know
+      rather than reasoning it out."""
 
 
 # What the form will refuse, stated so the answer can be checked before it is
 # typed rather than after a 422. Every one of these is a real validator.
+NOT_ON_FORM = """NOT ON THE ADD FORM - give these last, under their own heading.
+There is no box for them on the screen where a fund is created, so I will open
+the fund's edit screen afterwards and put them in there:
+
+  "Minimum term (years)"  (recommended_min_term_years) - EDIT screen
+      the minimum term in years, only if the sheet states a NUMBER. Wording like
+      "suitable for longer term investment horizons" is not a number: give that
+      as the horizon words instead. Worth getting right, because this is the
+      figure that decides whether a fund is shown to somebody investing over a
+      short horizon.
+
+  "Regulation 28"  (regulation_28) - EDIT screen, yes or no
+      only if the sheet states Regulation 28 compliance. Recorded and displayed,
+      and deliberately not used for matching.
+
+  minimum lump sum (min_lump_sum), minimum monthly amount (min_debit_order)
+      NO box anywhere in the app today. Give them if the sheet states them, as
+      rand figures, and I will keep them in my notes.
+      A tax-free fund prints a MAXIMUM lump sum instead, because SARS caps
+      contributions: leave it out rather than recording a cap as a minimum. That
+      exact mistake has been made on a real Allan Gray sheet - the number was
+      real and the meaning was inverted."""
+
+
 CHECKS = """BEFORE YOU ANSWER, check these. The form refuses a row that fails
 any of them, and it lists every problem at once rather than the first:
 
@@ -172,21 +286,30 @@ any of them, and it lists every problem at once rather than the first:
                           must have NO yahoo_symbol"""
 
 
-LISTS = """LISTS — give each under its own heading, one "label = number" per line:
+LISTS = """FORM SECTION 3, the four multi-line boxes at the bottom. Each
+takes rows of "label = number", so give each under its own heading:
 
-  WHAT IT HOLDS      the asset allocation. Percentages must account for the
-                     whole fund. Usually drawn as a pie or bar chart: read it
-                     off the picture, and say so, because a chart's text layer
-                     often lists the labels and the numbers as two separate
-                     lists whose pairing is a guess.
-  TOP HOLDINGS       the largest positions as listed. These do NOT add to 100;
-                     they are the top of a longer list.
-  PAST RETURNS       the ANNUALISED row, labelled 1y / 3y / 5y / 10y /
-                     inception. Sheets print cumulative and annualised side by
-                     side — say which one you took.
-  PAID OUT           distributions, as "YYYY-MM = cents per unit". Skip a month
-                     printed as a dash; keep one printed as 0.00, because a
-                     declared nothing and no declaration are different things."""
+  "What it holds"  (asset_allocation)
+      the asset allocation. Percentages must account for the whole fund, and a
+      partial breakdown is refused. Usually drawn as a pie or bar chart: read it
+      off the picture and say that you did, because a chart's text layer often
+      lists the labels and the numbers as two separate lists whose pairing is a
+      guess. Optional - many tracker sheets print no breakdown at all, and the
+      index is the answer.
+
+  "Top holdings"  (top_holdings)
+      the largest positions as the sheet lists them. These do NOT add to 100;
+      they are the top of a longer list.
+
+  "Past returns, as published"  (performance)
+      the manager's own ANNUALISED figures. Label them 1y / 3y / 5y / 10y /
+      inception so they stay comparable between funds. Sheets print cumulative
+      and annualised side by side - say which one you took.
+
+  "What it has paid out"  (income_distribution)
+      distributions, as "YYYY-MM = cents per unit". Skip a month printed as a
+      dash; keep one printed as 0.00, because a declared nothing and no
+      declaration are different things."""
 
 # Optional: let the chat fill gaps from elsewhere, tagged so a person can see
 # which values are the manager's own and which are not.
@@ -270,9 +393,11 @@ def main() -> int:
 
     parts = [RULES]
     if not sheet_only:
+        parts.append(URL_BOX)
         parts.append(IDENTITY)
     parts.append(FIELDS)
     parts.append(LISTS)
+    parts.append(NOT_ON_FORM)
     if research:
         parts.append(RESEARCH)
     parts.append(CHECKS)
