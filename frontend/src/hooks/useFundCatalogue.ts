@@ -147,11 +147,18 @@ export function useFundPrices(fundId: string | undefined, listed: boolean) {
   return { prices, isLoading };
 }
 
-/** The classification tree, the vehicles and the risk scale. Loaded once. */
+/** The classification tree, the vehicles and the risk scale. Loaded once.
+ *
+ * `reload` exists because the failure is now shown rather than swallowed: the
+ * navigator this feeds is the only way to browse by category, and a page that
+ * says "the category list did not load" and offers no way to ask again leaves
+ * the reader reloading the whole route to retry one request.
+ */
 export function useFundCatalogueMeta() {
   const [meta, setMeta] = useState<CatalogueMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,9 +183,9 @@ export function useFundCatalogueMeta() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
-  return { meta, isLoading, error };
+  return { meta, isLoading, error, reload: () => setAttempt((n) => n + 1) };
 }
 
 /** The caller's own matches.

@@ -57,6 +57,11 @@ export const FUNDS_PAGE_LEAD =
 export const FUNDS_HEADER_STRIP =
   "South African funds, JSE-listed where they are exchange traded. Priced in rand, not converted from another currency.";
 
+/** The eyebrow over the page title. The server sends it; this was written
+ *  inline in the page, which is how one of the header's three strings ended up
+ *  outside the file that scans them. */
+export const FUNDS_HEADER_EYEBROW = "South African funds";
+
 export const BROWSE_TITLE = "Browse every category we cover";
 
 export const BROWSE_LEAD =
@@ -71,16 +76,111 @@ export const FILTER_MANAGER = "Management company";
 export const FILTER_TFSA = "Tax-free eligible only";
 export const FILTER_SEARCH_PLACEHOLDER = "Search by fund, manager or ISIN";
 
+/** The navigator's three tiers, which are the classification itself.
+ *
+ *  The geography and asset-class labels are shared with the filter row they
+ *  replaced: the words are the reader's way in to the same two columns, and
+ *  having two names for one column is how the page ended up offering both a
+ *  tree and a select that wrote the same filter and disagreed about it. */
+export const BROWSE_FOCUS_LABEL = "Within {assetClass}";
+
+/** Named as an action rather than a state, because it is a button. Promised by
+ *  the filtered-empty copy since that state was written, and absent until now:
+ *  the only way back out of a dead filter was to undo each control by hand. */
+export const FILTER_CLEAR_ALL = "Clear all";
+
+export const FILTER_CLEAR_SEARCH = "Clear search";
+
+/** The tree's own failure, which used to render as nothing at all.
+ *
+ *  `useFundCatalogueMeta` returns `isLoading` and `error` and the page discarded
+ *  both, so a failed meta request produced a page with no navigator, no message
+ *  and no hint that a section was missing. The second sentence is the one that
+ *  matters: the grid below does not depend on this request. */
+export const BROWSE_META_FAILED_TITLE = "The category list did not load";
+
+export const BROWSE_META_FAILED_BODY =
+  "Browsing by category is unavailable right now. Every fund we cover is still listed below.";
+
+export const RETRY_ACTION = "Try again";
+
+/** The browse grid opens at four rows and says how many more there are. The
+ *  count is substituted rather than concatenated so the whole sentence is one
+ *  scanned string. */
+export const SHOW_ALL_ACTION = "Show all {count}";
+
+export const SHOW_FEWER_ACTION = "Show fewer";
+
+/* ── The states that are not a list of funds ──────────────────────────────
+ *
+ * Five of them, each with a title and a body, because all five rendered as the
+ * same untitled grey paragraph in a card and three of them are different
+ * situations with different ways out. The titles say what happened; the bodies
+ * say what still works, which on this page is usually "the catalogue below".
+ */
+
+export const EMPTY_CATALOGUE_TITLE = "No funds are loaded yet";
+
 export const EMPTY_CATALOGUE =
-  "No funds are loaded yet. The catalogue is transcribed from published fact sheets, and this page fills up as they are added.";
+  "The catalogue is transcribed from published fact sheets, and this page fills up as they are added.";
+
+export const EMPTY_FILTERED_TITLE = "Nothing matches those filters";
 
 export const EMPTY_FILTERED =
-  "No fund in the catalogue matches those filters. Clear one and the list widens.";
+  "Clear one and the list widens. Every category we cover is still browsable.";
+
+export const LOAD_FAILED_TITLE = "The fund list did not load";
 
 export const LOAD_FAILED = "Unable to load the funds catalogue right now.";
 
+export const MATCHES_LOAD_FAILED_TITLE = "Your matches did not load";
+
 export const MATCHES_LOAD_FAILED =
   "Unable to work out which categories your profile maps to right now. Every category we cover is listed below.";
+
+/** The state the page could not express at all.
+ *
+ *  When the matcher ran, found the profile, and returned nothing with no notice
+ *  attached, the section rendered its heading over empty space. It is a real
+ *  outcome of a small catalogue rather than a fault, so it says so and points at
+ *  the only thing left to do. */
+export const MATCHED_EMPTY_TITLE = "No fund carries a published risk label at or below yours";
+
+export const MATCHED_EMPTY_BODY =
+  "Your answers map to the categories browsable below, and no fund in them publishes a label that clears your profile yet.";
+
+export const MATCHED_EMPTY_ACTION = "Browse every category";
+
+/* ── The two statements that may not go missing ───────────────────────────
+ *
+ * The footer's four paragraphs come off the catalogue response, and the whole
+ * footer was rendered only when that response arrived — so a failed request
+ * took the not-licensed statement off the page along with the list it was
+ * about. These two are the ones that are about the product rather than about
+ * the list, so they are also here and the footer always renders.
+ *
+ * Mirrored from `backend/src/funds/copy.py`, the same way the forbidden-term
+ * scan above is, and kept in step by a test that reads that file. The other
+ * two paragraphs have no fallback on purpose: the inclusion rule and the
+ * not-covered list describe a catalogue, and describing a catalogue that
+ * failed to load is describing nothing.
+ */
+export const FOOTER_NOT_LICENSED =
+  "AlphaSwarm is not a licensed financial services provider and does not give " +
+  "advice. Fund categories, risk labels, costs and performance figures on this " +
+  "page are the fund managers' own, taken from the Minimum Disclosure Document " +
+  "each fund is required to publish.";
+
+export const CIS_DISCLAIMER =
+  "Collective investment schemes are medium- to long-term investments. Past " +
+  "performance does not predict future returns. Fund values move with the " +
+  "markets and with exchange rates, and charges reduce what you earn.";
+
+/** The verbatim section heading, from the design note. The server sends it and
+ *  this is the fallback; it was written inline in the page, which put the one
+ *  string the design fixes word for word outside the file that scans them. */
+export const MATCHED_SECTION_TITLE =
+  "Funds whose published risk label matches your profile";
 
 /** The block under the header that shows what the match is filtered on.
  *
@@ -167,12 +267,141 @@ export const TFSA_BADGE = "Tax-free eligible";
 
 export const TRACKER_BADGE = "Index tracker";
 
+/** The reason sentence's own heading, which the card omitted.
+ *
+ *  It is the tallest and most variable block on a matched card and it sat there
+ *  unlabelled, so it read as prose about the fund rather than as the answer to
+ *  the question the section poses. The wording is the design note's own. */
+export const WHY_APPEARS_LABEL = "Why this appears";
+
+/** Follows a charge figure: "1.79% a year". Was inline in the card, which put
+ *  it outside the scan. */
+export const COST_PER_YEAR = "a year";
+
+export const FUND_SIZE_LABEL = "Fund size";
+
+export const DISTRIBUTIONS_LABEL = "Distributions";
+
+/** Printed where a fact sheet does not state a figure the card has a slot for.
+ *
+ *  The slot is kept rather than dropped: on a catalogue card the four figures
+ *  are the comparison, and a card that quietly omits one is a card that looks
+ *  like it has a shorter answer rather than a document that is silent. Only the
+ *  minimum term uses it, because it is the field managers most often leave out —
+ *  five of nineteen sheets stated it. */
+export const NOT_STATED = "Not stated";
+
+/** Why a fund can be browsed and never matched.
+ *
+ *  The backend sends `risk_note` for a fund it knows about; this is the fallback
+ *  for one whose sheet simply carries no indicator. Until now `RiskScale`
+ *  returned null in that case and the card's whole middle band vanished, which
+ *  made a designed outcome look like a rendering fault. */
+export const RISK_UNPUBLISHED_NOTE =
+  "This manager publishes no risk indicator on its fact sheet, so this fund can be browsed but is never matched to a profile.";
+
+export const RISK_NO_SHEET_NOTE =
+  "No fact sheet is on file for this fund yet, so there is no published risk label to show.";
+
+/* ── How old the figures are ──────────────────────────────────────────────
+ *
+ * A fact sheet is a monthly document, so a date alone does not tell a reader
+ * whether they are looking at this quarter's figures or the ones from three
+ * quarters ago. Three of the eleven funds live today are 313 to 466 days old
+ * and the card presented all three exactly as it presented the current ones.
+ *
+ * The words describe the document and not the reader's next move: "out of date"
+ * is a fact about a sheet, where anything in the shape of an instruction would
+ * be this page telling somebody what to do about a fund.
+ */
+
+export const STALENESS_CURRENT = "current";
+
+export const STALENESS_AGEING = "worth re-checking";
+
+export const STALENESS_STALE = "sheet is out of date";
+
 export const VEHICLE_LABEL: Record<string, string> = {
   unit_trust: "Unit trust",
   etf: "Exchange traded fund",
 };
 
 /* ── Fund detail page ────────────────────────────────────────────────────── */
+
+/* The three questions the page answers, one per tab.
+ *
+ * Named after what a reader wants rather than after our data model: "The
+ * figures" is the returns and the payouts, "The document" is the identity and
+ * the provenance. A tab whose panel would be empty is not rendered at all, so
+ * on a sheet nobody has finished reading the strip is itself a statement about
+ * how much is known. */
+export const DETAIL_TABS_LABEL = "Fund sections";
+
+export const DETAIL_TAB_OVERVIEW = "Overview";
+
+export const DETAIL_TAB_FIGURES = "The figures";
+
+export const DETAIL_TAB_DOCUMENT = "The document";
+
+/** The small facts that answer "how does this fund work" without a chart. */
+export const DETAIL_GLANCE_TITLE = "At a glance";
+
+/** The manager's quoted prose, gathered into one tile.
+ *
+ *  Objective, risk narrative and horizon were three separate cards saying the
+ *  same kind of thing in the same voice: the manager's, quoted. Together they
+ *  read as a passage from the document, which is what they are. */
+export const DETAIL_WORDS_TITLE = "In the manager's own words";
+
+export const DETAIL_MANAGED_BY_LABEL = "Managed by";
+
+export const DETAIL_ERROR_TITLE = "This fund did not load";
+
+export const DETAIL_NO_FACTSHEET_TITLE = "No fact sheet on file yet";
+
+/* ── The largest holdings ─────────────────────────────────────────────────
+ *
+ * Transcribed for seven sheets, typed in the public DTO, selected by the
+ * repository, passed through by `service.py`, editable in admin — and shown to
+ * nobody until now. The reader was the only party on the page who could not
+ * see it.
+ *
+ * The note is the load-bearing part. A holdings list invites the reading "this
+ * is what the fund owns", and it is not: it is the ten largest positions the
+ * sheet chose to print, on the sheet's own date, out of a portfolio that may
+ * hold hundreds.
+ */
+export const DETAIL_HOLDINGS_TITLE = "Its largest holdings";
+
+export const DETAIL_HOLDINGS_LEAD =
+  "The biggest positions this sheet lists, as a share of the fund.";
+
+export const DETAIL_HOLDINGS_NOTE =
+  "The largest holdings the sheet prints, not the whole portfolio, and as at the date on it.";
+
+/* ── What it takes to start ───────────────────────────────────────────────
+ *
+ * Also transcribed and also never rendered. Shown only where the figure is
+ * above zero: `min_lump_sum` is non-blank on fifteen of twenty-six sheets and
+ * twelve of those are `0`, all of them FundRock boutique funds carrying
+ * `0`/`0`, which reads as one bulk seed default rather than twelve separate
+ * readings. Printing "R0" would turn that default into a claim that a reader
+ * can start with nothing, which is an invented fact on a page whose whole
+ * argument is that it invents none.
+ *
+ * The note carries the same caveat `DETAIL_PLATFORM_FEE_NOTE` makes about
+ * fees, for the same reason: the sheet states the manager's terms, and almost
+ * nobody in this catalogue's audience buys directly from the manager.
+ */
+export const DETAIL_MINIMUMS_TITLE = "What it takes to start";
+
+export const DETAIL_MIN_LUMP_LABEL = "Lump sum";
+
+export const DETAIL_MIN_DEBIT_LABEL = "Monthly debit order";
+
+export const DETAIL_MINIMUMS_NOTE =
+  "The manager's own minimums, from this sheet. A platform may set different ones.";
+
 
 export const DETAIL_BACK = "Back to funds";
 
@@ -209,7 +438,8 @@ export const DETAIL_FACTS_TITLE = "The published facts";
 
 export const DETAIL_BENCHMARK_LABEL = "Measured against";
 
-export const DETAIL_SIZE_LABEL = "Fund size";
+/** The same words the card uses, aliased rather than repeated. */
+export const DETAIL_SIZE_LABEL = FUND_SIZE_LABEL;
 
 export const DETAIL_DISTRIBUTION_LABEL = "Pays income";
 
@@ -269,8 +499,37 @@ export function allStrings(): string[] {
     FILTER_MANAGER,
     FILTER_TFSA,
     FILTER_SEARCH_PLACEHOLDER,
+    EMPTY_CATALOGUE_TITLE,
     EMPTY_CATALOGUE,
+    EMPTY_FILTERED_TITLE,
     EMPTY_FILTERED,
+    LOAD_FAILED_TITLE,
+    MATCHES_LOAD_FAILED_TITLE,
+    MATCHED_EMPTY_TITLE,
+    MATCHED_EMPTY_BODY,
+    MATCHED_EMPTY_ACTION,
+    MATCHED_SECTION_TITLE,
+    FOOTER_NOT_LICENSED,
+    CIS_DISCLAIMER,
+    BROWSE_FOCUS_LABEL,
+    FILTER_CLEAR_ALL,
+    FILTER_CLEAR_SEARCH,
+    BROWSE_META_FAILED_TITLE,
+    BROWSE_META_FAILED_BODY,
+    RETRY_ACTION,
+    SHOW_ALL_ACTION,
+    SHOW_FEWER_ACTION,
+    FUNDS_HEADER_EYEBROW,
+    WHY_APPEARS_LABEL,
+    COST_PER_YEAR,
+    FUND_SIZE_LABEL,
+    DISTRIBUTIONS_LABEL,
+    NOT_STATED,
+    RISK_UNPUBLISHED_NOTE,
+    RISK_NO_SHEET_NOTE,
+    STALENESS_CURRENT,
+    STALENESS_AGEING,
+    STALENESS_STALE,
     LOAD_FAILED,
     MATCHES_LOAD_FAILED,
     MATCH_INPUTS_TITLE,
@@ -300,6 +559,22 @@ export function allStrings(): string[] {
     TRACKER_BADGE,
     FACT_SHEET_PAGE_ACTION,
     DETAIL_BACK,
+    DETAIL_TABS_LABEL,
+    DETAIL_TAB_OVERVIEW,
+    DETAIL_TAB_FIGURES,
+    DETAIL_TAB_DOCUMENT,
+    DETAIL_GLANCE_TITLE,
+    DETAIL_WORDS_TITLE,
+    DETAIL_MANAGED_BY_LABEL,
+    DETAIL_ERROR_TITLE,
+    DETAIL_NO_FACTSHEET_TITLE,
+    DETAIL_HOLDINGS_TITLE,
+    DETAIL_HOLDINGS_LEAD,
+    DETAIL_HOLDINGS_NOTE,
+    DETAIL_MINIMUMS_TITLE,
+    DETAIL_MIN_LUMP_LABEL,
+    DETAIL_MIN_DEBIT_LABEL,
+    DETAIL_MINIMUMS_NOTE,
     DETAIL_ADMIN_EDIT,
     DETAIL_NOT_FOUND_TITLE,
     DETAIL_NOT_FOUND_LEAD,
@@ -352,6 +627,10 @@ export function allStrings(): string[] {
     // is the same tripwire the constants above get.
     ...["1y", "3y"].map(formatFeePeriod),
     ...["rolling_12m", "calendar_year"].map(formatExtremesBasis),
+    // Both grammatical numbers, because the singular and the plural are
+    // separate strings once a formatter builds them.
+    formatFundCount(1),
+    formatFundCount(3),
   ].filter((text): text is string => Boolean(text));
 }
 
@@ -473,6 +752,24 @@ export function formatPercent(value: number | null | undefined): string | null {
   return `${trimmed}%`;
 }
 
+/** A whole-rand amount, thousands grouped with a space: "R5 000".
+ *
+ *  Grouped with a space rather than a comma because the fact sheets do it that
+ *  way ("39 242 370") and because `formatPercent` beside it renders "1.79%"
+ *  with a point, so a comma would mix separators inside one tile.
+ *
+ *  **Zero and below return null, and that is the point rather than tidiness.**
+ *  Twelve of the fifteen transcribed minimums are `0`, all FundRock boutique
+ *  funds carrying `0`/`0` — a bulk seed default, not twelve readings. "R0" on
+ *  a minimum reads as "you can start with nothing", which is a claim the
+ *  document never made.
+ */
+export function formatRandAmount(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || Number.isNaN(value) || value <= 0) return null;
+  const whole = Math.round(value).toString();
+  return `R${whole.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0")}`;
+}
+
 /** Render a fund size in rand at readable scale. */
 export function formatFundSize(value: number | null | undefined): string | null {
   if (value === null || value === undefined || Number.isNaN(value) || value <= 0) return null;
@@ -506,4 +803,56 @@ export function formatMinTerm(years: number | null | undefined): string | null {
   }
   const rounded = Number(years.toFixed(1));
   return `${rounded} year${rounded === 1 ? "" : "s"}`;
+}
+
+/** An ASISA category split back into the three tiers it is built from.
+ *
+ *  The stored name is the classification's own, verbatim — "South African -
+ *  Multi Asset - High Equity" — and v1 shows those words rather than friendlier
+ *  labels of our invention. This does not rename anything: it separates the
+ *  three tiers so the geography can be given weight on a card, which the design
+ *  note asks for by name because a panel could not tell where a fund invested.
+ *
+ *  Null when the name is not three tiers, in which case a caller prints it as
+ *  it is stored. A category we cannot parse is still a category we must show.
+ */
+export function splitAsisaCategory(
+  name: string | null | undefined,
+): { geography: string; assetClass: string; focus: string } | null {
+  if (!name) return null;
+  const parts = name.split(" - ").map((part) => part.trim());
+  if (parts.length !== 3 || parts.some((part) => !part)) return null;
+  const [geography, assetClass, focus] = parts;
+  return { geography, assetClass, focus };
+}
+
+/** "3 funds", "1 fund", and with a scope "3 funds in South African · Equity".
+ *
+ *  A formatter rather than an inline ternary because the singular was written
+ *  in the page, which put two of the page's most-rendered words outside the
+ *  scan. The scope is category names off the API and is never our wording. */
+export function formatFundCount(count: number, scope?: string | null): string {
+  const noun = count === 1 ? "fund" : "funds";
+  return scope ? `${count} ${noun} in ${scope}` : `${count} ${noun}`;
+}
+
+/** How many days ago a fact sheet was dated, or null if there is no usable date.
+ *
+ *  Both dates are taken at midnight UTC. A fact-sheet date is a month end with
+ *  no time on it, so comparing it against a local `Date` would put a sheet in
+ *  Johannesburg two hours into the previous day and move an age across a
+ *  threshold on the boundary. A future date returns 0 rather than a negative
+ *  number: it means somebody typed next month's date, which is a data question
+ *  and not something to render as "-12 days".
+ */
+export function factSheetAgeDays(asOf: string | null | undefined, today?: Date): number | null {
+  if (!asOf) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asOf.trim());
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const sheet = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  if (Number.isNaN(sheet)) return null;
+  const now = today ?? new Date();
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.max(0, Math.round((midnight - sheet) / 86_400_000));
 }

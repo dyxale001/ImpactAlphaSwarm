@@ -1,14 +1,19 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import * as copy from './fundsCopy'
 import {
   FORBIDDEN_TERMS,
   allStrings,
+  factSheetAgeDays,
   findForbiddenTerms,
   formatAsAt,
+  formatFundCount,
   formatFundSize,
   formatMinTerm,
   formatPercent,
+  splitAsisaCategory,
 } from './fundsCopy'
+import { SOFT_STALE_DAYS, STALE_DAYS } from '../components/funds/StalenessChip'
 
 /**
  * Two claims.
@@ -193,5 +198,132 @@ describe('the provenance copy keeps its two admissions', () => {
 
   it('attributes the objective to the manager rather than to us', () => {
     expect(copy.DETAIL_OBJECTIVE_ATTRIB).toMatch(/manager's own words/i)
+  })
+})
+
+describe('factSheetAgeDays', () => {
+  // A fixed "today" so these do not drift with the clock. 9 September 2026 is
+  // the day the staleness chip was written, and the ages below are the real
+  // ones the eleven live funds had that day.
+  const today = new Date('2026-09-09T00:00:00Z')
+
+  it('counts whole days from a month-end sheet date', () => {
+    expect(factSheetAgeDays('2026-07-31', today)).toBe(40)
+    expect(factSheetAgeDays('2026-05-31', today)).toBe(101)
+    expect(factSheetAgeDays('2025-05-31', today)).toBe(466)
+  })
+
+  it('is zero on the day the sheet is dated', () => {
+    expect(factSheetAgeDays('2026-09-09', today)).toBe(0)
+  })
+
+  it('does not go negative on a date in the future', () => {
+    // Somebody typed next month's date, which is a data question. Rendering
+    // it as "-22 days old" would make a typo look like a feature.
+    expect(factSheetAgeDays('2026-10-01', today)).toBe(0)
+  })
+
+  it('is null when there is no date to work from', () => {
+    // A fund with no fact sheet already says so where its figures would be,
+    // and a chip reading "out of date" beside no figures would be describing
+    // a document that does not exist.
+    expect(factSheetAgeDays(null, today)).toBeNull()
+    expect(factSheetAgeDays('', today)).toBeNull()
+    expect(factSheetAgeDays('July 2026', today)).toBeNull()
+  })
+
+  it('compares both dates at midnight UTC', () => {
+    // A sheet date carries no time. Compared against a local Date, a reader in
+    // Johannesburg would be two hours into the previous day and an age would
+    // cross a threshold on the boundary depending on where they sat.
+    const lateInJohannesburg = new Date('2026-09-09T23:30:00+02:00')
+    expect(factSheetAgeDays('2026-07-31', lateInJohannesburg)).toBe(40)
+  })
+})
+
+describe('formatFundCount', () => {
+  it('has both grammatical numbers', () => {
+    expect(formatFundCount(1)).toBe('1 fund')
+    expect(formatFundCount(3)).toBe('3 funds')
+    expect(formatFundCount(0)).toBe('0 funds')
+  })
+
+  it('names what it counted when the grid is narrowed', () => {
+    expect(formatFundCount(3, 'South African · Multi Asset')).toBe(
+      '3 funds in South African · Multi Asset',
+    )
+  })
+})
+
+describe('splitAsisaCategory', () => {
+  it('separates the three tiers the classification stores as one name', () => {
+    expect(splitAsisaCategory('South African - Multi Asset - High Equity')).toEqual({
+      geography: 'South African',
+      assetClass: 'Multi Asset',
+      focus: 'High Equity',
+    })
+  })
+
+  it('keeps every word, because the names are ASISA\'s and not ours', () => {
+    const name = 'South African - Interest Bearing - Short Term'
+    const tiers = splitAsisaCategory(name)
+    expect(`${tiers?.geography} - ${tiers?.assetClass} - ${tiers?.focus}`).toBe(name)
+  })
+
+  it('is null for anything that is not three tiers', () => {
+    // The caller then prints the name as it is stored. A category we cannot
+    // parse is still a category we have to show.
+    expect(splitAsisaCategory('Global - Equity')).toBeNull()
+    expect(splitAsisaCategory('Worldwide')).toBeNull()
+    expect(splitAsisaCategory(null)).toBeNull()
+  })
+})
+
+describe('the two footer statements mirrored from the backend', () => {
+  // They exist here only so the footer can render when the catalogue request
+  // fails, which is when a page listing funds would otherwise carry no
+  // statement that the product is not licensed to advise on them. A copy is a
+  // drift risk, so the copy is checked against its source rather than trusted.
+
+  const source = readFileSync(
+    new URL('../../../backend/src/funds/copy.py', import.meta.url),
+    'utf-8',
+  )
+
+  /** One `NAME = ( "..." "..." )` constant, joined the way Python joins it. */
+  function pythonConstant(name: string): string {
+    const start = source.indexOf(`${name} = (`)
+    expect(start).toBeGreaterThan(-1)
+    const block = source.slice(start, source.indexOf('\n)', start))
+    const parts = block.match(/"((?:[^"\\]|\\.)*)"/g) ?? []
+    expect(parts.length).toBeGreaterThan(0)
+    return parts.map((part: string) => part.slice(1, -1)).join('')
+  }
+
+  it('matches FOOTER_NOT_LICENSED in backend/src/funds/copy.py', () => {
+    expect(copy.FOOTER_NOT_LICENSED).toBe(pythonConstant('FOOTER_NOT_LICENSED'))
+  })
+
+  it('matches CIS_DISCLAIMER in backend/src/funds/copy.py', () => {
+    expect(copy.CIS_DISCLAIMER).toBe(pythonConstant('CIS_DISCLAIMER'))
+  })
+})
+
+describe('the staleness thresholds mirrored from the backend', () => {
+  it('matches SOFT_STALE_DAYS and STALE_DAYS in admin_routes.py', () => {
+    // A public card cannot ask an admin endpoint what its own thresholds are,
+    // so the two numbers are written twice. If the backend's move and these do
+    // not, the page grades a sheet as current that the catalogue calls stale.
+    const source = readFileSync(
+      new URL('../../../backend/src/funds/admin_routes.py', import.meta.url),
+      'utf-8',
+    )
+    const read = (name: string) => {
+      const found = new RegExp(`^${name} = (\\d+)$`, 'm').exec(source)
+      expect(found).not.toBeNull()
+      return Number(found?.[1])
+    }
+    expect(SOFT_STALE_DAYS).toBe(read('SOFT_STALE_DAYS'))
+    expect(STALE_DAYS).toBe(read('STALE_DAYS'))
   })
 })
