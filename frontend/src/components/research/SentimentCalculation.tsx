@@ -96,9 +96,12 @@ function BlendRow({
   weightPct: number;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 font-mono text-[12px] text-brand-fg">
+    // Wraps rather than squashing: on a phone the label and the sum together are
+    // wider than the panel, and a formula broken mid-way across two lines is worse
+    // than one sitting on its own line under its label.
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[12px] text-brand-fg">
       <span className="text-forest-500">{label}</span>
-      <span className="tabular-nums">
+      <span className="tabular-nums whitespace-nowrap">
         {Math.round(score)} &times; {weightPct}% ={" "}
         <span className="font-semibold text-brand-fg">
           {fmt((score * weightPct) / 100)}
@@ -199,7 +202,7 @@ export default function SentimentCalculation({
                   return (
                     <div
                       key={t.tier}
-                      className="flex items-center justify-between gap-3 text-[12px]"
+                      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px]"
                     >
                       <span className="flex items-center gap-2">
                         <span
@@ -211,7 +214,10 @@ export default function SentimentCalculation({
                           {t.count} {t.count === 1 ? "article" : "articles"}
                         </span>
                       </span>
-                      <span className="font-mono tabular-nums text-brand-fg">
+                      {/* nowrap so the sum stays one readable formula: it is only a
+                          few characters wider than the phone panel, and left to wrap
+                          it splits after the "=" with the answer alone on line two. */}
+                      <span className="font-mono tabular-nums whitespace-nowrap text-brand-fg">
                         avg {Math.round(t.avg)} &times; {Math.round(t.sharePct)}% ={" "}
                         <span className="font-semibold">
                           {fmt(t.contribution)}
@@ -221,9 +227,9 @@ export default function SentimentCalculation({
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between gap-3 border-t border-forest-200 pt-1.5 text-[12px] font-semibold text-brand-fg">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-forest-200 pt-1.5 text-[12px] font-semibold text-brand-fg">
                 <span>News sub-score</span>
-                <span className="font-mono tabular-nums">
+                <span className="font-mono tabular-nums whitespace-nowrap">
                   {Math.round(newsSub)} / 100
                 </span>
               </div>
@@ -243,11 +249,15 @@ export default function SentimentCalculation({
               <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
                 Social sub-score
               </p>
-              <div className="flex items-center justify-between gap-3 text-[12px] font-semibold text-brand-fg">
-                <span className="font-normal text-forest-500">
+              {/* A full sentence opposite a figure. Left on one row these two shrink
+                  against each other on a phone, wrapping the sentence to four lines
+                  and splitting "62 / 100" across two. The figure takes its own line
+                  instead, and keeps it whole. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px] font-semibold text-brand-fg">
+                <span className="min-w-0 font-normal text-forest-500">
                   Engagement-weighted average of every post scored in the window
                 </span>
-                <span className="font-mono tabular-nums">
+                <span className="font-mono tabular-nums whitespace-nowrap">
                   {Math.round(socialSub)} / 100
                 </span>
               </div>
@@ -288,9 +298,9 @@ export default function SentimentCalculation({
             {/* The answer the whole panel is working towards, ruled off in the
                 signature lime rather than the same hairline as the intermediate
                 sub-totals above it. */}
-            <div className="flex items-center justify-between gap-3 border-t-2 border-lime-500 mt-1 pt-2 text-sm font-semibold text-brand-fg">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t-2 border-lime-500 mt-1 pt-2 text-sm font-semibold text-brand-fg">
               <span>Blended Score</span>
-              <span className="font-mono tabular-nums">
+              <span className="font-mono tabular-nums whitespace-nowrap">
                 {blendedShown} / 100
               </span>
             </div>

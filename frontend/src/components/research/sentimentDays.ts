@@ -6,6 +6,13 @@
 // either side converting. Local time is deliberately not used: it would slide posts
 // between buckets for anyone east or west of UTC, and a day's score would stop
 // matching the posts shown for it.
+//
+// The holiday table is keyed by New York local dates. A UTC day key and a New York
+// date are both plain calendar labels here, and a market holiday is a whole calendar
+// day rather than an instant, so "2026-11-26" means Thanksgiving to both without a
+// conversion between them.
+
+import { marketHolidayName } from "../../utils/marketHours";
 
 export function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -34,6 +41,40 @@ export function isWeekend(date: string): boolean {
   if (Number.isNaN(parsed.getTime())) return false;
   const day = parsed.getUTCDay();
   return day === 0 || day === 6;
+}
+
+/** Why the US market was shut on a day, and what to call it. */
+export type MarketClosure = {
+  kind: "weekend" | "holiday";
+  /** "Saturday", "Thanksgiving", "Independence Day (observed)". */
+  name: string;
+};
+
+const WEEKEND_NAMES: Record<number, string> = { 0: "Sunday", 6: "Saturday" };
+
+/**
+ * Why a day key's column is quiet, or null on a normal trading day.
+ *
+ * The chart's bars already washed weekends out, which answered "why is Saturday
+ * empty" but not "why is this Thursday in November empty". A holiday looks exactly
+ * like a collapse in interest otherwise, which is the same misreading the weekend
+ * band was added to prevent.
+ *
+ * Holiday is checked first. NYSE holidays falling at a weekend are observed on a
+ * neighbouring weekday so the two cannot collide in the table as written, but if a
+ * future entry ever did, the holiday is the more informative of the two answers.
+ *
+ * Years outside the holiday table return null for holidays rather than guessing;
+ * `holidaysKnownFor` is how a caller tells "trading day" from "we do not know".
+ */
+export function marketClosure(date: string): MarketClosure | null {
+  const holiday = marketHolidayName(date);
+  if (holiday) return { kind: "holiday", name: holiday };
+
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const weekendName = WEEKEND_NAMES[parsed.getUTCDay()];
+  return weekendName ? { kind: "weekend", name: weekendName } : null;
 }
 
 // The same, but naming the day when it is one the reader thinks of by name.

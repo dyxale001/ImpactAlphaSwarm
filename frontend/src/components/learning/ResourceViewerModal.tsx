@@ -1,4 +1,4 @@
-import type { LearningArticle } from "../../types/learning";
+import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const scrollbarStyles = `
@@ -31,9 +31,16 @@ const scrollbarStyles = `
 type Props = {
   article: LearningArticle | null;
   onClose: () => void;
+  onStartQuiz: (article: LearningArticle) => void;
+  quizStatus?: LearningQuizStatus;
 };
 
-export default function ArticleViewerModal({ article, onClose }: Props) {
+export default function ArticleViewerModal({
+  article,
+  onClose,
+  onStartQuiz,
+  quizStatus,
+}: Props) {
   if (!article) return null;
 
   return (
@@ -88,6 +95,35 @@ flex-col
           <div className="article-viewer-scrollbar overflow-y-auto px-6 py-7">
             <div className="mx-auto max-w-3xl space-y-8 text-brand-fg">
               <MarkdownRenderer content={article.content} />
+              <section className="space-y-3 rounded-2xl border border-brand-border/60 bg-brand-bg/70 p-5">
+                <h2 className="text-lg font-semibold text-brand-fg">
+                  {quizStatus === "COMPLETED"
+                    ? "Ready to revisit what you learned?"
+                    : "Ready to test your knowledge?"}
+                </h2>
+                {(article.quiz_question_count ?? 0) > 0 ? (
+                  <>
+                    <p className="text-sm leading-relaxed text-brand-muted-fg">
+                      {quizStatus === "COMPLETED"
+                        ? "You’ve completed this quiz. Retake it to refresh your understanding."
+                        : "Complete the quiz to check your understanding and make progress through your learning journey."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onStartQuiz(article)}
+                      className="rounded-full bg-brand-primary px-5 py-2.5 text-sm font-semibold text-brand-bg transition-opacity hover:opacity-90"
+                    >
+                      {quizStatus === "COMPLETED" ? "Retake Quiz" : "Take Quiz"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-brand-muted-fg">
+                    {article.quiz_question_count === 0
+                      ? "This article currently has no quiz questions."
+                      : "Quiz availability could not be confirmed. Please reload the Learning Centre to try again."}
+                  </p>
+                )}
+              </section>
             </div>
           </div>
         </div>

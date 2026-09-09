@@ -19,6 +19,7 @@ const ARTICLE_XP: Record<LearningDifficultyLevel, number> = {
 type LearningCentreCategoryRow = Omit<LearningCategory, "articles"> & {
   articles?: Array<
     Omit<LearningArticle, "questions"> & {
+      quiz_questions?: Array<{ count: number }>;
       questions?: Array<
         Omit<LearningQuestion, "answers"> & {
           answers?: LearningQuestion["answers"];
@@ -170,8 +171,9 @@ export class LearningCentreRepository {
           .sort((left, right) =>
             left.created_at.localeCompare(right.created_at),
           )
-          .map((article) => ({
+          .map(({ quiz_questions, ...article }) => ({
             ...article,
+            quiz_question_count: quiz_questions?.[0]?.count,
             questions: [...(article.questions ?? [])]
               .sort((left, right) => left.display_order - right.display_order)
               .map((question) => ({
@@ -190,7 +192,7 @@ export class LearningCentreRepository {
       .select(
         `
           *,
-          articles:learning_articles(*)
+          articles:learning_articles(*, quiz_questions:learning_questions(count))
         `,
       )
       .order("display_order");

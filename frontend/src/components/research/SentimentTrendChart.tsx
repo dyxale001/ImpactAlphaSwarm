@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
 import { SOCIAL_HISTORY_DAYS } from "../../data/sentimentMethodology";
-import { formatDay, isWeekend } from "./sentimentDays";
+import { formatDay, marketClosure, type MarketClosure } from "./sentimentDays";
 import { newsDaysWithData, type NewsDay } from "./newsDaily";
 
 // Score and volume share one plot: the day is the unit, and splitting it across two
@@ -65,6 +65,22 @@ const BAR_SELECTED = "#8fb08a";
 // fourth thing to measure.
 const WEEKEND_BAND = "rgba(255,255,255,0.055)";
 
+// A public holiday, washed the same way and for the same reason, but stronger.
+//
+// Both mean "the market was shut", so they are one visual idea rather than two, and a
+// holiday is not a different KIND of thing to a Saturday. It is the rarer one though,
+// and the one a reader has no other way to work out: two quiet columns every week are
+// obviously the weekend, while a dead Thursday in November explains nothing about
+// itself. The extra lift is what makes it worth a second look.
+const HOLIDAY_BAND = "rgba(255,255,255,0.11)";
+
+// The name written up the shut column. Dim enough to stay ground rather than joining
+// the series in front of it, bright enough to read against both washes.
+const CLOSED_LABEL = "rgba(255,255,255,0.42)";
+// Below this the column is too narrow to write in without the text colliding with its
+// neighbours, so the label is dropped and the tooltip carries the name alone.
+const MIN_LABEL_COLUMN = 22;
+
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
 
@@ -72,10 +88,64 @@ const MIN_DAYS_TO_PLOT = 3;
 // news pair is optional and present only when the caller passed newsDays, which is how
 // every news addition below stays invisible to callers that did not ask for one.
 type PlottedPoint = SentimentHistoryPoint & {
-  weekendBand: number;
+  closedBand: number;
+  /** Null on a trading day. Drives the wash, the label and the tooltip's badge. */
+  closure: MarketClosure | null;
   newsScore?: number | null;
   newsCount?: number;
 };
+
+// The wash behind a shut column, with the reason written up it.
+//
+// A custom shape rather than two Bar series. Two Bars on one x-axis are laid out side
+// by side, so a separate holiday series would halve the width of both and neither
+// would fill its column -- the same trap the hidden `weekend` axis below exists to
+// avoid. One series that picks its own fill per column keeps the band full width.
+//
+// The label is rotated up the column because that is the only direction with room: a
+// column is at most ~80px wide on a desktop and under 40px on a phone, while the plot
+// is ~200px tall, so "Independence Day (observed)" fits vertically and could never fit
+// across. It is drawn behind the bars and the line, which is what keeps it a watermark
+// on the ground rather than a fourth thing competing with the data.
+function ClosedBand(props: any) {
+  const { x, y, width, height, payload } = props;
+  const closure: MarketClosure | null = payload?.closure ?? null;
+  // Recharts wants an element back, never null.
+  if (!closure || !height || height <= 0) return <g />;
+
+  const centre = x + width / 2;
+  const base = y + height - 8;
+
+  return (
+    <g>
+      <Rectangle
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        stroke="none"
+        fill={closure.kind === "holiday" ? HOLIDAY_BAND : WEEKEND_BAND}
+      />
+      {width >= MIN_LABEL_COLUMN ? (
+        <text
+          x={centre}
+          y={base}
+          // Rotated about its own anchor, so the text climbs the column from the
+          // bottom regardless of how tall the plot is at this width.
+          transform={`rotate(-90, ${centre}, ${base})`}
+          textAnchor="start"
+          fontSize={10}
+          fill={CLOSED_LABEL}
+          // The column is the click target for selecting a day. Without this the
+          // label swallows the clicks that land on the letters.
+          pointerEvents="none"
+        >
+          {closure.name}
+        </text>
+      ) : null}
+    </g>
+  );
+}
 
 // One series' reading, as a row rather than a sentence.
 //
@@ -143,7 +213,7 @@ function TooltipRow({
 function TrendTooltip({ active, payload, variant = "social" }: any) {
   if (!active || !payload?.length) return null;
   const point: PlottedPoint = payload[0].payload;
-  const closed = isWeekend(point.date);
+  const closure = point.closure;
   // Undefined, not null: a day with news enabled but no articles carries null, and
   // that still earns a "no articles" line. Only an absent field means this chart has
   // no news series at all.
@@ -167,12 +237,22 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
     >
       <div className="font-semibold mb-1 flex items-center gap-1.5">
         {formatDay(point.date)}
-        {closed ? (
+        {/* Names the closure rather than only reporting one. "Market closed" left the
+            reader to work out which Saturday this was, and said nothing at all about a
+            Thursday in November. A holiday is spelled out in full; a weekend gets its
+            own day name, which is the thing a reader would otherwise be counting
+            columns to establish. */}
+        {closure ? (
           <span
-            className="font-normal rounded-full px-1.5 py-px text-[10px]"
+            className="font-normal rounded-full px-1.5 py-px text-[10px] whitespace-nowrap"
             style={{ background: "rgba(255,255,255,0.1)", color: AXIS_TEXT }}
+            title={
+              closure.kind === "holiday"
+                ? "The New York Stock Exchange does not trade on this public holiday."
+                : "The New York Stock Exchange does not trade at weekends."
+            }
           >
-            Market closed
+            {closure.name} · closed
           </span>
         ) : null}
       </div>
@@ -325,9 +405,11 @@ export function SentimentTrendChart({
   // The band is a full height value on the volume scale, so it reaches the top of the
   // plot whatever the busiest day was. Weekdays carry 0, which draws nothing.
   const plotted: PlottedPoint[] = points.map((point) => {
+    const closure = marketClosure(point.date);
     const base = {
       ...point,
-      weekendBand: isWeekend(point.date) ? volumeCeiling : 0,
+      closure,
+      closedBand: closure ? volumeCeiling : 0,
     };
     // Left off entirely rather than set to null when there is no news series, so the
     // tooltip can tell "this chart has no news" from "this day had no articles".
@@ -341,6 +423,8 @@ export function SentimentTrendChart({
       newsCount: day?.count ?? 0,
     };
   });
+
+  const hasHoliday = plotted.some((p) => p.closure?.kind === "holiday");
 
   return (
     <div>
@@ -374,12 +458,14 @@ export function SentimentTrendChart({
               <Bar
                 xAxisId="weekend"
                 yAxisId="volume"
-                dataKey="weekendBand"
-                fill={WEEKEND_BAND}
+                dataKey="closedBand"
                 isAnimationActive={false}
                 // Wide enough that the band always fills its column however the plot
                 // is resized. maxBarSize is a ceiling, not a width.
                 maxBarSize={9999}
+                // Fill and label both come from the column's own closure, so weekends
+                // and holidays share one series rather than splitting the column.
+                shape={<ClosedBand />}
               />
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -590,8 +676,23 @@ export function SentimentTrendChart({
                 border: "1px solid rgba(255,255,255,0.18)",
               }}
             />
-            Market closed
+            Weekend
           </span>
+          {/* Only when one is actually in the window. A key for a colour that is not
+              on screen is a colour the reader hunts for and never finds, and most
+              seven-day windows contain no holiday at all. */}
+          {hasHoliday ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-sm"
+                style={{
+                  background: HOLIDAY_BAND,
+                  border: "1px solid rgba(255,255,255,0.18)",
+                }}
+              />
+              Public holiday
+            </span>
+          ) : null}
           {/* What a click actually does differs by page: the source pages open that
               day's list, the sentiment tab opens its written summary. The chart cannot
               know which, and a hint that promises the wrong thing is worse than none,

@@ -44,11 +44,13 @@ export async function fetchUserProfileData(userId: string) {
     profileData = newProfile;
   }
 
-  const { data: analysisData } = await supabase
+  const { data: analysisData, error: analysisError } = await supabase
     .from("user_analysis")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (analysisError) return { error: analysisError };
 
   return {
     profile: (profileData as UserProfile) || null,

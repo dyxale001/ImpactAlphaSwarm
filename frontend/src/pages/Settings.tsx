@@ -1,10 +1,12 @@
 import { useAuthStore } from "../store/authStore"
 import { useNavigate } from "react-router-dom"
+import { supabase } from "../lib/supabase"
 import { useUserSettings } from "../hooks/useUserSettings"
 import ChangePasswordSection from "../components/ChangePasswordSection"
 import InvestmentPreferencesSection from "../components/InvestmentPreferencesSection"
 import DeactivateAccountSection from "../components/DeactivateAccountSection"
 import ProfileAnswersSection from "../components/settings/ProfileAnswersSection"
+import DashboardPreferencesSection from "../components/DashboardPreferencesSection"
 
 export default function SettingsPage() {
   const { setSession } = useAuthStore()
@@ -27,7 +29,15 @@ export default function SettingsPage() {
     email,
   } = useUserSettings()
 
-  const handleSignOut = () => {
+  // setSession(null) alone only empties this tab's state: the Supabase token
+  // stays in storage and the next load signs straight back in. Clearing both is
+  // what the admin pages and the dashboard banner do.
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      /* leaving anyway */
+    }
     setSession(null)
     navigate("/", { replace: true })
   }
@@ -48,7 +58,7 @@ export default function SettingsPage() {
         </div>
         <button
           type="button"
-          onClick={handleSignOut}
+          onClick={() => void handleSignOut()}
           className="self-start shrink-0 whitespace-nowrap px-4 py-2 rounded-full bg-danger/30 border border-danger hover:bg-danger hover:text-white text-semantic-danger text-sm transition-colors"
         >
           Sign out
@@ -147,6 +157,9 @@ export default function SettingsPage() {
 
       {/* ── The answers the profile is derived from ──────── */}
       <ProfileAnswersSection />
+
+      {/* ── Dashboard ────────────────────────────────────── */}
+      <DashboardPreferencesSection />
 
     </div>
   )

@@ -16,9 +16,7 @@ export function useAuth() {
         if (event === 'SIGNED_OUT') setRecovery(false)
         setSession(session)
         if (session?.user) {
-          fetchProfile(session.user.id)
-        } else {
-          useAuthStore.setState({ profile: null })
+          void fetchProfile(session.user.id)
         }
       }
     )

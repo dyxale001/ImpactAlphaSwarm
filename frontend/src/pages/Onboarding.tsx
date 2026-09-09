@@ -36,7 +36,12 @@ const STEP_EYEBROWS = [
   'Step 03 of 04 · Assessment',
   'Step 04 of 04 · Profile',
 ]
-const STEP_HEADS = ['How Do You Like to Invest?', 'What Do You Already Follow?', 'Your Risk Profile', 'Your Profile Is Ready']
+const STEP_HEADS = [
+  'How Do You Like to Invest?',
+  'What Do You Already Follow?',
+  'Your Risk Profile',
+  'Your Profile Is Ready',
+]
 const STEP_LEADS = [
   'Pick the style that sounds most like you, adjustable any time.',
   "Select companies you recognise. We'll suggest sectors and can start your watchlist.",

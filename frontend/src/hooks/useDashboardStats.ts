@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import { isRecentlyDiscovered } from "../utils/discovery";
 import type { ConvergenceState } from "../data/signalCopy";
+import {
+  getAnalysisExecutionIdentity,
+  type AnalysisProgress,
+} from "../types/analysisLifecycle";
+import { getStatus } from "../services/api/analysis";
 
 export interface AssetRecommendation {
   assetId: string;
@@ -59,8 +64,23 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
   const [latestRunCreatedAt, setLatestRunCreatedAt] = useState<string | null>(
     null,
   );
+  const [latestRunId, setLatestRunId] = useState<string | null>(null);
+  const [latestRunExecutionIdentity, setLatestRunExecutionIdentity] = useState<
+    string | null
+  >(null);
+  const [isRunComplete, setIsRunComplete] = useState(false);
   const [isRunInProgress, setIsRunInProgress] = useState(false);
+  const [analysisProgress, setAnalysisProgress] =
+    useState<AnalysisProgress | null>(null);
+  const [analysisProgressRunId, setAnalysisProgressRunId] = useState<
+    string | null
+  >(null);
+  const [
+    analysisProgressExecutionIdentity,
+    setAnalysisProgressExecutionIdentity,
+  ] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const terminalRunHandled = useRef<string | null>(null);
 
   const fetchRecommendations = useCallback(async () => {
     try {
@@ -69,6 +89,11 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
 
       if (!profile?.id) {
         setRecs([]);
+        setLatestRunId(null);
+        setLatestRunExecutionIdentity(null);
+        setAnalysisProgress(null);
+        setAnalysisProgressRunId(null);
+        setAnalysisProgressExecutionIdentity(null);
         setLatestRunCreatedAt(null);
         setRecommendationError(
           "Unable to load dashboard data until your profile is available.",
@@ -90,16 +115,43 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
       }
 
       const latestRunId = userLatestRun?.id ?? null;
+      const executionIdentity = userLatestRun
+        ? getAnalysisExecutionIdentity(
+            userLatestRun.id,
+            userLatestRun.created_at,
+          )
+        : null;
+      setLatestRunId(latestRunId);
+      setLatestRunExecutionIdentity(executionIdentity);
       setLatestRunCreatedAt(userLatestRun?.created_at ?? null);
       setIsRunInProgress(userLatestRun?.status === "running");
+      setIsRunComplete(userLatestRun?.status === "complete");
+      if (userLatestRun?.status !== "running") {
+        setAnalysisProgress(null);
+        setAnalysisProgressRunId(null);
+        setAnalysisProgressExecutionIdentity(null);
+      }
 
       if (userLatestRun?.status === "running") {
         setRecommendationError(null);
         return;
       }
 
+      if (userLatestRun?.status === "failed") {
+        setRecs([]);
+        setRecommendationError(
+          "Your latest analysis could not be completed. You can try a new analysis.",
+        );
+        return;
+      }
+
       if (!latestRunId) {
         setRecs([]);
+        setLatestRunId(null);
+        setLatestRunExecutionIdentity(null);
+        setAnalysisProgress(null);
+        setAnalysisProgressRunId(null);
+        setAnalysisProgressExecutionIdentity(null);
         setLatestRunCreatedAt(null);
         setRecommendationError(
           "No AI runs are associated with your account yet.",
@@ -193,18 +245,21 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
             // and never cleared, so testing it alone kept the badge on names the
             // agent surfaced months ago (MU, GOOG) as though they were fresh.
             isDiscovered: isRecentlyDiscovered(asset ?? {}),
-            discoverySources: (asset?.discovery_sources as string[] | null) ?? null,
+            discoverySources:
+              (asset?.discovery_sources as string[] | null) ?? null,
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,
             convergence: rec.convergence ?? null,
-            convergenceState: (rec.convergence_state as ConvergenceState) ?? null,
+            convergenceState:
+              (rec.convergence_state as ConvergenceState) ?? null,
             dataSufficiency: rec.data_sufficiency ?? null,
             profileFit: rec.profile_fit ?? null,
             quantLean: rec.quant_lean ?? null,
             quantState: rec.quant_state ?? null,
             // Only treat the row as scorecard-ready when the ordering factors are
             // actually present — legacy rows must fall back, not render blanks.
-            hasSignalTerms: rec.convergence_state != null && rec.signal_strength != null,
+            hasSignalTerms:
+              rec.convergence_state != null && rec.signal_strength != null,
           };
         },
       );
@@ -226,14 +281,43 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
   }, [fetchRecommendations]);
 
   useEffect(() => {
-    if (!profile?.id || !isRunInProgress) return;
+    if (!isRunInProgress || !latestRunId) return;
 
-    const interval = window.setInterval(() => {
-      void fetchRecommendations();
-    }, 3000);
+    let cancelled = false;
+    const fetchProgress = () => {
+      void getStatus(latestRunId)
+        .then((status) => {
+          const executionIdentity = getAnalysisExecutionIdentity(
+            status.id,
+            status.created_at,
+          );
+          if (!cancelled && executionIdentity === latestRunExecutionIdentity) {
+            setIsRunInProgress(status.status === "running");
+            setIsRunComplete(status.status === "complete");
+            setAnalysisProgress(status.progress);
+            setAnalysisProgressRunId(status.id);
+            setAnalysisProgressExecutionIdentity(executionIdentity);
+            if (
+              status.status !== "running" &&
+              terminalRunHandled.current !== executionIdentity
+            ) {
+              terminalRunHandled.current = executionIdentity;
+              void fetchRecommendations();
+            }
+          }
+        })
+        .catch(() => {
+          // Recommendation status remains the authoritative loading state.
+        });
+    };
 
-    return () => window.clearInterval(interval);
-  }, [profile?.id, isRunInProgress, fetchRecommendations]);
+    fetchProgress();
+    const interval = window.setInterval(fetchProgress, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRunInProgress, latestRunExecutionIdentity, latestRunId]);
 
   // Derived State
   const searchedRecs = recs.filter(
@@ -284,6 +368,12 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
     sparkPoints,
     isLoadingRecs,
     isRunInProgress,
+    analysisProgress:
+      latestRunId === analysisProgressRunId &&
+      latestRunExecutionIdentity === analysisProgressExecutionIdentity
+        ? analysisProgress
+        : null,
+    isRunComplete,
     recommendationError,
     latestRunCreatedAt,
     refreshRecommendations: fetchRecommendations,

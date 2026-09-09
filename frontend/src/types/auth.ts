@@ -17,6 +17,11 @@ export interface UserAnalysis {
   // No longer collected at onboarding — present only on legacy rows
   capital?: number | string | null;
   risk_tolerance: string;
+  /** The personalised dashboard: which widgets, in what order, at what size.
+   *  Free-form jsonb, so it is parsed rather than trusted (see
+   *  dashboard/layoutSchema.ts). Null means the user has never set one up, which
+   *  is what shows them the starter-deck picker. */
+  dashboard_layout?: unknown;
 
   is_active: boolean;
   created_at?: string;
