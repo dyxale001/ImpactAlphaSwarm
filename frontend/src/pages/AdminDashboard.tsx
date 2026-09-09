@@ -15,10 +15,10 @@ import {
   formatNumberWithSpaces,
 } from "../utils/stringFormatters";
 import { Link, useNavigate } from "react-router-dom";
+import AdminTabs from "../components/admin/AdminTabs";
 import { useAuthStore } from "../store/authStore";
 import { supabase } from "../lib/supabase";
 import AdminDashboardSkeleton from "../components/admin/AdminDashboardSkeleton";
-import { FUNDS_ENABLED } from "../utils/fundsFlags";
 
 export default function AdminDashboard() {
   const {
@@ -176,50 +176,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Learn-centre navigation tabs */}
-        <div className="flex flex-wrap gap-3">
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
-          >
-            Users
-          </Link>
-          <Link
-            to="/admin/learning-categories"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Categories
-          </Link>
-          <Link
-            to="/admin/learning-articles"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Articles
-          </Link>
-          <Link
-            to="/admin/learning-questions"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Questions &amp; Answers
-          </Link>
-          <Link
-            to="/admin/badges"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Badges
-          </Link>
-          {/* Gated on the same flag as the route it points at: with the feature
-              off that route is not registered, so an ungated link would send an
-              admin to the redirect instead of a page. */}
-          {FUNDS_ENABLED && (
-            <Link
-              to="/admin/funds"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-            >
-              Funds
-            </Link>
-          )}
-        </div>
+        <AdminTabs />
 
         {/* Search bar */}
         <div className="relative">
