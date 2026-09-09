@@ -1,5 +1,9 @@
 """The fund houses' risk-profile indicator, normalised to 1-5.
 
+One exception to "normalised" is worth reading before the rest: a seven-step
+scale is CONVERTED here, and that is arithmetic rather than a lookup. See
+`_SEVEN_STEP_TO_FIVE`.
+
 Every Minimum Disclosure Document carries a risk profile indicator, and no two
 managers word it the same way: one prints a five-step scale from Low to High,
 another says simply "Medium", a third omits it. The ceiling rule needs one
@@ -19,6 +23,7 @@ add a name without adding a seam.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # The five published steps, in order. The words are the ones fund houses print.
@@ -77,6 +82,49 @@ _RISK_ALIASES: dict[str, int] = {
     "aggressive": 5,
 }
 
+# ── a seven-step scale, converted ───────────────────────────────────────────
+# Ninety One prints a SEVEN-step scale as numbered boxes, 1 to 7, with the
+# applicable step outlined and no words anywhere near it. Nine of ten sheets in
+# the September 2026 batch appeared to publish no indicator when searched as
+# text; looking at the pages showed most of them do, this one included.
+#
+# **This mapping is arithmetic of ours, not a word the manager printed**, which
+# makes it the one place in this module that computes rather than looks up. It
+# is here on an explicit decision (2026-09-09) rather than by drift, and the
+# honest mitigation is that `risk_indicator_raw` keeps what the sheet showed —
+# "4 of 7" — so the page quotes the manager and only the ceiling comparison uses
+# the converted number.
+#
+# Converted by position rather than proportionally rounded, so the ends stay the
+# ends: a fund at the top of a seven-step scale must not land mid-scale on a
+# five-step one.
+_SEVEN_STEP_TO_FIVE: dict[int, int] = {1: 1, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 5}
+
+#: "4 of 7", "4/7", "4 out of 7". Matched before the separator collapsing below,
+#: which would otherwise turn "4/7" into "4 to 7" and lose it.
+_OUT_OF_SEVEN = re.compile(r"^(\d)\s*(?:/|of|out of)\s*7$")
+
+#: "2 of 5", "2/5". A FIVE-step scale needs no conversion at all — this scale
+#: has five steps, so position N is level N. Recognised because a manager may
+#: draw the steps and label only the ends: Curate labels boxes 1, 3 and 5 "Low
+#: risk", "Medium" and "High risk", so a fund on step 2 has a published rating
+#: and no printed word for it.
+#:
+#: Deliberately anchored to 5 and 7 rather than any denominator. Coronation
+#: prints "6/10" beside the word "Moderate"; the word is the rating there, and
+#: running its position through a table would invent a step it never published.
+_OUT_OF_FIVE = re.compile(r"^([1-5])\s*(?:/|of|out of)\s*5$")
+
+
+def from_seven_step(step: Any) -> int | None:
+    """A step on a seven-step scale, as a level on ours. None if out of range."""
+    try:
+        position = int(step)
+    except (TypeError, ValueError):
+        return None
+    return _SEVEN_STEP_TO_FIVE.get(position)
+
+
 # Words that decorate a label without changing it. Sheets print "Moderate - High
 # Risk" as a heading and abbreviate the scale itself to "Mod-High"; both are the
 # same rating and neither should fall through as unreadable.
@@ -124,6 +172,17 @@ def normalize(value: Any) -> int | None:
         return None
     if not isinstance(value, str):
         return None
+
+    # Before collapsing, because "/" becomes " to " below.
+    flat = " ".join(value.strip().casefold().split())
+    seven = _OUT_OF_SEVEN.match(flat)
+    if seven:
+        return from_seven_step(seven.group(1))
+    five = _OUT_OF_FIVE.match(flat)
+    if five:
+        level = int(five.group(1))
+        return level if level in RISK_SCALE else None
+
     collapsed = _collapse(value)
     if collapsed in _ABSENT:
         return None

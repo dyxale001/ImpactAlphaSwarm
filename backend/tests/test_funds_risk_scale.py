@@ -26,6 +26,7 @@ from src.funds.risk_scale import (  # noqa: E402
     CEILINGS,
     RISK_SCALE,
     ceiling_for,
+    from_seven_step,
     label_for,
     normalize,
     within_ceiling,
@@ -87,11 +88,20 @@ class TestNormalisingPublishedLabels:
     def test_an_absent_indicator_is_none(self, raw):
         assert normalize(raw) is None
 
-    @pytest.mark.parametrize("raw", ["catastrophic", "level 7", "spicy", "moderate-ish", "3 of 5"])
+    @pytest.mark.parametrize("raw", ["catastrophic", "level 7", "spicy", "moderate-ish", "2 of 6"])
     def test_an_unrecognised_wording_is_none_not_a_guess(self, raw):
         # A sheet whose wording we have never seen must not be forced onto the
         # scale. The fund stays browsable and says its manager publishes no
         # indicator we can read, which is true and checkable.
+        #
+        # "3 of 5" was in this list until 2026-09-09 and has moved to
+        # TestAFiveStepScale. It was here as an example of a wording nobody had
+        # seen, next to "spicy" — then Curate's sheet turned up printing exactly
+        # that, five drawn boxes with only the ends labelled. A five-step
+        # position needs no conversion to reach a five-step scale, and
+        # `normalize(3)` already returns 3, so recognising the string form only
+        # makes it agree with the numeric form. "2 of 6" takes its place: an
+        # unseen denominator still must not be forced.
         assert normalize(raw) is None
 
     @pytest.mark.parametrize("raw", [None, [], {}, object(), True, False])
@@ -109,6 +119,125 @@ class TestNormalisingPublishedLabels:
     @pytest.mark.parametrize("raw", [0, 6, -1, 99, 2.5])
     def test_a_number_off_the_scale_is_none(self, raw):
         assert normalize(raw) is None
+
+
+class TestASevenStepScale:
+    """Ninety One prints seven numbered boxes and no words at all.
+
+    This is the module's one conversion, so it gets its own tests. Two things
+    are being defended: that the ends stay the ends, and that the surrounding
+    behaviour did not loosen to accommodate it.
+
+    Worth recording how it was found. Searching the text layer of ten sheets in
+    the September 2026 batch reported "no risk rating" for nine of them, and
+    that was wrong for most — Ninety One draws numbered boxes, Coronation draws
+    a small dial. Only looking at the rendered pages showed the ratings were
+    there, which is the Satrix 40 lesson holding a second time.
+    """
+
+    @pytest.mark.parametrize(
+        "printed,expected",
+        [
+            ("1 of 7", 1),
+            ("2 of 7", 1),
+            ("3 of 7", 2),
+            ("4 of 7", 3),
+            ("5 of 7", 4),
+            ("6 of 7", 5),
+            ("7 of 7", 5),
+        ],
+    )
+    def test_each_step_converts(self, printed, expected):
+        assert normalize(printed) == expected
+
+    def test_the_ends_stay_the_ends(self):
+        """A fund at the top of seven steps must not land mid-scale on five.
+
+        Proportional rounding would put 7/7 at 5 and 1/7 at 1 too, but it would
+        also put 4/7 at 3 by arithmetic that happens to agree — the reason to
+        state the table explicitly is that the ends are the part that matters
+        for a ceiling comparison.
+        """
+        assert normalize("1 of 7") == min(RISK_SCALE)
+        assert normalize("7 of 7") == max(RISK_SCALE)
+
+    @pytest.mark.parametrize("printed", ["4/7", "4 out of 7", "4 OF 7", " 4 of 7 "])
+    def test_the_ways_it_is_written(self, printed):
+        """`/` in particular, which the separator collapsing would eat."""
+        assert normalize(printed) == 3
+
+    @pytest.mark.parametrize("printed", ["0 of 7", "8 of 7", "9 of 7"])
+    def test_a_step_off_the_scale_is_not_a_rating(self, printed):
+        assert normalize(printed) is None
+
+    def test_another_denominator_is_not_assumed_to_be_seven(self):
+        """Only the seven-step scale is converted, because only it was decided.
+
+        A sheet printing "4 of 10" — Coronation prints "6/10" beside the word
+        "Moderate" — must not be quietly run through the seven-step table. The
+        word is what Coronation publishes and the word is what gets read.
+        """
+        assert normalize("4 of 10") is None
+        assert normalize("6/10") is None
+        # Coronation's own label still reads, because it is a word.
+        assert normalize("Moderate") == 3
+
+    def test_the_helper_is_usable_on_its_own(self):
+        assert from_seven_step(4) == 3
+        assert from_seven_step("4") == 3
+        assert from_seven_step(0) is None
+        assert from_seven_step(None) is None
+        assert from_seven_step("not a number") is None
+
+    def test_a_converted_level_is_still_only_half_the_record(self):
+        """The raw label is what the page shows, and that is the mitigation.
+
+        Converting is a computation this module otherwise refuses to do. It is
+        tolerable only because `risk_indicator_raw` keeps what the sheet showed,
+        so a reader sees "4 of 7" as printed and the converted number is used
+        for the ceiling comparison alone. If that ever stops being true, this
+        conversion should go.
+        """
+        assert label_for(normalize("4 of 7")) == "Moderate"
+        # And a fund with no indicator at all still never clears a ceiling.
+        assert normalize("") is None
+        assert not within_ceiling(None, "Aggressive")
+
+
+class TestAFiveStepScale:
+    """A five-step scale needs no conversion: position N is level N.
+
+    Recognised because a manager may draw five boxes and label only the ends.
+    Curate labels boxes 1, 3 and 5 "Low risk", "Medium" and "High risk", so a
+    fund sitting on box 2 has a published rating and no printed word for it —
+    which is exactly the case that read as "publishes nothing" before anyone
+    looked at the picture.
+    """
+
+    @pytest.mark.parametrize("printed,expected", [(f"{n} of 5", n) for n in range(1, 6)])
+    def test_each_step_is_itself(self, printed, expected):
+        assert normalize(printed) == expected
+
+    @pytest.mark.parametrize("printed", ["2/5", "2 out of 5", "2 OF 5"])
+    def test_the_ways_it_is_written(self, printed):
+        assert normalize(printed) == 2
+
+    @pytest.mark.parametrize("printed", ["0 of 5", "6 of 5", "9 of 5"])
+    def test_a_step_off_the_scale_is_not_a_rating(self, printed):
+        assert normalize(printed) is None
+
+    def test_it_does_not_swallow_other_denominators(self):
+        """INVARIANT: only 5 and 7 are recognised, and for different reasons.
+
+        Five is an identity, seven is a conversion this project decided on.
+        Coronation prints "6/10" beside the word "Moderate": the word is the
+        rating, and running the position through any table would invent a step
+        the manager never published. So a tenth-scale must stay unreadable.
+        """
+        assert normalize("6/10") is None
+        assert normalize("4 of 10") is None
+        assert normalize("2 of 6") is None
+        assert normalize("Moderate") == 3
 
 
 class TestScaleAndCeilings:

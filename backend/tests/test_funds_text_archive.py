@@ -209,17 +209,32 @@ class TestTheHashIgnoresWhereCopiesAreKept:
             ) != FundRepository.transcription_hash(isin, before):
                 rekeyed.append(isin)
 
-        # The four whose Minimum Disclosure Document is readable locally.
-        assert sorted(rekeyed) == sorted(
-            ["ZAE000027108", "ZAE000188538", "ZAE000240123", "ZAE000240131"]
+        # Derived rather than listed. The invariant is that a row re-keys if and
+        # only if it actually carries one of the new columns — which is the bug
+        # this defends: migration 025 added fourteen headers, blank for the funds
+        # nobody could read, and hashing those blanks re-keyed every row and
+        # would have written a "correction" per fund, permanently.
+        #
+        # It was a hard-coded list of the four readable sheets until 2026-09-09,
+        # when seven more funds were transcribed and it started failing for the
+        # right reason: more rows have data now.
+        expected = sorted(
+            row["isin"]
+            for row in rows
+            if any(
+                row.get(column) not in (None, "", {}, [])
+                for column in new_columns
+            )
         )
+        assert sorted(rekeyed) == expected
+        assert len(expected) >= 4, "no row carries the common core - parsing broke"
 
     def test_every_seeded_row_keeps_its_hash_whether_or_not_it_is_archived(self):
         """Checked across the real seed, because the cost of being wrong is 19 duplicates."""
         parse = loader().parse_snapshot
         with SNAPSHOTS_CSV.open(newline="", encoding="utf-8") as handle:
             rows = [parse(row) for row in csv.DictReader(handle)]
-        assert len(rows) == 19
+        assert len(rows) >= 19, 'the seed shrank unexpectedly'
         for row in rows:
             isin = dict(row).pop("isin")
             base = FundRepository.transcription_hash(isin, {k: v for k, v in row.items() if k != "isin"})

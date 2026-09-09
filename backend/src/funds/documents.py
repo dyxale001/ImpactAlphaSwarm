@@ -42,7 +42,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 import httpx
 
 #: Hosts a seeded fact sheet is fetched from. Every one of these publishes the
-#: documents the catalogue's 19 funds were transcribed from: `bcis.co.za` is
+#: documents the catalogue's funds were transcribed from: `bcis.co.za` is
 #: FundRock's, which issues on one template for around thirty boutiques;
 #: `satrix.co.za` is Satrix's own; `resources.easyequities.co.za` is where the
 #: platform re-hosts a manager's sheet, which is the copy a user following a
@@ -56,6 +56,17 @@ ALLOWED_HOSTS: tuple[str, ...] = (
     "satrix.co.za",
     "www.satrix.co.za",
     "resources.easyequities.co.za",
+    # Added 2026-09-09 with the Coronation, Discovery and Momentum funds. The
+    # list has to cover the catalogue it exists to archive, and
+    # `test_every_seeded_sheet_is_still_reachable` fails when it does not —
+    # which is how these three arrived rather than being noticed mid-run.
+    "coronation.com",
+    "www.coronation.com",
+    "discovery.co.za",
+    "www.discovery.co.za",
+    "wealth.momentum.co.za",
+    "allangray.co.za",
+    "www.allangray.co.za",
 )
 
 # Generous for a fact sheet (they run 100KB-1MB) and far below anything that
