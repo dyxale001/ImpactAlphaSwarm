@@ -441,6 +441,73 @@ class TestTheOutcome:
         assert first.rules_applied == second.rules_applied
 
 
+class TestWhatCanLowerTheAppliedBracket:
+    """INVARIANT: only the horizon and an emergency fund lower `effective`.
+
+    The funds page states the applied rating and, when it sits below what the
+    risk answers scored to, names the cause. It works that out from the bracket
+    alone — an emergency-fund purpose, or else the horizon — because those are
+    the only two rules that can move it.
+
+    That is a client reading a rule set it cannot see, so the pair is held
+    complete here rather than trusted. A third narrowing rule would make the
+    page attribute its effect to the horizon, silently and wrongly.
+    """
+
+    def test_the_horizon_lowers_it(self, catalogue):
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Aggressive", horizon_target_year=TODAY.year + 1), catalogue
+        )
+        assert outcome.bracket.effective != "Aggressive"
+
+    def test_an_emergency_fund_lowers_it(self, catalogue):
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Aggressive", horizon_target_year=TODAY.year + 9, purpose="emergency_fund"),
+            catalogue,
+        )
+        assert outcome.bracket.effective == "Conservative"
+
+    @pytest.mark.parametrize("purpose", ["growth", "goal", "income"])
+    def test_no_other_purpose_lowers_it(self, purpose, catalogue):
+        """`income` narrows the CATEGORIES and must not touch the bracket.
+
+        This is the case that would break the page's attribution: an income
+        purpose that quietly lowered `effective` would be reported to the reader
+        as their horizon having done it.
+        """
+        outcome = FundMatcher(clock=lambda: TODAY).match(
+            profile("Aggressive", horizon_target_year=TODAY.year + 9, purpose=purpose),
+            catalogue,
+        )
+        assert outcome.bracket.effective == "Aggressive"
+
+    def test_nothing_lowers_it_when_only_the_risk_answers_exist(self, catalogue):
+        outcome = FundMatcher(clock=lambda: TODAY).match(profile("Aggressive"), catalogue)
+        assert outcome.bracket.effective == "Aggressive"
+
+    def test_only_two_rules_can_change_the_applied_bracket(self, catalogue):
+        """Runs each rule alone and checks which ones move `effective`.
+
+        The page's attribution is a two-way branch. If this finds a third rule
+        that moves the bracket, the branch is wrong and the page needs the
+        server to say why instead of working it out.
+        """
+        movers = []
+        for rule in DEFAULT_RULES:
+            for goals in (
+                {"horizon_target_year": TODAY.year + 1},
+                {"horizon_target_year": TODAY.year + 9, "purpose": "emergency_fund"},
+                {"horizon_target_year": TODAY.year + 9, "purpose": "income"},
+                {"horizon_target_year": TODAY.year + 9, "purpose": "growth"},
+            ):
+                outcome = FundMatcher(rules=(rule,), clock=lambda: TODAY).match(
+                    profile("Aggressive", **goals), catalogue
+                )
+                if outcome.bracket.effective != "Aggressive":
+                    movers.append(type(rule).__name__)
+        assert sorted(set(movers)) == ["HorizonRule", "PurposeRule"], sorted(set(movers))
+
+
 class TestTheChainItself:
     def test_the_default_chain_is_the_five_rules_in_order(self):
         assert [type(rule).__name__ for rule in DEFAULT_RULES] == [

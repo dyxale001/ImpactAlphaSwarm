@@ -114,6 +114,28 @@ export const MATCH_INPUTS_NARROWED =
 
 export const MATCH_INPUTS_ACTION = "Change these answers";
 
+/** The applied rating, which is the number that actually decides the list.
+ *
+ *  Emphasised over the answered one because they are not always the same and
+ *  the difference is the page's most confusing moment: a reader who answered
+ *  Aggressive and sees cautious funds needs the applied rating to be the loud
+ *  one, with the drop shown rather than left to be inferred. */
+export const MATCH_APPLIED_LABEL = "Applied to this list";
+
+export const MATCH_ANSWERED_LABEL = "Your risk answers score";
+
+export const MATCH_APPLIED_UNCHANGED = "Your risk answers are applied as they scored.";
+
+/** Only two things can lower the applied rating, and they are named separately
+ *  because the reason is more useful than the fact. `test_only_two_rules_can
+ *  _change_the_applied_bracket` on the backend is what keeps this pair
+ *  complete. */
+export const MATCH_NARROWED_BY_HORIZON =
+  "Lowered from {answered} because you need this money in {band}. A shorter horizon narrows which fund categories are in play, whatever risk you told us you can take.";
+
+export const MATCH_NARROWED_BY_PURPOSE =
+  "Lowered from {answered} because this money is an emergency fund. Money you may need at short notice is a question about access before it is one about risk, so the categories drop to money market and short term.";
+
 export const COMPLETE_PROFILE_TITLE = "Two more answers sharpens this";
 
 export const COMPLETE_PROFILE_LEAD =
@@ -260,6 +282,11 @@ export function allStrings(): string[] {
     MATCH_INPUT_UNANSWERED,
     MATCH_INPUTS_NARROWED,
     MATCH_INPUTS_ACTION,
+    MATCH_APPLIED_LABEL,
+    MATCH_ANSWERED_LABEL,
+    MATCH_APPLIED_UNCHANGED,
+    MATCH_NARROWED_BY_HORIZON,
+    MATCH_NARROWED_BY_PURPOSE,
     COMPLETE_PROFILE_TITLE,
     COMPLETE_PROFILE_LEAD,
     COMPLETE_PROFILE_ACTION,
