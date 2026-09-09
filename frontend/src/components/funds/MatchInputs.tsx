@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import type { CatalogueBracket } from "../../services/api/fundCatalogue";
 import { BAND_WORDS, PURPOSE_WORDS, type GoalPurpose, type HorizonBand } from "../../utils/goals";
 import {
@@ -28,11 +28,16 @@ import {
  *
  * ## Why it is laid out in two columns
  *
- * One consequence on the left, the answers behind it on the right. The first
+ * One outcome on the left, the three answers behind it on the right. The first
  * version stacked four blocks down the card with a paragraph wedged between the
  * rating and the answers, which made it tall, put the explanation before the
  * thing it explained, and nested a panel inside a panel. Cause and effect now
  * sit side by side and the card is about half the height.
+ *
+ * The answered rating is a row in that list rather than a struck-through value
+ * beside the applied one. Striking it out read as a correction of something the
+ * reader got wrong, when it is simply one of the three answers the filter used —
+ * and it belongs with the other two.
  *
  * The reason sentence deliberately does not repeat the horizon band or the
  * purpose: both are labelled values a few centimetres to the right, and saying
@@ -90,32 +95,15 @@ export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) 
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-accent">
             {MATCH_APPLIED_LABEL}
           </p>
-          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            {narrowed && (
-              <>
-                <span className="text-base font-semibold text-brand-secondary/45 line-through decoration-brand-secondary/35">
-                  {bracket.risk_tolerance}
-                </span>
-                <ArrowRight
-                  className="h-3.5 w-3.5 shrink-0 self-center text-brand-secondary/40"
-                  aria-hidden="true"
-                />
-              </>
-            )}
-            <span className="text-2xl font-bold leading-none text-brand-primary lg:text-[28px]">
-              {bracket.effective}
-            </span>
-          </div>
-          {narrowed && (
-            <p className="mt-0.5 text-[10px] uppercase tracking-[0.06em] text-brand-secondary/50">
-              {MATCH_ANSWERED_LABEL}
-            </p>
-          )}
+          <p className="mt-0.5 text-2xl font-bold leading-none text-brand-primary lg:text-[28px]">
+            {bracket.effective}
+          </p>
           <p className="mt-2 text-[11px] leading-relaxed text-brand-secondary">{because}</p>
         </div>
 
         {/* ── The answers behind it ── */}
         <dl className="space-y-2 self-start lg:border-l lg:border-brand-border/40 lg:pl-8">
+          <Row label={MATCH_ANSWERED_LABEL} value={bracket.risk_tolerance} />
           <Row label={MATCH_INPUT_HORIZON_LABEL} value={horizon} />
           <Row label={MATCH_INPUT_PURPOSE_LABEL} value={purpose} />
           <div className="border-t border-brand-border/40 pt-2">
