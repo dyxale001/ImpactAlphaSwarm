@@ -122,6 +122,14 @@ export const VEHICLE_LABEL: Record<string, string> = {
 
 export const DETAIL_BACK = "Back to funds";
 
+/** Shown only to an admin, linking this fund to the screen that edits it.
+ *
+ *  Here rather than inline in the page because every other string on the fund
+ *  detail page comes from this catalogue and is scanned for advice language.
+ *  This one is staff-facing and could not fail that scan, but a reader looking
+ *  for where the page's words live should find all of them in one file. */
+export const DETAIL_ADMIN_EDIT = "Edit this fund";
+
 export const DETAIL_NOT_FOUND_TITLE = "That fund is not in the catalogue";
 
 export const DETAIL_NOT_FOUND_LEAD =
@@ -224,6 +232,7 @@ export function allStrings(): string[] {
     TRACKER_BADGE,
     FACT_SHEET_PAGE_ACTION,
     DETAIL_BACK,
+    DETAIL_ADMIN_EDIT,
     DETAIL_NOT_FOUND_TITLE,
     DETAIL_NOT_FOUND_LEAD,
     DETAIL_OBJECTIVE_TITLE,

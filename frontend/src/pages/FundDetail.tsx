@@ -1,5 +1,6 @@
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Pencil } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import { useAuthStore } from "../store/authStore";
 import RiskScale from "../components/funds/RiskScale";
 import FundsSkeleton from "../components/funds/FundsSkeleton";
 import FundPriceChart from "../components/funds/FundPriceChart";
@@ -13,6 +14,7 @@ import {
   COST_LABEL,
   COST_TER_LABEL,
   DETAIL_BACK,
+  DETAIL_ADMIN_EDIT,
   DETAIL_AMF_LABEL,
   DETAIL_AMF_NOTE,
   DETAIL_BENCHMARK_LABEL,
@@ -82,6 +84,11 @@ import {
 export default function FundDetailPage() {
   const { fundId } = useParams<{ fundId: string }>();
   const { fund, isLoading, error, notFound } = useFundDetail(fundId);
+  // The same check `AdminRoute` makes, so one place decides who is an admin.
+  // This only reveals a link: the screen it points at is itself behind
+  // `AdminRoute`, and the write behind that is behind the backend's admin
+  // guard, so a non-admin who guesses the URL still gets nowhere.
+  const isAdmin = useAuthStore((state) => state.profile?.role) === "admin";
   // Asked for only when the fund is exchange-traded. The vehicle is the cheap
   // check the client can make; the backend's `listed` flag is the authority,
   // and the chart renders nothing when it is false — so a mislabelled fund
@@ -164,6 +171,15 @@ export default function FundDetailPage() {
             </span>
           )}
           {fund.available_on && <span>{fund.available_on}</span>}
+          {isAdmin && (
+            <Link
+              to={`/admin/funds/${fundId}`}
+              className="inline-flex items-center gap-1 font-semibold text-brand-primary hover:underline"
+            >
+              <Pencil className="h-3 w-3" />
+              {DETAIL_ADMIN_EDIT}
+            </Link>
+          )}
           {factSheetUrl && (
             <a
               href={factSheetUrl}

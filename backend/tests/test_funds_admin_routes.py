@@ -401,6 +401,95 @@ class TestAddingAFundAndItsFirstSheetTogether:
         assert row["mdd_sha256"] == expected
 
 
+class TestEditingAFundFromItsOwnPage:
+    """INVARIANT: the fields the edit form offers can actually be saved.
+
+    An admin reaching this from a fund's page expects to correct what that page
+    shows. Two of those corrections were impossible until the form sent the
+    whole ASISA triple, and the failure was silent in the worst way: a 422 on a
+    field the admin had not touched.
+    """
+
+    def test_the_category_cannot_be_changed_on_its_own(self, client):
+        """This is the bug the category dropdown exists to prevent.
+
+        `asisa_geography` and `asisa_asset_class` are denormalised off the
+        category for filtering, and the validator checks the three agree. A
+        patch carrying only the category is merged onto the row's existing tier
+        columns, which still describe the OLD category - so the row that gets
+        validated contradicts itself and the save is refused, naming two fields
+        the admin never edited.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"asisa_category": "Global - Equity - General"},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert fields == {"asisa_geography", "asisa_asset_class"}
+
+    def test_and_a_partial_mismatch_flags_only_the_column_that_disagrees(self, client):
+        """Worth its own case, because this is the version that slips past a reader.
+
+        Moving the seeded fund to SA Equity leaves the geography correct and only
+        the asset class wrong, so the refusal names one field rather than two -
+        which reads much more like a typo in something the admin did touch.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"asisa_category": "South African - Equity - SA General"},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert fields == {"asisa_asset_class"}
+
+    def test_the_category_and_its_tiers_together_are_accepted(self, client):
+        """Which is what the form now sends, taking all three off one record."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={
+                "asisa_category": "South African - Equity - SA General",
+                "asisa_geography": "South African",
+                "asisa_asset_class": "Equity",
+            },
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_the_badges_a_reader_sees_can_be_corrected(self, client):
+        """The tracker and tax-free flags are badges on the public page, so an
+        admin looking at a wrong one has to be able to fix it here."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"is_index_tracker": True, "tfsa_eligible": True},
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_a_unit_trusts_dealing_code_can_be_set_and_cleared(self, client):
+        """FundRock prints a JSE code on unit trusts, for dealing rather than a
+        listing, so this is editable without touching the vehicle."""
+        assert client.patch(
+            "/api/admin/fund-catalogue/funds/f-1", json={"jse_code": "BCIIFA"}
+        ).status_code == 200
+        assert client.patch(
+            "/api/admin/fund-catalogue/funds/f-1", json={"jse_code": None}
+        ).status_code == 200
+
+    def test_the_vehicle_is_why_the_form_leaves_it_alone(self, client):
+        """Not editable on the form, and this is the reason rather than an oversight.
+
+        Switching a unit trust to an ETF requires a '.JO' price symbol, which no
+        form reads or writes today, so the refusal names a field the admin has
+        no box for. Making the vehicle editable means giving the edit page an
+        admin read that carries `yahoo_symbol`.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1", json={"vehicle": "etf"}
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert "yahoo_symbol" in fields
+
+
 class TestTheFlagAndTheAdminCheck:
     def test_nothing_mounts_when_the_feature_is_off(self):
         app = FastAPI()

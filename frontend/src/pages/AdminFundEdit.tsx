@@ -9,6 +9,7 @@ import {
   type SnapshotInput,
 } from "../services/api/adminFundCatalogue";
 import { getCatalogueFund, type CatalogueFundDetail } from "../services/api/fundCatalogue";
+import { useFundCatalogueMeta } from "../hooks/useFundCatalogue";
 import PairRows, { asObject, type Pair } from "../components/admin/PairRows";
 
 /**
@@ -97,16 +98,53 @@ function FundFields({
   fundId: string;
   onSaved: () => Promise<void>;
 }) {
+  const { meta } = useFundCatalogueMeta();
   const [values, setValues] = useState({
     name: fund.name,
     fund_house: fund.fund_house,
     manco: fund.manco,
+    // Sent unchanged so the validator sees the whole row, but not editable
+    // here: see the note beside it in the form below.
+    vehicle: fund.vehicle as string,
     asisa_category: fund.asisa_category,
+    // Held alongside the category and never typed: see `pickCategory` below.
+    asisa_geography: fund.asisa_geography,
+    asisa_asset_class: fund.asisa_asset_class,
+    jse_code: fund.jse_code ?? "",
     curation_rule: fund.curation_rule ?? "",
     mdd_page_url: fund.mdd_page_url ?? "",
   });
+  const [flags, setFlags] = useState({
+    is_index_tracker: fund.is_index_tracker,
+    tfsa_eligible: fund.tfsa_eligible,
+  });
+
+  /** Take all three ASISA columns off one record, as the add form does.
+   *
+   *  The category used to be a free-text box here while the geography and asset
+   *  class were not editable at all, so correcting a category left the other two
+   *  describing the old one. They are one fact in three columns, and the
+   *  validator reads them as a set. */
+  function pickCategory(name: string) {
+    const category = meta?.categories.find((c) => c.name === name);
+    setValues({
+      ...values,
+      asisa_category: name,
+      asisa_geography: category?.tier1 ?? values.asisa_geography,
+      asisa_asset_class: category?.tier2 ?? values.asisa_asset_class,
+    });
+  }
+
   const { problems, saved, saving, save } = useSaver(async () => {
-    await updateAdminFund(fundId, values);
+    // Empty text means "not stated", which is not the same as an empty string:
+    // the JSE code is nullable and the validators read a blank as absent.
+    await updateAdminFund(fundId, {
+      ...values,
+      jse_code: values.jse_code.trim() || null,
+      mdd_page_url: values.mdd_page_url.trim() || null,
+      curation_rule: values.curation_rule.trim() || null,
+      ...flags,
+    });
     await onSaved();
   });
 
@@ -115,14 +153,58 @@ function FundFields({
       <h2 className="text-sm font-bold text-brand-primary">Fund details</h2>
       <p className="text-xs text-brand-secondary/70">
         Facts about the fund itself. The ISIN identifies it and cannot be changed here — a
-        different ISIN is a different fund.
+        different ISIN is a different fund. Retiring one is on the funds list.
       </p>
       <Field label="Name" value={values.name} onChange={(v) => setValues({ ...values, name: v })} problems={problems} name="name" />
       <Field label="Manager" value={values.fund_house} onChange={(v) => setValues({ ...values, fund_house: v })} problems={problems} name="fund_house" />
       <Field label="Management company" value={values.manco} onChange={(v) => setValues({ ...values, manco: v })} problems={problems} name="manco" />
-      <Field label="ASISA category" value={values.asisa_category} onChange={(v) => setValues({ ...values, asisa_category: v })} problems={problems} name="asisa_category" />
+      {/* Read-only, and not an oversight. `VehicleConsistencyValidator` requires
+          an ETF to carry a '.JO' price symbol and a unit trust to carry none,
+          and `yahoo_symbol` is absent from the public detail this page reads —
+          so an editable fund type refuses in BOTH directions with a problem the
+          form cannot fix: changing to an ETF asks for a symbol there is no box
+          for, and changing away from one leaves the stored symbol in place.
+          Making it editable means giving this page an admin read that includes
+          the symbol. Until then a wrong vehicle is a retire-and-re-add. */}
+      <Readonly
+        label="Fund type"
+        value={
+          (meta?.vehicles ?? []).find((v) => v.value === values.vehicle)?.label ?? values.vehicle
+        }
+      />
+      <Choice
+        label="ASISA category"
+        value={values.asisa_category}
+        onChange={pickCategory}
+        problems={problems}
+        name="asisa_category"
+        options={(meta?.categories ?? []).map((c) => [c.name, c.name])}
+      />
+      <p className="text-[11px] text-brand-secondary/60">
+        {values.asisa_geography} · {values.asisa_asset_class}
+        <span className="text-brand-secondary/40"> — both follow the category</span>
+      </p>
+      <Field
+        label={values.vehicle === "etf" ? "JSE code (required)" : "JSE code (unit trusts may print one)"}
+        value={values.jse_code}
+        onChange={(v) => setValues({ ...values, jse_code: v })}
+        problems={problems}
+        name="jse_code"
+      />
       <Field label="Why it is in the catalogue" value={values.curation_rule} onChange={(v) => setValues({ ...values, curation_rule: v })} problems={problems} name="curation_rule" />
       <Field label="Manager's fund page" value={values.mdd_page_url} onChange={(v) => setValues({ ...values, mdd_page_url: v })} problems={problems} name="mdd_page_url" />
+      <div className="flex flex-wrap gap-4 pt-1 text-xs">
+        <Check
+          label="Index tracker"
+          checked={flags.is_index_tracker}
+          onChange={(b) => setFlags({ ...flags, is_index_tracker: b })}
+        />
+        <Check
+          label="Tax-free eligible"
+          checked={flags.tfsa_eligible}
+          onChange={(b) => setFlags({ ...flags, tfsa_eligible: b })}
+        />
+      </div>
       <SaveRow saving={saving} saved={saved} problems={problems} onSave={save} label="Save details" />
     </section>
   );
@@ -657,6 +739,23 @@ function Choice({
           {p.message}
         </span>
       ))}
+    </label>
+  );
+}
+
+function Check({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (b: boolean) => void;
+}) {
+  return (
+    <label className="inline-flex items-center gap-1.5 text-brand-secondary">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
     </label>
   );
 }
