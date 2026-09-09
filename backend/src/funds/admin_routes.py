@@ -240,6 +240,34 @@ def list_funds_for_admin(
     }
 
 
+@router.get("/funds/{fund_id}")
+def get_fund_for_admin(
+    fund_id: str,
+    _admin: str = Depends(require_admin),
+    repo: FundRepository = Depends(get_repository),
+):
+    """One fund as stored, for the screen that edits it.
+
+    The edit page used to read the PUBLIC detail endpoint, which is shaped for a
+    reader rather than an editor: it drops the columns a reader has no business
+    seeing. That made three fields uneditable for a reason nobody would guess
+    from the form — there was no box because there was no value to put in it.
+
+    ``yahoo_symbol`` is the one that mattered. It is the discriminator behind
+    ``VehicleConsistencyValidator``: an ETF must carry a '.JO' symbol and a unit
+    trust must carry none. Without it the vehicle could not be edited either,
+    because every change refused naming a field the form could not show.
+
+    Retired funds are included, since restoring one means editing it, and the
+    row is returned as stored rather than summarised — this is the only caller
+    that wants it that way.
+    """
+    fund = repo.get(fund_id, include_retired=True)
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    return {"fund": fund}
+
+
 def _snapshot_row(fund: dict[str, Any], body: SnapshotIn, admin_id: str, fund_id: str) -> dict[str, Any]:
     """One fact-sheet row, ready to write, with its provenance filled in.
 

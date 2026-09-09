@@ -163,6 +163,16 @@ interface Saved<T> {
   snapshot?: T;
 }
 
+/** One fund as stored, for the screen that edits it.
+ *
+ *  Separate from `getCatalogueFund` because that one is shaped for a reader and
+ *  drops the columns an editor needs — `yahoo_symbol` above all, which decides
+ *  whether a vehicle change is even valid. Retired funds come back too, since
+ *  restoring one means editing it. */
+export async function getAdminFund(fundId: string) {
+  return send<{ fund: AdminFund }>(`/funds/${fundId}`, { method: "GET" });
+}
+
 export async function listAdminFunds() {
   return send<AdminFundList>("/funds", { method: "GET" });
 }

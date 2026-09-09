@@ -474,20 +474,120 @@ class TestEditingAFundFromItsOwnPage:
             "/api/admin/fund-catalogue/funds/f-1", json={"jse_code": None}
         ).status_code == 200
 
-    def test_the_vehicle_is_why_the_form_leaves_it_alone(self, client):
-        """Not editable on the form, and this is the reason rather than an oversight.
+    def test_a_unit_trust_becomes_an_etf_when_the_symbol_comes_with_it(self, client):
+        """The change that was impossible until the form could read the symbol.
 
-        Switching a unit trust to an ETF requires a '.JO' price symbol, which no
-        form reads or writes today, so the refusal names a field the admin has
-        no box for. Making the vehicle editable means giving the edit page an
-        admin read that carries `yahoo_symbol`.
+        `VehicleConsistencyValidator` wants an ETF to carry a '.JO' symbol and a
+        unit trust to carry none, so the vehicle and the symbol are one edit.
+        The edit page read the PUBLIC fund detail, which does not include
+        `yahoo_symbol`, so there was no box for it and every vehicle change
+        refused naming a field the admin could not see.
         """
         res = client.patch(
-            "/api/admin/fund-catalogue/funds/f-1", json={"vehicle": "etf"}
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"vehicle": "etf", "jse_code": "ALPHA", "yahoo_symbol": "ALPHA.JO"},
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_changing_the_vehicle_alone_still_refuses(self, client):
+        """Which is correct, and is why the two boxes sit next to each other."""
+        res = client.patch("/api/admin/fund-catalogue/funds/f-1", json={"vehicle": "etf"})
+        assert res.status_code == 422
+        assert "yahoo_symbol" in {p["field"] for p in res.json()["detail"]["problems"]}
+
+    def test_a_symbol_that_is_not_a_jse_listing_is_refused(self, client):
+        """A symbol found for a rand fund is usually an offshore share class."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"vehicle": "etf", "jse_code": "ALPHA", "yahoo_symbol": "ALPHA"},
         )
         assert res.status_code == 422
-        fields = {p["field"] for p in res.json()["detail"]["problems"]}
-        assert "yahoo_symbol" in fields
+        assert "yahoo_symbol" in {p["field"] for p in res.json()["detail"]["problems"]}
+
+    def test_a_fund_can_be_retired_and_restored_from_its_own_page(self, client):
+        """Retiring used to live only on the list. It is the only removal there
+        is, so the screen that edits a fund should be able to do it."""
+        for state in (False, True):
+            res = client.patch(
+                "/api/admin/fund-catalogue/funds/f-1", json={"is_active": state}
+            )
+            assert res.status_code == 200, res.json()
+
+    def test_every_editable_fund_field_can_be_saved_in_one_request(self, client):
+        """INVARIANT: the form can save the whole row, not a subset of it.
+
+        The form binds to every field `FundPatch` accepts, so this sends the same
+        shape. A field added to the patch model and not to the form would leave a
+        column nobody can correct without a SQL console; this fails when the two
+        drift, which is the cheapest place to notice.
+        """
+        from src.funds.admin_routes import FundPatch
+
+        patch = {
+            "name": "Alpha Money Market Fund (A)",
+            "fund_house": "Alpha",
+            "manco": "Alpha Collective Investments (RF) (Pty) Ltd",
+            "vehicle": "unit_trust",
+            "asisa_geography": "South African",
+            "asisa_asset_class": "Multi Asset",
+            "asisa_category": "South African - Multi Asset - Income",
+            "is_index_tracker": True,
+            "jse_code": "ALPHAA",
+            "yahoo_symbol": None,
+            "tfsa_eligible": True,
+            "platforms": ["EasyEquities"],
+            "mdd_page_url": "https://alpha.invalid/funds/mm",
+            "curation_rule": "a manager most South African investors will recognise",
+            "is_active": True,
+        }
+        assert set(patch) == set(FundPatch.model_fields), (
+            "the patch model and this test have drifted: "
+            f"{sorted(set(FundPatch.model_fields) ^ set(patch))}"
+        )
+
+        res = client.patch("/api/admin/fund-catalogue/funds/f-1", json=patch)
+        assert res.status_code == 200, res.json()
+
+    def test_the_isin_is_not_editable_and_that_is_deliberate(self, client):
+        """It keys the archived documents in storage and goes into each fact
+        sheet's transcription hash, so changing it would orphan the one and
+        re-key the other. The patch model does not accept it at all."""
+        from src.funds.admin_routes import FundPatch
+
+        assert "isin" not in FundPatch.model_fields
+
+
+class TestTheStoredRowIsReadableForEditing:
+    """INVARIANT: the edit screen can read every field it offers to write.
+
+    A form cannot bind to a field its data does not carry, and that is not a
+    theoretical failure — it is exactly how `yahoo_symbol` came to be
+    uneditable. The page used to read the public detail, which drops it.
+    """
+
+    def test_it_returns_the_row_as_stored(self, client):
+        body = client.get("/api/admin/fund-catalogue/funds/f-1").json()
+        fund = body["fund"]
+        # The three the public view does not carry.
+        for field in ("yahoo_symbol", "is_active", "platforms"):
+            assert field in fund, field
+
+    def test_a_retired_fund_is_still_readable_here(self):
+        """Restoring one means editing it, so it has to be fetchable."""
+        app = build_app(
+            rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []}
+        )
+        res = TestClient(app).get("/api/admin/fund-catalogue/funds/f-1")
+        assert res.status_code == 200
+        assert res.json()["fund"]["is_active"] is False
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        assert client.get("/api/admin/fund-catalogue/funds/nope").status_code == 404
+
+    def test_reading_it_needs_an_admin(self):
+        app = build_app(admin=False)
+        res = TestClient(app).get("/api/admin/fund-catalogue/funds/f-1")
+        assert res.status_code in (401, 403)
 
 
 class TestTheFlagAndTheAdminCheck:

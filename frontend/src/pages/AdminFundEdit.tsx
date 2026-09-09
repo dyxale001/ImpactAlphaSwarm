@@ -4,7 +4,9 @@ import { AlertTriangle, ArrowLeft, Check } from "lucide-react";
 import {
   ValidationError,
   addAdminSnapshot,
+  getAdminFund,
   updateAdminFund,
+  type AdminFund,
   type FieldProblem,
   type SnapshotInput,
 } from "../services/api/adminFundCatalogue";
@@ -29,6 +31,12 @@ import PairRows, { asObject, type Pair } from "../components/admin/PairRows";
 export default function AdminFundEdit() {
   const { fundId } = useParams<{ fundId: string }>();
   const [fund, setFund] = useState<CatalogueFundDetail | null>(null);
+  // Two reads, because they answer different questions. The catalogue view is
+  // what a reader sees, and the page shows the current sheet and its history
+  // from it. `stored` is the row as the database holds it, which is what the
+  // editable half has to bind to: a form cannot offer a field its data does not
+  // carry, and that is exactly how `yahoo_symbol` came to be uneditable.
+  const [stored, setStored] = useState<AdminFund | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -37,7 +45,12 @@ export default function AdminFundEdit() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      setFund(await getCatalogueFund(fundId));
+      const [detail, admin] = await Promise.all([
+        getCatalogueFund(fundId),
+        getAdminFund(fundId),
+      ]);
+      setFund(detail);
+      setStored(admin.fund);
     } catch (e) {
       console.error("Error loading the fund:", e);
       setLoadError("Unable to load that fund.");
@@ -53,7 +66,7 @@ export default function AdminFundEdit() {
   if (isLoading) {
     return <Shell><p className="text-sm text-brand-secondary">Loading…</p></Shell>;
   }
-  if (loadError || !fund || !fundId) {
+  if (loadError || !fund || !stored || !fundId) {
     return <Shell><p className="text-sm text-brand-secondary">{loadError ?? "Not found."}</p></Shell>;
   }
 
@@ -66,7 +79,7 @@ export default function AdminFundEdit() {
         </p>
       </header>
 
-      <FundFields fund={fund} fundId={fundId} onSaved={load} />
+      <FundFields fund={stored} fundId={fundId} onSaved={load} />
       <CurrentSheet fund={fund} />
       <RecordSheet fundId={fundId} fund={fund} onSaved={load} />
     </Shell>
@@ -94,7 +107,7 @@ function FundFields({
   fundId,
   onSaved,
 }: {
-  fund: CatalogueFundDetail;
+  fund: AdminFund;
   fundId: string;
   onSaved: () => Promise<void>;
 }) {
@@ -103,9 +116,9 @@ function FundFields({
     name: fund.name,
     fund_house: fund.fund_house,
     manco: fund.manco,
-    // Sent unchanged so the validator sees the whole row, but not editable
-    // here: see the note beside it in the form below.
-    vehicle: fund.vehicle as string,
+    vehicle: fund.vehicle,
+    yahoo_symbol: fund.yahoo_symbol ?? "",
+    platforms: fund.platforms.join(", "),
     asisa_category: fund.asisa_category,
     // Held alongside the category and never typed: see `pickCategory` below.
     asisa_geography: fund.asisa_geography,
@@ -117,6 +130,7 @@ function FundFields({
   const [flags, setFlags] = useState({
     is_index_tracker: fund.is_index_tracker,
     tfsa_eligible: fund.tfsa_eligible,
+    is_active: fund.is_active,
   });
 
   /** Take all three ASISA columns off one record, as the add form does.
@@ -141,8 +155,16 @@ function FundFields({
     await updateAdminFund(fundId, {
       ...values,
       jse_code: values.jse_code.trim() || null,
+      // A unit trust must carry no symbol at all, so a cleared box is null
+      // rather than an empty string: the validator reads a blank as absent and
+      // an empty string would store as a symbol nobody can price.
+      yahoo_symbol: values.yahoo_symbol.trim() || null,
       mdd_page_url: values.mdd_page_url.trim() || null,
       curation_rule: values.curation_rule.trim() || null,
+      platforms: values.platforms
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean),
       ...flags,
     });
     await onSaved();
@@ -152,25 +174,25 @@ function FundFields({
     <section className="soft-card space-y-3 p-5">
       <h2 className="text-sm font-bold text-brand-primary">Fund details</h2>
       <p className="text-xs text-brand-secondary/70">
-        Facts about the fund itself. The ISIN identifies it and cannot be changed here — a
-        different ISIN is a different fund. Retiring one is on the funds list.
+        Every field the catalogue stores about the fund itself. The ISIN is the exception and
+        is deliberately not editable: it keys the archived documents in storage and goes into
+        each fact sheet's transcription hash, so changing it would orphan the one and re-key the
+        other. A different ISIN is a different fund.
       </p>
       <Field label="Name" value={values.name} onChange={(v) => setValues({ ...values, name: v })} problems={problems} name="name" />
       <Field label="Manager" value={values.fund_house} onChange={(v) => setValues({ ...values, fund_house: v })} problems={problems} name="fund_house" />
       <Field label="Management company" value={values.manco} onChange={(v) => setValues({ ...values, manco: v })} problems={problems} name="manco" />
-      {/* Read-only, and not an oversight. `VehicleConsistencyValidator` requires
-          an ETF to carry a '.JO' price symbol and a unit trust to carry none,
-          and `yahoo_symbol` is absent from the public detail this page reads —
-          so an editable fund type refuses in BOTH directions with a problem the
-          form cannot fix: changing to an ETF asks for a symbol there is no box
-          for, and changing away from one leaves the stored symbol in place.
-          Making it editable means giving this page an admin read that includes
-          the symbol. Until then a wrong vehicle is a retire-and-re-add. */}
-      <Readonly
+      {/* Editable only because the price symbol below it is. The two are one
+          rule: `VehicleConsistencyValidator` requires an ETF to carry a '.JO'
+          symbol and a unit trust to carry none, so changing either alone
+          refuses. They sit next to each other for that reason. */}
+      <Choice
         label="Fund type"
-        value={
-          (meta?.vehicles ?? []).find((v) => v.value === values.vehicle)?.label ?? values.vehicle
-        }
+        value={values.vehicle}
+        onChange={(v) => setValues({ ...values, vehicle: v })}
+        problems={problems}
+        name="vehicle"
+        options={(meta?.vehicles ?? []).map((v) => [v.value, v.label])}
       />
       <Choice
         label="ASISA category"
@@ -191,6 +213,24 @@ function FundFields({
         problems={problems}
         name="jse_code"
       />
+      <Field
+        label={
+          values.vehicle === "etf"
+            ? "Price symbol, e.g. STX40.JO (required)"
+            : "Price symbol (ETFs only — a unit trust must have none)"
+        }
+        value={values.yahoo_symbol}
+        onChange={(v) => setValues({ ...values, yahoo_symbol: v })}
+        problems={problems}
+        name="yahoo_symbol"
+      />
+      <Field
+        label="Available on (comma separated)"
+        value={values.platforms}
+        onChange={(v) => setValues({ ...values, platforms: v })}
+        problems={problems}
+        name="platforms"
+      />
       <Field label="Why it is in the catalogue" value={values.curation_rule} onChange={(v) => setValues({ ...values, curation_rule: v })} problems={problems} name="curation_rule" />
       <Field label="Manager's fund page" value={values.mdd_page_url} onChange={(v) => setValues({ ...values, mdd_page_url: v })} problems={problems} name="mdd_page_url" />
       <div className="flex flex-wrap gap-4 pt-1 text-xs">
@@ -204,7 +244,21 @@ function FundFields({
           checked={flags.tfsa_eligible}
           onChange={(b) => setFlags({ ...flags, tfsa_eligible: b })}
         />
+        {/* The only removal there is. Unticking takes the fund off every public
+            surface and keeps every fact sheet, because migration 024 grants no
+            delete on either table. */}
+        <Check
+          label="In the catalogue"
+          checked={flags.is_active}
+          onChange={(b) => setFlags({ ...flags, is_active: b })}
+        />
       </div>
+      {!flags.is_active && (
+        <p className="text-[11px] leading-relaxed text-amber-700">
+          Saved with this unticked, the fund is retired: it disappears from the funds page and
+          from its own URL. Nothing is deleted, and ticking it again brings it back.
+        </p>
+      )}
       <SaveRow saving={saving} saved={saved} problems={problems} onSave={save} label="Save details" />
     </section>
   );
@@ -264,6 +318,12 @@ function RecordSheet({
     fund_size_zar: "",
     distribution_frequency: "",
     recommended_min_term_years: "",
+    // The platform minimums. Accepted by the API and stored since 024, and
+    // until now typeable nowhere — so a sheet that printed them had them read
+    // and then dropped. `min_debit_order` is not decoration: the matcher checks
+    // it against the platform's own minimum.
+    min_lump_sum: "",
+    min_debit_order: "",
     // The common core. Everything a Minimum Disclosure Document publishes that
     // the earlier form discarded — most consequentially the NAV, which for a
     // unit trust is the only price the fund has.
@@ -321,6 +381,8 @@ function RecordSheet({
         "tic",
         "fund_size_zar",
         "recommended_min_term_years",
+        "min_lump_sum",
+        "min_debit_order",
         "nav_cpu",
         "annual_management_fee",
         "return_high_12m",
@@ -396,6 +458,8 @@ function RecordSheet({
         <Field label="Fund size (R)" value={values.fund_size_zar} onChange={(v) => setValues({ ...values, fund_size_zar: v })} problems={problems} name="fund_size_zar" />
         <Field label="Distributions" value={values.distribution_frequency} onChange={(v) => setValues({ ...values, distribution_frequency: v })} problems={problems} name="distribution_frequency" />
         <Field label="Minimum term (years)" value={values.recommended_min_term_years} onChange={(v) => setValues({ ...values, recommended_min_term_years: v })} problems={problems} name="recommended_min_term_years" />
+        <Field label="Minimum lump sum (R)" value={values.min_lump_sum} onChange={(v) => setValues({ ...values, min_lump_sum: v })} problems={problems} name="min_lump_sum" />
+        <Field label="Minimum monthly amount (R)" value={values.min_debit_order} onChange={(v) => setValues({ ...values, min_debit_order: v })} problems={problems} name="min_debit_order" />
         <Field label="Manager's fee %" value={values.annual_management_fee} onChange={(v) => setValues({ ...values, annual_management_fee: v })} problems={problems} name="annual_management_fee" />
         {/* Which fee column the figures above came from. Managers print 1-Year
             and 3-Year and the figures differ, so a cost recorded without its
