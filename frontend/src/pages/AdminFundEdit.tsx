@@ -4,14 +4,11 @@ import { AlertTriangle, ArrowLeft, Check } from "lucide-react";
 import {
   ValidationError,
   addAdminSnapshot,
-  extractFactsheet,
   updateAdminFund,
   type FieldProblem,
-  type Extraction,
   type SnapshotInput,
 } from "../services/api/adminFundCatalogue";
 import { getCatalogueFund, type CatalogueFundDetail } from "../services/api/fundCatalogue";
-import FactsheetCrops from "../components/admin/FactsheetCrops";
 import PairRows, { asObject, type Pair } from "../components/admin/PairRows";
 
 /**
@@ -279,37 +276,6 @@ function RecordSheet({
 
   const allocationTotal = allocation.reduce((sum, r) => sum + (Number(r.percent) || 0), 0);
 
-  // Reading a sheet fills the boxes; it does not save anything, and what it
-  // could not read stays empty with the reason shown beside it.
-  const [prefilling, setPrefilling] = useState(false);
-  const [extraction, setExtraction] = useState<Extraction | null>(null);
-  const [prefillError, setPrefillError] = useState<string | null>(null);
-
-  async function prefill() {
-    setPrefilling(true);
-    setPrefillError(null);
-    setExtraction(null);
-    try {
-      const read = await extractFactsheet(values.mdd_url);
-      setExtraction(read);
-      // Only fields the sheet actually gave. Anything already typed by hand
-      // stays: the person is the authority, the extractor is a convenience.
-      setValues((current) => {
-        const next = { ...current };
-        for (const [field, value] of Object.entries(read.fields)) {
-          if (field in next && !next[field].trim()) next[field] = String(value);
-        }
-        return next;
-      });
-    } catch (e) {
-      setPrefillError(
-        e instanceof ValidationError ? e.message : "That sheet could not be read.",
-      );
-    } finally {
-      setPrefilling(false);
-    }
-  }
-
   const supersedes = fund.snapshot_history.some((h) => h.as_of === values.as_of);
 
   return (
@@ -319,77 +285,17 @@ function RecordSheet({
         Transcribe the figures from the manager's own document. Leave a field empty when the sheet
         does not state it — an empty field means "not published", which is not the same as zero.
       </p>
-      {/* Paste the manager's link and let the sheet fill what it can. */}
-      <div className="flex flex-wrap items-end gap-2 rounded-md bg-brand-bg/50 p-3">
-        <div className="flex-1 min-w-[220px]">
-          <Field
-            label="Fact sheet URL"
-            value={values.mdd_url}
-            onChange={(v) => setValues({ ...values, mdd_url: v })}
-            problems={problems}
-            name="mdd_url"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => void prefill()}
-          disabled={prefilling || !values.mdd_url.trim()}
-          className="rounded-md border border-brand-border/60 px-3 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-bg disabled:opacity-50"
-        >
-          {prefilling ? "Reading…" : "Read the sheet"}
-        </button>
+      {/* The document the figures are read from. Stored with the sheet, so
+          every number on the fund's page can be traced back to it. */}
+      <div className="rounded-md bg-brand-bg/50 p-3">
+        <Field
+          label="Fact sheet URL"
+          value={values.mdd_url}
+          onChange={(v) => setValues({ ...values, mdd_url: v })}
+          problems={problems}
+          name="mdd_url"
+        />
       </div>
-
-      {prefillError && (
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-700">
-          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-          {prefillError}
-        </p>
-      )}
-
-      {extraction && (
-        <div className="space-y-2 rounded-md border border-brand-border/40 p-3">
-          <p className="text-[11px] text-brand-secondary">
-            Read {Object.keys(extraction.fields).length} field
-            {Object.keys(extraction.fields).length === 1 ? "" : "s"} using the{" "}
-            <span className="font-semibold">{extraction.template}</span> template. Check each
-            against the document before saving — the quote beside a value is the line it came from.
-          </p>
-
-          {Object.entries(extraction.evidence).length > 0 && (
-            <ul className="space-y-1">
-              {Object.entries(extraction.evidence).map(([field, quote]) => (
-                <li key={field} className="text-[11px] leading-relaxed">
-                  <span className="font-semibold text-brand-primary">{field}</span>{" "}
-                  <span className="text-brand-secondary/70">“{quote}”</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {extraction.unresolved.length > 0 && (
-            <div className="border-t border-brand-border/40 pt-2">
-              <p className="text-[11px] font-semibold text-brand-primary">
-                Left blank on purpose — read these off the document yourself:
-              </p>
-              <ul className="mt-1 space-y-1">
-                {extraction.unresolved.map((u) => (
-                  <li key={u.field} className="text-[11px] leading-relaxed text-brand-secondary">
-                    <span className="font-semibold">{u.field}</span> — {u.reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* The blocks a person still has to read, cut out of the document. Shown
-          after the reading rather than beside each field: the crops are wide,
-          and three of the four cover fields that are blank anyway. */}
-      {extraction?.crops && extraction.crops.length > 0 && (
-        <FactsheetCrops crops={extraction.crops} />
-      )}
 
       {supersedes && (
         <p className="rounded-md bg-brand-bg/70 p-2.5 text-[11px] leading-relaxed text-brand-secondary">

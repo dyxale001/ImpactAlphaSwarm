@@ -42,8 +42,6 @@ from src.funds.admin_routes import (  # noqa: E402
     router,
 )
 from src.funds.admin_routes import SnapshotIn  # noqa: E402
-from src.funds.extract import FetchError  # noqa: E402
-from src.funds.extract.base import Extraction, Reading, Unresolved  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
 
 TODAY = date(2026, 9, 5)
@@ -403,134 +401,6 @@ class TestAddingAFundAndItsFirstSheetTogether:
         assert row["mdd_sha256"] == expected
 
 
-class TestExtractingToPrefill:
-    """INVARIANT: reading a sheet pre-fills a form and writes nothing."""
-
-    def test_it_writes_nothing_to_the_catalogue(self, client, monkeypatch):
-        from src.funds import admin_routes
-
-        monkeypatch.setattr(
-            admin_routes,
-            "read_and_crop",
-            lambda url: (
-                Extraction(template="fake", url=url, readings=(Reading("isin", "X", "ev"),)),
-                (),
-            ),
-        )
-        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
-        assert res.status_code == 200
-        for table in ("funds", "fund_factsheet_snapshots"):
-            assert not any(
-                name in ("insert", "upsert", "update", "delete")
-                for name, *_ in client.app.state.fake.calls_on(table)
-            )
-
-    def test_it_returns_values_evidence_refusals_and_crops_separately(self, client, monkeypatch):
-        # Four things, not one: what to fill, what it was read from, what the
-        # reviewer has to supply themselves, and a picture of the block they
-        # have to supply it from.
-        from src.funds import admin_routes
-        from src.funds.extract.crops import Crop
-
-        monkeypatch.setattr(
-            admin_routes,
-            "read_and_crop",
-            lambda url: (
-                Extraction(
-                    template="satrix",
-                    url=url,
-                    readings=(Reading("isin", "ZAE000240123", "ISIN Code ZAE000240123"),),
-                    unresolved=(
-                        Unresolved("risk_indicator_raw", "drawn as a graphic — read the sheet"),
-                    ),
-                ),
-                (
-                    Crop(
-                        field="risk_indicator_raw",
-                        label="Risk profile",
-                        note="Read which step is shaded.",
-                        page=1,
-                        anchor="RISK PROFILE",
-                        png=b"\x89PNG pretend",
-                    ),
-                ),
-            ),
-        )
-        body = client.post(
-            "/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"}
-        ).json()
-        assert body["fields"] == {"isin": "ZAE000240123"}
-        assert "ISIN Code" in body["evidence"]["isin"]
-        assert body["unresolved"][0]["field"] == "risk_indicator_raw"
-
-        # The crop is attached to the field it belongs beside, carries the page
-        # it came from, and arrives as base64 so the form needs no second call.
-        crop = body["crops"][0]
-        assert crop["field"] == "risk_indicator_raw"
-        assert crop["page"] == 1
-        assert crop["png_base64"]
-
-    def test_a_sheet_that_cannot_be_rendered_still_returns_its_reading(self, client, monkeypatch):
-        """The crops are an aid. Losing them degrades the form, not the request."""
-        from src.funds import admin_routes
-
-        monkeypatch.setattr(
-            admin_routes,
-            "read_and_crop",
-            lambda url: (
-                Extraction(template="fundrock", url=url, readings=(Reading("ter", 1.26, "TER 1.26"),)),
-                (),
-            ),
-        )
-        body = client.post(
-            "/api/admin/fund-catalogue/extract", json={"url": "https://bcis.co.za/x"}
-        ).json()
-        assert body["fields"] == {"ter": 1.26}
-        assert body["crops"] == []
-
-    def test_a_bad_link_is_the_admins_to_fix_not_a_server_fault(self, client, monkeypatch):
-        from src.funds import admin_routes
-
-        def explode(_url):
-            raise FetchError("That address did not return a PDF.")
-
-        monkeypatch.setattr(admin_routes, "read_and_crop", explode)
-        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
-        assert res.status_code == 422
-        assert "PDF" in res.json()["detail"]["message"]
-
-    def test_a_reader_failure_is_reported_with_its_message_not_as_a_crash(
-        self, client, monkeypatch
-    ):
-        """A misconfigured reader is the server's fault and still not a 500.
-
-        Before the errors shared a base class this came back as a 500 with no
-        body, which tells the person at the form nothing at all — and the
-        messages are written precisely so they can act.
-        """
-        from src.funds import admin_routes
-        from src.funds.extract.llm import LlmExtractError
-
-        def explode(_url):
-            raise LlmExtractError("ANTHROPIC_API_KEY is not set on the server.")
-
-        monkeypatch.setattr(admin_routes, "read_and_crop", explode)
-        res = client.post("/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"})
-        assert res.status_code == 422
-        assert "ANTHROPIC_API_KEY" in res.json()["detail"]["message"]
-
-    def test_the_readable_hosts_are_listed_for_the_form(self, client):
-        hosts = client.get("/api/admin/fund-catalogue/extract/hosts").json()["hosts"]
-        assert "satrix.co.za" in hosts
-
-    def test_extraction_needs_an_admin_like_everything_else(self):
-        app = build_app(admin=False)
-        res = TestClient(app).post(
-            "/api/admin/fund-catalogue/extract", json={"url": "https://satrix.co.za/x"}
-        )
-        assert res.status_code in (401, 403)
-
-
 class TestTheFlagAndTheAdminCheck:
     def test_nothing_mounts_when_the_feature_is_off(self):
         app = FastAPI()
@@ -539,6 +409,17 @@ class TestTheFlagAndTheAdminCheck:
 
     def test_the_router_owns_the_admin_prefix(self):
         assert router.prefix == "/api/admin/fund-catalogue"
+
+    def test_no_route_reads_a_sheet(self):
+        """Funds are entered by hand, and this is what says so in code.
+
+        The reading endpoints and the readers behind them were removed
+        deliberately: a figure in this catalogue is one a person typed off the
+        document. Re-adding a prefill route is a product decision, so it should
+        fail a test rather than arrive quietly with a form field.
+        """
+        paths = [route.path for route in router.routes]
+        assert not [path for path in paths if "extract" in path], paths
 
     def test_every_route_requires_the_admin_dependency(self):
         # The check is a dependency rather than a line in each handler, so this

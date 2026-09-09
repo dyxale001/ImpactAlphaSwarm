@@ -27,20 +27,30 @@ gap.
 | Script | What it is for |
 |---|---|
 | `easyequities_instruments.py` | The availability boundary. Reads the instrument workbook EasyEquities publishes; look an ISIN up before seeding it. |
-| `read_factsheet.py` | Read any sheet a template covers. A thin wrapper over `src/funds/extract`, which is what the admin form uses — one set of patterns, so the terminal and the form cannot disagree. `--hosts` lists the managers covered. |
 | `fundrock_index.py` | Discovery: the ~580 fund classes FundRock publishes, filtered by word. |
-| `../extractor_accuracy.py` | Scores the extractor against the hand-transcribed seed, per field. Refusals are counted separately from mistakes — declining to read a graphic is correct behaviour, not an error. |
+| `../factsheet_prompt.py` | Prints the reading rules to paste into a chat with the PDF attached, for recording a sheet by hand. Every rule in it was added because a real sheet broke something. |
+| `../archive_fund_documents.py` | Downloads each seeded fund's sheet and stores it with its text layer, so a figure stays checkable after a manager's link rots. **Read its docstring first** — archiving changes a snapshot's identity, and migration 024 grants no DELETE. |
 
 Downloads land in `.cache/`, which is gitignored.
+
+**Nothing here reads a figure off a sheet any more.** There was an extractor —
+per-manager patterns and a model-based reader behind a flag — and it was removed
+along with the admin form's "Read the sheet" button: funds are entered by hand.
+`factsheet_prompt.py` is what is left of it, and the difference is the one that
+matters. The in-app reader had to quote the line it read each value from, and
+that quote was checked against the PDF's own text layer; a chat cannot do that,
+so keep the sheet open beside the answers and check anything that reads like a
+threshold, a fee column or a date. The rules are in git history at `2bc0835` if
+the automated path is ever wanted back.
 
 ## Two traps worth knowing before you transcribe anything
 
 **The risk profile is usually a graphic.** Managers draw a scale and fill in the
 step that applies. The text layer often contains *all* the step labels whatever
-the rating, so matching it returns nothing or the wrong answer. Render the block
-and read it. This is not hypothetical: the Satrix 40 ETF was seeded as
-publishing no rating when its sheet says AGGRESSIVE, and the mistake was
-repeated in the design note before anyone looked at the picture.
+the rating, so searching the text returns nothing or the wrong answer — **open
+the PDF and look at the picture.** This is not hypothetical: the Satrix 40 ETF
+was seeded as publishing no rating when its sheet says AGGRESSIVE, and the
+mistake was repeated in the design note before anyone looked at it.
 
 **A house may word its scale by temperament rather than by risk.** Satrix runs
 CONSERVATIVE / CAUTIOUS / MODERATE / MODERATE-AGGRESSIVE / AGGRESSIVE, where

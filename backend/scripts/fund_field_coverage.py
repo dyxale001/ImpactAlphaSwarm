@@ -2,8 +2,12 @@
 
 The point of migration 025 is coverage, not accuracy: the columns were added
 because roughly a third of what every Minimum Disclosure Document publishes was
-being discarded. Accuracy is measured elsewhere, by `extractor_accuracy.py`,
-against the same seed. This says how much there is to be accurate about.
+being discarded. This says how much of it the catalogue actually holds.
+
+There used to be an accuracy harness beside this one, scoring an extractor
+against the same seed. The extractor was removed — funds are entered by hand —
+so coverage is now a question about transcription effort rather than about how
+well a reader did.
 
 Reads the CSVs rather than the database, deliberately. The seed is the
 transcription of record — the loader refuses to write a row that fails

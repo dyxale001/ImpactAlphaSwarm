@@ -3,19 +3,20 @@
     venv/bin/python scripts/curation/fundrock_index.py income cautious
     venv/bin/python scripts/curation/fundrock_index.py            # everything
 
-Discovery, not extraction — a separate job from reading a sheet, which is what
-`read_factsheet.py` does. FundRock issues for around thirty boutique managers
-from one index page, so this is where most of the catalogue's candidates come
-from: roughly 580 fund classes, each with a direct link and a sheet date.
+Discovery only: it finds sheets worth transcribing and does not read one.
+FundRock issues for around thirty boutique managers from one index page, so this
+is where most of the catalogue's candidates come from: roughly 580 fund classes,
+each with a direct link and a sheet date.
 
 Two things worth knowing before trusting the list:
 
 *Not every fund here uses FundRock's template.* Anchor issues its own, and its
-sheet carries no ISIN at all. Those cannot be read automatically and are dropped
+sheet carries no ISIN at all — a fund whose sheet does not state one is dropped
 rather than guessed at, so expect a hit rate rather than a sweep.
 
 *The links carry literal spaces*, which these hosts answer with 200 and an HTML
-page rather than a 404. `read_factsheet.py` encodes them and checks the bytes.
+page rather than a 404. `src/funds/documents.py` encodes them and checks that the
+bytes start with `%PDF`, which is what catches that soft 404.
 """
 
 import html

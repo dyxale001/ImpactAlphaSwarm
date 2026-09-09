@@ -54,15 +54,13 @@ for _key, _value in _IMPORT_TIME_REQUIRED.items():
 
 # ── documented defaults, pinned ──────────────────────────────────────────────
 _PINNED_DEFAULTS = {
-    # funds/config.py — pinned because the reader list is built ONCE at import
-    # from these, and this file's own warning came true on 2026-09-07: setting
-    # FUND_LLM_EXTRACT_ENABLED=true in backend/.env to try a live read shifted
-    # the suite underneath it, and three tests failed looking like regressions
-    # ("assert 'llm' == 'satrix'") when nothing had regressed. Assignment, not
-    # setdefault, so a developer's .env cannot decide which reader a test gets.
+    # funds/config.py — read ONCE at import, so a developer's .env must not
+    # decide what a test gets. Assignment rather than setdefault, because that
+    # is exactly how it bit on 2026-09-07: a flag set in backend/.env to try
+    # something live shifted the suite underneath it, and three tests failed
+    # looking like regressions when nothing had regressed.
     "FUNDS_ENABLED": "true",
     "FUND_TRACES_ENABLED": "false",
-    "FUND_LLM_EXTRACT_ENABLED": "false",
     # ranking.py
     "RANK_W_QUANT": "0.5",
     "RANK_W_SENT": "0.5",

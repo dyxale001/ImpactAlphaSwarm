@@ -28,7 +28,6 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .config import FUNDS_ENABLED
-from .extract import ExtractError, read_and_crop, readable_hosts
 from .repository import FundRepository
 from .validators import Problem, fund_validators, snapshot_validators
 
@@ -390,54 +389,6 @@ def add_snapshot(
 
     written = repo.insert_snapshot(_snapshot_row(fund, body, admin_id, fund_id))
     return {"snapshot": written[0] if written else None, "warnings": _warnings(problems)}
-
-
-class ExtractIn(BaseModel):
-    """A fact-sheet address, as pasted from a manager's own site."""
-
-    url: str
-
-
-@router.post("/extract")
-def extract_factsheet(body: ExtractIn, _admin: str = Depends(require_admin)):
-    """Read a fact sheet so the form can be pre-filled, and write nothing.
-
-    The catalogue's claim is that every figure came off a document a manager
-    published. This does not change that — a person still approves every value —
-    it only changes what they are looking at while they do.
-
-    What comes back is deliberately four things rather than one. `fields` is
-    what to pre-fill. `evidence` is the text each value was read from, so review
-    can be a comparison rather than a nod. `unresolved` is what the reader
-    declined and why, because a field that cannot be read confidently must
-    arrive blank: a wrong value that looks right is worse than an empty box, and
-    the Satrix risk rating — drawn, not written — is the standing proof.
-
-    `crops` is the fourth, and it is what makes the third one usable. A refusal
-    whose reason is "open the PDF and read it yourself" is honest and is also
-    the whole cost of this design; a picture of the risk scale beside the field
-    turns it into a glance. The crops carry their own headings on purpose — a
-    fee table cropped without its `1-Year 3-Year` row is two numbers and no
-    basis for choosing between them.
-    """
-    try:
-        extraction, crops = read_and_crop(body.url)
-    except ExtractError as exc:
-        # A bad link is the admin's to fix, and a misconfigured reader is the
-        # server's — but neither is a crash, and both have the same answer for
-        # the person at the form: here is what went wrong, type it in for now.
-        # Catching the base class matters: before it existed, a reader failure
-        # (a missing key, a refused workspace) came back as a 500 with no
-        # message, which is the one outcome that tells nobody anything.
-        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
-
-    return {**extraction.as_dict(), "crops": [crop.as_dict() for crop in crops]}
-
-
-@router.get("/extract/hosts")
-def extractable_hosts(_admin: str = Depends(require_admin)):
-    """The managers a sheet can be read from, so the form can say so up front."""
-    return {"hosts": list(readable_hosts())}
 
 
 def mount_fund_catalogue_admin(app: FastAPI, enabled: bool = FUNDS_ENABLED) -> bool:

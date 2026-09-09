@@ -7,8 +7,8 @@
 `fund_factsheet_snapshots.mdd_pdf_ref` and `extracted_text_ref` are both null on
 every row today, because the seed loader archives a document only when a copy has
 been placed at `data/funds/mdd/<isin>/<as_of>.pdf` and none has. This fetches the
-documents from the managers' own URLs instead, using the same allowlisted fetch
-the admin form uses, and writes both refs onto the rows.
+documents from the managers' own URLs instead, using the allowlisted fetch in
+`src/funds/documents.py`, and writes both refs onto the rows.
 
 ## ⚠ Read this before running it without --dry-run
 
@@ -46,8 +46,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from src.funds.extract import extract_text  # noqa: E402
-from src.funds.extract.fetch import FetchError, fetch  # noqa: E402
+from src.funds.documents import FetchError, extract_text, fetch  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
 
 DATA_DIR = BACKEND / "data" / "funds"

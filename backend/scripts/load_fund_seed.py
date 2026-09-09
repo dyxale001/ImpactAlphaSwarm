@@ -158,7 +158,7 @@ def archive_text(repo, isin: str, as_of: str, pdf: bytes) -> str | None:
     recorded rather than blocking the load.
     """
     try:
-        from src.funds.extract import extract_text
+        from src.funds.documents import extract_text
 
         text = extract_text(pdf)
     except Exception as exc:  # noqa: BLE001

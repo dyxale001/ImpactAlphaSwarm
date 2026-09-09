@@ -28,10 +28,10 @@ logs/
 data/*
 data/runs/
 data/reports/
-# The exception: the fund catalogue seed is source, not an artefact. Figures
-# transcribed by hand from published fact sheets, and the golden set an extractor
-# is later measured against. Archived PDFs stay ignored, being copies of the
-# managers' own documents that the loader fetches.
+# The exception: the fund catalogue seed is source, not an artefact. Every figure
+# in it was transcribed by hand from a published fact sheet, which is what the
+# catalogue's provenance claim rests on. Archived PDFs stay ignored, being copies
+# of the managers' own documents that the loader fetches.
 !data/funds/
 data/funds/mdd/
 # Fact sheets and workbooks the curation scripts download to read. Same reason:

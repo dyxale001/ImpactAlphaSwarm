@@ -163,43 +163,6 @@ interface Saved<T> {
   snapshot?: T;
 }
 
-/** What reading a fact sheet produced: values, their source text, and refusals. */
-/** A picture of one block on the sheet, for a field a person must read. */
-export interface FactsheetCrop {
-  /** The form field this belongs beside. */
-  field: string;
-  label: string;
-  /** Why it is being shown, in words the form puts under the image. */
-  note: string;
-  /** 1-based, because that is how a person counts pages in a PDF. */
-  page: number;
-  /** The heading the backend found the block by. */
-  anchor: string;
-  /** Inlined rather than served from a URL: a one-shot review aid for a
-   *  document nobody has stored yet, so there is nothing to serve it from. */
-  png_base64: string;
-}
-
-export interface Extraction {
-  template: string;
-  url: string;
-  fields: Record<string, string | number>;
-  /** The text each value was read from, so review is a comparison not a nod. */
-  evidence: Record<string, string>;
-  /** Fields the reader would not read, and why. These arrive blank on
-   *  purpose: a wrong value that looks right is worse than an empty box. */
-  unresolved: Array<{ field: string; reason: string }>;
-  /** Pictures of the blocks behind the refusals above — and of the fee table,
-   *  which is worth checking even when it was read. Absent on an older server
-   *  or when the document could not be rendered, so treat it as optional. */
-  crops?: FactsheetCrop[];
-}
-
-/** Read a fact sheet to pre-fill the form. Writes nothing. */
-export async function extractFactsheet(url: string) {
-  return send<Extraction>("/extract", { method: "POST", body: JSON.stringify({ url }) });
-}
-
 export async function listAdminFunds() {
   return send<AdminFundList>("/funds", { method: "GET" });
 }

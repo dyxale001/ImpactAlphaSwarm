@@ -3,16 +3,12 @@
 #   pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0
 
-# Read fund fact sheets when curating the catalogue seed (scripts/curation/).
-# The app never opens a PDF; only the person transcribing a fact sheet does.
-# pypdf pulls the text; pymupdf renders the risk-profile block, which every
-# manager draws as a graphic rather than printing as text.
+# Archive a fund's fact sheet alongside the figures a person transcribed from it
+# (scripts/archive_fund_documents.py). The app never opens a PDF; only the
+# person curating the catalogue does.
+#
+# pypdf takes the text layer, which is stored beside the document so that
+# re-checking a figure is a search rather than a page-by-page read. pymupdf is
+# used by the tests to synthesise a one-page PDF to run that over.
 pypdf>=4.0
 pymupdf>=1.24
-
-# Read a fact sheet with a model instead of a per-manager pattern, behind
-# FUND_LLM_EXTRACT_ENABLED. Dev-only for the same reason as the two above: this
-# is the admin curation path, and the deployed API that serves the catalogue
-# never opens a PDF. With the flag off nothing imports it, which a test proves.
-# Needed on the server only if the flag is turned on there.
-anthropic>=0.40

@@ -1,7 +1,7 @@
 # Testing
 
 Automated unit tests covering the scoring and ranking core, and the funds
-catalogue. **1056 backend tests and 104 frontend tests**, both suites run in a
+catalogue. **1265 backend tests and 202 frontend tests**, both suites run in a
 few seconds combined, and neither touches the network, the database, or an LLM.
 
 ## Running them
@@ -25,24 +25,37 @@ npm run test:watch
 
 | Suite | Module | Tests |
 |---|---|---|
-| `backend/tests/test_ranking.py` | `src/orchestration/ranking.py` | 102 |
+| `backend/tests/test_funds_repository.py` | `src/funds/repository.py`, `validators.py` | 132 |
 | `backend/tests/test_quant_analyst.py` | `src/agents/quant_analyst.py` | 106 |
-| `backend/tests/test_ss_aggregation.py` | `src/utils/ss_aggregation.py` | 49 |
-| `backend/tests/test_funds_repository.py` | `src/funds/repository.py`, `validators.py` | 123 |
-| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 59 |
+| `backend/tests/test_asset_discovery.py` | `src/agents/asset_discovery.py` | 106 |
+| `backend/tests/test_ranking.py` | `src/orchestration/ranking.py` | 102 |
+| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 72 |
+| `backend/tests/test_supabase_repositories.py` | `src/utils/supabase_client.py` | 66 |
 | `backend/tests/test_funds_copy.py` | `src/funds/copy.py` | 50 |
+| `backend/tests/test_ss_aggregation.py` | `src/utils/ss_aggregation.py` | 49 |
+| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 45 |
+| `backend/tests/test_funds_common_core.py` | migration 025's snapshot columns | 41 |
 | `backend/tests/test_funds_matcher.py` | `src/funds/matcher.py` | 37 |
+| `backend/tests/test_funds_admin_routes.py` | `src/funds/admin_routes.py` | 36 |
 | `backend/tests/test_funds_explain.py` | `src/funds/explain.py` | 32 |
-| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 29 |
+| `backend/tests/test_fund_seed_loader.py` | `scripts/load_fund_seed.py` | 29 |
 | `backend/tests/test_api_search_guard.py` | asset-search exchange guard | 28 |
-| `backend/tests/test_funds_asisa.py` | `src/funds/asisa.py` | 24 |
+| `backend/tests/test_funds_documents.py` | `src/funds/documents.py` — the fetch allowlist | 26 |
+| `backend/tests/test_funds_asisa.py` | `src/funds/asisa.py` | 26 |
+| `backend/tests/test_funds_text_archive.py` | archiving a sheet's text (migration 026) | 24 |
 | `backend/tests/test_funds_isolation.py` | funds stay out of the pipeline | 9 |
 | `backend/tests/test_funds_config.py` | `src/funds/config.py` | 7 |
+| `frontend/src/utils/fundsCopy.test.ts` | funds copy + forbidden-term scan | 35 |
+| `frontend/src/utils/validation.test.ts` | email + password rules | 32 |
 | `frontend/src/utils/scoringEngine.test.ts` | onboarding psychometrics | 31 |
-| `frontend/src/utils/validation.test.ts` | email + password rules | 24 |
+| `frontend/src/utils/goals.test.ts` | onboarding goals + horizon | 28 |
 | `frontend/src/utils/staleness.test.ts` | nightly-run staleness | 20 |
 | `frontend/src/utils/stringFormatters.test.ts` | display formatting | 18 |
+| `frontend/src/utils/fundsCommonCore.test.ts` | common-core field display | 17 |
 | `frontend/src/utils/discovery.test.ts` | discovery provenance copy | 11 |
+| `frontend/src/utils/profileHistory.test.ts` | archiving previous survey answers | 10 |
+
+Suites under ten tests are omitted; the totals above are the full run.
 
 The target is the pure logic that decides what a user is shown and in what
 order: the four ranking terms and their composition, the two-stage quant
