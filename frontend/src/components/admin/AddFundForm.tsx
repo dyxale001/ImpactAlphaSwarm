@@ -5,7 +5,6 @@ import {
   createAdminFund,
   type FieldProblem,
   type FundInput,
-  type SnapshotInput,
 } from "../../services/api/adminFundCatalogue";
 import { useFundCatalogueMeta } from "../../hooks/useFundCatalogue";
 import PairRows, { asObject, type Pair } from "./PairRows";
@@ -148,7 +147,7 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
       }
       // Only sent when there is a dated sheet to attach it to; as_of is what
       // makes a snapshot a snapshot.
-      if (snapshot.as_of) body.snapshot = snapshot as SnapshotInput;
+      if (snapshot.as_of) body.snapshot = snapshot;
 
       await createAdminFund(body as unknown as FundInput);
       setOpen(false);

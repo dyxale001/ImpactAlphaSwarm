@@ -23,5 +23,13 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests are Node programs, not browser code: one of them reads a file off disk
+  // to keep two copies of a disclaimer in step, and `node:fs` cannot resolve in
+  // a DOM project. Vitest runs them; no tsc project typechecks them, which is
+  // what it was already doing before this line existed, because `tsc --noEmit`
+  // at the root compiles nothing (tsconfig.json is a solution file with
+  // `files: []`). A tsconfig.test.json with jsx and node types would cover
+  // them properly.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

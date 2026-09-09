@@ -40,22 +40,6 @@ function SelectionRing() {
   )
 }
 
-// Stacked bars showing volatility — height grows left to right
-function VolBars({ filled }: { filled: number }) {
-  const colors = ['bg-blue-400', 'bg-brand-primary', 'bg-semantic-danger']
-  return (
-    <div className="flex items-end gap-[3px] h-4">
-      {[1, 2, 3].map((n) => (
-        <div
-          key={n}
-          className={`w-1 rounded-[2px] transition-all duration-200 ${n <= filled ? colors[filled - 1] : 'bg-brand-border/30'}`}
-          style={{ height: `${28 + n * 24}%` }}
-        />
-      ))}
-    </div>
-  )
-}
-
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface Props {

@@ -138,6 +138,10 @@ export interface SnapshotInput {
   asset_allocation?: Record<string, number>;
   /** Period ("1y", "3y", …) → annualised percent, as the sheet prints them. */
   performance?: Record<string, number>;
+  /** Holding name → percent of the fund. The add form has always sent this
+   *  and the API has always accepted it; the type never listed it, so the
+   *  edit screen could not read it back without an error. */
+  top_holdings?: Record<string, number> | null;
 
   // The common core, all optional: a sheet that omits one must still be
   // recordable, and a reader that refuses a field has to be able to leave it

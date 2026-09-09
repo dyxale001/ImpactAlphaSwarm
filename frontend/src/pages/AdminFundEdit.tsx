@@ -234,12 +234,12 @@ function FundFields({
       <Field label="Why it is in the catalogue" value={values.curation_rule} onChange={(v) => setValues({ ...values, curation_rule: v })} problems={problems} name="curation_rule" />
       <Field label="Manager's fund page" value={values.mdd_page_url} onChange={(v) => setValues({ ...values, mdd_page_url: v })} problems={problems} name="mdd_page_url" />
       <div className="flex flex-wrap gap-4 pt-1 text-xs">
-        <Check
+        <CheckBox
           label="Index tracker"
           checked={flags.is_index_tracker}
           onChange={(b) => setFlags({ ...flags, is_index_tracker: b })}
         />
-        <Check
+        <CheckBox
           label="Tax-free eligible"
           checked={flags.tfsa_eligible}
           onChange={(b) => setFlags({ ...flags, tfsa_eligible: b })}
@@ -247,7 +247,7 @@ function FundFields({
         {/* The only removal there is. Unticking takes the fund off every public
             surface and keeps every fact sheet, because migration 024 grants no
             delete on either table. */}
-        <Check
+        <CheckBox
           label="In the catalogue"
           checked={flags.is_active}
           onChange={(b) => setFlags({ ...flags, is_active: b })}
@@ -425,7 +425,10 @@ function RecordSheet({
         "return_high_12m",
         "return_low_12m",
       ];
-      (body as Record<string, unknown>)[key] = numeric.includes(key) ? Number(raw) : raw;
+      // A dynamic key into a typed shape: the double assertion is what the
+      // compiler asks for, and `key` comes from the literal list above.
+      (body as unknown as Record<string, unknown>)[key] =
+        numeric.includes(key) ? Number(raw) : raw;
     }
 
     if (reg28) body.regulation_28 = reg28 === "yes";
@@ -855,7 +858,13 @@ function Choice({
   );
 }
 
-function Check({
+/** A labelled checkbox.
+ *
+ *  Named CheckBox, not Check, because lucide-react exports a Check icon and a
+ *  local declaration shadows an import: every `<Check>` in this file resolved
+ *  to this component, including the one beside "Saved" that wanted the tick and
+ *  was rendering a label-less checkbox instead. */
+function CheckBox({
   label,
   checked,
   onChange,
