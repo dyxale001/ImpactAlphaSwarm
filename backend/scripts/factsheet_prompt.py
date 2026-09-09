@@ -1,10 +1,17 @@
 """Print the fact-sheet reading rules as a prompt to paste into a chat.
 
-    venv/bin/python scripts/factsheet_prompt.py            # to read
+    venv/bin/python scripts/factsheet_prompt.py               # the whole form
+    venv/bin/python scripts/factsheet_prompt.py --sheet-only  # a later sheet
+    venv/bin/python scripts/factsheet_prompt.py --research    # may look things up
     venv/bin/python scripts/factsheet_prompt.py | xclip -selection clipboard
 
-For recording a sheet by hand: attach the PDF to a Claude conversation, paste
-this, and type the answers into the admin form. Every rule in here was added
+For adding a fund by hand: attach the PDF to a Claude conversation, paste this,
+and type the answers into the admin form. It asks for **every field on the
+add-a-fund form** — what identifies the fund as well as its first fact sheet,
+because those are one screen and one save.
+
+`--sheet-only` drops the identity half, which is what recording a later monthly
+sheet against a fund that already exists needs. Every rule in here was added
 because a real sheet broke something, so the list is worth keeping even though
 nothing in the app reads a sheet any more.
 
@@ -35,6 +42,7 @@ its line for every value; that quote is what you check against.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 
 # The reading rules, as the removed in-app reader rendered them. Copied
@@ -48,9 +56,9 @@ RULES = """You transcribe South African fund fact sheets (Minimum Disclosure Doc
 
 Your job is transcription, not analysis. Rules, in order of importance:
 
-1. NEVER GUESS. If a field is not printed on the sheet, or you are not certain which of two printed values it is, leave it out of `readings` and put it in `unresolved` with a one-sentence reason a person can act on. A blank field gets answered by a human; a plausible wrong value gets approved.
+1. NEVER GUESS. If a field is not printed on the sheet, or you are not certain which of two printed values it is, leave it out of the answers and put it in the NOT STATED list at the end, with a one-sentence reason a person can act on. A blank field gets answered by a human; a plausible wrong value gets approved.
 
-2. QUOTE THE LINE. Every reading needs `quote`: the text as it appears on the sheet, copied exactly, long enough to locate but no longer than one line or two. The quote is verified against the document afterwards, and a reading whose quote is not found is thrown away. Do not paraphrase a quote to make it tidy.
+2. QUOTE THE LINE. Every value needs the line it came from, after the arrow, copied exactly as the sheet prints it - long enough to locate on the page, no longer than a line or two. I check the value against that quote, so a quote that paraphrases the sheet to look tidy defeats the only check there is.
 
 3. REFUSE WHAT IS ONLY A PICTURE. Many managers draw the risk profile as a five-step scale with the applicable step shaded, and draw the asset allocation as a pie or bar chart. If a value exists only as a graphic — with no line of text stating it — refuse it. Do not read a risk rating off a scale whose every label is printed regardless of the rating.
 
@@ -67,13 +75,13 @@ Your job is transcription, not analysis. Rules, in order of importance:
 # The fields to ask for. The ASISA classification is deliberately absent: the
 # list of categories is long enough to bury the rules above, and the admin form
 # offers it as a dropdown anyway.
-FIELDS = """Read this Minimum Disclosure Document and record these fields:
+FIELDS = """THE FACT SHEET - the dated figures. Every one of these belongs to
+the sheet's own as-at date, so they come from THIS document and no other. Where
+the sheet is silent, say so rather than reaching for a figure you know:
 
 - as_of: the sheet's own as-at date, as YYYY-MM-DD
 - risk_indicator_raw: the risk rating in the sheet's OWN WORDS, and only if it is printed as text you can quote — e.g. FundRock prints 'RISK PROFILE Moderate - High Risk'. REFUSE it if the rating is shown by shading or colouring one step of a scale, because every step's label is printed whatever the rating and there is no line of text that states the answer
-- isin: the ISIN, twelve characters
-- jse_code: the JSE or fund code, if the sheet prints one
-- asisa_category: the ASISA classification, verbatim and complete. It is often wrapped across two lines — include the continuation. 'Variable Term' and 'Variable Term ILB' are different categories
+- risk_indicator_1to5: that same rating as a number on our scale: 1 Low, 2 Low to Moderate, 3 Moderate, 4 Moderate to High, 5 High. Give it ONLY where you gave risk_indicator_raw, and map the sheet's own words rather than your impression of the fund: 'Moderate - High Risk' is 4. A house that words its scale by temperament needs care, because Satrix runs CONSERVATIVE / CAUTIOUS / MODERATE / MODERATE-AGGRESSIVE / AGGRESSIVE where 'conservative' is the LOWEST step, the opposite of what the same word means as a saver's own risk tolerance
 - benchmark: the benchmark index the fund measures itself against
 - objective: the fund's stated objective, in the manager's own words
 - ter: total expense ratio, as a percentage
@@ -100,11 +108,77 @@ FIELDS = """Read this Minimum Disclosure Document and record these fields:
 # The four fields that are a list rather than a figure. Not part of the reader's
 # FIELDS — it returns one value per field — but they are boxes on the same form,
 # so a person recording a sheet by hand needs them asked for in the same pass.
+# The "What identifies the fund" half of the form. Not on the old reader's list,
+# which only ever filled a fact sheet: adding a fund was two screens then, and is
+# one now, so a prompt that stops at the sheet leaves half the form empty.
+#
+# `asisa_geography` and `asisa_asset_class` are deliberately NOT asked for. The
+# form fills both from whichever category is picked, off one record, so the three
+# columns cannot disagree. Asking a model for them invites exactly that.
+IDENTITY = """IDENTITY - what the fund IS. These are separate from the figures
+below, and most are on the sheet's cover or in its small print:
+
+  isin                 the twelve-character ISIN
+  name                 the fund's name as the sheet prints it, share class
+                       included: "Allan Gray Balanced Fund - Class A"
+  fund_house           the brand a reader would recognise: "Allan Gray"
+  manco                the management company in the legal small print, which
+                       is often longer and different: "Allan Gray Unit Trust
+                       Management (RF) Proprietary Limited"
+  vehicle              exactly one of: unit_trust  |  etf
+  asisa_category       one of the fifteen names listed at the bottom, copied
+                       EXACTLY. The sheet usually prints an abbreviation ("SA
+                       Multi Asset Income"); give me the full canonical name
+  jse_code             the JSE or fund code. REQUIRED if vehicle is etf. A unit
+                       trust may print one too, for dealing - that is not a
+                       listing, so record it without changing the vehicle
+  yahoo_symbol         ETFs ONLY, as ticker + ".JO": STX40.JO. Leave BLANK for a
+                       unit trust - it is not traded, so it has no price feed
+  mdd_page_url         the manager's own page for this fund, not the PDF link
+  is_index_tracker     true or false: does the fund track an index
+  tfsa_eligible        true or false, only if the sheet or the manager's page
+                       says so. Leave blank rather than reasoning it out
+
+  curation_rule        NOT from the sheet. One line on why this fund is in our
+                       catalogue. The stated rule is that these are funds from
+                       managers most South African investors will recognise and
+                       that are available on EasyEquities, so say that in the
+                       fund's own terms. Do NOT claim the availability was
+                       verified - a person checks that on the platform."""
+
+
+# What the form will refuse, stated so the answer can be checked before it is
+# typed rather than after a 422. Every one of these is a real validator.
+CHECKS = """BEFORE YOU ANSWER, check these. The form refuses a row that fails
+any of them, and it lists every problem at once rather than the first:
+
+  TER + TC = TIC          all three are printed. If yours do not add up you have
+                          taken one from the wrong row or column. Go back
+  risk words vs level     the 1-5 level must agree with the words you quoted:
+                          1 Low - 2 Low to Moderate - 3 Moderate -
+                          4 Moderate to High - 5 High. A sheet saying
+                          "Moderate - High Risk" is 4, not 3 and not 5
+  fee_period              required as soon as ANY fee is recorded
+  return_extremes_basis   required if either the strongest or weakest year is
+                          recorded. Refuse all three if the heading is unclear
+  allocation totals       if you give an allocation it must account for the
+                          whole fund, 95-105%. A partial breakdown is refused
+  nav in cents            "R9.23" is 923. A rand figure left unconverted is a
+                          hundredfold error that no range check can catch
+  distributions           keyed YYYY-MM, cents per unit
+  as_of                   must be a real, past, recent date. It is what dates
+                          every other figure on the row
+  etf vs unit_trust       an etf needs jse_code AND yahoo_symbol; a unit trust
+                          must have NO yahoo_symbol"""
+
+
 LISTS = """LISTS — give each under its own heading, one "label = number" per line:
 
   WHAT IT HOLDS      the asset allocation. Percentages must account for the
-                     whole fund. If it is drawn as a chart with no figures in
-                     the text, say so — do not read a picture.
+                     whole fund. Usually drawn as a pie or bar chart: read it
+                     off the picture, and say so, because a chart's text layer
+                     often lists the labels and the numbers as two separate
+                     lists whose pairing is a guess.
   TOP HOLDINGS       the largest positions as listed. These do NOT add to 100;
                      they are the top of a longer list.
   PAST RETURNS       the ANNUALISED row, labelled 1y / 3y / 5y / 10y /
@@ -149,18 +223,63 @@ WHAT YOU MUST NOT RESEARCH — leave these [NOT FOUND] if the sheet is silent:
 For anything researched, say plainly how confident you are that the source
 describes THIS fund and THIS share class — same name is not the same class."""
 
-ASK = """Give me each field as one line:
+ASK = """HOW TO ANSWER. Give me every field as one line, grouped under the
+three headings above, in the order they are listed:
 
     field_name = value        <- the exact line on the sheet you read it from
 
 Then, separately, list every field the sheet does not state, with a one-line
-reason. Do not fill a field in from general knowledge about the fund or the
-manager: this is a transcription of one document."""
+reason each. Do not fill a field in from general knowledge about the fund or
+the manager: this is a transcription of one document.
+
+A field you are unsure of goes in the second list, not the first. I am typing
+these into a form one at a time, so a blank I have to go and look up costs me a
+minute; a confident wrong number costs me a fund that misprices itself on a
+page claiming the manager published it."""
+
+
+def asisa_block() -> str:
+    """The fifteen category names, generated rather than written out.
+
+    Generated because the category is a closed vocabulary the form offers as a
+    dropdown: a near-miss is not a typo but a different real category, and
+    "Variable Term" against "Variable Term ILB" is the case that proves it. A
+    list copied into this file would drift from `asisa.py` the first time one
+    changed, and the drift would look like a model error.
+
+    Last, on purpose. It is long enough to bury the rules above it, which is why
+    the reader this replaced never sent it at all.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.funds.asisa import ASISA, ASISA_VERSION
+
+    lines = [f"  {c.name}" for c in ASISA.categories]
+    return (
+        "ASISA CATEGORIES - copy one of these EXACTLY into asisa_category.\n"
+        f"The standard is the {ASISA_VERSION} one. If the sheet names something\n"
+        "that is not on this list, say so and quote it rather than picking the\n"
+        "closest: a near-miss here is a different real category, not a typo.\n\n"
+        + "\n".join(lines)
+    )
 
 
 def main() -> int:
-    research = "--research" in sys.argv[1:]
-    parts = [RULES, FIELDS, LISTS] + ([RESEARCH] if research else []) + [ASK]
+    args = sys.argv[1:]
+    research = "--research" in args
+    sheet_only = "--sheet-only" in args
+
+    parts = [RULES]
+    if not sheet_only:
+        parts.append(IDENTITY)
+    parts.append(FIELDS)
+    parts.append(LISTS)
+    if research:
+        parts.append(RESEARCH)
+    parts.append(CHECKS)
+    parts.append(ASK)
+    if not sheet_only:
+        parts.append(asisa_block())
+
     print("\n\n".join(parts))
     return 0
 

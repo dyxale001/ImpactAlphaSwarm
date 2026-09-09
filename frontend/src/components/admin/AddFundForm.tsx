@@ -319,7 +319,7 @@ export default function AddFundForm({ onCreated }: { onCreated: () => Promise<vo
 
         <PairRows
           title="What it holds"
-          note="Optional — many tracker sheets print no breakdown, and the index is the answer. If you do enter one it has to account for the whole fund: a partial breakdown reads as a fund holding some of nothing. It is a chart on the sheet, so read it from the crop above."
+          note="Optional — many tracker sheets print no breakdown, and the index is the answer. If you do enter one it has to account for the whole fund: a partial breakdown reads as a fund holding some of nothing. It is drawn as a chart, so read it off the picture in the document."
           rows={allocation}
           onChange={setAllocation}
           labelPlaceholder="Domestic equity"
