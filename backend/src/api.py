@@ -136,6 +136,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# The Quant tab's window and trace endpoints live in their own module. Mounted whether
+# or not the features are on: each answers `available: false` when off, which is how the
+# frontend tells "not enabled here" from "failed". The module imports nothing heavy until
+# a request asks for a window.
+from src.quant.routes import mount_quant_routes  # noqa: E402
+
+mount_quant_routes(app)
+
 
 # --- Orphaned-run guard -------------------------------------------------------
 # An interactive analysis runs as a fire-and-forget background task after the API

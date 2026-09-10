@@ -139,6 +139,26 @@ class Indicator(ABC):
 	def _compute(self, close_prices: pd.Series) -> Any:
 		"""The measurement itself, on a series already known to be usable."""
 
+	def series(self, close_prices) -> pd.Series | None:
+		"""The measurement at EVERY point of the series, for charting.
+
+		Same guards as ``compute`` and the same failure shape, ``None``. An indicator
+		that has no series form leaves ``_series`` unimplemented and reports ``None``;
+		the caller draws nothing for it rather than a line of repeated last values.
+		"""
+		try:
+			series = _ensure_series(close_prices)
+			if series is None or len(series) < self.min_points:
+				return None
+			return self._series(series)
+		except Exception as e:
+			print(f"     {self.label} series calculation failed: {e}")
+			return None
+
+	def _series(self, close_prices: pd.Series) -> pd.Series | None:
+		"""Override where the measurement exists at every point, not only the last."""
+		return None
+
 
 class ReturnsIndicator(Indicator, ABC):
 	"""An indicator measured on DAILY RETURNS rather than on prices.
@@ -179,6 +199,13 @@ class RSI(Indicator):
 		return self.period + 1
 
 	def _compute(self, close_prices: pd.Series) -> float | None:
+		rsi = self._series(close_prices)
+		last_rsi = rsi.iloc[-1]
+		return float(last_rsi) if pd.notna(last_rsi) else None
+
+	def _series(self, close_prices: pd.Series) -> pd.Series:
+		"""RSI at every point. ``_compute`` reads its last value, so the run's single
+		reading and the chart's line are the same arithmetic by construction."""
 		period = self.period
 		delta = close_prices.diff()
 		gains = delta.clip(lower=0)
@@ -188,10 +215,7 @@ class RSI(Indicator):
 		avg_loss = losses.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
 
 		rs = avg_gain / avg_loss
-		rsi = 100 - (100 / (1 + rs))
-
-		last_rsi = rsi.iloc[-1]
-		return float(last_rsi) if pd.notna(last_rsi) else None
+		return 100 - (100 / (1 + rs))
 
 
 class MACD(Indicator):
@@ -362,6 +386,44 @@ class MarketDataSource:
 		except Exception as e:
 			print(f"     Error fetching {ticker}: {str(e)}")
 			return None
+
+	def history_between(self, ticker: str, start, end) -> pd.DataFrame | None:
+		"""Fetch OHLCV between two dates (end exclusive), or None if the fetch fails.
+
+		The period form above is what the run uses. The Quant tab's horizons need dates:
+		yfinance has no three year period, and a window that starts on a date has to be
+		fetched from an earlier one so the indicators are settled by its first point.
+		"""
+		try:
+			data = yf.download(
+				ticker,
+				start=str(start),
+				end=str(end),
+				progress=False,
+				threads=False,
+			)
+			if data is None or len(data) == 0:
+				return None
+			return data
+		except Exception as e:
+			print(f"     Error fetching {ticker} between {start} and {end}: {str(e)}")
+			return None
+
+	def profile(self, ticker: str) -> dict[str, str]:
+		"""Where the ticker is listed and what it is priced in, or blanks when unknown.
+
+		From fast_info, which is a single light request. Blank rather than guessed: a
+		chart that says nothing about currency is better than one that says USD for a
+		JSE listing.
+		"""
+		try:
+			info = yf.Ticker(ticker).fast_info
+			currency = str(getattr(info, "currency", "") or "").upper()
+			exchange = str(getattr(info, "exchange", "") or "")
+			return {"currency": currency, "exchange": exchange}
+		except Exception as e:
+			print(f"     Error reading profile for {ticker}: {str(e)}")
+			return {"currency": "", "exchange": ""}
 
 	def benchmark_close(self, period: str | None = None) -> pd.Series | None:
 		"""Fetch the SPY close series ONCE for the universe (shared across all beta
