@@ -289,3 +289,92 @@ export async function getSentimentLastUpdated() {
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<{ updated_at: string | null }>;
 }
+
+// ── The Quant tab's historical window and the paragraph written over it ─────
+
+import type { QuantHorizon } from "../../data/quantExplainers";
+
+export interface QuantHistoryPoint {
+  /** Trading day, YYYY-MM-DD. */
+  date: string;
+  /** Close in the asset's own listing currency. */
+  close: number;
+  /** RSI(14) on that day, or null while the indicator has too little history. */
+  rsi: number | null;
+}
+
+// The numbers a window supports, computed on the full daily series before the plotted
+// one was thinned. What the strip above the chart shows and the trace is allowed to quote.
+export interface QuantWindowFacts {
+  start: string;
+  end: string;
+  trading_days: number;
+  first_close: number;
+  last_close: number;
+  change_pct: number | null;
+  high: number;
+  high_date: string;
+  low: number;
+  low_date: string;
+  /** Worst peak to trough fall inside the window, as a negative percentage. */
+  max_drawdown_pct: number;
+  /** Annualised volatility of THIS window's daily returns, as a percentage. */
+  volatility_pct: number | null;
+  latest_rsi: number | null;
+  rsi_days_measured: number;
+  days_rsi_overbought: number;
+  days_rsi_oversold: number;
+}
+
+export interface QuantHistoryResponse {
+  ticker: string;
+  horizon: QuantHorizon;
+  /** False when the deployment has not switched the feature on. Distinct from empty. */
+  available: boolean;
+  /** ISO currency code the closes are in, e.g. "USD", or "" when yfinance did not say. */
+  currency: string;
+  /** yfinance's exchange code, e.g. "NMS". */
+  exchange: string;
+  /** The same exchange as a reader would name it, e.g. "Nasdaq". */
+  exchange_name: string;
+  points: QuantHistoryPoint[];
+  facts: QuantWindowFacts | null;
+}
+
+// One ticker's closes and RSI over a horizon. Fetched from yfinance the first time a
+// window is opened today and served from memory after that. Informational, so no auth
+// token is needed.
+export async function getQuantHistory(ticker: string, horizon: QuantHorizon) {
+  const res = await fetch(
+    `${BASE}/api/assets/${encodeURIComponent(ticker)}/quant-history?horizon=${horizon}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<QuantHistoryResponse>;
+}
+
+export interface QuantTraceResponse {
+  ticker: string;
+  horizon: QuantHorizon;
+  available: boolean;
+  /**
+   * The paragraph, or null for every quiet reason at once: traces switched off, no
+   * window to write from, generation failed and no template could stand in. The panel
+   * renders one fallback for all of them.
+   */
+  trace: string | null;
+  /** "model" when the language model wrote it, "template" when the deterministic fallback did. */
+  source: "model" | "template" | null;
+  model: string | null;
+  generated_at: string | null;
+}
+
+// The written paragraph over one ticker's window. Generated the first time a
+// (ticker, day, horizon) is asked for and read back from a table after that, so this is
+// usually an indexed read and occasionally a couple of seconds. Informational, no token.
+export async function getQuantTrace(ticker: string, horizon: QuantHorizon) {
+  const res = await fetch(
+    `${BASE}/api/assets/${encodeURIComponent(ticker)}/quant-trace?horizon=${horizon}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<QuantTraceResponse>;
+}

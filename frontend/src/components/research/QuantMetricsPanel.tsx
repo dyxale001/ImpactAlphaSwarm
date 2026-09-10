@@ -13,6 +13,10 @@ import {
   // quantExplainers.ts so reverting this commit restores the footer intact.
   INSUFFICIENT_UNIVERSE_NOTE,
   NO_DATA_NOTE,
+  SUB_DIMENSION_DIRECTION,
+  RSI_BAND_MEANING,
+  BETA_BAND_MEANING,
+  percentileReading,
   type SubDimensionKey,
   type RsiBand,
   type BetaBand,
@@ -24,6 +28,10 @@ function formatMetric(value: unknown, digits = 2) {
     return Number.isInteger(value) ? String(value) : value.toFixed(digits);
   }
   return String(value);
+}
+
+function sentenceCase(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function ordinal(n: number) {
@@ -151,6 +159,21 @@ export default function QuantMetricsPanel({
                   {copy.subtitle}
                 </p>
                 {pctile !== null && <PercentileTrack pctile={pctile} />}
+                {/* D-122: the direction of "good" differs per row and was never
+                    stated, so "78th percentile" on stability could not be read.
+                    One line says which way is which; a second turns the ordinal
+                    into a comparison a beginner can picture. Neither is a verdict:
+                    whether steadiness is wanted depends on the reader. */}
+                {pctile !== null && (
+                  <p className="mt-1.5 text-xs text-brand-fg/80">
+                    <span className="font-medium text-brand-fg">
+                      {sentenceCase(percentileReading(key, pctile))}.
+                    </span>{" "}
+                    <span className="text-brand-muted-fg">
+                      {SUB_DIMENSION_DIRECTION[key]}
+                    </span>
+                  </p>
+                )}
                 {open && <ExplainerBody text={copy.detail} />}
               </div>
             );
@@ -206,6 +229,23 @@ export default function QuantMetricsPanel({
                 </span>
                 <Info className="w-3 h-3 text-brand-muted-fg shrink-0" />
               </button>
+            )}
+          </div>
+          {/* D-122: RSI and beta need plain-language explanation for a reader
+              who has not met the terms. Said under the chips, always, in the
+              chip's own band; the fuller definition stays behind the toggle. */}
+          <div className="space-y-1 text-xs text-brand-fg/80">
+            {rsiBand && (
+              <p>
+                <span className="font-medium text-brand-fg">RSI:</span>{" "}
+                {RSI_BAND_MEANING[rsiBand]}
+              </p>
+            )}
+            {betaBand && (
+              <p>
+                <span className="font-medium text-brand-fg">Beta:</span>{" "}
+                {BETA_BAND_MEANING[betaBand]}
+              </p>
             )}
           </div>
           {openExplainer === "rsi" && (

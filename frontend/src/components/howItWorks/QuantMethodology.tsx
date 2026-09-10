@@ -1,7 +1,15 @@
 import { BarChart3, Calculator, Ruler, Tags, ShieldCheck } from "lucide-react";
 import MethodologyCardHeader from "./MethodologyCardHeader";
 import MethodologyStep from "./MethodologyStep";
-import { RAW_METRICS, RSI_BANDS, BETA_BANDS } from "../../data/quantExplainers";
+import {
+  RAW_METRICS,
+  RSI_BANDS,
+  BETA_BANDS,
+  SUB_DIMENSIONS,
+  SUB_DIMENSION_ORDER,
+  SUB_DIMENSION_DIRECTION,
+  QUANT_HORIZONS,
+} from "../../data/quantExplainers";
 
 // The quantitative walkthrough. This replaced a "documentation coming soon"
 // placeholder that promised to explain how the metrics "become a score" — which
@@ -59,6 +67,23 @@ export default function QuantMethodology() {
             a run has too few comparable assets for a ranking to mean anything, we
             show the facts and say the ranking was not possible rather than
             inventing a position.
+          </p>
+          <p>
+            A percentile still needs its direction stated, because it differs per
+            row. Beside every reading the asset page says which way is which:
+          </p>
+          <ul className="mt-1 space-y-1.5">
+            {SUB_DIMENSION_ORDER.map((key) => (
+              <li key={key}>
+                <span className="font-semibold text-brand-fg">{SUB_DIMENSIONS[key].label}</span>:{" "}
+                {SUB_DIMENSION_DIRECTION[key]}
+              </li>
+            ))}
+          </ul>
+          <p>
+            The Quant tab also draws the closing price and the daily RSI over{" "}
+            {QUANT_HORIZONS.join(", ")} windows, in the asset's own listing currency.
+            The line describes what the price did; it is not a chart to trade from.
           </p>
         </MethodologyStep>
 

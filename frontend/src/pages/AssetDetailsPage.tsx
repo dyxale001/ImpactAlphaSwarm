@@ -23,6 +23,10 @@ import {
 } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
+import {
+  HorizonPicker,
+  QuantTrendChart,
+} from "../components/research/QuantTrendChart";
 import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
@@ -38,6 +42,11 @@ import {
 } from "../components/research/sentimentDisplay";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 import { useSentimentHistory } from "../hooks/useSentimentHistory";
+import { useQuantHistory } from "../hooks/useQuantHistory";
+import {
+  DEFAULT_QUANT_HORIZON,
+  type QuantHorizon,
+} from "../data/quantExplainers";
 import { HUB_PAGE_LABELS, readLastHubPage } from "../utils/lastHubPage";
 import {
   NEWS_LOOKBACK_DAYS,
@@ -386,6 +395,11 @@ export default function AssetDetailsPage() {
       ? requested
       : "ranking";
   });
+
+  // The Quant tab's window. Fetched only while that tab is showing: a reader who opened
+  // the page for the ranking should not cost a price fetch for a chart they never saw.
+  const [horizon, setHorizon] = useState<QuantHorizon>(DEFAULT_QUANT_HORIZON);
+  const quantHistory = useQuantHistory(ticker?.toUpperCase(), horizon, tab === "quant");
 
   // Per-day news for the chart's second line: the history the backend stored where it
   // has any, and only otherwise the figure derived here from the run's article list.
@@ -813,7 +827,39 @@ export default function AssetDetailsPage() {
           icon={BarChart3}
           action={<ExplainerLink ticker={asset.ticker} section="quant" />}
         >
-          <QuantMetricsPanel recommendation={recommendation} />
+          {/* One wrapper, for the same reason the sentiment card has one: the card's
+              uniform space-y would otherwise put the window switch, the chart and the
+              measurements all exactly as far apart as each other. */}
+          <div className="space-y-5">
+            {/* The window first, then the chart it selects, then the run's own
+                measurements. The switch sits above rather than on the chart so it is
+                found before the thing it changes. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-brand-muted-fg">
+                Price history over a window you choose. The measurements further
+                down come from the most recent analysis run.
+              </p>
+              <HorizonPicker value={horizon} onChange={setHorizon} />
+            </div>
+
+            <QuantTrendChart
+              points={quantHistory.points}
+              facts={quantHistory.facts}
+              currency={quantHistory.currency}
+              exchangeName={quantHistory.exchangeName}
+              horizon={horizon}
+              available={quantHistory.available}
+              isLoading={quantHistory.isLoading}
+              error={quantHistory.error}
+            />
+
+            <div className="pt-4 border-t border-brand-border/50">
+              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-3">
+                From the latest analysis run
+              </p>
+              <QuantMetricsPanel recommendation={recommendation} />
+            </div>
+          </div>
         </SectionCard>
       )}
 
