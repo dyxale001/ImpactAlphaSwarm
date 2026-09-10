@@ -10,10 +10,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import { useAdminUsers } from "../hooks/useAdminUsers";
-import {
-  formatDbString,
-  formatNumberWithSpaces,
-} from "../utils/stringFormatters";
+import { formatDbString } from "../utils/stringFormatters";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { supabase } from "../lib/supabase";
@@ -369,16 +366,6 @@ export default function AdminDashboard() {
                                 ? formatDbString(
                                     user.user_preferences.risk_tolerance,
                                   )
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-brand-muted-fg w-24">
-                              Capital:
-                            </span>
-                            <span className="font-medium text-brand-fg">
-                              {user.user_preferences?.capital != null
-                                ? `R ${formatNumberWithSpaces(user.user_preferences.capital as string | number)}`
                                 : "N/A"}
                             </span>
                           </div>

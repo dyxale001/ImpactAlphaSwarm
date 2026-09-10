@@ -1,12 +1,22 @@
 import { supabase } from "../../lib/supabase";
 import type { SocialPost } from "../../components/research/SocialPosts";
 import type { NewsArticle } from "../../components/research/NewsArticles";
+import type { AnalysisStatus } from "../../types/analysisLifecycle";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
 async function getToken() {
   const { data } = await supabase.auth.getSession();
   return data?.session?.access_token ?? null;
+}
+
+export interface StartAnalysisResponse {
+  run_id: string;
+  /**
+   * True when a run was already in flight for this user and the id below is that
+   * existing run rather than a new one. Callers poll it the same way either way.
+   */
+  already_running?: boolean;
 }
 
 export async function startAnalysis(payload: {
@@ -31,13 +41,13 @@ export async function startAnalysis(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<StartAnalysisResponse>;
 }
 
 export async function getStatus(runId: string) {
   const res = await fetch(`${BASE}/api/analysis/status/${runId}`);
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<AnalysisStatus>;
 }
 
 export async function getResult(runId: string) {
@@ -137,7 +147,6 @@ export interface TopFundsResponse {
   cached?: boolean;
   fetched_at?: string | null;
 }
-
 
 // Institutional data inverted to per-fund holdings across all tracked assets.
 export async function getTopFunds() {

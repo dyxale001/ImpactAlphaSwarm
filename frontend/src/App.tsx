@@ -37,8 +37,8 @@ import WhaleWatchingPage from "./pages/WhaleWatching";
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { session, isProfileLoading, isRecovery } = useAuthStore();
-  if (isProfileLoading) return null; // Let global loading state handle spinner
+  const { session, isLoading, isProfileLoading, isRecovery } = useAuthStore();
+  if (isLoading || isProfileLoading) return null;
   // A pending recovery session must still be able to reach the login page,
   // otherwise abandoning a reset would bounce the user into the app.
   if (session && !isRecovery) return <Navigate to="/dashboard" replace />;

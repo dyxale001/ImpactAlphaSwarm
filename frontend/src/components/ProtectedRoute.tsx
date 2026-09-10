@@ -3,14 +3,14 @@ import { useAuthStore } from '../store/authStore'
 
 export default function ProtectedRoute() {
 
-  const { session, profile, analysis, isLoading, isProfileLoading, isRecovery } = useAuthStore()
+  const { session, profile, analysis, isLoading, isProfileLoading, hasResolvedProfile, profileError, fetchProfile, isRecovery } = useAuthStore()
   const location = useLocation()
 
- 
+
   if (isLoading || isProfileLoading) {
     return <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg">Verifying session...</div>
   }
-  
+
   if (!session) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
@@ -21,6 +21,15 @@ export default function ProtectedRoute() {
     return <Navigate to="/reset-password" replace />
   }
 
+
+  if (!hasResolvedProfile) {
+    return <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg">
+      <div role="alert">
+        <p>{profileError || 'Unable to load your profile.'}</p>
+        <button onClick={() => void fetchProfile(session.user.id)}>Try again</button>
+      </div>
+    </div>
+  }
 
   if (!profile && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />

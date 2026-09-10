@@ -45,6 +45,7 @@ from typing import Any
 
 from .gr_reasoningtracestyle import HOUSE_STYLE
 from .llm_client import GroqClient
+from .market_calendar import MarketCalendar
 from .ns_daily import NewsHistory
 from .ss_config import SentimentConfig
 from .ss_daily import RETENTION_DAYS, SocialHistory, utc_now, window_days
@@ -228,8 +229,14 @@ class DayEvidence:
 class DaySummaryPromptBuilder:
 	"""Turns one day's evidence into the prompt. Pure, no I/O."""
 
-	def __init__(self, config: SentimentConfig | None = None):
+	def __init__(
+		self,
+		config: SentimentConfig | None = None,
+		calendar: MarketCalendar | None = None,
+	):
 		self.config = config or SentimentConfig.from_env()
+		# A pure lookup table, so the builder stays pure with it.
+		self.calendar = calendar or MarketCalendar()
 
 	def build(self, evidence: DayEvidence, *, partial: bool) -> str:
 		items = self.config.day_summary_evidence_items
@@ -258,6 +265,7 @@ Rules you must follow:
 - Never predict what the price or the sentiment will do next, and never tell the reader to buy, sell or hold.
 - Refer to the sentiment reading, not to what the company or its stock "did". A quiet day with bullish chatter is not a day the stock rose.
 - A day marked "nothing collected" in the table is a day no data was gathered, not a day sentiment fell to zero. Never read a gap as a crash.
+- A day marked "market closed" is a Saturday, a Sunday or a US public holiday, when the New York Stock Exchange does not trade. Chatter is normally thinner on those days, so a quiet closed day is the ordinary weekly pattern and never evidence that interest fell away. If the day you are writing about was closed, say so plainly and name it, for example that it was a Saturday or that it was Thanksgiving. Do not describe trading, volume or market moves on a closed day, because there were none.
 - Never confuse a score with a count. Scores run 0 to 100 and say how positive the mood was; counts are how many posts or articles there were. A day with a score of 44 did not have 44 posts.
 - The figures above already state which side of neutral each score sits on and by how much. Use exactly what they say. A score given as ABOVE the neutral 50 is a positive mood and must never be called bearish, negative or below neutral, and one given as BELOW is the reverse. Being the lowest reading of the week is NOT the same as being below neutral: the week's lowest score can still sit well above 50.
 - Write British English, in a plain, level voice. No hype, no filler openers like "Overall" or "In summary".
@@ -278,6 +286,22 @@ Write only the paragraph itself."""
 			f"- Article reliability mix: {self._tier_phrase(evidence.tier_counts)}",
 			f"- Post volume: {evidence.post_count} posts, {evidence.volume_comparison()}",
 		]
+
+		# Stated among the figures, not only in the week table, because it is a fact
+		# about the day being written about rather than a comparison with the others.
+		# Without it the model explains a thin Thanksgiving as waning interest, which is
+		# the one reading the figures cannot rule out on their own.
+		closure = self.calendar.closure(evidence.day)
+		if closure is not None:
+			reason = (
+				f"for the US public holiday {closure.name}"
+				if closure.kind == "holiday"
+				else f"because it was a {closure.name}"
+			)
+			lines.append(
+				f"- The US stock market was CLOSED on this day {reason}."
+				" There was no trading, and chatter is normally thinner on a closed day."
+			)
 
 		standing = evidence.score_comparison()
 		if standing:
@@ -322,15 +346,21 @@ Write only the paragraph itself."""
 		seven read "social no reading, 0 posts; news no reading, 0 articles" invites the
 		model to treat the emptiness as a finding.
 		"""
+		# Named on every closed row, empty or not. A closure explains a thin day as well
+		# as an empty one, and the model cannot work out that the last Thursday in
+		# November was a holiday from a date alone.
+		closure = self.calendar.closure(entry.day)
+		closed = f"market closed, {closure.name}; " if closure else ""
+
 		if entry.post_count == 0 and entry.news_count == 0:
-			return "nothing collected"
+			return f"{closed}nothing collected"
 		# "social score 44 from 9 posts", not "social 44, 9 posts". The terse form was
 		# genuinely ambiguous and the model read across it: given a row reading
 		# "social 44, 9 posts" it wrote "higher than the 44 posts on 28 August", turning a
 		# score into a volume. Naming both quantities in every cell costs a few tokens and
 		# removes the only reading error the table produced.
 		return (
-			f"social score {self._table_score(entry.social_score)}"
+			f"{closed}social score {self._table_score(entry.social_score)}"
 			f" from {entry.post_count} posts;"
 			f" news score {self._table_score(entry.news_score)}"
 			f" from {entry.news_count} articles"

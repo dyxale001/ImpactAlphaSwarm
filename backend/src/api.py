@@ -339,7 +339,7 @@ async def start_analysis(
 
 @app.get("/api/analysis/status/{run_id}")
 async def analysis_status(run_id: str):
-    resp = supabase.table("ai_runs").select("id, status, created_at").eq("id", run_id).execute()
+    resp = supabase.table("ai_runs").select("id, status, created_at, progress").eq("id", run_id).execute()
     data = resp.data or []
     if not data:
         raise HTTPException(status_code=404, detail="run not found")
@@ -349,6 +349,19 @@ async def analysis_status(run_id: str):
     if row.get("status") == "running" and _is_run_stale(row.get("created_at")):
         update_ai_run_status(run_id, "failed")
         row["status"] = "failed"
+    progress = row.get("progress")
+    if isinstance(progress, dict):
+        phases = {"initializing", "analysis", "synthesis", "output", "complete"}
+        active = {"quant", "sentiment"}
+        row["progress"] = {
+            "phase": progress.get("phase") if progress.get("phase") in phases else "initializing",
+            "message": progress.get("message") if isinstance(progress.get("message"), str) else "Preparing your analysis",
+            "active": [item for item in progress.get("active", []) if item in active],
+        }
+        if isinstance(progress.get("selected_assets"), int):
+            row["progress"]["selected_assets"] = progress["selected_assets"]
+    else:
+        row["progress"] = None
     return row
 
 
@@ -624,6 +637,36 @@ _ASK_BLOCKLIST = (
 # broader is caught (if at all) by the classifier below, which is why its
 # prompt spells out the ALLOW/BLOCK distinction explicitly rather than
 # relying on the blocklist alone to be exhaustive.
+
+
+# Ask request/response models. Defined here, at the top of the Ask section,
+# because the helpers below annotate their return type as AskResponse and
+# annotations are evaluated at def time — declaring these after the helpers
+# raises NameError at import.
+class AskRequest(BaseModel):
+    query: str
+
+
+class AskSource(BaseModel):
+    title: str
+    publisher: str
+    url: str
+    retrieved_at: str
+
+
+class AskResponse(BaseModel):
+    intent: str
+    narration: str
+    data: dict
+    source: str
+    # Structured source metadata for externally-grounded LEARNING_QUESTION
+    # answers (trusted-knowledge fallback). Empty for every other path —
+    # `source` (a short string label) stays the field older/other consumers
+    # read, this is purely additive so no existing consumer breaks.
+    sources: List[AskSource] = []
+    is_blocked: bool = False
+    redirect_suggestions: List[str] = []
+
 
 _ASK_REDIRECT_SUGGESTIONS = [
     "Show me technology assets in my universe",

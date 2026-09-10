@@ -12,11 +12,15 @@ import {
   Layers,
   Sparkles,
 } from "lucide-react";
-import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAssets";
+import {
+  useUniverseAssets,
+  type UniverseAsset,
+} from "../hooks/useUniverseAssets";
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import CompanySearch from "../components/research/CompanySearch";
 import WaveMotif from "../components/research/WaveMotif";
+import WhaleWatchingSkeleton from "../components/research/WhaleWatchingSkeleton";
 import FundHoldingsView, {
   FundHoldingsDetail,
 } from "../components/research/FundHoldingsView";
@@ -26,7 +30,11 @@ import type { FundHolding } from "../services/api/analysis";
 const UNIVERSE_TILES = [
   { id: "Technology", Icon: Cpu, desc: "Software, hardware & semiconductors" },
   { id: "Green Energy", Icon: Zap, desc: "Solar, wind & clean infrastructure" },
-  { id: "Finance", Icon: TrendingUp, desc: "Banks, fintech & asset management" },
+  {
+    id: "Finance",
+    Icon: TrendingUp,
+    desc: "Banks, fintech & asset management",
+  },
   { id: "AI & Robotics", Icon: Bot, desc: "Machine learning & automation" },
   { id: "Healthcare", Icon: Heart, desc: "Biotech, pharma & medical devices" },
 ] as const;
@@ -95,6 +103,10 @@ export default function WhaleWatchingPage() {
 
   const selected = ticker ? assetByTicker[ticker] : undefined;
 
+  if (isLoading && all.length === 0) {
+    return <WhaleWatchingSkeleton />;
+  }
+
   return (
     <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-6 animate-fade-in-up">
       {/* Header band. Forest ground with the wave motif breaking along the
@@ -119,25 +131,25 @@ export default function WhaleWatchingPage() {
           filters rather than competing with the header. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
-        {(
-          [
-            { id: "universes", label: "Universes", Icon: Layers },
-            { id: "funds", label: "Top Funds", Icon: Building2 },
-          ] as const
-        ).map((s) => (
-          <button
-            key={s.id}
-            onClick={() => goToSection(s.id)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-              section === s.id
-                ? "bg-brand-primary text-brand-bg"
-                : "text-brand-muted-fg hover:text-brand-fg"
-            }`}
-          >
-            <s.Icon className="w-3.5 h-3.5" />
-            {s.label}
-          </button>
-        ))}
+          {(
+            [
+              { id: "universes", label: "Universes", Icon: Layers },
+              { id: "funds", label: "Top Funds", Icon: Building2 },
+            ] as const
+          ).map((s) => (
+            <button
+              key={s.id}
+              onClick={() => goToSection(s.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                section === s.id
+                  ? "bg-brand-primary text-brand-bg"
+                  : "text-brand-muted-fg hover:text-brand-fg"
+              }`}
+            >
+              <s.Icon className="w-3.5 h-3.5" />
+              {s.label}
+            </button>
+          ))}
         </div>
         <div className="w-full sm:w-auto sm:min-w-[18rem]">
           <CompanySearch
@@ -298,7 +310,9 @@ export default function WhaleWatchingPage() {
                       </div>
                       <ChevronRight className="w-4 h-4 text-brand-muted-fg group-hover:text-brand-primary transition-colors" />
                     </div>
-                    <p className="text-base font-semibold text-brand-fg">{id}</p>
+                    <p className="text-base font-semibold text-brand-fg">
+                      {id}
+                    </p>
                     <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
                     <p className="text-[11px] mt-3 font-semibold flex items-center gap-1.5">
                       <span className="text-brand-primary">

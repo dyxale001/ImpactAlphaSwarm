@@ -67,6 +67,48 @@ export const NATURE_DEFS: Record<string, string> = {
     "Shares obtained by converting another security (e.g. a derivative) into common stock.",
 };
 
+// How many distinct insiders must have bought on the open market inside the
+// window before it counts as a cluster. One insider buying is a person; several
+// buying at once is a pattern.
+export const CLUSTER_MIN_BUYERS = 2;
+export const CLUSTER_WINDOW_DAYS = 30;
+
+interface ClusterCandidate {
+  name: string;
+  transaction_code?: string | null;
+  transaction_date?: string | null;
+  filing_date?: string | null;
+}
+
+/**
+ * Count the distinct insiders who bought on the open market recently.
+ *
+ * SEC code P only: a grant, an option exercise or a tax withholding is not a
+ * decision to buy, so counting them would turn routine compensation admin into
+ * a conviction signal. Dated off the transaction where there is one, since the
+ * filing can lag it by days.
+ *
+ * Shared by the per-company insider panel and the dashboard's cluster widget so
+ * the two cannot disagree about what a cluster is.
+ */
+export function clusterBuyerCount(
+  transactions: ClusterCandidate[],
+  now: number = Date.now(),
+): number {
+  const windowMs = CLUSTER_WINDOW_DAYS * 86_400_000;
+  const buyers = new Set<string>();
+
+  for (const t of transactions) {
+    if ((t.transaction_code || "").trim().toUpperCase() !== "P") continue;
+    const when = new Date(t.transaction_date || t.filing_date || "");
+    if (Number.isNaN(when.getTime())) continue;
+    if (now - when.getTime() > windowMs) continue;
+    buyers.add(t.name.trim().toUpperCase());
+  }
+
+  return buyers.size;
+}
+
 // Finnhub returns insider names upper-cased and in "LAST FIRST" order. Title-case
 // them and tidy initials/suffixes; leave the token order as-is (we cannot
 // reliably tell how many leading tokens are the surname).

@@ -25,49 +25,87 @@ interface AuthState {
   profile: UserProfile | null
   analysis: UserAnalysis | null
   isLoading: boolean
+  // Initial resolution blocks routing; background refresh never does.
   isProfileLoading: boolean
+  isProfileRefreshing: boolean
+  hasResolvedProfile: boolean
+  profileError: string | null
+  saveCompletedAnalysis: (analysis: UserAnalysis) => void
   isRecovery: boolean
   setSession: (session: Session | null) => void
   setRecovery: (value: boolean) => void
   fetchProfile: (userId: string) => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  session: null,
-  user: null,
-  profile: null,
-  analysis: null,
-  isLoading: true,
-  isProfileLoading: false,
-  isRecovery: detectPendingRecovery(),
+export const useAuthStore = create<AuthState>((set, get) => {
+  let revision = 0
+  let pending: Promise<void> | null = null
+  return {
+    session: null,
+    user: null,
+    profile: null,
+    analysis: null,
+    isLoading: true,
+    isProfileLoading: false,
+    isProfileRefreshing: false,
+    hasResolvedProfile: false,
+    profileError: null,
+    isRecovery: detectPendingRecovery(),
 
-  setRecovery: (value) => {
-    if (typeof window !== 'undefined') {
-      if (value) window.localStorage.setItem(RECOVERY_KEY, 'true')
-      else window.localStorage.removeItem(RECOVERY_KEY)
+    setRecovery: (value) => {
+      if (typeof window !== 'undefined') {
+        if (value) window.localStorage.setItem(RECOVERY_KEY, 'true')
+        else window.localStorage.removeItem(RECOVERY_KEY)
+      }
+      set({ isRecovery: value })
+    },
+
+    setSession: (session) => {
+      const changedUser = get().user?.id !== session?.user.id
+      if (changedUser || !session) {
+        revision++
+        pending = null
+        set({ profile: null, analysis: null, hasResolvedProfile: false,
+          profileError: null, isProfileLoading: Boolean(session), isProfileRefreshing: false })
+      }
+      set({ session, user: session?.user ?? null, isLoading: false })
+    },
+
+    // A successful write is newer evidence than any outstanding profile read.
+    saveCompletedAnalysis: (analysis) => {
+      if (get().user?.id !== analysis.user_id) return
+      revision++
+      pending = null
+      set({ analysis, profileError: null, isProfileLoading: false,
+        isProfileRefreshing: false })
+    },
+
+    fetchProfile: (userId) => {
+      if (get().user?.id !== userId) return Promise.resolve()
+      if (pending) return pending
+      const requestRevision = ++revision
+      const isCurrent = () => revision === requestRevision && get().user?.id === userId
+      set({ isProfileLoading: !get().hasResolvedProfile,
+        isProfileRefreshing: get().hasResolvedProfile, profileError: null })
+
+      const request = (async () => {
+        try {
+          const result = await fetchUserProfileData(userId)
+          if (!isCurrent()) return
+          if (result.error) throw result.error
+          set({ profile: result.profile, analysis: result.analysis, hasResolvedProfile: true })
+        } catch (error: unknown) {
+          if (isCurrent()) set({ profileError:
+            error instanceof Error ? error.message : 'Unable to load your profile. Please try again.' })
+        } finally {
+          if (isCurrent()) {
+            pending = null
+            set({ isProfileLoading: false, isProfileRefreshing: false })
+          }
+        }
+      })()
+      pending = request
+      return request
     }
-    set({ isRecovery: value })
-  },
-
-  setSession: (session) => set(() => ({
-    session,
-    user: session?.user ?? null,
-    isLoading: false,
-    ...(session === null ? { isProfileLoading: false, profile: null, analysis: null } : {})
-  })),
-
-  fetchProfile: async (userId) => {
-    set({ isProfileLoading: true })
-
-    const { profile, analysis, error } = await fetchUserProfileData(userId)
-    if (error) {
-      set({ isProfileLoading: false })
-      return
-    }
-    set({
-      profile,
-      analysis,
-      isProfileLoading: false
-    })
   }
-}))
+})

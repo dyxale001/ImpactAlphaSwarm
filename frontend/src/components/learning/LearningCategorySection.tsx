@@ -1,4 +1,4 @@
-import type { LearningArticle, LearningCategory } from "../../types/learning";
+import type { LearningArticle, LearningCategory, LearningQuizStatus } from "../../types/learning";
 import LearningCard from "./LearningCard";
 
 type Props = {
@@ -6,6 +6,7 @@ type Props = {
   onOpenArticle: (article: LearningArticle) => void;
   onTakeQuiz: (article: LearningArticle) => void;
   getArticleQuizScore: (articleId: string) => number | null;
+  getArticleQuizStatus?: (articleId: string) => LearningQuizStatus | undefined;
 };
 
 export default function LearningCategorySection({
@@ -13,6 +14,7 @@ export default function LearningCategorySection({
   onOpenArticle,
   onTakeQuiz,
   getArticleQuizScore,
+  getArticleQuizStatus,
 }: Props) {
   return (
     <section className="space-y-4">
@@ -41,8 +43,9 @@ text-sm text-brand-muted-fg
               article={article}
               onOpenArticle={onOpenArticle}
               onTakeQuiz={onTakeQuiz}
-              canTakeQuiz={true}
+              canTakeQuiz={(article.quiz_question_count ?? 0) > 0}
               hasPerfectScore={getArticleQuizScore(article.id) === 100}
+              quizStatus={getArticleQuizStatus?.(article.id)}
             />
           </div>
         ))}
