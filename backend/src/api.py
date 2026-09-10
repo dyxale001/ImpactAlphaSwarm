@@ -2644,6 +2644,8 @@ _ASK_GLOSSARY = {
     "confidence score": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
     "confidence": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
     "quant score": "The quant score is AlphaSwarm's quantitative (price-data-based) signal for an asset, before it's blended with sentiment — a measurement derived from price history, not a prediction.",
+    "quant position": "Quant Position (shown as \"Quant Position vs Peers\") is where an asset's price-based measurements — momentum, risk-adjusted return, and stability — sit relative to the other assets analysed in the same run, expressed as a percentile from 0-100. A 70th percentile quant position means the asset's average of those three measurements ranked higher than about 70% of the candidates in that run. It is a factual position among today's candidates, not a quality rating or a forecast, and RSI/beta are deliberately excluded from it.",
+    "quant lean": "Quant Position (shown as \"Quant Position vs Peers\") is where an asset's price-based measurements — momentum, risk-adjusted return, and stability — sit relative to the other assets analysed in the same run, expressed as a percentile from 0-100. A 70th percentile quant position means the asset's average of those three measurements ranked higher than about 70% of the candidates in that run. It is a factual position among today's candidates, not a quality rating or a forecast, and RSI/beta are deliberately excluded from it.",
     "rank": "Rank is an asset's position in AlphaSwarm's most recent ranked run, ordered by its confidence score — 1 is the highest-ranked asset in that run. It reflects the current data, not a forecast.",
     "price": "An asset's current price, as last recorded by AlphaSwarm — the capital needed for one whole share, always quoted in South African Rand (ZAR). Not a measure of investment quality by itself.",
     "institutional ownership": "Institutional ownership shows what share of a company is held by large investors (funds, asset managers) based on their public 13F filings. It's purely informational — refreshed periodically, not part of AlphaSwarm's ranking or Signal Score.",
@@ -2975,7 +2977,7 @@ def _is_bare_ticker_query(query: str, ticker: str) -> bool:
 # phrasing and answered from the SAME existing, disclosed, non-advice
 # feature description — never a new answer, never a recommendation.
 _ASK_WHALE_FEATURE_PATTERN = re.compile(
-    r"\bwhale\s+watching\b|"
+    r"\bwhale[\s-]*watching\b|"
     r"\bwhich\s+whales?\b|\bwhat\s+whales?\b|\bwho\s+(?:are|is)\s+the\s+whales?\b|"
     r"\bwhale\s+activity\b|\bwhales?\s+(?:should|to)\s+(?:i\s+)?watch\b|"
     r"\bimportant\s+whales?\b|"
@@ -3258,6 +3260,7 @@ def _resolve_both_metric_clause(fragment: str, last_pair: Optional[tuple], local
 
 def _classify_ask_clause(
     fragment: str, user_id: str, context: Optional["AskContext"],
+    local_assets: Optional[dict] = None,
 ) -> Optional[tuple]:
     """One fragment of a multi-intent query -> either
     ('asset_metric', ticker, field_key, value, glossary_definition, metric_label, currency)
@@ -3265,7 +3268,14 @@ def _classify_ask_clause(
     on its own. A fragment naming no explicit asset but using reference
     wording ("its beta") falls back to the conversation's active_asset —
     the SAME context mechanism every other Ask path already uses, not a
-    parallel one."""
+    parallel one. A fragment naming no explicit asset AND no reference
+    wording either (e.g. the bare "beta" left over from splitting "what is
+    googl's rsi and beta" on "and") falls back to the asset most recently
+    established EARLIER IN THIS SAME QUERY (local_assets, insertion-ordered)
+    — without this, a bare trailing metric with nothing of its own to
+    resolve against would silently become a generic textbook definition
+    instead of that metric's actual value for the asset the sentence was
+    already about."""
     fragment = fragment.strip(" ?.,!")
     if not fragment:
         return None
@@ -3274,6 +3284,19 @@ def _classify_ask_clause(
     metric = _extract_metric_from_query(fragment)
     if not asset and metric and context and context.active_asset and _ASK_REFERENCE_PATTERN.search(fragment):
         asset = _resolve_asset(context.active_asset)
+
+    if not asset and metric and local_assets:
+        ticker = next(reversed(local_assets), None)
+        if ticker:
+            full_data = local_assets[ticker]
+            metric_key = metric.lower()
+            field_key = _ASK_METRIC_FIELD_MAP.get(metric_key)
+            glossary_definition = _ASK_GLOSSARY.get(metric_key)
+            if field_key and glossary_definition:
+                return (
+                    "asset_metric", ticker, field_key, full_data.get(field_key),
+                    glossary_definition, metric, full_data,
+                )
 
     if asset and metric:
         metric_key = metric.lower()
@@ -3373,7 +3396,7 @@ def _ask_multi_intent(query: str, context: Optional["AskContext"], user_id: str)
                 clauses.append(("overview", overview_data["ticker"], overview_data))
                 continue
 
-        classified = _classify_ask_clause(fragment, user_id, context)
+        classified = _classify_ask_clause(fragment, user_id, context, local_assets)
         if classified is not None:
             if classified[0] == "asset_metric":
                 local_assets.setdefault(classified[1], classified[6])

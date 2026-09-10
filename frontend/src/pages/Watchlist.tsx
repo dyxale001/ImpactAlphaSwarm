@@ -147,7 +147,7 @@ export default function WatchlistPage() {
           <AskAlphaSwarm
             query={ask.query}
             setQuery={ask.setQuery}
-            result={ask.result}
+            result={ask.turns.length > 0 ? ask.turns[ask.turns.length - 1].result : null}
             loading={ask.loading}
             error={ask.error}
             onAsk={ask.ask}

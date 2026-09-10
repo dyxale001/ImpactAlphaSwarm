@@ -1112,8 +1112,12 @@ def search_authoritative_education(query: str) -> Optional[SourceResult]:
 _BROAD_BEGINNER_PATTERN = re.compile(
     r"\b(don'?t understand investing|new to investing|beginner|"
     r"staple knowledge|investing basics|basics of investing|"
-    r"where (do|should) i start|getting started|how does investing work|"
-    r"i don'?t know (anything |much )?about investing)\b",
+    r"where (do|should) i start|(don'?t|do not) know where to start|"
+    r"getting started|how (do i|to) start investing|how does investing work|"
+    r"i don'?t know (anything |much )?about investing|"
+    r"what should i learn first|"
+    r"(common|key|basic|main) investing concepts|"
+    r"investing concepts)\b",
     re.IGNORECASE,
 )
 

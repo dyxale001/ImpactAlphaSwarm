@@ -1615,6 +1615,11 @@ def test_whale_feature_pattern_covers_expected_phrasings():
         "What does Whale Watching do?", "What information does Whale Watching use?",
         "Which whales should I watch?", "Who are the whales?",
         "Show me the most important whales", "Which institutional investors should I follow?",
+        # Terse compound-noun phrasing with no space/hyphen between "whale"
+        # and "watching" — previously failed since the pattern required
+        # literal whitespace between the two words.
+        "what is whalewatching", "whalewatching", "explain whalewatching",
+        "what is whale-watching",
     ):
         assert api._ASK_WHALE_FEATURE_PATTERN.search(q), f"expected match: {q!r}"
 
