@@ -27,6 +27,7 @@ import {
   HorizonPicker,
   QuantTrendChart,
 } from "../components/research/QuantTrendChart";
+import { QuantTracePanel } from "../components/research/QuantTracePanel";
 import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
@@ -831,9 +832,10 @@ export default function AssetDetailsPage() {
               uniform space-y would otherwise put the window switch, the chart and the
               measurements all exactly as far apart as each other. */}
           <div className="space-y-5">
-            {/* The window first, then the chart it selects, then the run's own
-                measurements. The switch sits above rather than on the chart so it is
-                found before the thing it changes. */}
+            {/* The window switch first, then the tab's own reasoning trace, then the
+                chart it describes, then the run's own measurements. D-125's order:
+                the trace opens the tab. The switch sits above both rather than on the
+                chart so it is found before the two things it changes. */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-brand-muted-fg">
                 Price history over a window you choose. The measurements further
@@ -841,6 +843,17 @@ export default function AssetDetailsPage() {
               </p>
               <HorizonPicker value={horizon} onChange={setHorizon} />
             </div>
+
+            {/* Held back while the chart's own answer says the feature is off, so the
+                tab does not show two panels explaining the same absence. Once the
+                window has answered, the panel decides for itself. */}
+            {quantHistory.available && (
+              <QuantTracePanel
+                ticker={asset.ticker}
+                horizon={horizon}
+                active={tab === "quant"}
+              />
+            )}
 
             <QuantTrendChart
               points={quantHistory.points}
