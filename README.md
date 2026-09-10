@@ -39,7 +39,7 @@ ImpactAlphaSwarm/
 │   │   ├── agents/                   # sentiment_scout, quant_analyst, asset_discovery, gcp_nlp
 │   │   ├── orchestration/            # LangGraph orchestrator + unified ranking
 │   │   └── utils/                    # Supabase client, sentiment modules, whale watching, traces
-│   ├── migrations/                   # 001-014, applied in the Supabase SQL editor
+│   ├── migrations/                   # 001-027, applied in the Supabase SQL editor
 │   ├── scripts/                      # ranking shadow / stability reports
 │   ├── tests/                        # pytest suite
 │   ├── Dockerfile                    # Cloud Run image (gunicorn + uvicorn worker)
@@ -85,9 +85,12 @@ From your Supabase project:
 ### Step 1.2: Apply the Migrations
 
 `backend/migrations/` holds the schema changes made since the base tables, in
-numbered order (001 through 014): news and social sentiment columns, the quant
+numbered order (001 through 027): news and social sentiment columns, the quant
 sub-dimensions, the whale-watching and news caches, asset discovery, entity
-descriptions, and the unified ranking tables.
+descriptions, the unified ranking tables, the daily sentiment history and its
+generated day summaries, the dashboard layout, and the Quant tab's reasoning
+traces (027). Migrations behind a feature flag (019-023, 027) are only needed once
+that flag is switched on; the backend never touches their tables before then.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
@@ -327,6 +330,8 @@ LANGSMITH_PROJECT               → (Optional) LangSmith project name
 DISCOVERY_ENABLED               → (Optional) run the discovery agent, default false
 UNIFIED_RANKING_ENABLED         → (Optional) four-factor ordering, default false
 UNIFIED_RANKING_SHADOW          → (Optional) record without reordering, default true
+QUANT_HISTORY_ENABLED           → (Optional) Quant tab price/RSI window over 1M-5Y, default false
+QUANT_TRACE_ENABLED             → (Optional) Quant tab reasoning trace (needs 027 + history), default false
 ```
 
 Further tuning variables (discovery thresholds, news weighting, quant window,
@@ -342,6 +347,6 @@ VITE_UNIFIED_SCORECARD          → (Optional) "true" renders the Signal Scoreca
 
 ---
 
-**Last Updated**: August 10, 2026
+**Last Updated**: September 10, 2026
 **Project**: ImpactAlphaSwarm - Information Systems Honours Project
 **Stack**: Python FastAPI + LangGraph + React + TypeScript + Supabase
