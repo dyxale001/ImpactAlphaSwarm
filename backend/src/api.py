@@ -722,13 +722,22 @@ _ASK_PERSONAL_FINANCE_PATTERN = re.compile(
     r"\b("
     r"roth\s+ira|traditional\s+ira|401\s*\(?k\)?|ira\s+withdrawal|"
     r"pension\s+withdrawal|retirement\s+account|retirement\s+plan(?:ning)?|"
+    r"retirement\s+annuity|tfsa|tax[- ]free\s+savings\s+account|"
     r"tax\s+deduction|tax\s+bracket|avoid\s+taxes|tax[- ]free\s+withdrawal|"
+    r"my\s+tax\b|tax\s+on\s+my\b|"
     r"pay\s+off\s+(?:my\s+)?debt|credit[- ]card\s+debt|"
     r"my\s+(?:personal\s+)?(?:situation|circumstances)|"
+    r"my\s+portfolio\s+allocation|allocation\s+for\s+my\s+portfolio|"
+    r"allocate\s+my\s+portfolio|risk\s+questionnaire.*allocation|"
     r"personalised\s+advice|personalized\s+advice"
     r")\b",
     re.IGNORECASE,
 )
+# NOTE: "my tax"/"tax on my" (not bare "tax") is the deliberate trigger for
+# personal-context tax questions ("help me with my tax on ETF gains") without
+# also catching a purely factual question like "what is capital gains tax?"
+# — that one has no "my"/personal framing and must stay routed to
+# LEARNING_QUESTION's educational retrieval, not this gate.
 
 _ASK_OUT_OF_SCOPE_PATTERN = re.compile(
     r"\b("
@@ -741,7 +750,12 @@ _ASK_OUT_OF_SCOPE_PATTERN = re.compile(
 )
 
 # Hardcoded methodology text — actual AlphaSwarm implementation only, never
-# LLM-generated. Mirrors ranking.py's disclosed four-term composite.
+# LLM-generated. Mirrors ranking.py's disclosed four-term composite. Kept as
+# the RANKING-specific entry in _PLATFORM_ANSWERS below (and as the final
+# fallback for a platform question that doesn't match any more specific
+# topic) — not because ranking is somehow the "default" platform topic, but
+# because it's the single most-asked one and a graceful generic answer beats
+# an outright "I don't know" for a genuinely unmatched platform question.
 _PLATFORM_METHODOLOGY = (
     "AlphaSwarm ranks assets using four disclosed, measured factors, "
     "multiplied together: (1) Signal strength — how strongly the price data "
@@ -752,6 +766,134 @@ _PLATFORM_METHODOLOGY = (
     "tolerance. None of these factors is a prediction or a recommendation — "
     "they describe what the current data shows."
 )
+
+# Company-description provenance — as-built per commit 2682294 ("Take
+# descriptions off the LLM entirely"): utils/descriptions.py pulls
+# yfinance.Ticker(ticker).info["longBusinessSummary"] and trims it to whole
+# sentences (see that module's _first_sentences). Explicitly NOT an LLM
+# rewrite/generation step — stated here so a PLATFORM_QUESTION about
+# descriptions can never accidentally claim the opposite.
+_PLATFORM_DESCRIPTIONS = (
+    "Asset descriptions on AlphaSwarm come from yfinance's own company "
+    "profile data (the same public source AlphaSwarm's price data comes "
+    "from), trimmed to the first few whole sentences. They are not written "
+    "or rewritten by AlphaSwarm's AI — the AI is not involved in generating "
+    "descriptions at all."
+)
+
+# Live retrieval status for the LEARNING_QUESTION educational fallback (see
+# educational_retrieval.py) — read at ANSWER TIME from the actual env var
+# that gates it (SERPAPI_API_KEY), not asserted as always-on or always-off,
+# so this stays truthful if the key is added, removed, or rotated later.
+def _platform_live_retrieval_answer() -> str:
+    if os.getenv("SERPAPI_API_KEY"):
+        return (
+            "For general finance-concept questions outside AlphaSwarm's own "
+            "computed metrics, Ask AlphaSwarm can search a small set of "
+            "approved regulatory/educational sources live (checking its own "
+            "hand-verified local reference list first). It never does an "
+            "open, unrestricted web search, and it never uses live search for "
+            "questions about a specific asset or AlphaSwarm's own analysis — "
+            "those always come from AlphaSwarm's own data."
+        )
+    return (
+        "Ask AlphaSwarm does not currently perform live web search. For "
+        "general finance-concept questions outside AlphaSwarm's own computed "
+        "metrics, it draws only from a small, hand-verified local reference "
+        "list of approved regulatory/educational sources — never an open, "
+        "unrestricted web search, and never invented content."
+    )
+
+
+# Real, verified data sources AlphaSwarm's own agents use — kept in sync
+# with what the codebase actually calls (yfinance for price/description
+# data, Finnhub and StockTwits for news/social text, Groq for narration —
+# see llm_client.py's DEFAULT_MODEL). Not a claim about every internal
+# detail, just the sources a user-facing answer can honestly name.
+_PLATFORM_DATA_SOURCES = (
+    "AlphaSwarm's analysis draws on: yfinance for price history and company "
+    "profile data, Finnhub and StockTwits for news and social-media text, "
+    "and Groq-hosted language models for narrating results in plain "
+    "language. AlphaSwarm's own agents compute the quantitative and "
+    "sentiment scores from that raw data — the scores themselves are not "
+    "pulled from any outside source."
+)
+
+_PLATFORM_AI_MODEL = (
+    f"Ask AlphaSwarm's narration and classification are powered by a "
+    f"Groq-hosted language model ({os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')}). "
+    "The model only explains data AlphaSwarm's own agents already computed — "
+    "it never invents scores, prices, or facts on its own, and it never "
+    "makes predictions or gives personalised advice."
+)
+
+# AlphaSwarm is analysis/research only — it never places, executes, or has
+# any connection to a brokerage account. Before this entry existed, "Can
+# AlphaSwarm place a trade for me?" fell to the generic ranking-formula
+# fallback, which never actually answers the question asked (yes/no on
+# trading capability) at all.
+_PLATFORM_NOT_A_BROKER = (
+    "AlphaSwarm is an analysis and research tool — it does not place, "
+    "execute, or manage trades, and it has no connection to any brokerage "
+    "or trading account. It ranks and explains assets using its own "
+    "disclosed data; buying, selling, or executing any trade always happens "
+    "outside AlphaSwarm, through your own broker or platform."
+)
+
+# Keyword -> answer routing for PLATFORM_QUESTION. Checked in order; the
+# FIRST pattern that matches wins, so more specific topics are listed before
+# the general ranking fallback. This replaces a single hardcoded return that
+# answered every platform question with the ranking-formula text regardless
+# of what was actually asked (e.g. "how does AlphaSwarm generate company
+# descriptions?" used to get the ranking paragraph back, which doesn't
+# address the question at all) — each entry here is still a fixed, reviewed
+# string (never LLM-generated), just chosen by keyword match against the
+# actual question instead of being the same string unconditionally.
+_PLATFORM_TOPIC_PATTERNS: tuple[tuple["re.Pattern[str]", Any], ...] = (
+    (
+        re.compile(r"\bdescription|longbusinesssummary|business\s+summary\b", re.IGNORECASE),
+        lambda: _PLATFORM_DESCRIPTIONS,
+    ),
+    (
+        re.compile(r"\bsearch\s+the\s+web|web\s+search|live\s+(?:search|retrieval)|search\s+online\b", re.IGNORECASE),
+        _platform_live_retrieval_answer,
+    ),
+    (
+        re.compile(
+            r"\bdata\s+sources?\b|\bfinnhub\b|\bstocktwits\b|\byfinance\b|"
+            # "where" + "data"/"information" in EITHER order ("where does the
+            # data come from" / "where does AlphaSwarm get its data") — a
+            # single lookahead so word order doesn't matter, unlike an
+            # earlier version of this pattern that only matched one order.
+            r"\bwhere\b(?=.*\b(?:data|information)\b)",
+            re.IGNORECASE,
+        ),
+        lambda: _PLATFORM_DATA_SOURCES,
+    ),
+    (
+        re.compile(
+            r"\bplace\s+a\s+trade|execute\s+a\s+trade|make\s+a\s+trade|"
+            r"\bis\s+alphaswarm\s+a\s+broker\b|\bbroker(?:age)?\b|"
+            r"\bbuy\s+.*\bfor\s+me\b|\bsell\s+.*\bfor\s+me\b",
+            re.IGNORECASE,
+        ),
+        lambda: _PLATFORM_NOT_A_BROKER,
+    ),
+    (
+        re.compile(r"\b(?:what|which)\s+(?:llm|model|ai)\b|\blanguage\s+model\b|\bgroq\b", re.IGNORECASE),
+        lambda: _PLATFORM_AI_MODEL,
+    ),
+)
+
+
+def _platform_question_answer(query: str) -> str:
+    """Route a PLATFORM_QUESTION to the specific topic string its keywords
+    match, falling back to the general ranking-methodology text only when
+    nothing more specific matches — see _PLATFORM_TOPIC_PATTERNS above."""
+    for pattern, answer_fn in _PLATFORM_TOPIC_PATTERNS:
+        if pattern.search(query):
+            return answer_fn()
+    return _PLATFORM_METHODOLOGY
 
 # Simple in-memory per-user rate limiter (process-local; see spec — no Redis).
 _ASK_RATE_LIMIT = 10
@@ -1312,7 +1454,27 @@ def _narrate_ask(
 
 def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
     """Deterministic asset search. Respects the user's investment universe when
-    it can be inferred from their saved preferences (user_analysis)."""
+    it can be inferred from their saved preferences (user_analysis).
+
+    Root-cause bug this fixes: this function used to ONLY filter by universe/
+    sector, with no logic at all to search by company name or ticker — a
+    query naming a SPECIFIC company ("Search for NVIDIA", "Do you have
+    Apple?", "Find NVDA") never considered that name at all, and instead
+    handed the narrator an arbitrary universe-filtered (or entirely
+    unfiltered) slice of assets. The narrator then honestly reported that
+    the named company wasn't in THAT list — a true statement about the
+    wrong data, since NVDA (for example) genuinely IS in the real universe,
+    just not in whatever 5 rows happened to come back first. Fixed by
+    reusing the SAME deterministic company/ticker resolution
+    (_resolve_asset/_resolve_multiple_assets) every other Ask path already
+    uses — not a new search mechanism, just applied here too — tried FIRST
+    when the query plausibly names a specific asset; the universe/sector
+    listing below is unchanged as the fallback for a genuinely
+    category-shaped query ("show me technology assets")."""
+    named = _resolve_multiple_assets(query, limit=5)
+    if named:
+        return {"assets": named}, "asset_search"
+
     prefs_resp = (
         supabase.table("user_analysis")
         .select("investment_universe")
@@ -1415,6 +1577,129 @@ _NAME_STOPWORDS = {
 }
 
 
+_TICKER_TOKEN_RE = re.compile(r"\b[A-Za-z]{1,5}(?:[.\-][A-Za-z]{1,3})?\b")
+
+
+def _normalize_ticker(s: str) -> str:
+    """Canonical form for ticker comparison: uppercase, '.' folded to '-'
+    (BRK.B and BRK-B are the same security; a stored ticker or a user's
+    typed query may use either separator)."""
+    return s.upper().replace(".", "-")
+
+
+def _extract_ticker_tokens(query: str) -> set[str]:
+    """Ticker-shaped tokens from free text, INCLUDING a hyphen/dot share-
+    class suffix (BRK-B, BRK.B) as part of the SAME token.
+
+    Root-cause bug this fixes: plain `\\b[A-Za-z]{1,5}\\b` treats '-'/'.' as
+    delimiters (they're non-word characters), so "Tell me about BRK-B" was
+    tokenized into "BRK" and "B" as two SEPARATE tokens — the combined
+    string "BRK-B" never appeared as a token at all, so it could never equal
+    a stored ticker "BRK-B" no matter how the comparison was written. This
+    single shared helper (used by both _resolve_asset and
+    _resolve_multiple_assets, which had the identical bug duplicated) fixes
+    it once instead of patching each call site's tokenization separately."""
+    return {_normalize_ticker(m.group(0)) for m in _TICKER_TOKEN_RE.finditer(query)}
+
+
+def _damerau_levenshtein_le1(a: str, b: str) -> bool:
+    """True if `a` and `b` differ by at most one edit — a single
+    substitution, insertion, deletion, OR adjacent transposition (Damerau,
+    not plain Levenshtein — "NDVA" vs "NVDA" is a transposition of the
+    middle two letters, distance 1 under Damerau but distance 2 under plain
+    Levenshtein, which would have missed exactly the typo this exists for).
+    No general-purpose DP table: at distance <=1 the only ways two strings
+    can relate are same length (0 or 1 substitution, or a transposition) or
+    length differing by exactly 1 (one insertion/deletion) — checked
+    directly, which is both simpler and cheaper than the full algorithm for
+    this narrow a threshold."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        diffs = [i for i in range(la) if a[i] != b[i]]
+        if len(diffs) == 1:
+            return True  # single substitution
+        if len(diffs) == 2 and diffs[1] == diffs[0] + 1:
+            i, j = diffs
+            return a[i] == b[j] and a[j] == b[i]  # adjacent transposition
+        return False
+    # One insertion/deletion apart: walk both strings, allow exactly one
+    # skip in the longer one, everything else must match in order.
+    longer, shorter = (a, b) if la > lb else (b, a)
+    i = j = skipped = 0
+    while i < len(longer) and j < len(shorter):
+        if longer[i] == shorter[j]:
+            i += 1
+            j += 1
+        else:
+            skipped += 1
+            if skipped > 1:
+                return False
+            i += 1
+    return True
+
+
+# Root-cause bug this guards against: with no exclusion at all, the typo
+# matcher ran against EVERY word in the query, including ordinary sentence
+# words — "TELL" (from "Tell me about...") turned out to be exactly one
+# substitution away from the real ticker "DELL", so "Tell me about NDVA"
+# resolved to DELL via the word "tell" itself, before ever reaching "ndva".
+# Every opener word this module's own patterns already use, plus other
+# common query verbs/fillers a real ticker could coincidentally be one edit
+# from, is excluded — the same defensive principle as _NAME_STOPWORDS.
+_ASK_TYPO_MATCH_STOPWORDS = _NAME_STOPWORDS | {
+    "tell", "about", "what", "who", "can", "you", "give", "info",
+    "information", "overview", "explain", "does", "is", "are", "of", "on",
+    "me", "an", "a", "to", "for", "with", "show", "find", "search", "do",
+    "have", "has", "want", "know", "like", "this", "that", "please",
+}
+
+
+_ask_typo_domain_stopwords_cache: Optional[set] = None
+
+
+def _ask_typo_full_stopwords() -> set:
+    """_ASK_TYPO_MATCH_STOPWORDS plus every individual word from
+    _ASK_GLOSSARY/_ASK_METRIC_FIELD_MAP's own keys, computed lazily (those
+    dicts are defined further down in this module, after this function) and
+    cached on first call.
+
+    Root-cause bug this fixes: "beta" — one of the single most common words
+    in this entire product, and a real _ASK_GLOSSARY key — turned out to be
+    exactly one substitution away from the real ticker "META". Without this
+    exclusion, "What does its beta mean?" (a pure context-resolution
+    question naming no asset at all) spuriously resolved to META via the
+    typo path, silently overriding the conversational context this function
+    was supposed to defer to. The general fix isn't "exclude the word
+    beta" — it's "never let this product's OWN vocabulary be treated as a
+    mistyped ticker," which is what indexing _ASK_GLOSSARY/
+    _ASK_METRIC_FIELD_MAP achieves without hardcoding any single word."""
+    global _ask_typo_domain_stopwords_cache
+    if _ask_typo_domain_stopwords_cache is None:
+        words = set(_ASK_TYPO_MATCH_STOPWORDS)
+        for key in list(_ASK_GLOSSARY.keys()) + list(_ASK_METRIC_FIELD_MAP.keys()):
+            words.update(key.lower().split())
+        _ask_typo_domain_stopwords_cache = words
+    return _ask_typo_domain_stopwords_cache
+
+
+def _find_unique_ticker_typo(token: str, ticker_map: Dict[str, dict]) -> Optional[str]:
+    """The single real ticker (normalized form) within one Damerau-
+    Levenshtein edit of `token`, or None if zero or more than one candidate
+    qualifies, or the token is itself an ordinary/domain word. Deliberately
+    conservative: only ever used as the LAST resort after every exact match
+    has already failed, and only ever acts when the result is unambiguous —
+    two candidates both one edit away means "don't guess," not "pick
+    either.\""""
+    if len(token) < 3 or token.lower() in _ask_typo_full_stopwords():
+        return None
+    candidates = [t for t in ticker_map if _damerau_levenshtein_le1(token, t)]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _resolve_asset(query: str) -> Optional[dict]:
     """Deterministically resolve the asset a query is about — by ticker symbol
     or company-name substring, against the actual `assets` table. No LLM: this
@@ -1427,8 +1712,8 @@ def _resolve_asset(query: str) -> Optional[dict]:
     if not assets:
         return None
 
-    tokens = set(re.findall(r"\b[A-Za-z]{1,5}\b", query.upper()))
-    ticker_map = {(a.get("ticker") or "").upper(): a for a in assets if a.get("ticker")}
+    tokens = _extract_ticker_tokens(query)
+    ticker_map = {_normalize_ticker(a.get("ticker") or ""): a for a in assets if a.get("ticker")}
 
     for word in re.findall(r"\b[a-z]+\b", query.lower()):
         for candidate_ticker in _ASSET_ALIASES.get(word, ()):
@@ -1436,7 +1721,7 @@ def _resolve_asset(query: str) -> Optional[dict]:
                 return ticker_map[candidate_ticker]
 
     for asset in assets:
-        ticker = (asset.get("ticker") or "").upper()
+        ticker = _normalize_ticker(asset.get("ticker") or "")
         if ticker and ticker in tokens:
             return asset
 
@@ -1445,10 +1730,9 @@ def _resolve_asset(query: str) -> Optional[dict]:
     # word like "GOOGLS". Only fires when stripping one trailing S yields an
     # ACTUAL known ticker, so it can't turn an unrelated 6-letter word into a
     # false match.
-    ticker_map_local = {(a.get("ticker") or "").upper(): a for a in assets if a.get("ticker")}
     for word in re.findall(r"\b[A-Za-z]{2,6}\b", query.upper()):
-        if word.endswith("S") and word[:-1] in ticker_map_local:
-            return ticker_map_local[word[:-1]]
+        if word.endswith("S") and word[:-1] in ticker_map:
+            return ticker_map[word[:-1]]
 
     # Company-name WORD match: a significant word from the asset's name (not a
     # generic corporate suffix) appears as a whole word in the query. Matching
@@ -1476,9 +1760,46 @@ def _resolve_asset(query: str) -> Optional[dict]:
     # name reference is genuinely ambiguous in this universe. Ask, don't
     # guess: returning the first of two equally-good matches would silently
     # pick the wrong company as often as the right one.
-    if len(best_assets) != 1:
+    if len(best_assets) == 1:
+        return best_assets[0]
+    if best_assets:
         return None
-    return best_assets[0]
+
+    # Last resort: a single, obvious one-edit ticker typo ("NDVA" for
+    # "NVDA" — an adjacent-letter transposition). Only fires when exactly
+    # ONE real ticker in the universe is within edit distance 1 of a
+    # ticker-shaped token — if two or more tickers are equally close (or
+    # none are), this returns None exactly like every other "genuinely
+    # ambiguous" case above, rather than guessing.
+    #
+    # SCANNED FROM THE ORIGINAL (non-uppercased) QUERY TEXT, requiring the
+    # token to ALREADY be all-uppercase as typed — not from a lowercased-
+    # then-reuppercased version of the whole query. This is a structural
+    # fix, not another reactive word exclusion: with every ordinary word in
+    # the query eligible (as it was before this fix), the domain-vocabulary
+    # stopword list kept discovering new real collisions one at a time as
+    # this was tested against live traffic — "tell" vs "DELL", "beta" vs
+    # "META", and then "buy" vs "BMY" (Bristol-Myers Squibb), the last of
+    # which is a genuine safety concern: it turned "...for me to buy this
+    # stock?" into a confident BMY lookup instead of leaving the query for
+    # the advice-detecting classifier to see, since resolved_asset now
+    # looked like a real, explicitly-named asset. No stopword list can be
+    # guaranteed exhaustive against the whole English lexicon colliding
+    # with a ~176-ticker universe. Requiring the ORIGINAL token to already
+    # be typed in capitals is the actual signal that distinguishes "the
+    # user attempted a ticker" from "this is an ordinary sentence word that
+    # happens to be short" — an ordinary lowercase sentence practically
+    # never does that, while someone typing a ticker (correctly or with a
+    # typo) very often does. Trade-off, stated plainly: a typo entered in
+    # all-lowercase ("tell me about ndva") no longer gets this correction —
+    # accepted deliberately, because the alternative (matching lowercase
+    # words too) is exactly the mechanism that produced the BMY safety
+    # issue, and safety takes priority over that narrower convenience.
+    for match_obj in re.finditer(r"\b[A-Z]{2,5}\b", query):
+        match = _find_unique_ticker_typo(match_obj.group(0), ticker_map)
+        if match:
+            return ticker_map[match]
+    return None
 
 
 def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
@@ -1497,7 +1818,7 @@ def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
         return []
 
     found: Dict[str, dict] = {}
-    ticker_map = {(a.get("ticker") or "").upper(): a for a in assets if a.get("ticker")}
+    ticker_map = {_normalize_ticker(a.get("ticker") or ""): a for a in assets if a.get("ticker")}
 
     for word in re.findall(r"\b[a-z]+\b", query.lower()):
         for candidate_ticker in _ASSET_ALIASES.get(word, ()):
@@ -1505,9 +1826,9 @@ def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
             if a:
                 found[a["id"]] = a
 
-    tokens = set(re.findall(r"\b[A-Za-z]{1,5}\b", query.upper()))
+    tokens = _extract_ticker_tokens(query)
     for asset in assets:
-        ticker = (asset.get("ticker") or "").upper()
+        ticker = _normalize_ticker(asset.get("ticker") or "")
         if ticker and ticker in tokens:
             found[asset["id"]] = asset
 
@@ -1580,7 +1901,15 @@ def _build_ask_comparison_trigger_pattern():
         r"which\s+(?:one\s+|asset\s+)?(?:has|is|looks|seems)|"
         r"(?:higher|lower|better)\s+(?:beta|rsi|sharpe|volatility|price|score|confidence|dividend)|"
         r"more\s+(?:volatile|risky)|"
-        r"the\s+other\s+one|the\s+other|both|their"
+        r"the\s+other\s+one|the\s+other|both|their|"
+        # Root-cause regression this closes: "What are the main differences
+        # between BAC and GE?" resolved BOTH tickers fine
+        # (_resolve_multiple_assets) but never reached the two-asset
+        # comparison branch at all, because that branch is gated on this
+        # very pattern and "differences between" didn't match anything in
+        # it — silently falling back to single-asset handling and dropping
+        # GE's data entirely, even though it was available.
+        r"differences?\s+between|\bdiffer(?:s)?\b|main\s+differences?"
         r")\b",
         re.IGNORECASE,
     )
@@ -2345,6 +2674,16 @@ _ASK_LEARNING_STOPWORDS = {
     "that", "with", "from", "into", "your", "than", "then", "will", "would",
     "could", "should", "please", "define", "definition", "know", "understand",
     "and", "the", "for", "are", "how", "why", "when", "who",
+    # 3-letter filler words. Added alongside lowering the length cutoff below
+    # from >3 to >=3 — see _ask_learning_centre_lookup's docstring for why:
+    # the >3 cutoff was silently dropping 3-letter finance acronyms (DCF,
+    # ETF, RSI, ...) from scoring entirely, so "How does a DCF work?" scored
+    # against nothing but the leftover word "work" and matched whichever
+    # unrelated article happened to contain it. These stay excluded because
+    # they're ordinary filler, unlike a 3-letter acronym, which is exactly
+    # the signal this scoring needs to keep.
+    "you", "not", "yes", "our", "his", "her", "its", "out", "any", "all",
+    "one", "can", "has", "had", "but", "was", "were", "use", "let",
 }
 
 
@@ -2372,9 +2711,21 @@ def _ask_learning_centre_lookup(query: str) -> Optional[dict]:
     """
     import re
 
+    def _singularize(w: str) -> str:
+        # Same fix, same reasoning, as educational_retrieval.py's
+        # _meaningful_tokens: a bare "-s" plural ("assets") must reduce to
+        # the same token as the singular form a title uses ("Asset ..."),
+        # or a plural query and a singular-titled article never share a
+        # token at all. Canonical (singular) form only — not both forms —
+        # so the distinctive-word/coverage math below still means what it
+        # says instead of silently requiring two tokens for one concept.
+        if w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+            return w[:-1]
+        return w
+
     query_words = {
-        w for w in re.findall(r"[a-z]+", query.lower())
-        if len(w) > 3 and w not in _ASK_LEARNING_STOPWORDS
+        _singularize(w) for w in re.findall(r"[a-z]+", query.lower())
+        if len(w) >= 3 and w not in _ASK_LEARNING_STOPWORDS
     }
     if not query_words:
         return None
@@ -2385,8 +2736,16 @@ def _ask_learning_centre_lookup(query: str) -> Optional[dict]:
         return None
 
     article_tokens = [
-        set(re.findall(r"[a-z]+", f"{a.get('title', '')} {a.get('summary', '')}".lower()))
+        {_singularize(w) for w in re.findall(r"[a-z]+", f"{a.get('title', '')} {a.get('summary', '')}".lower())}
         for a in articles
+    ]
+    # Title tokens tracked separately from the full title+summary set: a
+    # scoring word appearing in an article's TITLE means the article's
+    # actual subject is that word, not just related to it — used below only
+    # to break a tie between two articles with equal raw overlap, never to
+    # change whether a match passes the coverage bar at all.
+    article_title_tokens = [
+        {_singularize(w) for w in re.findall(r"[a-z]+", a.get("title", "").lower())} for a in articles
     ]
 
     n = len(articles)
@@ -2398,11 +2757,23 @@ def _ask_learning_centre_lookup(query: str) -> Optional[dict]:
     # fall back to plain overlap rather than refusing every match outright.
     scoring_words = distinctive_words or query_words
 
-    best_article, best_score = None, 0
-    for article, toks in zip(articles, article_tokens):
+    # Root-cause regression this tie-break fixes: "What is risk?" ->
+    # scoring_words={"risk"} -> BOTH "Risk vs Reward" (title literally names
+    # it) and "Introduction to Diversification" (mentions risk in passing,
+    # discussing how diversification reduces it) score an equal raw overlap
+    # of 1 -- and since the old code kept only the FIRST article to reach a
+    # given score (`score > best_score`, not `>=`), whichever happened to
+    # come first in the Supabase result order won, regardless of which one
+    # is actually ABOUT the query term. Same underlying issue for "What is a
+    # portfolio?" vs "Asset Allocation and Portfolio Construction".
+    best_article, best_score, best_title_hit = None, 0, False
+    for article, toks, title_toks in zip(articles, article_tokens, article_title_tokens):
         score = len(scoring_words & toks)
-        if score > best_score:
-            best_article, best_score = article, score
+        title_hit = bool(scoring_words & title_toks)
+        if score == 0:
+            continue
+        if best_article is None or score > best_score or (score == best_score and title_hit and not best_title_hit):
+            best_article, best_score, best_title_hit = article, score, title_hit
 
     if best_article is None:
         return None
@@ -2549,6 +2920,106 @@ _ASK_QUALITATIVE_PERFORMANCE_PATTERN = re.compile(
 
 
 _ASK_CAUSAL_WHY_PATTERN = re.compile(r"\bwhy\b", re.IGNORECASE)
+
+# ── Deterministic asset-overview shortcut ("Tell me about NVDA") ───────────
+# Root-cause bug this fixes: with NO deterministic shortcut for a plain
+# overview request, "Tell me about NVDA" depended entirely on the
+# probabilistic LLM classifier picking ANALYSIS_EXPLANATION — which observed
+# testing showed is NOT reliable for this exact shape of question (identical
+# phrasing, different ticker, inconsistent classification), unlike the
+# metric-question case (2b above) and the qualitative-performance case (2c
+# above), both of which already bypass the classifier for exactly this
+# reason. This is the same fix, for the plain-overview case.
+#
+# Deliberately scoped to an explicit "tell me about X" / "what is X" / "who
+# is X" / "info on X" SHAPE, not "any query naming a resolvable asset with no
+# metric" — a broader trigger would also swallow a borderline-advice
+# phrasing the blocklist doesn't happen to cover (e.g. "Is NVDA a good
+# stock?", which starts with "Is", not one of these openers) into a factual
+# overview answer, removing the classifier's chance to route it to
+# UNSUPPORTED_FINANCIAL_ADVICE. Never weakens the advice boundary: this only
+# fires for phrasing that could not plausibly BE an advice request.
+_ASK_ASSET_OVERVIEW_PATTERN = re.compile(
+    r"^\s*(?:tell\s+me\s+about|what\s+is|what's|who\s+is|can\s+you\s+explain|"
+    r"what\s+can\s+you\s+tell\s+me\s+about|"
+    r"give\s+me\s+(?:info|information|an?\s+overview)\s+(?:on|about|of)|info\s+on)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_bare_ticker_query(query: str, ticker: str) -> bool:
+    """True when the ENTIRE query is (up to case/punctuation) just the
+    resolved ticker itself — "NVDA", "nvda", "NVDA?" — never a sentence
+    that happens to mention it among other words. A bare, unambiguous
+    ticker is a clear overview request on its own; this deliberately does
+    NOT fire for anything with other content, which might be asking
+    something else the classifier still needs to see."""
+    stripped = re.sub(r"[^A-Za-z0-9.\-]", "", query)
+    return _normalize_ticker(stripped) == _normalize_ticker(ticker)
+
+# ── Deterministic learning-question shortcuts ───────────────────────────────
+# Same root cause as the asset-overview shortcut above, applied to
+# LEARNING_QUESTION: "what is an ETF?"/"what is whale watching?" already
+# resolve correctly ONCE _ask_learning_question runs (its own glossary/
+# Learning-Centre/cache tiers are all deterministic and already correct —
+# proven by direct testing), but reaching it at all depends on the
+# classifier picking LEARNING_QUESTION, which testing showed is unreliable
+# specifically for TERSE/bare phrasing with no question wrapper ("whale
+# watching" alone, vs. "what is whale watching").
+
+# Bare feature-name phrasing for AlphaSwarm's Whale Watching feature that
+# doesn't contain the literal substring "whale watching" _ASK_GLOSSARY keys
+# on — "which whales should I watch" must NOT become stock-picking advice
+# (it never reaches this far if it did match the blocklist/advice patterns
+# above, which it doesn't), so it's rewritten to the canonical glossary
+# phrasing and answered from the SAME existing, disclosed, non-advice
+# feature description — never a new answer, never a recommendation.
+_ASK_WHALE_FEATURE_PATTERN = re.compile(
+    r"\bwhale\s+watching\b|"
+    r"\bwhich\s+whales?\b|\bwhat\s+whales?\b|\bwho\s+(?:are|is)\s+the\s+whales?\b|"
+    r"\bwhale\s+activity\b|\bwhales?\s+(?:should|to)\s+(?:i\s+)?watch\b|"
+    r"\bimportant\s+whales?\b|"
+    r"\binstitutional\s+investors?\b.{0,20}\b(?:follow|watch)\b",
+    re.IGNORECASE,
+)
+
+_ASK_DEFINITIONAL_SHAPE_PATTERN = re.compile(
+    r"^\s*(?:what\s+is|what's|what\s+are|what\s+does|what\s+factors|"
+    r"how\s+does|how\s+is|how\s+are|why\s+does|why\s+is|"
+    r"explain|define)\b",
+    re.IGNORECASE,
+)
+
+
+def _ask_free_tier_learning_hit(query: str) -> bool:
+    """Cheap, zero-network-search pre-check: does the FREE-tier deterministic
+    learning retrieval (in-memory glossary, one Supabase read for the
+    Learning Centre, or the hand-verified local reference cache — never live
+    SerpApi search) already have something for this query, or is it acronym-
+    shaped (also handled without a search)? Used to decide whether the
+    definitional-shortcut below is worth taking over the classifier.
+
+    Why not just always call _ask_learning_question and use whatever it
+    returns? Because that function's LAST resort is a live SerpApi search —
+    calling it unconditionally for every "what is X" query (including ones
+    with no learning content at all, like "What is AlphaSwarm?", which
+    correctly belongs to PLATFORM_QUESTION) would spend a search-quota call
+    on queries that were going to fall through to the classifier anyway. This
+    check only costs an in-memory dict scan plus one Supabase read — it can
+    never reach live search itself."""
+    from src.utils import educational_retrieval
+
+    q_lower = query.lower()
+    for term in _ASK_GLOSSARY:
+        if re.search(r"\b" + re.escape(term) + r"\b", q_lower):
+            return True
+    if _ask_learning_centre_lookup(query) is not None:
+        return True
+    if educational_retrieval.search_local_cache_only(query) is not None:
+        return True
+    if educational_retrieval.looks_like_acronym(query) is not None:
+        return True
+    return False
 
 
 def _ask_contextual_metric_explanation(
@@ -3128,10 +3599,14 @@ def _ask_learning_question(query: str) -> AskResponse:
             # rather than the "nothing found" message; a broad-but-ungrounded
             # request may still resolve to one specific matching source.
 
-    # 4. Approved authoritative external source (bounded allowlist —
-    #    see educational_retrieval.py's module docstring for the full policy
-    #    rationale). Never asked to search/decide anything about assets.
-    result = educational_retrieval.search_authoritative_education(query)
+    # 4. Approved authoritative external source — LOCAL CACHE first (bounded
+    #    allowlist, see educational_retrieval.py's module docstring for the
+    #    full policy rationale). Never asked to search/decide anything about
+    #    assets. Split from live search below: a hand-verified cache hit
+    #    (e.g. "ETF") is trustworthy regardless of the query's shape, but an
+    #    acronym-shaped query with NO cache hit must not be allowed past step
+    #    4a into live web search — see step 4b.
+    result = educational_retrieval.search_local_cache_only(query)
     if result:
         grounded = _ground_external_answer(query, result)
         if grounded is None:
@@ -3157,7 +3632,18 @@ def _ask_learning_question(query: str) -> AskResponse:
             is_blocked=False, redirect_suggestions=[],
         )
 
-    # 5. Unresolved acronym — clarify rather than guess.
+    # 4b. Unresolved acronym — clarify rather than let it reach live search.
+    # Checked HERE, before live web search (not after, as this used to be
+    # ordered): an ambiguous 2-5 letter acronym with no glossary/Learning
+    # Centre/local-cache hit (all already checked and missed, above) is
+    # exactly the case where a live web search is most dangerous — the
+    # engine will confidently return a REAL page for SOME meaning of the
+    # acronym (e.g. "RSA" -> a real security company's real page) with no
+    # way to know that isn't the meaning this user meant. Moving this check
+    # ahead of live search, instead of only after it failed, is the actual
+    # fix for that: previously live search ran first and OFTEN succeeded
+    # (finding a real page for a real, just wrong-context, meaning), so this
+    # check never got a chance to fire at all.
     acronym = educational_retrieval.looks_like_acronym(query)
     if acronym:
         return AskResponse(
@@ -3170,7 +3656,30 @@ def _ask_learning_question(query: str) -> AskResponse:
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
 
-    # 6. Nothing found anywhere — plain, helpful, non-technical fallback.
+    # 4c. Live web search — only reached for a non-acronym-shaped query the
+    # local cache had nothing on (e.g. a longer natural-language phrase).
+    live_result = educational_retrieval.search_live_provider_only(query)
+    if live_result:
+        grounded = _ground_external_answer(query, live_result)
+        if grounded is None:
+            return AskResponse(
+                intent="LEARNING_QUESTION", narration=_ASK_LEARNING_NOT_COVERED_MESSAGE,
+                data={}, source="none", sources=[], is_blocked=False,
+                redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+            )
+        return AskResponse(
+            intent="LEARNING_QUESTION",
+            narration=grounded,
+            data={"term": query, "definition": grounded},
+            source=live_result.publisher,
+            sources=[AskSource(
+                title=live_result.title, publisher=live_result.publisher, url=live_result.url,
+                retrieved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            )],
+            is_blocked=False, redirect_suggestions=[],
+        )
+
+    # 5. Nothing found anywhere — plain, helpful, non-technical fallback.
     return AskResponse(
         intent="LEARNING_QUESTION",
         narration=_ASK_LEARNING_NOT_COVERED_MESSAGE,
@@ -3345,18 +3854,38 @@ async def _ask_alphaswarm_impl(
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
 
-    # 1. Local blocklist — before any LLM call. Safety check still runs
-    # FIRST, exactly as before. The one addition: a blocklist phrase like
-    # "should i buy" can appear as ONE CLAUSE of an otherwise legitimate
-    # compound question ("What is GOOGL's RSI and should I buy GOOGL?") —
-    # rather than let that single clause discard a real, answerable
-    # question, try the SAME deterministic multi-intent decomposition used
-    # below (never an LLM, never a different safety rule) as a second
-    # opinion; it only fires when it can resolve 2+ genuine clauses
-    # (including the advice one, which it bounds with the identical
-    # _ASK_NO_ADVICE_MESSAGE refusal), so a plain single-clause advice
-    # question ("Should I buy GOOGL?") still gets the exact same blanket
-    # refusal as before.
+    # 1. Personal-finance gate — deterministic, no LLM call, checked BEFORE
+    # the generic advice blocklist below. A personal-finance query is a more
+    # specific case of "sensitive query" than the blocklist's generic advice
+    # phrases, and several personal-finance phrasings literally contain a
+    # blocklisted substring (e.g. "Which fund should I PUT my TFSA
+    # contributions into?" contains "should i put") — if the blocklist ran
+    # first, as it used to, those queries got the generic
+    # _ASK_NO_ADVICE_MESSAGE instead of the more specific, more helpful
+    # _ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE. Also checked before
+    # conversational-reference and asset/metric resolution so a term like
+    # "Roth IRA" or "TFSA" is never mistaken for an asset/metric name.
+    if _ASK_PERSONAL_FINANCE_PATTERN.search(query):
+        return AskResponse(
+            intent="UNSUPPORTED_FINANCIAL_ADVICE",
+            narration=_ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE,
+            data={},
+            source="scope_boundary",
+            is_blocked=True,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # 2. Local blocklist — before any LLM call. The one addition here (from
+    # an earlier round): a blocklist phrase like "should i buy" can appear
+    # as ONE CLAUSE of an otherwise legitimate compound question ("What is
+    # GOOGL's RSI and should I buy GOOGL?") — rather than let that single
+    # clause discard a real, answerable question, try the SAME deterministic
+    # multi-intent decomposition used below (never an LLM, never a different
+    # safety rule) as a second opinion; it only fires when it can resolve 2+
+    # genuine clauses (including the advice one, which it bounds with the
+    # identical _ASK_NO_ADVICE_MESSAGE refusal), so a plain single-clause
+    # advice question ("Should I buy GOOGL?") still gets the exact same
+    # blanket refusal as before.
     if _ask_blocklist_hit(query):
         multi_intent = _ask_multi_intent(query, req.context, user_id)
         if multi_intent is not None:
@@ -3370,21 +3899,9 @@ async def _ask_alphaswarm_impl(
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
 
-    # 1b. Personal-finance / out-of-scope gates — deterministic, no LLM call,
-    # checked before conversational-reference and asset/metric resolution so
-    # a term like "Roth IRA" or "IRA" is never mistaken for an asset/metric
-    # name and never reaches the old generic PLATFORM_QUESTION methodology
-    # fallback. Personal-finance boundary takes priority over the plainer
-    # out-of-scope message since it's the more specific/safety-relevant case.
-    if _ASK_PERSONAL_FINANCE_PATTERN.search(query):
-        return AskResponse(
-            intent="UNSUPPORTED_FINANCIAL_ADVICE",
-            narration=_ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE,
-            data={},
-            source="scope_boundary",
-            is_blocked=True,
-            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
-        )
+    # 3. Out-of-scope gate — deterministic, no LLM call, checked before the
+    # old generic PLATFORM_QUESTION methodology fallback would otherwise
+    # catch an unrelated consumer-banking question.
     if _ASK_OUT_OF_SCOPE_PATTERN.search(query):
         return AskResponse(
             intent="UNKNOWN",
@@ -3449,8 +3966,72 @@ async def _ask_alphaswarm_impl(
                 is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
             )
 
-    # 3. Intent classification (small Groq call).
-    intent = _classify_ask_intent(query)
+    # 2d. Deterministic asset-overview shortcut ("Tell me about NVDA") — see
+    # _ASK_ASSET_OVERVIEW_PATTERN's own comment for why this exists and why
+    # it's scoped this narrowly. resolved_asset/resolved_metric already came
+    # out of step 2 above; no extra resolution work needed here.
+    #
+    # `intent` is a sentinel: None means "not yet deterministically decided",
+    # set by 2d/2e below, or by the classifier call in step 3 if neither
+    # shortcut fired. 2f (whale watching) returns directly rather than
+    # setting this sentinel, since it's a full response, not just an intent.
+    intent: Optional[str] = None
+    if resolved_asset and not resolved_metric and (
+        _ASK_ASSET_OVERVIEW_PATTERN.search(query) or _is_bare_ticker_query(query, resolved_asset)
+    ):
+        intent = "ANALYSIS_EXPLANATION"
+
+    # 2e. Deterministic Whale Watching feature-name shortcut — see
+    # _ASK_WHALE_FEATURE_PATTERN's own comment. Always safe to return
+    # directly: "whale watching" is a guaranteed _ASK_GLOSSARY hit, so this
+    # can never fall through to a fabricated or ungrounded answer, and it
+    # never reaches this point if the query matched an advice/blocklist
+    # pattern above.
+    if intent is None and _ASK_WHALE_FEATURE_PATTERN.search(query):
+        try:
+            return _ask_learning_question("what is whale watching")
+        except Exception as e:
+            logger.warning("Ask whale-watching shortcut failed: %s", e)
+
+    # 2f. Deterministic definitional-learning-question shortcut ("what is an
+    # ETF?", "what is a portfolio?") — see _ASK_DEFINITIONAL_SHAPE_PATTERN's
+    # own comment. Only taken when the FREE tiers (glossary/Learning Centre/
+    # local cache/acronym-shape) already have something, so a genuinely
+    # ungrounded "what is X" question (e.g. "What is AlphaSwarm?", which
+    # belongs to PLATFORM_QUESTION) always falls through unchanged to the
+    # classifier below exactly as before.
+    if (
+        intent is None and resolved_asset is None and not _resolve_asset(query)
+        and _ASK_DEFINITIONAL_SHAPE_PATTERN.search(query) and _ask_free_tier_learning_hit(query)
+    ):
+        try:
+            shortcut = _ask_learning_question(query)
+            # _ask_free_tier_learning_hit is a CHEAP word-overlap probe, not
+            # the real relevance check — it can false-positive on a query
+            # that shares little more than a common word with some cached
+            # entry (caught by testing: "How does AlphaSwarm generate
+            # company descriptions?" weakly matched the Diversification
+            # cache entry, which — correctly, once actually grounded —
+            # declined to answer, but that decline is worse than falling
+            # through to the classifier, which correctly knows this is a
+            # PLATFORM_QUESTION). Only commit to the shortcut's answer when
+            # it's a genuine grounded result, not an honest-but-wrong-source
+            # decline; otherwise fall through to classification exactly as
+            # if this shortcut had never fired.
+            is_decline = shortcut.narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
+                p in shortcut.narration.lower()
+                for p in ("t provide any information", "t contain any information",
+                          "t provide information", "t contain information")
+            )
+            if not is_decline:
+                return shortcut
+        except Exception as e:
+            logger.warning("Ask definitional-learning shortcut failed: %s", e)
+
+    # 3. Intent classification (small Groq call) — skipped when 2d already
+    # set `intent` deterministically.
+    if intent is None:
+        intent = _classify_ask_intent(query)
 
     if intent == "UNSUPPORTED_FINANCIAL_ADVICE":
         return AskResponse(
@@ -3477,10 +4058,13 @@ async def _ask_alphaswarm_impl(
         )
 
     if intent == "PLATFORM_QUESTION":
-        # Deterministic, hardcoded — no narration LLM call needed.
+        # Deterministic, hardcoded — no narration LLM call needed. Routed by
+        # keyword to the specific topic (_platform_question_answer), not a
+        # single fixed string for every platform question — see that
+        # function and _PLATFORM_TOPIC_PATTERNS above.
         return AskResponse(
             intent=intent,
-            narration=_PLATFORM_METHODOLOGY,
+            narration=_platform_question_answer(query),
             data={},
             source="platform_methodology",
             is_blocked=False,

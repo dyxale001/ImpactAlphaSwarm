@@ -42,23 +42,30 @@ Why does an unknown acronym get a clarification question instead of a guess?
     that promises not to hallucinate.
 
 Current state of the live path — read before assuming this searches the web:
-    This deployment has NO search-provider API key configured (there is none
-    in backend/.env, and none is required to run the rest of AlphaSwarm).
-    search_authoritative_education() is written so that setting
-    SEARCH_PROVIDER_URL + SEARCH_PROVIDER_API_KEY (see .env.example) turns on
-    genuine live retrieval — domain-restricted where the provider allows it,
-    always post-validated against APPROVED_EDUCATIONAL_DOMAINS, redirects
-    outside the allowlist rejected, page content fetched and relevance-
-    checked before use. Without those variables set, it deterministically
-    falls through to a small local reference cache (see
-    _LOCAL_REFERENCE_CACHE) built from the SAME validated shape (real,
-    live-checked URLs on approved domains) so the calling code and the
-    grounding/validation pipeline need no change when a provider is added.
-    This was a deliberate, disclosed trade-off, not a hidden shortcut — see
-    the PR notes for why live-scraping investor.gov specifically does not
-    work with a plain HTTP client (its glossary renders via a client-side
-    Drupal Views AJAX call that a static fetch cannot reproduce without a
-    real browser, which this proof-of-concept intentionally does not add).
+    setting SERPAPI_API_KEY (see .env.example) turns on genuine live
+    retrieval — but only as a FALLBACK for terms the local cache below has
+    nothing on (see search_authoritative_education's own docstring for why
+    it's cache-first, not live-first: a free-tier search quota gets spent
+    fast if it fires on every query, including ones the cache already
+    answers correctly for free). When it does fire, it's query-time
+    restricted to APPROVED_EDUCATIONAL_DOMAINS via a `site:` clause, and
+    every result re-checked against that same allowlist after the fact (the
+    check that actually enforces it — see _search_live_provider's own
+    docstring for why a query-time `site:` clause alone isn't trusted), plus
+    a relevance check before use. Without that variable set, or for any
+    query the cache already answers, this deterministically uses the small
+    local reference cache (see _LOCAL_REFERENCE_CACHE) instead — built from
+    real, live-checked URLs on approved domains, each fetched and confirmed
+    live at the time it was added, so the calling code and the
+    grounding/validation pipeline need no change whether a query resolves
+    from the cache or a live call. This was a deliberate, disclosed
+    trade-off, not a hidden shortcut. (Tavily was evaluated first and would
+    have been a stronger fit — its include_domains parameter enforces the
+    allowlist at the engine itself,
+    and it returns full extracted page content rather than a short snippet
+    — but its signup requires payment-card details even on the nominally
+    free tier, so SerpApi was used instead; revisit Tavily if that project
+    constraint changes.)
 """
 
 from __future__ import annotations
@@ -102,6 +109,55 @@ APPROVED_EDUCATIONAL_DOMAINS: dict[str, tuple[str, int]] = {
     # cannot. The "what is the JSE" entry below is cited to the FSCA (its
     # South African regulator) instead, which was independently verified live.
     "jse.co.za": ("JSE Limited (Johannesburg Stock Exchange)", 1),
+    # UK regulator, added as a moneyhelper.org.uk substitute — moneyhelper.org.uk
+    # 403's every plain-HTTP fetch tried (same bot-protection pattern as
+    # investor.gov/jse.co.za above), but fca.org.uk/consumers was independently
+    # verified live and reachable (real content: scams, pension transfers,
+    # compensation claims, not a blank shell) — the UK's actual financial
+    # conduct regulator, the same tier as the SEC/FSCA/FINRA entries above.
+    "fca.org.uk": ("Financial Conduct Authority (United Kingdom)", 1),
+    # OCC (Options Clearing Corporation) — the central clearinghouse for all
+    # US-listed options, regulated by the SEC and CFTC. Its glossary index
+    # page is real and reachable, though its letter-filter navigation is
+    # client-side JS (a query-string letter param didn't change what
+    # rendered), so only the "A" section's terms were actually confirmed
+    # live; the two cache entries below are drawn from exactly those
+    # confirmed terms, not guessed at from elsewhere on the site.
+    "optionseducation.org": ("OCC (Options Clearing Corporation)", 1),
+    # SA Revenue Service — the national tax authority. Its capital-gains-tax
+    # page (cited in the cache entry below) was independently verified live;
+    # its own homepage's navigation is JS-heavy so a specific page URL was
+    # needed rather than guessing a path from its nav menu (several guessed
+    # SARS/other-site paths in this same batch 404'd before this one was
+    # found to work).
+    "sars.gov.za": ("South African Revenue Service (SARS)", 1),
+    # Cboe Global Markets — operator of the world's largest US options
+    # exchange, since 1973. Its options glossary (at /optionsinstitute/glossary
+    # — NOT /education/options-definitions-glossary/, which 404'd on an
+    # earlier attempt in this same session) is genuinely static, plain-text
+    # content: Call, Put, Strike Price, In/Out-of-the-money, and Expiration
+    # Date were all independently confirmed live and quoted directly below.
+    "cboe.com": ("Cboe Global Markets — Options Institute", 1),
+    # CME Group's public-facing futures-education site, run on separate
+    # infrastructure from cmegroup.com/education (which returned a connection
+    # reset on direct fetch) — confirmed independently reachable with real
+    # content, including a direct quotable definition of a futures contract
+    # (cited below).
+    "futuresfundamentals.org": ("CME Group — Futures Fundamentals", 1),
+    # OpenStax (Rice University) — nonprofit publisher of free, peer-reviewed,
+    # openly-licensed textbooks. Tier 2 (like CFA Institute), not tier 1 —
+    # it's an academic publisher, not a regulator or exchange. Its book pages
+    # ARE genuinely static and fetchable (openstax.org/books/{slug}/pages/
+    # {section-slug} — confirmed live), but the slug/section structure isn't
+    # discoverable by guessing: several plausible paths (principles-finance's
+    # own chapter pages, principles-economics-3e's later macro chapters) 404'd
+    # before "principles-economics-3e"'s early sections were found to work.
+    # Only cite pages actually walked to and confirmed, the same rule as
+    # every other source in this cache — do not extrapolate that the rest of
+    # OpenStax's catalog (including its dedicated Principles of Finance book,
+    # whose landing page loads but whose own section URLs were not found
+    # this pass) works the same way without checking each one.
+    "openstax.org": ("OpenStax (Rice University)", 2),
 }
 
 # ── GOVERNMENT_FINANCIAL_EDUCATION ──────────────────────────────────────
@@ -128,7 +184,9 @@ GOVERNMENT_FINANCIAL_EDUCATION: dict[str, tuple[str, str]] = {
     "investor.gov": ("U.S. Securities and Exchange Commission — Investor.gov", "United States"),
     "consumerfinance.gov": ("Consumer Financial Protection Bureau (United States)", "United States"),
     "moneyhelper.org.uk": ("MoneyHelper — Money and Pensions Service (United Kingdom)", "United Kingdom"),
+    "fca.org.uk": ("Financial Conduct Authority (United Kingdom)", "United Kingdom"),
     "moneysmart.gov.au": ("Moneysmart — Australian Securities and Investments Commission (Australia)", "Australia"),
+    "sars.gov.za": ("South African Revenue Service (SARS)", "South Africa"),
 }
 
 # Fold the government-financial-education domains into the general approved
@@ -200,6 +258,35 @@ _STOPWORDS = {
     "that", "with", "from", "into", "your", "than", "then", "will", "would",
     "could", "should", "please", "define", "definition", "know", "understand",
     "and", "the", "is", "are", "how", "why", "when", "who",
+    # 2-letter filler words, added alongside lowering _meaningful_tokens'
+    # length cutoff from >2 to >=2 (see that function's docstring for why
+    # the cutoff had to drop) — these stay excluded because they carry no
+    # topic-distinguishing meaning, unlike "in"/"at"/"on", which the cutoff
+    # change was specifically made to let through. The first attempt at this
+    # list missed "do" — "What does SARB do?" started spuriously matching
+    # the Dividend entry, because "do" is common ordinary filler text
+    # ("dividends do not guarantee...") that has nothing to do with the
+    # query's actual subject, while the real SARB entry's title doesn't
+    # literally contain the word "SARB" so gets no compensating title bonus.
+    # Caught by re-running the full existing test suite, not just the new
+    # entries' own spot-checks — this list is now every common short English
+    # function word that could otherwise leak through as a false "topic"
+    # match, not just the ones the CBOE/OCC addition happened to trip over.
+    "to", "of", "or", "if", "be", "as", "an", "so", "no", "up", "my", "me",
+    "do", "did", "he", "it", "we", "us", "go", "am", "his", "her", "its",
+    "him", "our", "you", "yes",
+    # Brought in from api.py's PARALLEL Learning Centre stopword list after
+    # the identical false-positive pattern showed up here too: "What does
+    # all this mean?" (a vague CONTEXT_SYNTHESIS-shaped question with no
+    # real topic) matched "Investor.gov: Introduction to Investing" purely
+    # because "all" — a generic quantifier, not a topic word — happens to
+    # appear somewhere in that entry's long content. Two independently
+    # maintained stopword lists (this one and _ASK_LEARNING_STOPWORDS in
+    # api.py) drifting out of sync is exactly how a fix applied to one and
+    # not the other keeps recurring; kept as two lists (different modules,
+    # different call sites) but the actual WORDS are meant to stay identical.
+    "all", "any", "not", "one", "can", "has", "had", "but", "was", "were",
+    "use", "let",
 }
 
 
@@ -220,10 +307,45 @@ def _normalise_spelling(word: str) -> str:
 
 
 def _meaningful_tokens(text: str) -> set[str]:
-    return {
-        _normalise_spelling(w) for w in re.findall(r"[a-z]+", text.lower())
-        if len(w) > 2 and w not in _STOPWORDS
-    }
+    """Length cutoff is >=2, not >2 (the original cutoff): with >2, "in" and
+    "at" were both dropped, so "In-the-Money" and "At-the-Money" — two
+    genuinely different, real options terms this cache added in the same
+    batch — reduced to the SAME single token ("money"), making them
+    indistinguishable to _cache_entry_score's title-match check and causing
+    one to silently shadow the other. _STOPWORDS absorbs the extra 2-letter
+    noise words ("to", "of", ...) this widening would otherwise let through,
+    while deliberately leaving "in"/"at"/"on" as real, meaning-carrying
+    tokens.
+
+    Also adds a naive singular fallback for a plain "-s" plural (bonds ->
+    bond, stocks -> stock) — WITHOUT this, "What are bonds?" scored 0
+    against the real "CFPB Financial Terms Glossary: Bond" entry (its title
+    and hand-written content both use the singular "bond") while scoring 1
+    against the UNRELATED ETF entry, whose content happens to mention
+    "stocks or bonds" in passing as an example of what an ETF can hold —
+    the plural-only query token matched an incidental aside in the wrong
+    entry instead of the dedicated entry's singular title, because nothing
+    connected "bonds" to "bond" as the same concept. Deliberately narrow: a
+    bare trailing "s" (not "es"/"ies", not on a word already ending "ss")
+    on a word long enough that losing one letter can't turn it into noise —
+    the word is NORMALISED to its singular form (not kept alongside the
+    plural) — keeping both forms in the query's own token set was tried
+    first and made things worse: "bonds" then contributed BOTH "bonds" and
+    "bond" to query_tokens, and the full-title-match bonus requires ALL
+    query tokens to appear in the title — but a title only ever gets the
+    singular ("Bond"), never the literal plural, so the doubled query set
+    could never be a full subset and the bonus silently never applied.
+    Reducing to one canonical (singular) form for both query and candidate
+    text keeps the subset check meaningful either way."""
+    tokens = set()
+    for w in re.findall(r"[a-z]+", text.lower()):
+        if len(w) < 2 or w in _STOPWORDS:
+            continue
+        w = _normalise_spelling(w)
+        if w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+            w = w[:-1]
+        tokens.add(w)
+    return tokens
 
 
 def _relevance_score(query: str, candidate_text: str) -> int:
@@ -237,6 +359,33 @@ def _relevance_score(query: str, candidate_text: str) -> int:
         return 0
     candidate_tokens = _meaningful_tokens(candidate_text)
     return len(query_tokens & candidate_tokens)
+
+
+def _cache_entry_score(query: str, entry: SourceResult) -> int:
+    """As the local cache has grown to cover more overlapping topics (e.g.
+    both a CFPB "Inflation" glossary entry AND an SARB monetary-policy entry
+    that merely mentions inflation in passing while explaining the repo
+    rate), plain body-text overlap alone started mis-ranking: "what is
+    inflation" scored higher against SARB's longer passage than against
+    CFPB's short, directly-on-topic definition, simply because the longer
+    passage happened to repeat more of the query's other words too.
+
+    Fix: a bonus applies only when the entry's title covers EVERY meaningful
+    query token, not just one shared word — the title is that entry's actual
+    subject, so covering the whole query means the entry is very likely
+    "about" exactly what was asked, not just adjacent to it. A PARTIAL title
+    match earns no bonus, specifically so a generic entry sharing one word
+    with a more specific query (e.g. "interest rate"'s title token "rate"
+    partially matching "what is the repo rate") can't outrank an entry whose
+    BODY actually discusses the specific thing asked about (SARB's repo-rate
+    explanation) — that must still be decided by body-text overlap alone."""
+    query_tokens = _meaningful_tokens(query)
+    title_tokens = _meaningful_tokens(entry.title)
+    full_title_match = bool(query_tokens) and query_tokens.issubset(title_tokens)
+    return (
+        (10 if full_title_match else 0)
+        + _relevance_score(query, entry.content)
+    )
 
 
 # ── Local reference cache ────────────────────────────────────────────────
@@ -421,109 +570,532 @@ _LOCAL_REFERENCE_CACHE: list[SourceResult] = [
             "Reserve Bank."
         ),
     ),
+    # ── CFPB glossary (consumerfinance.gov) ──────────────────────────────
+    # Verified live 2026-09-08 (fetched, content confirmed present and not a
+    # blank/JS-only template — unlike investor.gov's /glossary/ slugs and
+    # moneysmart.gov.au / moneyhelper.org.uk, which returned HTTP 403 to a
+    # plain fetch when the same check was attempted for this batch). Content
+    # below quotes the CFPB Financial Terms Glossary directly, not invented.
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Credit Score",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A credit score is a number created from a scoring model that uses "
+            "information from your credit history to predict how likely you are to "
+            "repay borrowed money. Lenders use it, along with other factors, to help "
+            "decide whether to extend credit and on what terms."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Compound Interest",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Compound interest is interest calculated on both the money you originally "
+            "saved or invested and the interest that money has already earned — so "
+            "your balance can grow faster over time than with simple interest, which "
+            "is only calculated on the original amount."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Debt",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Debt is money you owe another person or a business, typically because "
+            "you borrowed it and agreed to pay it back, often with interest, "
+            "according to agreed terms."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Interest Rate",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "An interest rate is a percentage of a sum borrowed that a lender or "
+            "merchant charges for letting you use its money, or that a saver earns "
+            "for letting a bank use theirs."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Mutual Fund",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A mutual fund is a company that pools money from many investors and "
+            "invests it in securities such as stocks, bonds, and short-term debt. "
+            "Investors buy shares of the fund itself, giving them a stake in its "
+            "whole pooled portfolio rather than any single underlying holding."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Bond",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A bond is a type of debt. When you buy a bond, you are lending money to "
+            "the issuer — which may be a government, municipality, or corporation — "
+            "which agrees to pay it back, usually with interest, by a set date."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Inflation",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Inflation occurs when the prices of goods and services increase over "
+            "time, which reduces how much a given amount of money can buy."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Investment Fees",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Investment fees are what you pay to use investment products and "
+            "services — for example, charges a fund or broker deducts for managing "
+            "or facilitating your investment. Fees reduce net returns over time, so "
+            "understanding them is part of evaluating any investment product."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Credit Report",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A credit report is a summary of your credit activity and current credit "
+            "situation, such as loan payment history and the status of your credit "
+            "accounts. Lenders use credit reports to help decide on lending and "
+            "interest rates; other businesses may use them for insurance, rental, "
+            "utility, or employment-related decisions."
+        ),
+    ),
+    # Second verification pass, same day (2026-09-08), same page and same
+    # method: fetched live, content confirmed present and quoted directly,
+    # not invented. Coverage driven by a broader "500 investing concepts"
+    # priority list — these are the Tier-1/beginner terms from that list that
+    # (a) aren't already computed by AlphaSwarm itself (contrast api.py's
+    # _ASK_GLOSSARY, which already covers "asset" as a computed concept —
+    # this entry is kept anyway as a harmless safety net, since _ASK_GLOSSARY
+    # is checked first and wins whenever it applies) and (b) had a real,
+    # confirmed definition on an already-approved domain. The remaining
+    # Tier-1 terms from that list (return on investment, net worth, yield)
+    # were checked against this same page and are NOT present here — not
+    # added, rather than guessed.
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Asset",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "An asset is an item with economic value, such as a stock, bond, or real "
+            "estate, that a person or company owns."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Risk",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "In a financial context, risk is exposure to the possibility of loss — "
+            "for example, the chance that an investment's value falls, or that a "
+            "borrower is unable to repay what they owe."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Liquidity",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Liquidity is a measure of the ability and ease with which you can access "
+            "and use your money — cash is the most liquid asset, while something "
+            "like real estate is far less liquid because it takes time to convert "
+            "into cash."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Portfolio",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A portfolio is the combined collection of investments — such as stocks, "
+            "bonds, or fund holdings — that a person or fund holds, considered "
+            "together as a whole rather than as individual positions."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Capital Gain",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A capital gain is the profit that comes from selling an investment for "
+            "more than you paid for it. Selling for less than you paid is a capital "
+            "loss."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Stock",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A stock is a type of investment that gives people a share of ownership "
+            "in a company. Owning stock generally entitles the holder to a "
+            "proportional claim on the company's assets and earnings."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Budget",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A budget is a plan that outlines what money you expect to earn or "
+            "receive (your income) and how you will save it or spend it (your "
+            "expenses) for a given period of time."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Savings Account",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A savings account is an account at a bank (sometimes called a share "
+            "savings account at a credit union) used to set aside money, that "
+            "typically pays you interest on the balance."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Emergency Fund",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "An emergency fund is a cash reserve that's specifically set aside for "
+            "unplanned expenses or financial emergencies, kept separate from money "
+            "earmarked for everyday spending or investing."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Principal",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "Principal is the amount of money originally borrowed from a lender (or "
+            "originally invested), which is then paid back or grows separately from "
+            "any interest charged or earned on top of it."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Loan",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "A loan is money that needs to be repaid by the borrower, generally with "
+            "interest, according to terms agreed with the lender."
+        ),
+    ),
+    SourceResult(
+        title="CFPB Financial Terms Glossary: APR (Annual Percentage Rate)",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content=(
+            "APR (Annual Percentage Rate) is the cost of borrowing money on a yearly "
+            "basis, expressed as a percentage rate — it is meant to make it easier "
+            "to compare the cost of different loans or credit offers."
+        ),
+    ),
+    # Verified live 2026-09-08, same page and method as the CFPB block above.
+    # "Return" is the page's own term, not a perfect match for "return on
+    # investment" — kept as its own short entry rather than stretched to
+    # claim it defines ROI specifically, since it doesn't mention a
+    # percentage or a relationship to the amount invested.
+    SourceResult(
+        title="CFPB Financial Terms Glossary: Return",
+        publisher="Consumer Financial Protection Bureau (United States)",
+        url="https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/glossary/",
+        content="A return is the profit or loss on an investment.",
+    ),
+    # ── FINRA, OCC, SARS — verified live 2026-09-08 ─────────────────────
+    SourceResult(
+        title="FINRA Investor Insights: Margin Calls",
+        publisher="Financial Industry Regulatory Authority (FINRA)",
+        url="https://www.finra.org/investors/insights/margin-calls",
+        content=(
+            "A margin account lets an investor borrow cash from their brokerage "
+            "firm to buy securities, using the account's assets as collateral. A "
+            "margin call happens when the account's value falls (or a new trade "
+            "creates a shortfall) so that equity drops below the firm's minimum "
+            "requirement — the investor then has to deposit more money or "
+            "securities, or the firm may sell assets in the account to cover the "
+            "shortfall."
+        ),
+    ),
+    SourceResult(
+        title="OCC Options Glossary: At-the-Money",
+        publisher="OCC (Options Clearing Corporation)",
+        url="https://www.optionseducation.org/referencelibrary/optionsglossary",
+        content=(
+            "At-the-money describes an option whose strike price is equal to the "
+            "current market price of the underlying stock."
+        ),
+    ),
+    SourceResult(
+        title="OCC Options Glossary: American-Style Option",
+        publisher="OCC (Options Clearing Corporation)",
+        url="https://www.optionseducation.org/referencelibrary/optionsglossary",
+        content=(
+            "An American-style option is an option that can be exercised at any "
+            "time prior to its expiration date — unlike a European-style option, "
+            "which can only be exercised at expiration itself."
+        ),
+    ),
+    SourceResult(
+        title="SARS: Capital Gains Tax",
+        publisher="South African Revenue Service (SARS)",
+        url="https://www.sars.gov.za/types-of-tax/capital-gains-tax/",
+        content=(
+            "In South Africa, capital gains tax (CGT) applies when you dispose of "
+            "an asset (such as shares) for more than it cost you. Capital gains "
+            "are taxed at a lower effective rate than ordinary income — only a "
+            "portion of the gain is included in taxable income, rather than the "
+            "full gain. Gains and losses from before 1 October 2001 (when CGT was "
+            "introduced) are not taken into account."
+        ),
+    ),
+    # ── Cboe Options Institute glossary — verified live 2026-09-08 ─────────
+    SourceResult(
+        title="Cboe Options Institute Glossary: Call",
+        publisher="Cboe Global Markets — Options Institute",
+        url="https://www.cboe.com/optionsinstitute/glossary",
+        content=(
+            "A call is an option contract which gives the holder the right, but "
+            "not the obligation, to buy the underlying asset at a certain price "
+            "(the strike price) within a certain timeframe."
+        ),
+    ),
+    SourceResult(
+        title="Cboe Options Institute Glossary: Put",
+        publisher="Cboe Global Markets — Options Institute",
+        url="https://www.cboe.com/optionsinstitute/glossary",
+        content=(
+            "A put is an option contract granting the holder the right, but not "
+            "the obligation, to sell the underlying asset at a certain price (the "
+            "strike price) for a specified period of time."
+        ),
+    ),
+    SourceResult(
+        title="Cboe Options Institute Glossary: Strike Price",
+        publisher="Cboe Global Markets — Options Institute",
+        url="https://www.cboe.com/optionsinstitute/glossary",
+        content=(
+            "The strike price is the price at which an option holder may buy or "
+            "sell the underlying security, as defined in the terms of the option "
+            "contract."
+        ),
+    ),
+    SourceResult(
+        title="Cboe Options Institute Glossary: In-the-Money / Out-of-the-Money",
+        publisher="Cboe Global Markets — Options Institute",
+        url="https://www.cboe.com/optionsinstitute/glossary",
+        content=(
+            "A call option is 'in-the-money' if the underlying asset's price is "
+            "higher than the option's strike price, and 'out-of-the-money' if the "
+            "underlying asset's price is below the strike price."
+        ),
+    ),
+    SourceResult(
+        title="Cboe Options Institute Glossary: Expiration Date",
+        publisher="Cboe Global Markets — Options Institute",
+        url="https://www.cboe.com/optionsinstitute/glossary",
+        content="The expiration date is the day when an option contract terminates.",
+    ),
+    # ── CME Group Futures Fundamentals — verified live 2026-09-08 ───────────
+    SourceResult(
+        title="Futures Fundamentals: What Is a Futures Contract?",
+        publisher="CME Group — Futures Fundamentals",
+        url="https://www.futuresfundamentals.org/get-the-basics/introduction-to-derivatives/",
+        content=(
+            "A futures contract is a contractual agreement to buy or sell an "
+            "amount of something — a commodity, a financial instrument, a "
+            "currency — at a fixed price, for delivery or settlement at a fixed "
+            "date in the future."
+        ),
+    ),
+    # ── OpenStax "Principles of Economics 3e" — verified live 2026-09-08 ────
+    SourceResult(
+        title="OpenStax Principles of Economics 3e: Microeconomics",
+        publisher="OpenStax (Rice University)",
+        url="https://openstax.org/books/principles-economics-3e/pages/1-2-microeconomics-and-macroeconomics",
+        content=(
+            "Microeconomics focuses on the actions of individual agents within "
+            "the economy, like households, workers, and businesses."
+        ),
+    ),
+    SourceResult(
+        title="OpenStax Principles of Economics 3e: Macroeconomics",
+        publisher="OpenStax (Rice University)",
+        url="https://openstax.org/books/principles-economics-3e/pages/1-2-microeconomics-and-macroeconomics",
+        content=(
+            "Macroeconomics looks at the economy as a whole. It focuses on broad "
+            "issues such as growth of production, the number of unemployed "
+            "people, the inflationary increase in prices, government deficits, "
+            "and levels of exports and imports."
+        ),
+    ),
 ]
 
 
 def _search_local_cache(query: str) -> Optional[SourceResult]:
     best, best_score = None, 0
     for entry in _LOCAL_REFERENCE_CACHE:
-        score = _relevance_score(query, f"{entry.title} {entry.content}")
+        score = _cache_entry_score(query, entry)
         if score > best_score:
             best, best_score = entry, score
     return best
 
 
-# ── Live provider path (generic; not exercised without credentials) ────────
+# ── Live provider path (SerpApi; not exercised without a real API key) ─────
+# SerpApi (serpapi.com) specifically — chosen over Tavily after Tavily's
+# signup turned out to require card details even on its free tier; SerpApi's
+# free plan (100 searches/month at time of writing) has historically been
+# email-signup only. Trade-off versus the Tavily version this replaced:
+# SerpApi has no `include_domains`-equivalent parameter, so domain
+# restriction goes back to a `site:` clause in the query text (which a
+# provider could in principle ignore) backed by the SAME post-hoc
+# is_approved_domain() check every result already goes through below — still
+# safe (nothing off-allowlist can reach the model), just enforced in one
+# fewer place than the Tavily version was. SerpApi also only returns a short
+# search-result `snippet`, not a fully-fetched page, so `content` here is
+# necessarily shorter than the Tavily/local-cache versions — real text
+# (SerpApi's own snippet, not fabricated), just less of it. This module does
+# NOT re-fetch the page itself to get more: that was the original generic
+# design (see git history), but plain HTTP fetches get HTTP 403 from
+# investor.gov specifically (confirmed live during earlier work on this
+# module), which is exactly the domain most queries here would resolve to —
+# refetching would silently fail for the majority case, so a shorter but
+# real snippet was chosen over a longer but frequently-unavailable page body.
+SERPAPI_SEARCH_URL = "https://serpapi.com/search.json"
 
-def _extract_text(html: str) -> str:
-    """Dependency-free tag stripper. This project has no HTML-parsing
-    library installed (checked requirements.txt); adding one purely for a
-    best-effort text extraction here would be more than this proof-of-
-    concept needs. Good enough to hand short reference passages to the
-    grounding step, not a general-purpose scraper."""
-    text = re.sub(r"<script.*?</script>", " ", html, flags=re.S | re.I)
-    text = re.sub(r"<style.*?</style>", " ", text, flags=re.S | re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"&nbsp;|&amp;|&#39;|&quot;", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+# One `site:` clause per approved domain, ORed together, so a single SerpApi
+# call is restricted to results SerpApi believes are on an approved site —
+# the query-text equivalent of Tavily's include_domains, weaker only in that
+# it depends on the search engine actually honouring the operator rather
+# than the provider enforcing it structurally.
+_SITE_RESTRICTION = " OR ".join(f"site:{d}" for d in APPROVED_EDUCATIONAL_DOMAINS)
 
 
 def _search_live_provider(query: str) -> Optional[SourceResult]:
-    """Generic search-provider call, only active when SEARCH_PROVIDER_URL and
-    SEARCH_PROVIDER_API_KEY are configured (see .env.example). Expects the
-    provider to return JSON shaped like {"results": [{"title": ..., "url":
-    ...}, ...]} — adjust the two lines marked below to match whichever
-    provider is actually wired in, without touching the validation/relevance
-    logic. NOT exercised in this environment: no such credentials exist here
-    (see module docstring), so this path is implemented and reviewed but
-    UNTESTED against a live provider.
+    """Calls SerpApi, only active when SERPAPI_API_KEY is configured (see
+    .env.example). NOT exercised in this environment: no such credential
+    exists here (see module docstring), so this path is implemented and
+    reviewed but UNTESTED against the real SerpApi API — verify the response
+    shape against SerpApi's current docs before relying on it in production.
     """
-    provider_url = os.getenv("SEARCH_PROVIDER_URL")
-    api_key = os.getenv("SEARCH_PROVIDER_API_KEY")
-    if not provider_url or not api_key:
+    api_key = os.getenv("SERPAPI_API_KEY")
+    if not api_key:
         return None
 
     import httpx
 
     try:
         resp = httpx.get(
-            provider_url,
-            params={"q": f"{query} site:investor.gov OR site:sec.gov OR site:finra.org", "key": api_key},
+            SERPAPI_SEARCH_URL,
+            params={
+                "engine": "google",
+                "q": f"{query} ({_SITE_RESTRICTION})",
+                "api_key": api_key,
+                "num": 5,
+            },
             timeout=8.0,
         )
         resp.raise_for_status()
-        results = resp.json().get("results", [])  # <- adjust to the provider's actual response shape
+        results = resp.json().get("organic_results", [])
     except Exception as e:
-        logger.warning("Educational search provider call failed: %s", e)
+        logger.warning("SerpApi educational search call failed: %s", e)
         return None
 
     for item in results:
-        candidate_url = item.get("url", "")
-        if not candidate_url or not is_approved_domain(candidate_url):
-            continue  # reject anything outside the allowlist before even fetching it
-        try:
-            page = httpx.get(
-                candidate_url, timeout=8.0, follow_redirects=True,
-                headers={"User-Agent": "AlphaSwarmEducationalBot/1.0"},
-            )
-            page.raise_for_status()
-        except Exception as e:
-            logger.info("Educational source fetch failed for %s: %s", candidate_url, e)
+        url = item.get("link", "")
+        # The `site:` clause above is a request to the engine, not a
+        # guarantee — this check is what actually enforces the allowlist,
+        # the same principle the rest of this module applies everywhere
+        # else: never trust a single layer to enforce a safety boundary.
+        if not url or not is_approved_domain(url):
+            logger.info("Rejected %s: outside the approved-domain allowlist", url)
             continue
+        content = (item.get("snippet") or "").strip()
+        if not content:
+            continue
+        title = item.get("title") or url
+        if _relevance_score(query, f"{title} {content}") == 0:
+            logger.info("Rejected %s: approved domain but not relevant to %r", url, query)
+            continue  # on-allowlist result, but not actually about this concept
 
-        final_url = str(page.url)
-        if not is_approved_domain(final_url):
-            logger.info("Rejected %s: redirected outside the allowlist to %s", candidate_url, final_url)
-            continue  # a redirect took us off the allowlist — reject, don't use it
-
-        text = _extract_text(page.text)
-        title = item.get("title") or final_url
-        if _relevance_score(query, f"{title} {text}") == 0:
-            logger.info("Rejected %s: approved domain but not relevant to %r", final_url, query)
-            continue  # on-allowlist page, but not actually about this concept
-
-        publisher = _publisher_for(final_url) or "Unknown"
-        return SourceResult(title=title, publisher=publisher, url=final_url, content=text[:1500])
+        publisher = _publisher_for(url) or "Unknown"
+        return SourceResult(title=title, publisher=publisher, url=url, content=content[:1500])
 
     return None
 
 
-def search_authoritative_education(query: str) -> Optional[SourceResult]:
-    """Single entry point LEARNING_QUESTION's fallback tier calls. Tries a
-    live provider first (a no-op when unconfigured), then the local
-    validated cache. Never raises — every failure degrades to None, which
-    tells the caller to fall through to the acronym-clarification / honest
-    "not covered yet" response rather than let the model guess."""
-    try:
-        live = _search_live_provider(query)
-        if live:
-            return live
-    except Exception as e:
-        logger.warning("Live educational search failed, falling back to local cache: %s", e)
+def search_local_cache_only(query: str) -> Optional[SourceResult]:
+    """Public wrapper over the local cache lookup, with none of
+    search_authoritative_education's live-provider fallback. Exists so a
+    caller can check "does the hand-verified cache already have this" as its
+    own separate step — specifically, api.py's acronym-clarification gate
+    needs to allow an acronym THROUGH when the cache has a real, curated
+    answer for it (e.g. "ETF") while still blocking it from ever reaching
+    live web search when the cache doesn't (e.g. "RSA", "TER") — live search
+    for a bare, unresolved acronym is exactly the case most likely to
+    confidently answer with a real but wrong-context result (an ambiguous
+    acronym has many genuine meanings; the search engine picks one without
+    knowing which one this product means), so it must be gated OFF for that
+    case rather than tried and hoped-to-fail. Never raises — degrades to
+    None on any lookup failure, same contract as search_authoritative_education."""
     try:
         return _search_local_cache(query)
     except Exception as e:
         logger.warning("Local educational reference lookup failed: %s", e)
+        return None
+
+
+def search_live_provider_only(query: str) -> Optional[SourceResult]:
+    """Public wrapper over the live-provider call alone, with no cache
+    fallback (the caller already tried the cache itself, via
+    search_local_cache_only, and is calling this only because that missed).
+    Same never-raises contract as the other public search functions here."""
+    try:
+        return _search_live_provider(query)
+    except Exception as e:
+        logger.warning("Live educational search failed: %s", e)
+        return None
+
+
+def search_authoritative_education(query: str) -> Optional[SourceResult]:
+    """Single entry point LEARNING_QUESTION's fallback tier calls. Tries the
+    local validated cache FIRST, live provider only as a fallback for terms
+    the cache genuinely has nothing on. Never raises — every failure
+    degrades to None, which tells the caller to fall through to the
+    acronym-clarification / honest "not covered yet" response rather than
+    let the model guess.
+
+    Cache-first, not live-first: a free-tier search provider (SerpApi: 100
+    searches/month at time of writing) has a hard, small quota, and the
+    local cache already holds a hand-verified, correctly-sourced answer for
+    a meaningful chunk of what gets asked (~30 terms at time of writing).
+    Trying the live provider first would spend one of those 100 searches on
+    every single one of those already-answered queries, every time anyone
+    asks — the quota would be gone before it ever reached a term the cache
+    actually has a gap on. Checking the cache first means the live call only
+    fires for genuine gaps, which is exactly where a paid/quota-limited
+    search actually adds value over what's already known to be correct."""
+    try:
+        cached = _search_local_cache(query)
+        if cached:
+            return cached
+    except Exception as e:
+        logger.warning("Local educational reference lookup failed: %s", e)
+    try:
+        return _search_live_provider(query)
+    except Exception as e:
+        logger.warning("Live educational search failed: %s", e)
         return None
 
 

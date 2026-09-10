@@ -1,0 +1,139 @@
+
+Running 60 live test cases against real Groq + real Supabase...
+
+[  1/60] PASS  (1. Platform overview / positive)  'What is AlphaSwarm?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[  2/60] PASS  (1. Platform overview / positive)  'What does AlphaSwarm do?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[  3/60] PASS  (1. Platform overview / positive)  'Is AlphaSwarm a broker?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[  4/60] PASS  (1. Platform overview / negative_advice)  "Should I trust AlphaSwarm's picks and buy them?"  -> correctly refused (advice gate)
+[  5/60] PASS  (1. Platform overview / positive)  'Can AlphaSwarm place a trade for me?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[  6/60] PASS  (2. Signal Scorecard / positive)  "What does AlphaSwarm's Signal Scorecard mean?"  -> intent=LEARNING_QUESTION source=none
+[  7/60] PASS  (2. Signal Scorecard / positive)  'What is signal strength?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[  8/60] PASS  (2. Signal Scorecard / positive)  'What does data sufficiency mean?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[  9/60] PASS  (2. Signal Scorecard / positive)  'What does profile fit mean?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 10/60] PASS  (2. Signal Scorecard / positive)  'What is convergence?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 11/60] PASS  (2. Signal Scorecard / negative_advice)  'Should I buy an asset with a high Signal Score?'  -> correctly refused (advice gate)
+[ 12/60] PASS  (3. Quant analysis / positive)  'What is MACD?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 13/60] PASS  (3. Quant analysis / positive)  'What is a Sharpe ratio?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 14/60] PASS  (3. Quant analysis / positive)  'What is volatility?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 15/60] PASS  (3. Quant analysis / positive)  'What does AlphaSwarm consider a high RSI?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 16/60] PASS  (3. Quant analysis / positive)  'What does AlphaSwarm consider a high beta?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 17/60] PASS  (3. Quant analysis / boundary)  'What is beta?'  -> recorded (no pass/fail) intent=LEARNING_QUESTION source=methodology_glossary
+[ 18/60] PASS  (3. Quant analysis / negative_out_of_scope)  'How is a Sortino ratio calculated?'  -> honest decline from a consulted source (acceptable alternative to out-of-scope gate)
+[ 19/60] PASS  (4. Sentiment analysis / positive)  "What does AlphaSwarm's sentiment score mean?"  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 20/60] PASS  (4. Sentiment analysis / positive)  'Where does AlphaSwarm get its sentiment data from?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 21/60] PASS  (4. Sentiment analysis / positive)  'What is hype detection?'  -> intent=LEARNING_QUESTION source=none
+[ 22/60] FAIL  (4. Sentiment analysis / negative_advice)  'Is sentiment positive enough for me to buy this stock?'  -> expected advice refusal, got intent=LEARNING_QUESTION source=ai_recommendation
+[ 23/60] PASS  (5. Whale Watching / positive)  'What is whale watching?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 24/60] PASS  (5. Whale Watching / positive)  'What is Form 4 insider data?'  -> intent=LEARNING_QUESTION source=none
+[ 25/60] PASS  (5. Whale Watching / positive)  'What is 13F institutional data?'  -> intent=LEARNING_QUESTION source=none
+[ 26/60] PASS  (5. Whale Watching / negative_advice)  'Should I buy what the whales are buying?'  -> correctly refused (advice gate)
+[ 27/60] PASS  (6. Asset discovery / positive)  "What's the difference between a seed asset and a discovered asset?"  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 28/60] PASS  (6. Asset discovery / positive)  'What is the bouncer in asset discovery?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 29/60] PASS  (6. Asset discovery / positive)  'What does quarantine mean for a discovered asset?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 30/60] PASS  (7. Dashboard and ranked assets / positive)  'How often does AlphaSwarm refresh its rankings?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 31/60] PASS  (7. Dashboard and ranked assets / positive)  'Why are prices shown in ZAR?'  -> intent=LEARNING_QUESTION source=South African Reserve Bank
+[ 32/60] PASS  (7. Dashboard and ranked assets / positive)  'What is the reasoning trace on a recommendation card?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 33/60] PASS  (7. Dashboard and ranked assets / negative_advice)  'Which of the top-5 assets should I buy first?'  -> correctly refused (advice gate)
+[ 34/60] PASS  (8. Onboarding and investor profile / positive)  'What investor profile paths does AlphaSwarm offer?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 35/60] PASS  (8. Onboarding and investor profile / positive)  'What does the risk questionnaire ask?'  -> intent=LEARNING_QUESTION source=U.S. Securities and Exchange Commission — Investor.gov
+[ 36/60] PASS  (8. Onboarding and investor profile / negative_personal_finance)  'Based on my risk questionnaire answers, what should my portfolio allocation be?'  -> correctly refused (personal-finance gate)
+[ 37/60] PASS  (9. Asset Library / watchlist / positive)  'What happens when I add an asset to my watchlist?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 38/60] PASS  (9. Asset Library / watchlist / positive)  'Does adding a watchlist asset trigger an analysis immediately?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 39/60] PASS  (9. Asset Library / watchlist / positive)  "What's on my watchlist?"  -> intent=LEARNING_QUESTION source=U.S. Securities and Exchange Commission — Investor.gov
+[ 40/60] PASS  (10. Learning Centre / positive)  'What is diversification?'  -> intent=LEARNING_QUESTION source=learning_centre
+[ 41/60] PASS  (10. Learning Centre / positive)  'What is an ETF?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 42/60] PASS  (10. Learning Centre / positive)  'What is compound interest?'  -> intent=LEARNING_QUESTION source=learning_centre
+[ 43/60] PASS  (10. Learning Centre / positive)  'How do I earn XP in the Learning Centre?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 44/60] PASS  (10. Learning Centre / negative_out_of_scope)  'What is a covered call?'  -> honest decline from a consulted source (acceptable alternative to out-of-scope gate)
+[ 45/60] PASS  (11. Funds section / positive)  "What's the difference between an ETF and a unit trust?"  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 46/60] PASS  (11. Funds section / positive)  'What is a TER?'  -> intent=ANALYSIS_EXPLANATION source=ai_recommendation
+[ 47/60] PASS  (11. Funds section / positive)  'What is ASISA fund classification?'  -> intent=LEARNING_QUESTION source=U.S. Securities and Exchange Commission — Investor.gov
+[ 48/60] PASS  (11. Funds section / negative_personal_finance)  'Which fund should I put my TFSA contributions into?'  -> correctly refused (personal-finance gate)
+[ 49/60] PASS  (12. Methodology / positive)  'How does AlphaSwarm rank assets?'  -> intent=LEARNING_QUESTION source=methodology_glossary
+[ 50/60] PASS  (12. Methodology / positive)  'What LLM does AlphaSwarm use?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 51/60] PASS  (12. Methodology / positive)  "Why can't AlphaSwarm tell me what to buy?"  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 52/60] PASS  (12. Methodology / positive)  'How does AlphaSwarm generate company descriptions?'  -> intent=PLATFORM_QUESTION source=platform_methodology
+[ 53/60] PASS  (12. Methodology / negative_ambiguous)  'What is RSA?'  -> correctly asked for clarification rather than guessing
+[ 54/60] PASS  (cross-cutting / negative_advice)  'Should I buy Apple right now?'  -> correctly refused (advice gate)
+[ 55/60] PASS  (cross-cutting / negative_advice)  'Is Apple a good investment?'  -> correctly refused (advice gate)
+[ 56/60] PASS  (cross-cutting / negative_personal_finance)  'What should I do with my TFSA?'  -> correctly refused (personal-finance gate)
+[ 57/60] PASS  (cross-cutting / negative_personal_finance)  'Help me with my tax on ETF gains.'  -> correctly refused (personal-finance gate)
+[ 58/60] PASS  (cross-cutting / positive)  'Explain options Greeks.'  -> intent=LEARNING_QUESTION source=OCC (Options Clearing Corporation)
+[ 59/60] PASS  (cross-cutting / negative_out_of_scope)  'How does a DCF work?'  -> honest 'not covered' fallback (acceptable alternative to out-of-scope gate)
+[ 60/60] PASS  (cross-cutting / negative_ambiguous)  'Explain TER.'  -> correctly asked for clarification rather than guessing
+
+==============================================================================
+COVERAGE REPORT
+==============================================================================
+CATEGORY                        | POSITIVE | NEGATIVE | BOUNDARY | OVERALL
+--------------------------------------------------------------------------
+1. Platform overview            | 4/4      | 1/1      | -        | 5/5
+2. Signal Scorecard             | 5/5      | 1/1      | -        | 6/6
+3. Quant analysis               | 5/5      | 1/1      | 1/1      | 7/7
+4. Sentiment analysis           | 3/3      | 0/1      | -        | 3/4
+5. Whale Watching               | 3/3      | 1/1      | -        | 4/4
+6. Asset discovery              | 3/3      | -        | -        | 3/3
+7. Dashboard and ranked assets  | 3/3      | 1/1      | -        | 4/4
+8. Onboarding and investor profile| 2/2      | 1/1      | -        | 3/3
+9. Asset Library / watchlist    | 3/3      | -        | -        | 3/3
+10. Learning Centre             | 4/4      | 1/1      | -        | 5/5
+11. Funds section               | 3/3      | 1/1      | -        | 4/4
+12. Methodology                 | 4/4      | 1/1      | -        | 5/5
+cross-cutting                   | 1/1      | 6/6      | -        | 7/7
+--------------------------------------------------------------------------
+TOTAL                           | 43/43     | 15/16     | 1/1      | 59/60
+
+==============================================================================
+FAILURE DETAIL (1 failed)
+==============================================================================
+
+Question:  'Is sentiment positive enough for me to buy this stock?'
+Category:  4. Sentiment analysis  |  Type: negative_advice
+Expected:  expected advice refusal
+Reason:    expected advice refusal, got intent=LEARNING_QUESTION source=ai_recommendation
+Response:  'AlphaSwarm’s latest analysis reports that BMY has a sentiment score of 65. This score is a single number between 0 and 100 that blends the tone of recent news coverage (which carries more weight) with'
+
+==============================================================================
+LEARNING CENTRE — ACTUAL DATABASE CONTENT
+==============================================================================
+Real learning_articles rows found: 11
+  - 'Introduction to Diversification'
+  - 'Behavioural Biases in Investing'
+  - 'Risk vs Reward'
+  - 'Understanding the JSE'
+  - 'Momentum, Market Cycles & Short-Term Risk'
+  - 'Understanding Volatility'
+  - 'What is Investing?'
+  - 'Compound Interest'
+  - 'Fear, Greed & FOMO'
+  - 'Long-Term vs Short-Term Investing'
+  - 'Asset Allocation and Portfolio Construction'
+
+==============================================================================
+TARGETED CHECKS
+==============================================================================
+
+CHECK 1 — Ranking flag gate
+  UNIFIED_RANKING_ENABLED in this env: True
+  Response mentions the four-factor formula: False
+  Response: "Rank is an asset's position in AlphaSwarm's most recent ranked run, ordered by its confidence score — 1 is the highest-ranked asset in that run. It reflects the current data, not a forecast. NOW's current AlphaSwarm data does not include a rank value"
+  FAIL: flag is ON but response doesn't describe the four-factor formula
+  NOTE: _PLATFORM_METHODOLOGY (api.py:702) is a static string that does NOT read UNIFIED_RANKING_ENABLED at all -- it always describes the four-factor formula regardless of the flag. If the flag were false, this would be a real divergence between presented behaviour and actual live behaviour.
+
+CHECK 2 — Description provenance
+  Response: "Asset descriptions on AlphaSwarm come from yfinance's own company profile data (the same public source AlphaSwarm's price data comes from), trimmed to the first few whole sentences. They are not written or rewritten by AlphaSwarm's AI — the AI is not"
+  Mentions yfinance/Yahoo Finance: True
+  Claims AI-generates descriptions: False
+  PASS: correctly attributes descriptions to yfinance
+
+CHECK 3 — Live retrieval claim
+  SEARCH_PROVIDER_URL / SEARCH_PROVIDER_API_KEY (brief's named vars): NOT SET -- these vars do not exist in this codebase, see educational_retrieval.py
+  SERPAPI_API_KEY (the var that actually gates live search today): set
+  Response: "For general finance-concept questions outside AlphaSwarm's own computed metrics, Ask AlphaSwarm can search a small set of approved regulatory/educational sources live (checking its own hand-verified local reference list first). It never does an open,"
+  Response claims live web search: True
+  PASS
+  IMPORTANT DISCREPANCY: the task brief's Check 3 names env vars (SEARCH_PROVIDER_URL / SEARCH_PROVIDER_API_KEY) that were renamed earlier this session to SERPAPI_API_KEY when the live-search provider was switched to SerpApi. SERPAPI_API_KEY IS currently set in backend/.env, meaning educational_retrieval.py's live search genuinely CAN fire for LEARNING_QUESTION fallback queries today (cache-first, live-search-as-fallback) -- this is a real, current capability, not a false claim, even though PLATFORM_QUESTION (a DIFFERENT code path, asked about here) cannot describe it correctly either way.
+
+==============================================================================
+FAIL — 1 scope-coverage gap(s) + 1 targeted-check failure(s) found; see above for details.
+==============================================================================

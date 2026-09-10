@@ -225,6 +225,19 @@ def test_bare_metric_question_still_uses_generic_glossary(monkeypatch):
 
 
 def test_educational_etf_question_unaffected(monkeypatch):
+    """Originally asserted "the classifier is still reached exactly once" —
+    a guard against a DIFFERENT bug (an asset/metric shortcut wrongly
+    swallowing an educational question). A later round added a deterministic
+    definitional-learning-question shortcut (_ASK_DEFINITIONAL_SHAPE_PATTERN
+    + _ask_free_tier_learning_hit) specifically so well-grounded terms like
+    ETF DON'T need the classifier at all — unlike SCHW/NVDA-style asset
+    overview requests, the classifier proved unreliable for terse "what is
+    X" phrasing, and ETF already has a real _ASK_GLOSSARY entry, so there's
+    nothing for the classifier to add here. The safety property this test
+    actually cares about — an ETF question is answered correctly and never
+    mistaken for an asset/metric question — still holds and is asserted
+    directly below; only the "classifier is the only path there" assumption
+    changed, intentionally."""
     _patch_rate_limit(monkeypatch)
     _patch_fake_auth(monkeypatch)
     monkeypatch.setattr(api, "_resolve_asset", lambda q: None)
@@ -233,11 +246,14 @@ def test_educational_etf_question_unaffected(monkeypatch):
 
     def _count(_q):
         calls["n"] += 1
-        return "LEARNING_QUESTION"
+        raise AssertionError("classifier must not be needed for a well-grounded 'what is X' question")
     monkeypatch.setattr(api, "_classify_ask_intent", _count)
 
-    asyncio.run(api.ask_alphaswarm(api.AskRequest(query="What is an ETF?"), authorization="Bearer x"))
-    assert calls["n"] == 1  # classifier still reached — no asset/metric shortcut fired
+    resp = asyncio.run(api.ask_alphaswarm(api.AskRequest(query="What is an ETF?"), authorization="Bearer x"))
+    assert calls["n"] == 0  # deterministic shortcut resolved it, no classifier call needed
+    assert resp.intent == "LEARNING_QUESTION"
+    assert resp.data.get("ticker") is None  # never mistaken for an asset/metric question
+    assert "etf" in resp.narration.lower() or "exchange" in resp.narration.lower()
 
 
 def _stub_assets(monkeypatch, price_field_overrides=None):
