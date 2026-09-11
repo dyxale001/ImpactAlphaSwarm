@@ -82,7 +82,10 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardDataProvider>
+    <DashboardDataProvider
+      learningEnabled={placedWidgets.some(({ entry }) => entry.id === "learning-progress" || entry.id === "learning-next")}
+      learningProgressEnabled={placedWidgets.some(({ entry }) => entry.id === "learning-progress")}
+    >
       <div className={`${PAGE} space-y-6`}>
         <TodayStrip
           widgetCount={placedWidgets.length}

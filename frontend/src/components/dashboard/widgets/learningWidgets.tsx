@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Award, BookOpen, Sparkles } from "lucide-react";
-import { useLearningSummary } from "../../../hooks/useLearningSummary";
+import { useDashboardLearning } from "../../../dashboard/DashboardDataContext";
 import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
 
 // Learning widgets. The learning centre already tracks XP, quiz scores and
@@ -9,19 +9,10 @@ import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
 
 /** XP, badges and how far through the articles the reader is. */
 export function LearningProgressWidget() {
-  const {
-    learningXp,
-    articlesCompleted,
-    articlesTotal,
-    badgesEarned,
-    badgesTotal,
-    earnedBadges,
-    isLoading,
-    error,
-  } = useLearningSummary();
-
-  if (isLoading) return <WidgetLoading rows={2} />;
-  if (error) return <WidgetEmpty message={error} />;
+  const { progress } = useDashboardLearning();
+  if (progress.isLoading) return <WidgetLoading rows={2} />;
+  if (progress.error || !progress.summary) return <WidgetEmpty message={progress.error ?? "Unable to load your learning progress."} />;
+  const { learningXp, articlesCompleted, articlesTotal, badgesEarned, badgesTotal, earnedBadges } = progress.summary;
 
   const pct =
     articlesTotal > 0
@@ -107,11 +98,12 @@ export function LearningProgressWidget() {
 
 /** The next thing to read, so learning is one click rather than a decision. */
 export function LearningNextWidget() {
-  const { nextArticle, nextArticleCategory, isLoading, error } =
-    useLearningSummary();
+  const { nextArticle, nextArticleCategory, articlesTotal, isLoading, error } =
+    useDashboardLearning().next;
 
   if (isLoading) return <WidgetLoading rows={2} />;
   if (error) return <WidgetEmpty message={error} />;
+  if (articlesTotal === 0) return <WidgetEmpty message="No learning content available yet." />;
   if (!nextArticle) {
     return (
       <WidgetEmpty

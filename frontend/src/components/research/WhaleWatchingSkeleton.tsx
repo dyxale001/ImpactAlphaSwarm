@@ -1,9 +1,6 @@
 export default function WhaleWatchingSkeleton() {
   return (
     <div className="relative mx-auto max-w-7xl space-y-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
-      <div className="text-sm font-semibold text-brand-fg">
-        Preparing whale watching...
-      </div>
       <div className="motion-safe:animate-pulse space-y-6">
         <div className="hero-card px-5 pb-12 pt-8 sm:px-7 sm:pb-16">
           <div className="space-y-3">
