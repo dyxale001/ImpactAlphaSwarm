@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { useLearningSummary } from "../hooks/useLearningSummary";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useWatchlistData } from "../hooks/useWatchlistData";
 
@@ -22,7 +23,10 @@ type WatchlistValue = ReturnType<typeof useWatchlistData>;
 const SignalsContext = createContext<SignalsValue | null>(null);
 const WatchlistContext = createContext<WatchlistValue | null>(null);
 
-export function DashboardDataProvider({ children }: { children: ReactNode }) {
+const LearningContext = createContext<ReturnType<typeof useLearningSummary> | null>(null);
+
+export function DashboardDataProvider({ children, learningEnabled, learningProgressEnabled }: { children: ReactNode; learningEnabled: boolean; learningProgressEnabled: boolean }) {
+  const learning = useLearningSummary(learningEnabled, learningProgressEnabled);
   // The whole ranked feed, not the top five: the also-scored widget shows
   // everything below the shortlist, and a run only scores about thirty tickers.
   const signals = useDashboardStats({ limit: null });
@@ -31,7 +35,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   return (
     <SignalsContext.Provider value={signals}>
       <WatchlistContext.Provider value={watchlist}>
-        {children}
+        <LearningContext.Provider value={learning}>{children}</LearningContext.Provider>
       </WatchlistContext.Provider>
     </SignalsContext.Provider>
   );
@@ -50,4 +54,8 @@ export function useSignals(): SignalsValue {
 
 export function useWatchlist(): WatchlistValue {
   return useRequired(useContext(WatchlistContext), "useWatchlist");
+}
+
+export function useDashboardLearning() {
+  return useRequired(useContext(LearningContext), "useDashboardLearning");
 }
