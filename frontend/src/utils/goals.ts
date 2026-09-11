@@ -125,6 +125,26 @@ export const BAND_WORDS: Record<HorizonBand, string> = {
   "5_plus": "5 years or more",
 };
 
+/**
+ * The stored goals read back as question answers, keyed the way the four
+ * questions are.
+ *
+ * `buildGoals` renames on the way in — `goal_purpose` becomes `purpose`,
+ * `goal_account_type` becomes `account_type` — so a form that prefills from
+ * the stored object has to rename on the way out, or it shows every question
+ * as unanswered a moment after they were saved. The horizon comes back as the
+ * band that was chosen, not as the target year derived from it.
+ */
+export function goalAnswersFromGoals(goals?: Goals | null): Partial<Record<GoalQuestionId, string>> {
+  if (!goals) return {};
+  const answers: Partial<Record<GoalQuestionId, string>> = {};
+  if (goals.horizon_band) answers.goal_horizon = goals.horizon_band;
+  if (goals.purpose) answers.goal_purpose = goals.purpose;
+  if (goals.account_type) answers.goal_account_type = goals.account_type;
+  if (goals.contribution_style) answers.goal_contribution = goals.contribution_style;
+  return answers;
+}
+
 /** A short phrase for the profile card, or undefined if nothing was answered. */
 export function describeGoals(goals?: Goals): string | undefined {
   if (!goals) return undefined;

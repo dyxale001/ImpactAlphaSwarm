@@ -3,7 +3,12 @@ import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import { GOAL_QUESTIONS, SURVEY_QUESTIONS } from "../utils/onboardingData";
 import { determinePsychometrics } from "../utils/scoringEngine";
-import { buildGoals, type GoalQuestionId } from "../utils/goals";
+import {
+  buildGoals,
+  goalAnswersFromGoals,
+  goalsFromSurveyAnswers,
+  type GoalQuestionId,
+} from "../utils/goals";
 import { lastSavedAt, withHistory, withoutHistory } from "../utils/profileHistory";
 
 /**
@@ -47,13 +52,10 @@ export function useProfileAnswers() {
     }
     setSurveyAnswers(answers);
 
-    const goals = (stored.goals ?? {}) as Record<string, unknown>;
-    const seeded: Record<string, string> = {};
-    for (const q of GOAL_QUESTIONS) {
-      const raw = goals[q.id as keyof typeof goals];
-      if (typeof raw === "string") seeded[q.id] = raw;
-    }
-    setGoalAnswers(seeded);
+    // Stored under the names `buildGoals` gives them, not the question ids,
+    // so they are renamed back here. Reading `stored.goals[q.id]` directly
+    // found nothing and showed four unanswered questions after every save.
+    setGoalAnswers(goalAnswersFromGoals(goalsFromSurveyAnswers(stored)));
   }
 
   // Re-seeded only when the stored row changes, so typing is not overwritten.
