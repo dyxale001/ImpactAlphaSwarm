@@ -407,12 +407,24 @@ class AssetRepository(Repository):
             return []
 
     def get_or_create_id(self, ticker: str) -> Optional[str]:
+        """Look up an asset's id by ticker, or None if it can't be found or created.
+
+        assets.universe is NOT NULL with no default, so a bare {"ticker", "name"}
+        insert for a watchlist ticker with no existing row (one added via search
+        that was never classified into a universe) is rejected by Postgres. That
+        must never abort the caller's whole save: callers skip tickers that come
+        back None rather than losing the entire run's recommendations to one
+        unresolvable ticker.
+        """
         resp = self.table().select("id").eq("ticker", ticker).limit(1).execute()
         data = resp.data or []
         if data:
             return data[0]["id"]
-        # Optional: create a minimal asset row if your schema allows it
-        new_resp = self.table().insert({"ticker": ticker, "name": ticker}).execute()
+        try:
+            new_resp = self.table().insert({"ticker": ticker, "name": ticker}).execute()
+        except Exception as e:
+            print(f"Could not create asset row for ticker {ticker} (skipping): {e}")
+            return None
         new_data = new_resp.data or []
         return new_data[0]["id"] if new_data else None
 
