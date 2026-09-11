@@ -19,6 +19,7 @@ import AdminLearningCategories from "./pages/AdminLearningCategories";
 import AdminLearningArticles from "./pages/AdminLearningArticles";
 import AdminLearningQuestions from "./pages/AdminLearningQuestions";
 import AdminBadges from "./pages/AdminBadges";
+import AdminReports from "./pages/AdminReports";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import FundsPage from "./pages/Funds";
@@ -28,6 +29,7 @@ import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
+import AskAlphaSwarmPage from "./pages/Ask";
 import PortfolioPage from "./pages/Portfolio";
 import LearningPage from "./pages/Learning";
 import AssetDetailsPage from "./pages/AssetDetailsPage";
@@ -98,6 +100,7 @@ export default function App() {
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/ask" element={<AskAlphaSwarmPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/whale-watching" element={<WhaleWatchingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -126,6 +129,7 @@ export default function App() {
             element={<AdminLearningQuestions />}
           />
           <Route path="/admin/badges" element={<AdminBadges />} />
+          <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
           {/* Gated by the funds flag as well as by AdminRoute: with the feature
               off its API is unmounted, so the pages would have nothing to read. */}

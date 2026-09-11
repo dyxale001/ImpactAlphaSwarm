@@ -1204,3 +1204,641 @@ def test_sa_educational_examples_still_allowed_after_relevance_fix():
         "What does a high beta mean?",
     ):
         assert not api._ask_blocklist_hit(phrase), f"expected NOT blocked: {phrase!r}"
+
+
+# ── 26. Acronym clarification must intercept BEFORE live search ────────────
+# Root-cause regression: "What is RSA?" used to reach live web search FIRST
+# (step 4, old ordering), which could find a real page for SOME meaning of
+# the acronym (a security company, in this case) and confidently answer with
+# it — the acronym-clarification check (old step 5) never got a chance to
+# fire, because the function had already returned. Fixed by moving the
+# acronym check ahead of live search (still after the local cache, which is
+# trustworthy regardless of query shape) — these tests assert the ordering
+# directly, not just the final answer, so a future reordering regression is
+# caught even if it happens to still "look right" for these particular terms.
+
+def test_ambiguous_three_letter_acronym_gets_clarification_not_live_search(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[])
+
+    def _boom(_query):
+        raise AssertionError("live search must never be reached for an unresolved acronym")
+    monkeypatch.setattr(educational_retrieval, "search_live_provider_only", _boom)
+
+    resp = api._ask_learning_question("What is RSA?")
+    assert resp.source == "none"
+    assert "RSA" in resp.narration
+    assert "refer to" in resp.narration.lower() or "clarify" in resp.narration.lower()
+
+
+def test_five_letter_ambiguous_string_gets_clarification(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[])
+
+    def _boom(_query):
+        raise AssertionError("live search must never be reached for an unresolved acronym")
+    monkeypatch.setattr(educational_retrieval, "search_live_provider_only", _boom)
+
+    resp = api._ask_learning_question("What is ZZYXW?")
+    assert resp.source == "none"
+    assert "ZZYXW" in resp.narration
+
+
+def test_known_alphaswarm_acronym_still_resolves_from_glossary(monkeypatch):
+    """RSI/MACD are computed by AlphaSwarm itself (_ASK_GLOSSARY) — the
+    acronym-clarification gate must never intercept a term the glossary
+    already resolves; that check only runs once glossary + Learning Centre
+    have both already missed."""
+    _patch_supabase(monkeypatch, learning_articles=[])
+    for q, term in (("What is RSI?", "RSI"), ("What is MACD?", "MACD")):
+        resp = api._ask_learning_question(q)
+        assert resp.source == "methodology_glossary", f"{q!r} should resolve from the glossary"
+        assert "refer to" not in resp.narration.lower()
+
+
+def test_known_financial_acronym_resolves_from_local_cache_not_clarification(monkeypatch):
+    """ETF is a real, curated entry in the local reference cache — a cache
+    hit must win over the acronym-clarification gate, since the cache is
+    trustworthy regardless of the query's shape (unlike live search)."""
+    _patch_supabase(monkeypatch, learning_articles=[])
+    _patch_narration_client(monkeypatch, _EchoGroqClient())
+    resp = api._ask_learning_question("What is ETF?")
+    assert resp.source != "none"
+    assert "refer to" not in resp.narration.lower()
+
+
+def test_local_cache_checked_before_acronym_gate_for_known_cache_terms(monkeypatch):
+    """Direct ordering assertion: search_local_cache_only must be consulted
+    before the acronym check can fire, for a term the cache actually has."""
+    _patch_supabase(monkeypatch, learning_articles=[])
+    _patch_narration_client(monkeypatch, _EchoGroqClient())
+    calls = []
+    orig = educational_retrieval.search_local_cache_only
+
+    def _tracking(q):
+        calls.append(q)
+        return orig(q)
+    monkeypatch.setattr(educational_retrieval, "search_local_cache_only", _tracking)
+    api._ask_learning_question("What is a bond?")
+    assert calls, "local cache must be checked for a non-glossary term"
+
+
+# ── 27. PLATFORM_QUESTION topic dispatch ────────────────────────────────────
+# Root-cause regression: PLATFORM_QUESTION used to return the SAME hardcoded
+# ranking-formula string (_PLATFORM_METHODOLOGY) for every platform question,
+# regardless of what was actually asked — "how does AlphaSwarm generate
+# company descriptions?" got the ranking paragraph back, which never
+# addresses descriptions at all, correctly or incorrectly.
+
+def test_description_provenance_question_mentions_yfinance_not_llm():
+    ans = api._platform_question_answer("How does AlphaSwarm generate company descriptions?")
+    assert "yfinance" in ans.lower()
+    assert "ai-generated" not in ans.lower()
+    assert "language model" not in ans.lower()
+    assert "llm" not in ans.lower()
+
+
+def test_live_retrieval_question_reflects_env_state_truthfully(monkeypatch):
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    ans_unset = api._platform_question_answer("Does Ask AlphaSwarm search the web for answers?")
+    assert "does not currently perform live web search" in ans_unset
+
+    monkeypatch.setenv("SERPAPI_API_KEY", "fake-key-for-test")
+    ans_set = api._platform_question_answer("Does Ask AlphaSwarm search the web for answers?")
+    assert "can search" in ans_set.lower()
+    assert ans_set != ans_unset
+
+
+def test_ranking_question_still_gets_the_four_factor_explanation():
+    ans = api._platform_question_answer("How does AlphaSwarm rank assets?")
+    assert "signal strength" in ans.lower()
+    assert "convergence" in ans.lower()
+
+
+def test_unmatched_platform_question_falls_back_to_general_methodology():
+    ans = api._platform_question_answer("What is AlphaSwarm?")
+    assert ans == api._PLATFORM_METHODOLOGY
+
+
+def test_platform_question_intent_uses_the_dispatch_not_a_fixed_string(monkeypatch):
+    """Routing-level guarantee: the PLATFORM_QUESTION branch in the main
+    pipeline must call the dispatcher (so different platform questions can
+    get different answers), not return _PLATFORM_METHODOLOGY unconditionally."""
+    _patch_fake_auth(monkeypatch)
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+    monkeypatch.setattr(api, "_ask_blocklist_hit", lambda _q: False)
+    monkeypatch.setattr(api, "_classify_ask_intent", lambda _q: "PLATFORM_QUESTION")
+
+    import asyncio
+    resp = asyncio.run(api.ask_alphaswarm(
+        api.AskRequest(query="How does AlphaSwarm generate company descriptions?"),
+        authorization="Bearer x",
+    ))
+    assert "yfinance" in resp.narration.lower()
+
+
+# ── 28. Boundary-gate ordering: personal-finance before generic blocklist ──
+# Root-cause regression: the generic advice blocklist ran BEFORE the
+# personal-finance gate, so any personal-finance query that also happened to
+# contain a blocklisted phrase (e.g. "Which fund should I PUT my TFSA
+# contributions into?" contains "should i put") got the generic
+# _ASK_NO_ADVICE_MESSAGE instead of the more specific, more helpful
+# _ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE. Also, several personal-finance
+# phrasings ("my tax on ETF gains", "my portfolio allocation") matched
+# NEITHER gate at all before the keyword-list expansion, and fell through
+# either to the LLM classifier or all the way to UNKNOWN.
+
+def test_personal_finance_query_gets_the_specific_boundary_message_not_generic_refusal(monkeypatch):
+    _patch_fake_auth(monkeypatch)
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+
+    import asyncio
+    for q in (
+        "Which fund should I put my TFSA contributions into?",
+        "What should I do with my TFSA?",
+        "Help me with my tax on ETF gains.",
+        "Based on my risk questionnaire answers, what should my portfolio allocation be?",
+    ):
+        resp = asyncio.run(api.ask_alphaswarm(api.AskRequest(query=q), authorization="Bearer x"))
+        assert resp.narration == api._ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE, (
+            f"{q!r} should get the personal-finance boundary message, got: {resp.narration!r}"
+        )
+        assert resp.source == "scope_boundary"
+
+
+def test_factual_capital_gains_tax_question_is_not_gated(monkeypatch):
+    """A bare factual question about what capital gains tax IS (no personal
+    framing — no "my", no possessive) must reach educational retrieval, not
+    the personal-finance gate — the gate's job is personalised advice
+    requests, not general tax-concept definitions."""
+    assert not api._ASK_PERSONAL_FINANCE_PATTERN.search("What is capital gains tax?")
+
+    _patch_supabase(monkeypatch, learning_articles=[])
+    resp = api._ask_learning_question("What is capital gains tax?")
+    assert resp.intent == "LEARNING_QUESTION"
+    assert resp.source != "scope_boundary"
+
+
+def test_personal_tax_framing_is_caught_by_the_finance_gate_not_left_unhandled(monkeypatch):
+    """Before the keyword-list fix, this phrase matched no gate at all and
+    fell through to UNKNOWN with no refusal whatsoever."""
+    assert api._ASK_PERSONAL_FINANCE_PATTERN.search("Help me with my tax on ETF gains.")
+
+
+def test_blocklist_phrase_inside_a_personal_finance_query_still_gets_the_finance_message(monkeypatch):
+    """Direct ordering assertion: a query that matches BOTH the generic
+    blocklist and the personal-finance pattern must resolve to the
+    personal-finance message, because that gate is now checked first."""
+    q = "Which fund should I put my TFSA contributions into?"
+    assert api._ask_blocklist_hit(q)  # still matches the blocklist too
+    assert api._ASK_PERSONAL_FINANCE_PATTERN.search(q)  # AND the finance gate
+
+    _patch_fake_auth(monkeypatch)
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+    import asyncio
+    resp = asyncio.run(api.ask_alphaswarm(api.AskRequest(query=q), authorization="Bearer x"))
+    assert resp.narration == api._ASK_PERSONAL_FINANCE_BOUNDARY_MESSAGE
+    assert resp.source == "scope_boundary"
+
+
+# ── 29. Ticker normalisation (BRK-B / BRK.B / hyphenated share classes) ────
+# Root-cause regression: plain \b[A-Za-z]{1,5}\b treats '-'/'.' as
+# delimiters, splitting "BRK-B" into two separate tokens ("BRK", "B") that
+# never equal the combined stored ticker "BRK-B" — duplicated identically in
+# _resolve_asset and _resolve_multiple_assets. Fixed once via the shared
+# _extract_ticker_tokens/_normalize_ticker helpers.
+
+def test_brk_b_hyphen_form_resolves(monkeypatch):
+    assert api._resolve_asset("Tell me about BRK-B") is not None
+    assert api._resolve_asset("Tell me about BRK-B")["ticker"] == "BRK-B"
+
+
+def test_brk_b_dot_form_normalises_to_same_asset(monkeypatch):
+    dot = api._resolve_asset("Tell me about BRK.B")
+    hyphen = api._resolve_asset("Tell me about BRK-B")
+    assert dot is not None and hyphen is not None
+    assert dot["id"] == hyphen["id"]
+
+
+def test_resolve_multiple_assets_handles_hyphenated_ticker(monkeypatch):
+    tickers = [a["ticker"] for a in api._resolve_multiple_assets("Compare BRK-B and NVDA")]
+    assert "BRK-B" in tickers and "NVDA" in tickers
+
+
+# ── 30. Deterministic asset-overview shortcut ───────────────────────────────
+# Root-cause regression: "Tell me about NVDA" depended entirely on the
+# probabilistic LLM classifier reliably picking ANALYSIS_EXPLANATION —
+# testing showed this was NOT reliable (identical phrasing, different
+# ticker, inconsistent classification). Fixed with a deterministic shortcut
+# analogous to the existing metric-question (2b) and qualitative-performance
+# (2c) shortcuts, scoped to an explicit overview-shaped opener so it can
+# never swallow an advice-flavoured question the blocklist doesn't cover.
+
+def test_asset_overview_pattern_matches_expected_openers():
+    for q in (
+        "Tell me about NVDA", "tell me about googl", "What is NVDA?", "who is Berkshire",
+        "Can you explain NVDA?", "What can you tell me about NVDA?", "Give me an overview of NVDA",
+        "Give me information about NVDA", "info on NVDA",
+    ):
+        assert api._ASK_ASSET_OVERVIEW_PATTERN.search(q), f"expected match: {q!r}"
+
+
+def test_asset_overview_pattern_does_not_match_advice_shaped_openers():
+    """Must never fire for phrasing that could plausibly be an advice
+    request — the classifier still needs to see these."""
+    for q in ("Is NVDA a good stock?", "Should I buy NVDA?", "Will NVDA go up?"):
+        assert not api._ASK_ASSET_OVERVIEW_PATTERN.search(q), f"unexpected match: {q!r}"
+
+
+def test_bare_ticker_query_recognised_as_overview():
+    assert api._is_bare_ticker_query("NVDA", "NVDA")
+    assert api._is_bare_ticker_query("nvda", "NVDA")
+    assert api._is_bare_ticker_query("NVDA?", "NVDA")
+    assert api._is_bare_ticker_query("BRK-B", "BRK-B")
+    assert api._is_bare_ticker_query("brk.b", "BRK-B")
+    assert not api._is_bare_ticker_query("Is NVDA a good stock?", "NVDA")
+
+
+def test_asset_overview_shortcut_end_to_end_bypasses_classifier(monkeypatch):
+    """Routing-level guarantee: a resolvable asset-overview question must
+    reach ANALYSIS_EXPLANATION deterministically — the classifier must not
+    even be called, both for reliability and to conserve the Groq quota."""
+    assets = [{"id": "a1", "ticker": "NVDA", "name": "NVIDIA Corporation", "universe": "Technology", "current_price": 900.0}]
+    monkeypatch.setattr(api, "supabase", _FakeAskSupabase(assets=assets))
+    _patch_fake_auth(monkeypatch)
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+
+    def _boom(_q):
+        raise AssertionError("classifier must not be needed for a deterministic asset-overview match")
+    monkeypatch.setattr(api, "_classify_ask_intent", _boom)
+    monkeypatch.setattr(api, "_get_ask_narration_client", lambda: _EchoGroqClient())
+
+    import asyncio
+    for q in ("Tell me about NVDA", "NVDA", "What is NVDA?"):
+        resp = asyncio.run(api.ask_alphaswarm(api.AskRequest(query=q), authorization="Bearer x"))
+        assert resp.intent == "ANALYSIS_EXPLANATION"
+        assert resp.data.get("ticker") == "NVDA"
+
+
+def test_asset_with_no_analysis_row_honestly_reports_price_only(monkeypatch):
+    """An asset that genuinely has no ai_recommendation row (e.g. NVDA/MSFT
+    in the real current DB, confirmed by direct query during this round's
+    debugging) must be answered honestly from whatever DOES exist (price),
+    never with fabricated metrics."""
+    assets = [{"id": "a1", "ticker": "NVDA", "name": "NVIDIA Corporation", "universe": "Technology", "current_price": 900.0}]
+    monkeypatch.setattr(api, "supabase", _FakeAskSupabase(assets=assets, runs=[], recs=[]))
+    data, source = api._ask_analysis_explanation("Tell me about NVDA", "user-1")
+    assert data.get("ticker") == "NVDA"
+    assert data.get("current_price") == 900.0
+    assert "rsi" not in data and "beta" not in data  # never fabricated
+    assert source == "assets"
+
+
+# ── 31. Local-cache / Learning Centre singular-plural matching ─────────────
+# Root-cause regression: "What are bonds?" (plural) scored 0 against the
+# real "CFPB Financial Terms Glossary: Bond" entry (singular title/content)
+# but scored 1 against the UNRELATED ETF entry, whose content happens to
+# mention "stocks or bonds" in passing — the plural-only query token matched
+# an incidental aside in the wrong entry instead of the dedicated entry's
+# singular title. Fixed by normalising both query and candidate tokens to a
+# canonical singular form in _meaningful_tokens (educational_retrieval.py)
+# and the equivalent _singularize helper in _ask_learning_centre_lookup
+# (api.py) — two independently-maintained tokenizers, same bug, same fix.
+
+def test_bonds_question_resolves_to_the_real_bond_entry_not_etf():
+    result = educational_retrieval.search_local_cache_only("What are bonds?")
+    assert result is not None
+    assert "bond" in result.title.lower()
+    assert "etf" not in result.title.lower() and "exchange-traded" not in result.title.lower()
+
+
+def test_stocks_question_resolves_to_the_real_stock_entry_not_etf():
+    result = educational_retrieval.search_local_cache_only("What are stocks?")
+    assert result is not None
+    assert "stock" in result.title.lower()
+    assert "etf" not in result.title.lower() and "exchange-traded" not in result.title.lower()
+
+
+def test_learning_centre_plural_query_matches_singular_titled_article(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[
+        {"title": "Asset Allocation and Portfolio Construction",
+         "summary": "How to allocate assets across a portfolio.", "content": ""},
+    ])
+    result = api._ask_learning_centre_lookup("What are assets?")
+    assert result is not None
+    assert result["title"] == "Asset Allocation and Portfolio Construction"
+
+
+def test_vague_what_does_all_this_mean_does_not_false_match_a_cache_entry():
+    """Root-cause regression: 'all' was not in educational_retrieval's
+    stopword list (it WAS in api.py's parallel list — the two had drifted
+    out of sync), so this vague, topic-less CONTEXT_SYNTHESIS-shaped
+    question spuriously matched an unrelated cache entry via the generic
+    word "all" alone."""
+    assert educational_retrieval.search_local_cache_only("What does all this mean?") is None
+
+
+# ── 32. Deterministic definitional-learning-question shortcut ──────────────
+# Root-cause regression: "what is an ETF?"/"what is a portfolio?" etc.
+# already resolve correctly ONCE _ask_learning_question runs, but reaching
+# it depended on the classifier reliably picking LEARNING_QUESTION — shown
+# unreliable for terse/bare phrasing. Fixed with a shortcut gated on a FREE
+# (no live-search) tier already having something, so a genuinely ungrounded
+# "what is X" (e.g. "What is AlphaSwarm?", which belongs to
+# PLATFORM_QUESTION) always falls through unchanged to the classifier.
+
+def test_definitional_shape_pattern_covers_expected_openers():
+    for q in (
+        "what is an etf", "what is an eft", "what is a portfolio", "what is risk",
+        "What factors make up Signal Score?", "How does AlphaSwarm calculate Signal Score?",
+        "How is Signal Score calculated?", "What does a high Signal Score mean?",
+    ):
+        assert api._ASK_DEFINITIONAL_SHAPE_PATTERN.search(q), f"expected match: {q!r}"
+
+
+def test_free_tier_learning_hit_true_for_covered_terms(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[])
+    for q in ("what is an etf", "what is an eft", "what is a portfolio", "what is risk",
+              "what is diversification", "what is compound interest", "what is TER",
+              "what is a Sharpe ratio", "what is beta", "what is the Signal Score"):
+        assert api._ask_free_tier_learning_hit(q), f"expected a free-tier hit: {q!r}"
+
+
+def test_free_tier_learning_hit_false_for_ungrounded_platform_question(monkeypatch):
+    """'What is AlphaSwarm?' must NOT trigger the shortcut — it has no
+    glossary/Learning-Centre/cache entry, and belongs to PLATFORM_QUESTION,
+    reached via the classifier exactly as before."""
+    _patch_supabase(monkeypatch, learning_articles=[])
+    assert not api._ask_free_tier_learning_hit("What is AlphaSwarm?")
+
+
+def test_etf_and_signal_score_questions_never_need_the_classifier(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[])
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+    _patch_fake_auth(monkeypatch)
+
+    def _boom(_q):
+        raise AssertionError("classifier must not be needed for a well-grounded definitional question")
+    monkeypatch.setattr(api, "_classify_ask_intent", _boom)
+
+    import asyncio
+    for q in ("What is an ETF?", "What is an EFT?", "What is the Signal Score?",
+              "How does AlphaSwarm calculate Signal Score?"):
+        resp = asyncio.run(api.ask_alphaswarm(api.AskRequest(query=q), authorization="Bearer x"))
+        assert resp.intent == "LEARNING_QUESTION"
+
+
+def test_platform_shaped_question_with_false_positive_free_tier_hit_falls_through_to_classifier(monkeypatch):
+    """Root-cause regression: broadening the definitional-shape pattern to
+    include 'how does'/'why is' etc. (for Signal Score coverage) also let
+    genuinely PLATFORM_QUESTION-shaped queries reach the shortcut. If the
+    cheap free-tier probe weakly (falsely) matches something, the shortcut
+    must recognise the resulting HONEST DECLINE and fall through to the
+    classifier rather than returning a wrong-source non-answer."""
+    _patch_fake_auth(monkeypatch)
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+    monkeypatch.setattr(api, "_classify_ask_intent", lambda _q: "PLATFORM_QUESTION")
+
+    import asyncio
+    resp = asyncio.run(api.ask_alphaswarm(
+        api.AskRequest(query="How does AlphaSwarm generate company descriptions?"),
+        authorization="Bearer x",
+    ))
+    assert resp.intent == "PLATFORM_QUESTION"
+    assert "yfinance" in resp.narration.lower()
+
+
+# ── 33. Whale Watching feature-name phrasing coverage ───────────────────────
+
+def test_whale_feature_pattern_covers_expected_phrasings():
+    for q in (
+        "whale watching", "What is whale watching?", "Explain whale watching",
+        "Tell me about whale watching", "How does whale watching work?",
+        "What does Whale Watching do?", "What information does Whale Watching use?",
+        "Which whales should I watch?", "Who are the whales?",
+        "Show me the most important whales", "Which institutional investors should I follow?",
+        # Terse compound-noun phrasing with no space/hyphen between "whale"
+        # and "watching" — previously failed since the pattern required
+        # literal whitespace between the two words.
+        "what is whalewatching", "whalewatching", "explain whalewatching",
+        "what is whale-watching",
+    ):
+        assert api._ASK_WHALE_FEATURE_PATTERN.search(q), f"expected match: {q!r}"
+
+
+def test_whale_shortcut_never_becomes_advice(monkeypatch):
+    monkeypatch.setattr(api, "_check_ask_rate_limit", lambda _uid: True)
+    _patch_fake_auth(monkeypatch)
+
+    def _boom(_q):
+        raise AssertionError("classifier must not be needed for the whale-watching shortcut")
+    monkeypatch.setattr(api, "_classify_ask_intent", _boom)
+
+    import asyncio
+    resp = asyncio.run(api.ask_alphaswarm(
+        api.AskRequest(query="Which whales should I watch?"), authorization="Bearer x",
+    ))
+    assert resp.intent == "LEARNING_QUESTION"
+    assert not resp.is_blocked
+    for phrase in ("should buy", "recommend", "i suggest"):
+        assert phrase not in resp.narration.lower()
+
+
+# ── 34. Safety boundaries unaffected by this round's routing changes ───────
+
+def test_advice_boundaries_still_refused_after_routing_changes(monkeypatch):
+    for q in ("Should I buy NVDA?", "Which stock should I buy?"):
+        assert api._ask_blocklist_hit(q), f"expected blocklist hit: {q!r}"
+
+
+def test_personal_finance_boundaries_still_refused_after_routing_changes():
+    for q in ("Which fund should I put in my TFSA?", "How should I allocate my portfolio?"):
+        assert api._ASK_PERSONAL_FINANCE_PATTERN.search(q), f"expected personal-finance match: {q!r}"
+
+
+def test_ambiguous_acronyms_still_clarify_after_routing_changes(monkeypatch):
+    _patch_supabase(monkeypatch, learning_articles=[])
+    for q in ("What is RSA?", "Explain TER."):
+        r = api._ask_learning_question(q)
+        assert "refer to" in r.narration.lower()
+
+
+# ── 35. Conservative ticker-typo tolerance ──────────────────────────────────
+# Root-cause regression (caught by this round's own testing, fixed before
+# landing): the typo matcher originally ran against EVERY word in the query,
+# not just ticker-shaped attempts — "TELL" (from "Tell me about...") turned
+# out to be exactly one substitution away from the real ticker "DELL", so
+# EVERY "Tell me about X" query resolved to DELL via the word "tell" itself.
+# Fixed with an explicit common-word exclusion list, the same defensive
+# principle as the existing _NAME_STOPWORDS.
+
+def test_damerau_levenshtein_le1_detects_adjacent_transposition():
+    assert api._damerau_levenshtein_le1("NDVA", "NVDA")  # transposition
+    assert api._damerau_levenshtein_le1("NVDA", "NVDA")  # identical
+    assert api._damerau_levenshtein_le1("NVDAX", "NVDA")  # one insertion
+    assert api._damerau_levenshtein_le1("NVD", "NVDA")  # one deletion
+    assert api._damerau_levenshtein_le1("NVXA", "NVDA")  # one substitution
+    assert not api._damerau_levenshtein_le1("ABCD", "NVDA")  # unrelated
+
+
+def test_find_unique_ticker_typo_ignores_tokens_too_short_to_mean_anything():
+    """The length guard lives in _find_unique_ticker_typo (not the raw
+    distance function, which correctly says "GE"/"GEO" ARE one edit apart —
+    that's just true) — a 2-letter token is too short for a 1-edit match to
+    be a meaningful signal at all."""
+    assert api._find_unique_ticker_typo("GE", {"GEO": {}}) is None
+
+
+def test_ticker_typo_stopwords_prevent_ordinary_words_from_matching():
+    """The exact regression: common sentence words must never be treated as
+    ticker-typo attempts, no matter how close they happen to be to a real
+    ticker."""
+    assert "tell" in api._ASK_TYPO_MATCH_STOPWORDS
+
+
+def test_ndva_typo_resolves_to_nvda():
+    a = api._resolve_asset("Tell me about NDVA")
+    assert a is not None and a["ticker"] == "NVDA"
+    a2 = api._resolve_asset("NDVA")
+    assert a2 is not None and a2["ticker"] == "NVDA"
+
+
+def test_unrelated_token_does_not_get_a_fabricated_typo_match():
+    """ABCD must not resolve to some unrelated ticker just because it's
+    short and ticker-shaped — the whole point of requiring a UNIQUE
+    edit-distance-1 candidate is to refuse rather than guess when nothing
+    genuinely close exists."""
+    assert api._resolve_asset("Tell me about ABCD") is None
+
+
+def test_ordinary_sentence_words_never_trigger_a_typo_match():
+    """Direct regression test for the caught bug: querying with common
+    opener words alone (no real ticker anywhere in the query) must not
+    resolve to an unrelated real ticker via the typo path."""
+    for q in ("Tell me about the weather", "Can you explain this to me",
+              "What does this mean", "Give me information please"):
+        assert api._resolve_asset(q) is None, f"unexpected resolution for {q!r}"
+
+
+def test_product_vocabulary_never_triggers_a_typo_match():
+    """Critical regression, caught by this round's own live verification
+    pass: "beta" — one of the single most common words in this entire
+    product, and a real _ASK_GLOSSARY key — is exactly one substitution
+    away from the real ticker "META". Without excluding the product's own
+    domain vocabulary from typo-matching, "What does its beta mean?" (a
+    pure context-resolution question naming no asset) spuriously resolved
+    to META, silently overriding the conversational context this function
+    is supposed to defer to. Covers the exact failure mode, not just the
+    one word that happened to trip it."""
+    for q in ("What does its beta mean?", "What about their beta?",
+              "Which one has the higher beta?", "What is its RSI?",
+              "What is its Sharpe ratio?", "And its MACD?"):
+        assert api._resolve_asset(q) is None, f"unexpected resolution for {q!r}"
+
+
+def test_context_resolution_still_appends_asset_for_pure_metric_followups(monkeypatch):
+    """End-to-end guarantee: the exact three cases the typo-vocabulary bug
+    broke (confirmed failing, then fixed, during this round) — a follow-up
+    naming a metric but no asset must still resolve via context, not
+    silently fall through to "no asset resolved" because the metric word
+    itself got mistaken for a mistyped ticker."""
+    query, clarification, asset, _metric = api._resolve_conversational_reference(
+        "What does its beta mean?", api.AskContext(active_asset="MSFT", recent_metric=None)
+    )
+    assert clarification is None
+    assert "MSFT" in query
+
+    query2, clarification2, _asset2, _metric2 = api._resolve_conversational_reference(
+        "What about their beta?", api.AskContext(compare_assets=["GOOGL", "MSFT"])
+    )
+    assert clarification2 is None
+    assert "GOOGL" in query2 and "MSFT" in query2
+
+
+# ── 36. Asset search must consider a specifically-named company/ticker ─────
+# Root-cause regression, caught live: _ask_asset_search only ever filtered
+# by universe/sector — a query naming a SPECIFIC company ("Search for
+# NVIDIA", "Do you have Apple?") never considered that name at all, and the
+# narrator was handed an arbitrary universe-filtered slice instead. It then
+# honestly reported the named company wasn't in THAT (wrong) list — a false
+# negative for NVDA/AAPL, both genuinely present in the real assets table.
+
+def test_asset_search_finds_a_specifically_named_company(monkeypatch):
+    assets = [
+        {"id": "a1", "ticker": "NVDA", "name": "NVIDIA Corporation", "universe": "Technology", "current_price": 900.0},
+        {"id": "a2", "ticker": "AAPL", "name": "Apple Inc.", "universe": "Technology", "current_price": 800.0},
+        {"id": "a3", "ticker": "PFE", "name": "Pfizer Inc.", "universe": "Healthcare", "current_price": 40.0},
+    ]
+    monkeypatch.setattr(api, "supabase", _FakeAskSupabase(assets=assets))
+    data, source = api._ask_asset_search("Search for NVIDIA", "user-1")
+    assert [a["ticker"] for a in data["assets"]] == ["NVDA"]
+
+    data2, _source2 = api._ask_asset_search("Do you have Apple?", "user-1")
+    assert [a["ticker"] for a in data2["assets"]] == ["AAPL"]
+
+
+def test_asset_search_falls_back_to_universe_listing_for_category_queries(monkeypatch):
+    """A genuinely category-shaped query (no specific company named) must
+    still use the existing universe/sector filtering, unchanged."""
+    assets = [
+        {"id": "a1", "ticker": "NVDA", "name": "NVIDIA Corporation", "universe": "Technology", "current_price": 900.0},
+        {"id": "a2", "ticker": "PFE", "name": "Pfizer Inc.", "universe": "Healthcare", "current_price": 40.0},
+    ]
+    monkeypatch.setattr(api, "supabase", _FakeAskSupabase(assets=assets))
+    data, _source = api._ask_asset_search("Show me technology assets in my universe", "user-1")
+    tickers = [a["ticker"] for a in data["assets"]]
+    assert tickers  # falls through to the existing listing path, not empty
+
+
+# ── 37. Comparison-trigger pattern must recognise "differences between" ────
+# Root-cause regression: "What are the main differences between BAC and GE?"
+# resolved BOTH tickers fine via _resolve_multiple_assets, but the two-asset
+# comparison branch in _ask_context_synthesis is gated on
+# _ASK_COMPARISON_TRIGGER_PATTERN, which didn't recognise "differences
+# between" at all — silently falling back to single-asset handling and
+# dropping the second asset's data entirely, even though it was available.
+
+def test_comparison_trigger_pattern_recognises_differences_between():
+    for q in ("What are the main differences between BAC and GE?",
+              "How do their MACDs differ?", "What is the difference between BAC and GE?"):
+        assert api._ASK_COMPARISON_TRIGGER_PATTERN.search(q), f"expected match: {q!r}"
+
+
+def test_comparison_trigger_pattern_unaffected_for_non_comparison_queries():
+    for q in ("Tell me about NVDA", "What is beta?"):
+        assert not api._ASK_COMPARISON_TRIGGER_PATTERN.search(q), f"unexpected match: {q!r}"
+
+
+# ── 38. Typo-matching must scan the ORIGINAL case, not the lowercase word ──
+# Critical safety regression, caught by this round's own live scope-coverage
+# run: "buy" is exactly one substitution away from the real ticker "BMY"
+# (Bristol-Myers Squibb). Before this fix, "Is sentiment positive enough for
+# me to buy this stock?" spuriously resolved to BMY via the word "buy"
+# alone, turning what should have reached the advice-detecting classifier
+# into a confident, specific-asset answer instead. A reactive per-word
+# stopword list cannot be guaranteed exhaustive against the whole English
+# lexicon; the structural fix is scanning only tokens that are ALREADY
+# uppercase in the query AS TYPED (real ticker attempts are typed that way
+# far more often than an ordinary sentence word coincidentally is).
+
+def test_lowercase_advice_words_never_collide_with_a_real_ticker():
+    """The exact caught bug: 'buy' (lowercase, ordinary sentence word) is
+    one edit from the real ticker BMY."""
+    assert api._resolve_asset("Is sentiment positive enough for me to buy this stock?") is None
+
+
+def test_explicit_advice_phrasing_with_a_real_ticker_still_resolves_normally():
+    """The fix must not break the ordinary, unambiguous case — a real
+    ticker named IN CAPS alongside advice wording still resolves; only the
+    lowercase-common-word collision path is now excluded."""
+    a = api._resolve_asset("Should I buy NVDA?")
+    assert a is not None and a["ticker"] == "NVDA"
+
+
+def test_typo_correction_only_scans_original_case_uppercase_tokens():
+    """Direct regression test for the fix mechanism itself: NDVA (typed in
+    caps, as a real ticker attempt would be) still corrects to NVDA; the
+    same typo typed in all-lowercase no longer does — an accepted,
+    deliberate trade-off in favour of eliminating the BMY-class collision
+    risk structurally rather than reactively."""
+    assert api._resolve_asset("Tell me about NDVA") is not None
+    assert api._resolve_asset("Tell me about NDVA")["ticker"] == "NVDA"
+    assert api._resolve_asset("tell me about ndva") is None

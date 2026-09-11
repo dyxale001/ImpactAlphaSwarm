@@ -39,10 +39,13 @@ export function WidgetEmpty({
 
 export function WidgetLoading({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="space-y-2" aria-hidden="true">
+    <div role="status">
+      <span className="sr-only">Loading widget content…</span>
+      <div className="space-y-2" aria-hidden="true">
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="h-12 rounded-2xl bg-brand-bg/70 animate-pulse" />
       ))}
+      </div>
     </div>
   );
 }

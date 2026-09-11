@@ -35,6 +35,7 @@ const TABS: Tab[] = [
   { to: "/admin/learning-articles", label: "Articles" },
   { to: "/admin/learning-questions", label: "Questions & Answers" },
   { to: "/admin/badges", label: "Badges" },
+  { to: "/admin/reports", label: "Reports" },
   // Gated on the same flag as the route it points at: with the feature off that
   // route is not registered, so an ungated link would send an admin to the
   // redirect instead of a page.

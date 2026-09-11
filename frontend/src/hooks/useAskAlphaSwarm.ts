@@ -1,145 +1,84 @@
-import { useState, useCallback, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  AskAlphaSwarmService,
+  AskAuthError,
+  AskRateLimitedError,
+} from '../services/ask/AskAlphaSwarmService'
+import { ConversationStorage } from '../services/ask/ConversationStorage'
+import { buildAskContext } from '../services/ask/contextTracker'
+import type { AskResult, AskSource, AskTurn } from '../services/ask/types'
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+export type { AskResult, AskSource, AskTurn }
 
-export interface AskSource {
-  title: string
-  publisher: string
-  url: string
-  retrieved_at: string
-}
-
-export interface AskResult {
-  intent: string
-  narration: string
-  data: Record<string, unknown>
-  source: string
-  // Structured, exact source metadata for externally-grounded Learning
-  // Centre fallback answers (empty for every other response type).
-  sources: AskSource[]
-  is_blocked: boolean
-  redirect_suggestions: string[]
-}
-
-// Same pattern as services/api/analysis.ts: fetch the token fresh from
-// Supabase at call time rather than off the zustand auth store, which can
-// still be null/stale at the moment a request fires (e.g. right after
-// navigation, before onAuthStateChange has re-populated it) and was causing
-// /api/ask to be called with no Authorization header at all.
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data?.session?.access_token ?? null
-}
-
-// ─── Session-scoped persistence ─────────────────────────────────────────────
-// The hook previously kept `query`/`result` in local useState only, which
-// lives inside WatchlistPage. Navigating to another route (Dashboard,
-// Learning, Settings, ...) unmounts WatchlistPage, so switching back reset
-// the conversation to blank — that was the reported bug. sessionStorage is
-// scoped to the browser tab, not to any one component's mount lifecycle, so
-// it survives route changes and re-renders while staying private to this
-// tab/session (cleared when the tab closes) — no new global store, no
-// permanent database write, nothing sensitive persisted beyond the current
-// browser session. A real page refresh also happens to survive (sessionStorage
-// outlives that too), which is a bonus, not a requirement being claimed here.
 const STORAGE_KEY = 'askAlphaSwarm.session'
 
-interface StoredState {
-  query: string
-  result: AskResult | null
+// Module-level singletons: one HTTP client and one storage key for the
+// whole app, regardless of how many components use the hook. Constructing
+// them outside the hook keeps them out of React's render cycle — they hold
+// no component state of their own, just configuration (base URL, key).
+const service = new AskAlphaSwarmService((import.meta as any).env?.VITE_API_BASE ?? '')
+const storage = new ConversationStorage(STORAGE_KEY)
+
+function makeTurnId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function loadStored(): StoredState {
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return { query: '', result: null }
-    const parsed = JSON.parse(raw)
-    return { query: parsed.query ?? '', result: parsed.result ?? null }
-  } catch {
-    return { query: '', result: null }
-  }
-}
-
-function saveStored(state: StoredState) {
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Best-effort only (private browsing / storage disabled) — the feature
-    // still works within a single mount, it just won't survive navigation.
-  }
-}
-
-// ─── Hook ──────────────────────────────────────────────────────────────────
-
+/**
+ * Ask AlphaSwarm's interaction/state orchestrator. Depends on
+ * AskAlphaSwarmService (API) and ConversationStorage (persistence) rather
+ * than reimplementing either — this hook's only job is turning "the user
+ * asked a question" into conversation state, mapping failures to
+ * user-facing messages, and keeping that state in sync with storage.
+ */
 export function useAskAlphaSwarm() {
-  const BASE = (import.meta as any).env?.VITE_API_BASE ?? ''
-
-  const initial = loadStored()
-  const [query, setQuery]     = useState(initial.query)
-  const [result, setResult]   = useState<AskResult | null>(initial.result)
+  const [turns, setTurns] = useState<AskTurn[]>(() => storage.load())
+  const [query, setQuery] = useState('')
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    saveStored({ query, result })
-  }, [query, result])
+    storage.save(turns)
+  }, [turns])
 
   const ask = useCallback(async (q?: string) => {
     const question = (q ?? query).trim()
-    if (!question) return
+    if (!question || loading) return
 
-    const token = await getToken()
-    if (!token) {
-      setError('You need to be signed in to ask AlphaSwarm.')
-      return
-    }
-
-    setLoading(true)
+    setQuery('')
     setError(null)
+    setLoading(true)
+    setPendingQuestion(question)
 
     try {
-      const res = await fetch(`${BASE}/api/ask`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ query: question }),
-      })
-
-      if (res.status === 429) {
+      // Computed from the conversation already on screen — the backend
+      // treats it as a hint for what the question refers to, never as
+      // evidence, and re-resolves/re-validates everything itself.
+      const context = buildAskContext(turns)
+      const result = await service.ask(question, context)
+      setTurns(prev => [...prev, { id: makeTurnId(), question, result }])
+    } catch (e) {
+      if (e instanceof AskAuthError) {
+        setError('You need to be signed in to ask AlphaSwarm.')
+      } else if (e instanceof AskRateLimitedError) {
         setError('Too many requests — please wait a moment before asking again.')
-        setResult(null)
-        return
-      }
-      if (!res.ok) {
+      } else {
         setError('Something went wrong answering that question. Try again.')
-        setResult(null)
-        return
       }
-
-      const data: AskResult = await res.json()
-      setResult(data)
-    } catch {
-      setError('Something went wrong answering that question. Try again.')
-      setResult(null)
     } finally {
       setLoading(false)
+      setPendingQuestion(null)
     }
-  }, [BASE, query])
+  }, [query, loading, turns])
 
   const reset = useCallback(() => {
+    setTurns([])
     setQuery('')
-    setResult(null)
     setError(null)
     setLoading(false)
-    try {
-      window.sessionStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // best-effort, see saveStored above
-    }
+    setPendingQuestion(null)
+    storage.clear()
   }, [])
 
-  return { query, setQuery, result, loading, error, ask, reset }
+  return { turns, query, setQuery, pendingQuestion, loading, error, ask, reset }
 }
