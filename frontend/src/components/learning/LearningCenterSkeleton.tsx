@@ -3,11 +3,11 @@ import "./LearningRoadmap.css";
 export default function LearningCenterSkeleton() {
   return (
     <>
-      <div role="status" aria-atomic="true" className="mx-auto max-w-7xl px-4 pt-6 text-sm font-semibold text-brand-fg sm:px-6 lg:px-8 lg:pt-10">
-        Preparing the Learning Centre...
-      </div>
       {/* Match the default My Roadmap view. Placeholders carry no user progress. */}
-      <div aria-hidden="true" className="relative mx-auto max-w-7xl motion-safe:animate-pulse space-y-8 px-4 sm:px-6 lg:px-8 pb-16 pt-4 lg:pt-6">
+      <div
+        aria-hidden="true"
+        className="relative mx-auto max-w-7xl motion-safe:animate-pulse space-y-8 px-4 sm:px-6 lg:px-8 pb-16 pt-4 lg:pt-6"
+      >
         <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 flex-1 space-y-3">
@@ -92,7 +92,7 @@ export default function LearningCenterSkeleton() {
           <div>
             <div className="mb-8 h-6 w-48 rounded bg-brand-border/35" />
             <div className="journey-path">
-              {[0, 1].map(category => (
+              {[0, 1].map((category) => (
                 <div key={category} className="journey-category">
                   <div className="journey-milestone">
                     <span className="journey-milestone-icon" />
@@ -103,8 +103,11 @@ export default function LearningCenterSkeleton() {
                     </div>
                   </div>
                   <div className="journey-lessons">
-                    {[0, 1].map(lesson => (
-                      <div key={lesson} className={`journey-stop ${lesson % 2 ? "journey-stop-right" : "journey-stop-left"}`}>
+                    {[0, 1].map((lesson) => (
+                      <div
+                        key={lesson}
+                        className={`journey-stop ${lesson % 2 ? "journey-stop-right" : "journey-stop-left"}`}
+                      >
                         <span className="journey-node" />
                         <div className="journey-lesson space-y-3 rounded-2xl border border-brand-border/70 bg-brand-card p-5">
                           <div className="h-3 w-24 max-w-full rounded bg-brand-border/30" />

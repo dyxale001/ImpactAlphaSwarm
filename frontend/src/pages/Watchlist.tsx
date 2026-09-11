@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react'
-import { Eye, RefreshCw, ArrowUpDown, TrendingUp, Search, Sparkles } from 'lucide-react'
-import { useWatchlistData, type SortOption } from '../hooks/useWatchlistData'
-import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
-import WatchlistSearch from '../components/watchlist/WatchlistSearch'
-import AskAlphaSwarm from '../components/watchlist/AskAlphaSwarm'
-import WatchedAssetCard from '../components/watchlist/WatchedAssetCard'
-import TopPickRow from '../components/watchlist/TopPickRow'
-import WatchlistSkeleton from '../components/watchlist/WatchlistSkeleton'
-import RadarMotif from '../components/watchlist/RadarMotif'
+import { useState, useEffect } from "react";
+import {
+  Eye,
+  RefreshCw,
+  ArrowUpDown,
+  TrendingUp,
+  Search,
+  Sparkles,
+} from "lucide-react";
+import { useWatchlistData, type SortOption } from "../hooks/useWatchlistData";
+import { useAskAlphaSwarm } from "../hooks/useAskAlphaSwarm";
+import WatchlistSearch from "../components/watchlist/WatchlistSearch";
+import AskAlphaSwarm from "../components/watchlist/AskAlphaSwarm";
+import WatchedAssetCard from "../components/watchlist/WatchedAssetCard";
+import TopPickRow from "../components/watchlist/TopPickRow";
+import WatchlistSkeleton from "../components/watchlist/WatchlistSkeleton";
+import RadarMotif from "../components/watchlist/RadarMotif";
 
 const SECTOR_DOT: Record<string, string> = {
   Technology: "bg-blue-400",
@@ -42,27 +49,27 @@ export default function WatchlistPage() {
     sectors,
   } = useWatchlistData();
 
-  const [showSortMenu, setShowSortMenu] = useState(false)
+  const [showSortMenu, setShowSortMenu] = useState(false);
   // Session-scoped, same reasoning as useAskAlphaSwarm's history persistence:
   // this page unmounts on route navigation, so plain useState reset the tab
   // choice back to 'ticker' every time the user came back. sessionStorage
   // survives that unmount/remount within the same browser tab.
-  const [searchMode, setSearchMode] = useState<'ticker' | 'ask'>(() => {
+  const [searchMode, setSearchMode] = useState<"ticker" | "ask">(() => {
     try {
-      const stored = window.sessionStorage.getItem('watchlist.searchMode')
-      return stored === 'ask' ? 'ask' : 'ticker'
+      const stored = window.sessionStorage.getItem("watchlist.searchMode");
+      return stored === "ask" ? "ask" : "ticker";
     } catch {
-      return 'ticker'
+      return "ticker";
     }
-  })
+  });
   useEffect(() => {
     try {
-      window.sessionStorage.setItem('watchlist.searchMode', searchMode)
+      window.sessionStorage.setItem("watchlist.searchMode", searchMode);
     } catch {
       // best-effort (private browsing / storage disabled)
     }
-  }, [searchMode])
-  const ask = useAskAlphaSwarm()
+  }, [searchMode]);
+  const ask = useAskAlphaSwarm();
 
   const sortLabels: Record<SortOption, string> = {
     added: "Recently added",
@@ -111,11 +118,11 @@ export default function WatchlistPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setSearchMode('ticker')}
+            onClick={() => setSearchMode("ticker")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-              searchMode === 'ticker'
-                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
-                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+              searchMode === "ticker"
+                ? "border-brand-primary/50 bg-brand-primary/10 text-brand-primary"
+                : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
             }`}
           >
             <Search className="w-3.5 h-3.5" />
@@ -123,11 +130,11 @@ export default function WatchlistPage() {
           </button>
           <button
             type="button"
-            onClick={() => setSearchMode('ask')}
+            onClick={() => setSearchMode("ask")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-              searchMode === 'ask'
-                ? 'border-brand-primary/50 bg-brand-primary/10 text-brand-primary'
-                : 'border-brand-border/40 text-brand-muted-fg hover:text-brand-fg'
+              searchMode === "ask"
+                ? "border-brand-primary/50 bg-brand-primary/10 text-brand-primary"
+                : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -135,7 +142,7 @@ export default function WatchlistPage() {
           </button>
         </div>
 
-        {searchMode === 'ticker' ? (
+        {searchMode === "ticker" ? (
           <WatchlistSearch
             search={search}
             setSearch={setSearch}
@@ -261,9 +268,6 @@ export default function WatchlistPage() {
           {/* Loading skeleton */}
           {loading && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-brand-fg">
-                Loading your watchlist...
-              </p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {[1, 2, 3].map((n) => (
                   <div
