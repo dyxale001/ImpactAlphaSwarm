@@ -1,17 +1,30 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { deactivateOwnAccount } from '../services/api/analysis'
+import SettingsCard from './settings/SettingsCard'
+import { DangerButton, DangerOutlineButton, TextButton } from './settings/SettingsButtons'
+import {
+  DEACTIVATE_ACTION,
+  DEACTIVATE_CARD_LEAD,
+  DEACTIVATE_CARD_TITLE,
+  DEACTIVATE_CONFIRM,
+  DEACTIVATE_CONSEQUENCE,
+  DEACTIVATE_KEEP,
+  DEACTIVATE_WORKING,
+} from '../utils/settingsCopy'
 
+/**
+ * Deactivate, never delete: the account is hidden and the login blocked, the
+ * data kept, and signing back in reverses it. The confirmation is inline
+ * rather than a browser dialog so the card can say, in its own words, exactly
+ * what is about to happen.
+ */
 export default function DeactivateAccountSection() {
+  const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleClick = async () => {
-    const ok = window.confirm(
-      "Deactivate your account?\n\nYou'll be signed out immediately. Sign back in whenever you want to reactivate."
-    )
-    if (!ok) return
-
+  const handleDeactivate = async () => {
     setLoading(true)
     setError(null)
     try {
@@ -19,31 +32,33 @@ export default function DeactivateAccountSection() {
       await supabase.auth.signOut()
       window.location.href = '/'
     } catch (err: any) {
-      setError(err?.message ?? 'Could not deactivate account. Please try again.')
+      setError(err?.message ?? 'Could not deactivate the account. Please try again.')
       setLoading(false)
     }
   }
 
   return (
-    <div className="glass-card p-6 space-y-4 border-semantic-danger/25">
-      <div>
-        <h3 className="text-sm font-semibold text-semantic-danger">Deactivate Account</h3>
-        <p className="text-xs text-brand-muted-fg mt-1 leading-relaxed">
-          Deactivating hides your account and signs you out immediately.
-          Your data is kept. You can reactivate at any time by signing back in.
-        </p>
-      </div>
-
-      {error && <p className="text-xs text-semantic-danger">{error}</p>}
-
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className="px-4 py-2 rounded-full border border-semantic-danger/40 text-semantic-danger text-sm font-medium hover:bg-semantic-danger/10 transition-colors disabled:opacity-40"
-      >
-        {loading ? 'Deactivating…' : 'Deactivate my account'}
-      </button>
-    </div>
+    <SettingsCard
+      id="deactivate"
+      title={DEACTIVATE_CARD_TITLE}
+      lead={DEACTIVATE_CARD_LEAD}
+      tone="danger"
+      error={error}
+      consequence={DEACTIVATE_CONSEQUENCE}
+      actions={
+        confirming ? (
+          <>
+            <TextButton onClick={() => setConfirming(false)} disabled={loading}>
+              {DEACTIVATE_KEEP}
+            </TextButton>
+            <DangerButton onClick={() => void handleDeactivate()} disabled={loading}>
+              {loading ? DEACTIVATE_WORKING : DEACTIVATE_CONFIRM}
+            </DangerButton>
+          </>
+        ) : (
+          <DangerOutlineButton onClick={() => setConfirming(true)}>{DEACTIVATE_ACTION}</DangerOutlineButton>
+        )
+      }
+    />
   )
 }

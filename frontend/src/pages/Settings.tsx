@@ -1,32 +1,61 @@
+import { useCallback } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useAuthStore } from "../store/authStore"
-import { useNavigate } from "react-router-dom"
 import { supabase } from "../lib/supabase"
 import { useUserSettings } from "../hooks/useUserSettings"
+import { useProfileAnswers } from "../hooks/useProfileAnswers"
+import SettingsHero from "../components/settings/SettingsHero"
+import SettingsTabs from "../components/settings/SettingsTabs"
+import RiskProfileCard from "../components/settings/RiskProfileCard"
+import GoalsCard from "../components/settings/GoalsCard"
+import { ExpertiseCard, SectorsCard } from "../components/settings/PreferenceCards"
+import AccountDetailsCard from "../components/settings/AccountDetailsCard"
 import ChangePasswordSection from "../components/ChangePasswordSection"
-import InvestmentPreferencesSection from "../components/InvestmentPreferencesSection"
 import DeactivateAccountSection from "../components/DeactivateAccountSection"
 import DashboardPreferencesSection from "../components/DashboardPreferencesSection"
+import { GOAL_QUESTIONS } from "../utils/onboardingData"
+import {
+  SETTINGS_TAB_PARAM,
+  parseSettingsTab,
+  type SettingsTab,
+} from "../utils/settingsTabs"
+import {
+  ACCOUNT_TAB_INTRO,
+  PREFERENCES_TAB_INTRO,
+  PROFILE_TAB_INTRO,
+  formatSavedDate,
+} from "../utils/settingsCopy"
 
+/**
+ * Settings: the same skeleton as every other main page.
+ *
+ * Forest hero, tab strip, cards on cream. Three tabs, split by what reads the
+ * data: the fund matcher reads the risk answers and goals together, the
+ * analysis run reads sectors and expertise, and the account tab is the login
+ * itself. Each card saves on its own — see `SettingsCard` for why there is no
+ * page-level Save.
+ *
+ * The active tab lives in the query string so other pages can link straight
+ * to a view; the dashboard's fund-bracket tile sends someone with no profile
+ * to `?tab=profile`, not to the top of the page.
+ */
 export default function SettingsPage() {
   const { setSession } = useAuthStore()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const {
-    formData,
-    updateFormField,
-    toggleUniverse,
-    saveAccountInfo,
-    resetAccountInfo,
-    isAccountSaving,
-    accountError,
-    accountSuccess,
-    saveInvestmentPrefs,
-    resetInvestmentPrefs,
-    isAppSaving,
-    appError,
-    appSuccess,
-    email,
-  } = useUserSettings()
+  const tab = parseSettingsTab(searchParams.get(SETTINGS_TAB_PARAM))
+  const setTab = useCallback(
+    (next: SettingsTab) => {
+      const params = new URLSearchParams(searchParams)
+      params.set(SETTINGS_TAB_PARAM, next)
+      setSearchParams(params, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const settings = useUserSettings()
+  const profile = useProfileAnswers()
 
   // setSession(null) alone only empties this tab's state: the Supabase token
   // stays in storage and the next load signs straight back in. Clearing both is
@@ -41,122 +70,56 @@ export default function SettingsPage() {
     navigate("/", { replace: true })
   }
 
-  const onSubmitAccount = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    await saveAccountInfo()
-  }
-
   return (
-    <div className="space-y-10 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 max-w-4xl mx-auto">
-
-      {/* Page header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-brand-fg">Settings</h1>
-          <p className="text-sm text-brand-muted-fg mt-1">Manage your account and app preferences.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void handleSignOut()}
-          className="self-start shrink-0 whitespace-nowrap px-4 py-2 rounded-full bg-danger/30 border border-danger hover:bg-danger hover:text-white text-semantic-danger text-sm transition-colors"
-        >
-          Sign out
-        </button>
-      </div>
-
-      {/* ── Account Management ───────────────────────────── */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-brand-fg">Account Management</h2>
-          <p className="text-xs text-brand-muted-fg mt-0.5">Update your personal details and security settings.</p>
-        </div>
-
-        <form onSubmit={onSubmitAccount} className="space-y-4">
-          <div className="glass-card p-4 sm:p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-brand-fg">Account Information</h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium text-brand-muted-fg">First Name</label>
-                <input
-                  type="text"
-                  value={formData.first_name}
-                  onChange={(e) => updateFormField("first_name", e.target.value)}
-                  className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-brand-muted-fg">Last Name</label>
-                <input
-                  type="text"
-                  value={formData.last_name}
-                  onChange={(e) => updateFormField("last_name", e.target.value)}
-                  className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-brand-muted-fg">Email</label>
-              <input
-                type="email"
-                value={email}
-                disabled
-                className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-muted-fg opacity-60 cursor-not-allowed"
-              />
-              <p className="text-xs text-brand-muted-fg mt-1">Email cannot be changed</p>
-            </div>
-          </div>
-
-          {accountError && (
-            <div role="alert" className="p-4 rounded-lg bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger text-sm">
-              {accountError}
-            </div>
-          )}
-          {accountSuccess && (
-            <div role="status" className="p-4 rounded-lg bg-semantic-success/10 border border-semantic-success/20 text-semantic-success text-sm">
-              {accountSuccess}
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="submit"
-              disabled={isAccountSaving}
-              className="flex-1 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg font-medium hover:bg-accent/70 disabled:opacity-50"
-            >
-              {isAccountSaving ? "Saving..." : "Save Changes"}
-            </button>
-            <button
-              type="button"
-              onClick={resetAccountInfo}
-              disabled={isAccountSaving}
-              className="flex-1 px-4 py-2 rounded-full bg-brand-surface border border-brand-border hover:bg-brand-border/30 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-
-        <ChangePasswordSection />
-        <DeactivateAccountSection />
-      </section>
-
-      {/* ── App Settings ─────────────────────────────────── */}
-      <InvestmentPreferencesSection
-        formData={formData}
-        updateFormField={updateFormField}
-        toggleUniverse={toggleUniverse}
-        isAppSaving={isAppSaving}
-        appError={appError}
-        appSuccess={appSuccess}
-        onSave={saveInvestmentPrefs}
-        onReset={resetInvestmentPrefs}
+    <div className="mx-auto max-w-6xl space-y-5 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+      <SettingsHero
+        riskLabel={profile.riskLabel}
+        savedAt={formatSavedDate(profile.lastSavedAt)}
+        goalsAnswered={profile.answeredGoals}
+        goalsTotal={GOAL_QUESTIONS.length}
+        sectors={settings.formData.investment_universe}
+        onSignOut={() => void handleSignOut()}
       />
 
-      {/* ── Dashboard ────────────────────────────────────── */}
-      <DashboardPreferencesSection />
+      <SettingsTabs active={tab} onChange={setTab} />
 
+      <div
+        role="tabpanel"
+        id="settings-panel-profile"
+        aria-labelledby="settings-tab-profile"
+        hidden={tab !== "profile"}
+        className="space-y-4"
+      >
+        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{PROFILE_TAB_INTRO}</p>
+        <RiskProfileCard profile={profile} />
+        <GoalsCard profile={profile} />
+      </div>
+
+      <div
+        role="tabpanel"
+        id="settings-panel-preferences"
+        aria-labelledby="settings-tab-preferences"
+        hidden={tab !== "preferences"}
+        className="space-y-4"
+      >
+        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{PREFERENCES_TAB_INTRO}</p>
+        <SectorsCard settings={settings} />
+        <ExpertiseCard settings={settings} />
+        <DashboardPreferencesSection />
+      </div>
+
+      <div
+        role="tabpanel"
+        id="settings-panel-account"
+        aria-labelledby="settings-tab-account"
+        hidden={tab !== "account"}
+        className="space-y-4"
+      >
+        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{ACCOUNT_TAB_INTRO}</p>
+        <AccountDetailsCard settings={settings} />
+        <ChangePasswordSection />
+        <DeactivateAccountSection />
+      </div>
     </div>
   )
 }

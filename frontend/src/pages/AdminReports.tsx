@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import AdminTabs from "../components/admin/AdminTabs";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
@@ -358,44 +358,7 @@ export default function AdminReports() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Users
-          </Link>
-          <Link
-            to="/admin/learning-categories"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Categories
-          </Link>
-          <Link
-            to="/admin/learning-articles"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Articles
-          </Link>
-          <Link
-            to="/admin/learning-questions"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Questions &amp; Answers
-          </Link>
-          <Link
-            to="/admin/badges"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Badges
-          </Link>
-          <Link
-            to="/admin/reports"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
-          >
-            Reports
-          </Link>
-        </div>
+        <AdminTabs />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-3">

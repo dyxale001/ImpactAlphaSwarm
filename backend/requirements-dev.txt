@@ -1,4 +1,14 @@
-# Test-only dependencies. Deliberately NOT in requirements.txt so the deployed
-# container image stays unchanged.
+# Test- and tooling-only dependencies. Deliberately NOT in requirements.txt so
+# the deployed container image stays unchanged.
 #   pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0
+
+# Archive a fund's fact sheet alongside the figures a person transcribed from it
+# (scripts/archive_fund_documents.py). The app never opens a PDF; only the
+# person curating the catalogue does.
+#
+# pypdf takes the text layer, which is stored beside the document so that
+# re-checking a figure is a search rather than a page-by-page read. pymupdf is
+# used by the tests to synthesise a one-page PDF to run that over.
+pypdf>=4.0
+pymupdf>=1.24

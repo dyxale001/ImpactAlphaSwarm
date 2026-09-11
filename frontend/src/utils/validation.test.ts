@@ -1,5 +1,49 @@
 import { describe, it, expect } from 'vitest'
-import { validateEmail, validatePassword } from './validation'
+import { validateEmail, validatePassword, validateGoals } from './validation'
+
+describe('validateGoals', () => {
+  const complete = {
+    goal_horizon: '2_to_5',
+    goal_purpose: 'growth',
+    goal_account_type: 'tfsa',
+    goal_contribution: 'monthly',
+  }
+
+  it('accepts all four answered', () => {
+    expect(validateGoals(complete)).toEqual({ isValid: true, message: '' })
+  })
+
+  it.each([
+    ['goal_horizon', 'when you expect to need this money'],
+    ['goal_purpose', 'what this money is for'],
+    ['goal_account_type', 'which kind of account you are investing through'],
+    ['goal_contribution', 'how you plan to put money in'],
+  ])('names the missing answer when %s is blank', (missing, phrase) => {
+    // "Please answer all of them" is useless on a page of four cards; the
+    // question a reader has is which one they missed.
+    const answers = { ...complete, [missing]: '' }
+    const result = validateGoals(answers)
+    expect(result.isValid).toBe(false)
+    expect(result.message).toContain(phrase)
+  })
+
+  it('reports the first gap in the order the questions are asked', () => {
+    // So following the message walks down the page rather than back up it.
+    const result = validateGoals({})
+    expect(result.message).toContain('when you expect to need this money')
+  })
+
+  it('treats a missing key and an empty string the same way', () => {
+    const { goal_purpose: _omitted, ...withoutPurpose } = complete
+    expect(validateGoals(withoutPurpose).isValid).toBe(false)
+    expect(validateGoals({ ...complete, goal_purpose: '' }).isValid).toBe(false)
+  })
+
+  it('has an empty message only when valid', () => {
+    expect(validateGoals(complete).message).toBe('')
+    expect(validateGoals({}).message).not.toBe('')
+  })
+})
 
 describe('validateEmail', () => {
   it.each([

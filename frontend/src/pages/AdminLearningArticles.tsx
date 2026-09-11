@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Edit3, Trash2, X } from "lucide-react";
+import AdminTabs from "../components/admin/AdminTabs";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import {
@@ -199,44 +200,7 @@ export default function AdminLearningArticles() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Users
-          </Link>
-          <Link
-            to="/admin/learning-categories"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Categories
-          </Link>
-          <Link
-            to="/admin/learning-articles"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
-          >
-            Articles
-          </Link>
-          <Link
-            to="/admin/learning-questions"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Questions &amp; Answers
-          </Link>
-          <Link
-            to="/admin/badges"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Badges
-          </Link>
-          <Link
-            to="/admin/reports"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Reports
-          </Link>
-        </div>
+        <AdminTabs />
 
         {error && (
           <div className="p-4 bg-semantic-danger/10 border border-semantic-danger/30 text-semantic-danger rounded-brand flex items-center gap-3">

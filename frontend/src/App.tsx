@@ -22,6 +22,11 @@ import AdminBadges from "./pages/AdminBadges";
 import AdminReports from "./pages/AdminReports";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
+import FundsPage from "./pages/Funds";
+import FundDetailPage from "./pages/FundDetail";
+import AdminFunds from "./pages/AdminFunds";
+import AdminFundEdit from "./pages/AdminFundEdit";
+import { FUNDS_ENABLED } from "./utils/fundsFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
@@ -86,6 +91,12 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />{" "}
           {/* Changed from "/" to "/dashboard" */}
           <Route path="/assets" element={<AssetsPage />} />
+          {/* Funds catalogue. Unrouted unless the flag is set, so with it off
+              the path is a 404 rather than a page that cannot load its data.
+              The detail route is listed after the list route and is equally
+              gated, so a deep link cannot reach a page whose API is off. */}
+          {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
+          {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
@@ -120,6 +131,10 @@ export default function App() {
           <Route path="/admin/badges" element={<AdminBadges />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/edit/:id" element={<AdminEditUser />} />
+          {/* Gated by the funds flag as well as by AdminRoute: with the feature
+              off its API is unmounted, so the pages would have nothing to read. */}
+          {FUNDS_ENABLED && <Route path="/admin/funds" element={<AdminFunds />} />}
+          {FUNDS_ENABLED && <Route path="/admin/funds/:fundId" element={<AdminFundEdit />} />}
         </Route>
       </Route>
     </Routes>

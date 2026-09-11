@@ -38,9 +38,11 @@ ImpactAlphaSwarm/
 │   │   ├── api.py                    # FastAPI endpoints (analysis, assets, whales, admin)
 │   │   ├── agents/                   # sentiment_scout, quant_analyst, asset_discovery, gcp_nlp
 │   │   ├── orchestration/            # LangGraph orchestrator + unified ranking
+│   │   ├── funds/                    # funds catalogue: classification, matcher, fact sheets (flagged off)
 │   │   └── utils/                    # Supabase client, sentiment modules, whale watching, traces
-│   ├── migrations/                   # 001-014, applied in the Supabase SQL editor
-│   ├── scripts/                      # ranking shadow / stability reports
+│   ├── migrations/                   # 001-026, applied in the Supabase SQL editor
+│   ├── data/funds/                   # transcribed fact-sheet seed for the funds catalogue
+│   ├── scripts/                      # ranking shadow / stability reports, fund seed loader
 │   ├── tests/                        # pytest suite
 │   ├── Dockerfile                    # Cloud Run image (gunicorn + uvicorn worker)
 │   ├── main.py                       # CLI entry point for a local orchestrator run
@@ -85,12 +87,19 @@ From your Supabase project:
 ### Step 1.2: Apply the Migrations
 
 `backend/migrations/` holds the schema changes made since the base tables, in
-numbered order (001 through 014): news and social sentiment columns, the quant
+numbered order (001 through 026): news and social sentiment columns, the quant
 sub-dimensions, the whale-watching and news caches, asset discovery, entity
-descriptions, and the unified ranking tables.
+descriptions, the unified ranking tables, the sentiment day summaries, the funds
+catalogue, the rest of what a fact sheet publishes, and the fact-sheet text
+archive.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
+
+Migrations 024, 025 and 026 are the only ones you can skip: together they create
+the funds catalogue, which does nothing until `FUNDS_ENABLED` is set. Apply all
+three before turning that flag on, not after — the page needs the tables and a
+loaded seed to show anything, and 025 adds columns the seed now fills.
 
 ---
 
@@ -327,6 +336,8 @@ LANGSMITH_PROJECT               → (Optional) LangSmith project name
 DISCOVERY_ENABLED               → (Optional) run the discovery agent, default false
 UNIFIED_RANKING_ENABLED         → (Optional) four-factor ordering, default false
 UNIFIED_RANKING_SHADOW          → (Optional) record without reordering, default true
+FUNDS_ENABLED                   → (Optional) serve the funds catalogue, default false
+FUND_TRACES_ENABLED             → (Optional) LLM fund explanations, default false
 ```
 
 Further tuning variables (discovery thresholds, news weighting, quant window,
@@ -338,6 +349,7 @@ VITE_SUPABASE_URL               → Supabase project URL (same as backend)
 VITE_SUPABASE_ANON_KEY          → Supabase anon key
 VITE_API_BASE                   → Backend URL (localhost:8000 locally)
 VITE_UNIFIED_SCORECARD          → (Optional) "true" renders the Signal Scorecard panel
+VITE_FUNDS_ENABLED              → (Optional) "true" shows the Funds page and nav entry
 ```
 
 ---

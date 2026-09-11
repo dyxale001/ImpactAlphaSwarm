@@ -1,5 +1,11 @@
 import { useState } from 'react'
 import { useChangePassword } from '../hooks/useChangePassword'
+import SettingsCard from './settings/SettingsCard'
+import { PrimaryButton, SecondaryButton, TextButton } from './settings/SettingsButtons'
+import { PASSWORD_CARD_LEAD, PASSWORD_CARD_TITLE, RETAKE_SAVING } from '../utils/settingsCopy'
+
+const INPUT =
+  'mt-1 w-full rounded-lg border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40'
 
 export default function ChangePasswordSection() {
   const [isOpen, setIsOpen] = useState(false)
@@ -20,93 +26,83 @@ export default function ChangePasswordSection() {
   }
 
   return (
-    <div className="glass-card p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-brand-fg">Password</h2>
-        <button
-          type="button"
-          onClick={() => { if (isOpen) handleCancel(); else setIsOpen(true) }}
-          className="text-xs text-brand-primary hover:underline focus:outline-none"
-        >
-          {isOpen ? 'Cancel' : 'Change password'}
-        </button>
-      </div>
-
-      {!isOpen && (
-        <p className="text-xs text-brand-muted-fg tracking-widest">••••••••</p>
-      )}
-
+    <SettingsCard
+      id="password"
+      title={PASSWORD_CARD_TITLE}
+      lead={PASSWORD_CARD_LEAD}
+      error={error}
+      success={successMessage}
+      consequence={<span />}
+      actions={
+        isOpen ? (
+          <>
+            <TextButton onClick={handleCancel} disabled={isLoading}>
+              Cancel
+            </TextButton>
+            <PrimaryButton type="submit" form="change-password-form" disabled={isLoading}>
+              {isLoading ? RETAKE_SAVING : 'Update password'}
+            </PrimaryButton>
+          </>
+        ) : (
+          <SecondaryButton onClick={() => setIsOpen(true)} aria-expanded={false} aria-controls="change-password-form">
+            Change password
+          </SecondaryButton>
+        )
+      }
+    >
       {isOpen && (
-        <form onSubmit={changePassword} className="space-y-4">
+        <form id="change-password-form" onSubmit={changePassword} className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-brand-muted-fg">Current Password</label>
+            <label htmlFor="settings-current-password" className="text-xs font-medium text-brand-muted-fg">
+              Current password
+            </label>
             <input
+              id="settings-current-password"
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               autoComplete="current-password"
-              className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
+              className={INPUT}
             />
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-brand-muted-fg">New Password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              autoComplete="new-password"
-              className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
-            />
-            <p className="text-xs text-brand-muted-fg mt-1">
-              Min. 8 characters with uppercase, lowercase, number, and special character.
-            </p>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-brand-muted-fg">Confirm New Password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              autoComplete="new-password"
-              className="mt-1 w-full px-3 py-2 rounded-lg bg-brand-surface border border-brand-border text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
-            />
-          </div>
-
-          {error && (
-            <div role="alert" className="p-3 rounded-lg bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger text-xs">
-              {error}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="settings-new-password" className="text-xs font-medium text-brand-muted-fg">
+                New password
+              </label>
+              <input
+                id="settings-new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                className={INPUT}
+              />
+              <p className="mt-1 text-xs text-brand-muted-fg">
+                At least 8 characters, with upper and lower case, a number and a symbol.
+              </p>
             </div>
-          )}
-          {successMessage && (
-            <div role="status" className="p-3 rounded-lg bg-semantic-success/10 border border-semantic-success/20 text-semantic-success text-xs">
-              {successMessage}
-            </div>
-          )}
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg font-medium hover:bg-accent/70 text-sm disabled:opacity-50"
-            >
-              {isLoading ? 'Saving...' : 'Update Password'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 rounded-full bg-brand-surface border border-brand-border hover:bg-brand-border/30 text-sm disabled:opacity-50"
-            >
-              Cancel
-            </button>
+            <div>
+              <label htmlFor="settings-confirm-password" className="text-xs font-medium text-brand-muted-fg">
+                Confirm new password
+              </label>
+              <input
+                id="settings-confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                className={INPUT}
+              />
+            </div>
           </div>
         </form>
       )}
-    </div>
+    </SettingsCard>
   )
 }

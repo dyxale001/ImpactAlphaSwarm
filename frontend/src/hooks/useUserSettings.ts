@@ -6,6 +6,17 @@ import { UNIVERSE_OPTIONS } from '../utils/onboardingData'
 type RiskTolerance = 'aggressive' | 'moderate' | 'conservative'
 type Expertise = 'novice' | 'intermediate' | 'advanced'
 
+/** The two preferences that save on their own cards. */
+export type PrefScope = 'universe' | 'expertise'
+
+export interface SaveStatus {
+  saving: boolean
+  error: string | null
+  success: string | null
+}
+
+const IDLE: SaveStatus = { saving: false, error: null, success: null }
+
 const normalizeRiskTolerance = (value?: string): RiskTolerance => {
   const v = (value || '').toLowerCase().trim()
   if (v === 'aggresive' || v === 'aggressive') return 'aggressive'
@@ -14,6 +25,20 @@ const normalizeRiskTolerance = (value?: string): RiskTolerance => {
   return 'moderate'
 }
 
+const normalizeExpertise = (value?: string): Expertise =>
+  value === 'advanced' ? 'advanced' : value === 'novice' ? 'novice' : 'intermediate'
+
+/**
+ * Name, sectors and expertise: the settings that are chosen rather than
+ * derived.
+ *
+ * Each preference saves on its own, with its own status, because the Settings
+ * page shows them on separate cards and a message under one card about a save
+ * made on another is a message about the wrong thing. Sectors and expertise
+ * still write to the same `user_analysis` row; each save touches only its own
+ * column so a change made on one card cannot carry a stale value from the
+ * other.
+ */
 export const useUserSettings = () => {
   const { profile, analysis, fetchProfile } = useAuthStore()
 
@@ -30,24 +55,18 @@ export const useUserSettings = () => {
   const [accountError, setAccountError] = useState<string | null>(null)
   const [accountSuccess, setAccountSuccess] = useState<string | null>(null)
 
-  // App settings section state
-  const [isAppSaving, setIsAppSaving] = useState(false)
-  const [appError, setAppError] = useState<string | null>(null)
-  const [appSuccess, setAppSuccess] = useState<string | null>(null)
+  // One status per preference card
+  const [prefStatus, setPrefStatus] = useState<Record<PrefScope, SaveStatus>>({
+    universe: IDLE,
+    expertise: IDLE,
+  })
 
   useEffect(() => {
-    const normalizedExpertise =
-      analysis?.ai_derived_expertise === 'advanced'
-        ? 'advanced'
-        : analysis?.ai_derived_expertise === 'novice'
-        ? 'novice'
-        : 'intermediate'
-
     setFormData({
       first_name: profile?.first_name || '',
       last_name: profile?.last_name || '',
       risk_tolerance: normalizeRiskTolerance(analysis?.risk_tolerance),
-      expertise_level: normalizedExpertise,
+      expertise_level: normalizeExpertise(analysis?.ai_derived_expertise),
       investment_universe: Array.isArray(analysis?.investment_universe)
         ? analysis!.investment_universe
         : [],
@@ -65,6 +84,7 @@ export const useUserSettings = () => {
       ...prev,
       [field]: field === 'risk_tolerance' ? normalizeRiskTolerance(value) : value,
     }))
+    if (field === 'expertise_level') setPrefStatus((s) => ({ ...s, expertise: IDLE }))
   }
 
   const toggleUniverse = (item: string) => {
@@ -77,6 +97,7 @@ export const useUserSettings = () => {
           : [...prev.investment_universe, item],
       }
     })
+    setPrefStatus((s) => ({ ...s, universe: IDLE }))
   }
 
   const availableUniverse = UNIVERSE_OPTIONS.filter((o) => !formData.investment_universe.includes(o))
@@ -96,9 +117,9 @@ export const useUserSettings = () => {
         .eq('id', profile.id)
       if (profileError) throw profileError
       await fetchProfile(profile.id)
-      setAccountSuccess('Account information saved.')
+      setAccountSuccess('Your details are saved.')
     } catch (err: any) {
-      setAccountError(err.message || 'Failed to save account information.')
+      setAccountError(err.message || 'Your details did not save. Please try again.')
     } finally {
       setIsAccountSaving(false)
     }
@@ -114,20 +135,36 @@ export const useUserSettings = () => {
     setAccountSuccess(null)
   }
 
-  const saveInvestmentPrefs = async () => {
+  /** Whether a card's value differs from what is stored. */
+  const prefDirty = (scope: PrefScope): boolean => {
+    if (scope === 'expertise') {
+      return formData.expertise_level !== normalizeExpertise(analysis?.ai_derived_expertise)
+    }
+    const stored = Array.isArray(analysis?.investment_universe) ? analysis!.investment_universe : []
+    return (
+      stored.length !== formData.investment_universe.length ||
+      stored.some((s) => !formData.investment_universe.includes(s))
+    )
+  }
+
+  const saveInvestmentPrefs = async (scope: PrefScope) => {
     if (!profile?.id) return
-    setIsAppSaving(true)
-    setAppError(null)
-    setAppSuccess(null)
+    setPrefStatus((s) => ({ ...s, [scope]: { saving: true, error: null, success: null } }))
     try {
+      // risk_tolerance is deliberately not written here. It is derived from
+      // the questionnaire (see useProfileAnswers), and this form holds
+      // whatever it loaded, so saving it back would silently undo a retake
+      // done since the page opened.
+      const patch =
+        scope === 'universe'
+          ? { investment_universe: formData.investment_universe }
+          : { ai_derived_expertise: formData.expertise_level }
       const { error: analysisError } = await supabase
         .from('user_analysis')
         .upsert(
           {
             user_id: profile.id,
-            investment_universe: formData.investment_universe,
-            risk_tolerance: normalizeRiskTolerance(formData.risk_tolerance),
-            ai_derived_expertise: formData.expertise_level,
+            ...patch,
             is_active: true,
             updated_at: new Date().toISOString(),
           },
@@ -135,25 +172,38 @@ export const useUserSettings = () => {
         )
       if (analysisError) throw analysisError
       await fetchProfile(profile.id)
-      setAppSuccess('App settings saved.')
+      setPrefStatus((s) => ({
+        ...s,
+        [scope]: {
+          saving: false,
+          error: null,
+          success: scope === 'universe' ? 'Sectors saved.' : 'Expertise level saved.',
+        },
+      }))
     } catch (err: any) {
-      setAppError(err.message || 'Failed to save app settings.')
-    } finally {
-      setIsAppSaving(false)
+      setPrefStatus((s) => ({
+        ...s,
+        [scope]: {
+          saving: false,
+          error: err.message || 'That did not save. Please try again.',
+          success: null,
+        },
+      }))
     }
   }
 
-  const resetInvestmentPrefs = () => {
-    setFormData((prev) => ({
-      ...prev,
-      risk_tolerance: normalizeRiskTolerance(analysis?.risk_tolerance),
-      expertise_level: (analysis?.ai_derived_expertise || 'intermediate') as Expertise,
-      investment_universe: Array.isArray(analysis?.investment_universe)
-        ? analysis!.investment_universe
-        : [],
-    }))
-    setAppError(null)
-    setAppSuccess(null)
+  const resetInvestmentPrefs = (scope: PrefScope) => {
+    setFormData((prev) =>
+      scope === 'expertise'
+        ? { ...prev, expertise_level: normalizeExpertise(analysis?.ai_derived_expertise) }
+        : {
+            ...prev,
+            investment_universe: Array.isArray(analysis?.investment_universe)
+              ? analysis!.investment_universe
+              : [],
+          }
+    )
+    setPrefStatus((s) => ({ ...s, [scope]: IDLE }))
   }
 
   return {
@@ -167,12 +217,11 @@ export const useUserSettings = () => {
     isAccountSaving,
     accountError,
     accountSuccess,
-    // App Settings
+    // Preferences, one status per card
+    prefStatus,
+    prefDirty,
     saveInvestmentPrefs,
     resetInvestmentPrefs,
-    isAppSaving,
-    appError,
-    appSuccess,
     email: profile?.email || '',
   }
 }

@@ -1,3 +1,4 @@
+import { settingsPath } from "../utils/settingsTabs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { LayoutGrid, Plus } from "lucide-react";
@@ -262,7 +263,7 @@ export default function DashboardPage() {
         <p className="pt-2 text-[11px] leading-relaxed text-brand-muted-fg">
           Everything here is research, not financial advice. Prices are US
           listings shown in rand.{" "}
-          <Link to="/settings" className="text-brand-primary hover:underline">
+          <Link to={settingsPath("preferences")} className="text-brand-primary hover:underline">
             Manage your preferences
           </Link>
           .

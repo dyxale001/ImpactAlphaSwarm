@@ -10,9 +10,21 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Load backend/.env before anything reads an environment variable.
+#
+# This used to happen only as a SIDE EFFECT: `src.orchestration.langgraph_orchestrator`
+# calls `load_dotenv()` at module level, and this module imports it lazily inside
+# a request handler — so the file was read at some point during the first
+# analysis run and not before. Every `os.getenv` at import time in this file was
+# therefore reading the shell environment only, and any handler needing a key
+# before that first run would have found nothing. Made explicit here so moving
+# that deferred import cannot quietly unset the server's configuration.
+load_dotenv()
 
 # REMOVED: from src.orchestration.langgraph_orchestrator import run_analysis
 from src.utils.supabase_client import (
@@ -139,6 +151,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Funds catalogue ----------------------------------------------------------
+# South African unit trusts and JSE-listed ETFs, matched to the onboarding
+# profile from published fact sheets. Off unless FUNDS_ENABLED is set: with the
+# flag off nothing beyond the flag module is imported and /api/fund-catalogue
+# 404s, so merging this changes no behaviour.
+#
+# Note the path. /api/funds already exists further down and returns 13F
+# institutional holdings — somebody else's holdings, not something to invest in.
+from src.funds.config import FUNDS_ENABLED  # noqa: E402
+
+if FUNDS_ENABLED:
+    from src.funds.routes import mount_fund_catalogue  # noqa: E402
+
+    # Log what happened, not what was attempted. Note that this Starlette
+    # version records an included router as one entry in `app.routes` rather
+    # than copying each path in, so the four funds paths are not visible there
+    # even when they are served — check the responses, not the route list.
+    if mount_fund_catalogue(app):
+        logger.info("Funds catalogue mounted at /api/fund-catalogue")
+    else:
+        logger.warning("FUNDS_ENABLED is set but the funds catalogue did not mount")
+
+    # The maintenance surface, behind the same flag and the usual admin check.
+    from src.funds.admin_routes import mount_fund_catalogue_admin  # noqa: E402
+
+    if mount_fund_catalogue_admin(app):
+        logger.info("Funds catalogue admin mounted at /api/admin/fund-catalogue")
+    else:
+        logger.warning("FUNDS_ENABLED is set but the funds admin did not mount")
 
 
 # --- Orphaned-run guard -------------------------------------------------------
@@ -471,6 +513,60 @@ async def refresh_asset_cache(ticker: str):
     }
 
 
+# Yahoo exchange codes for venues that quote in US dollars. Read off live search
+# responses rather than remembered: NASDAQ answers as both NMS and NGM, NYSE as
+# NYQ, its ETF venue as PCX, and the US over-the-counter market as PNK, OQB and
+# OQX. NCM and ASE are the remaining NASDAQ and NYSE American tiers.
+#
+# Everything else is a foreign listing, and the reason to exclude those is not
+# tidiness. Adding one to a watchlist puts its ticker into the next analysis run,
+# where the quantitative phase would price a rand-cent JSE quote as dollars and
+# the sentiment phase would find no coverage for it. A JSE fund belongs in the
+# funds catalogue, which reads published fact sheets instead of guessing.
+#
+# US over-the-counter venues are IN deliberately. They are how a name like
+# Naspers is reachable at all, they are quoted in dollars, and a user searching
+# for one and adding it is a deliberate act. That is different from the discovery
+# agent, which excludes over-the-counter names when choosing what to analyse
+# unprompted.
+US_EXCHANGE_CODES = frozenset({"NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "BTS", "PNK", "OQB", "OQX"})
+
+# Instruments we can price and analyse. Crypto, futures and indices are dropped.
+SEARCHABLE_QUOTE_TYPES = frozenset({"EQUITY", "ETF"})
+
+# How many results the search returns.
+SEARCH_RESULT_LIMIT = 6
+
+
+def _is_us_listed(quote: dict) -> bool:
+    """Whether a Yahoo search hit is quoted on a US venue.
+
+    Two checks rather than one. The exchange code is the real test; the absence
+    of a suffix in the symbol is the backstop, because a venue code we have
+    never seen would otherwise pass. Every foreign listing Yahoo returns carries
+    one (``STX40.JO``, ``AAL.L``, ``SXR8.DE``), and no US symbol does — Yahoo
+    writes share classes with a hyphen, as in ``BRK-B``.
+    """
+    if (quote.get("exchange") or "").upper() not in US_EXCHANGE_CODES:
+        return False
+    return "." not in (quote.get("symbol") or "")
+
+
+def _filter_search_quotes(quotes: list[dict]) -> list[dict]:
+    """Keep US-listed equities and ETFs, then take the first few.
+
+    Filtering before the slice matters: applied afterwards it would first fill
+    the six slots with foreign listings and then discard them, returning fewer
+    results than exist.
+    """
+    keep = [
+        row
+        for row in quotes
+        if (row.get("quoteType") or "").upper() in SEARCHABLE_QUOTE_TYPES and _is_us_listed(row)
+    ]
+    return keep[:SEARCH_RESULT_LIMIT]
+
+
 @app.get("/api/assets/search")
 async def search_assets(q: str = ""):
     """Fully live asset search via Yahoo Finance search API.
@@ -505,9 +601,7 @@ async def search_assets(q: str = ""):
     except Exception as exc:
         logger.warning("Yahoo Finance search failed for %s: %s", q, exc)
 
-    # Keep equities and ETFs; drop crypto, futures, indices
-    allowed = {"EQUITY", "ETF"}
-    quotes = [r for r in quotes if r.get("quoteType", "").upper() in allowed][:6]
+    quotes = _filter_search_quotes(quotes)
 
     if not quotes:
         return {"results": []}

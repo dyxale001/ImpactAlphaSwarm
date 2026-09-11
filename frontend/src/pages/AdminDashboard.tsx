@@ -12,6 +12,7 @@ import {
 import { useAdminUsers } from "../hooks/useAdminUsers";
 import { formatDbString } from "../utils/stringFormatters";
 import { Link, useNavigate } from "react-router-dom";
+import AdminTabs from "../components/admin/AdminTabs";
 import { useAuthStore } from "../store/authStore";
 import { supabase } from "../lib/supabase";
 import AdminDashboardSkeleton from "../components/admin/AdminDashboardSkeleton";
@@ -172,45 +173,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Learn-centre navigation tabs */}
-        <div className="flex flex-wrap gap-3">
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-fg text-brand-bg text-sm font-medium"
-          >
-            Users
-          </Link>
-          <Link
-            to="/admin/learning-categories"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Categories
-          </Link>
-          <Link
-            to="/admin/learning-articles"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Articles
-          </Link>
-          <Link
-            to="/admin/learning-questions"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Questions &amp; Answers
-          </Link>
-          <Link
-            to="/admin/badges"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Badges
-          </Link>
-          <Link
-            to="/admin/reports"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-brand-border bg-brand-card text-sm text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Reports
-          </Link>
-        </div>
+        <AdminTabs />
 
         {/* Search bar */}
         <div className="relative">
