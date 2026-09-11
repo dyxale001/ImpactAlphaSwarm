@@ -1,3 +1,4 @@
+import { settingsPath } from "../../../utils/settingsTabs";
 import { Link } from "react-router-dom";
 import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import { useFundMatches } from "../../../hooks/useFundCatalogue";
@@ -67,7 +68,7 @@ export function FundBracketWidget({ size }: WidgetProps) {
         grow
         action={
           <Link
-            to="/settings"
+            to={settingsPath("profile")}
             className="text-xs font-semibold text-brand-primary hover:underline"
           >
             {COMPLETE_PROFILE_ACTION}
@@ -155,7 +156,7 @@ export function FundBracketWidget({ size }: WidgetProps) {
           </Link>
           {fallbackRiskOnly && (
             <Link
-              to="/settings"
+              to={settingsPath("profile")}
               className="text-[11px] font-semibold text-brand-secondary hover:underline"
             >
               {COMPLETE_PROFILE_TITLE}

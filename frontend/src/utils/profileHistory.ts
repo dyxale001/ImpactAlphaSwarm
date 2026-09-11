@@ -58,3 +58,16 @@ export function withHistory(
     [HISTORY_KEY]: archived.slice(0, HISTORY_LIMIT),
   };
 }
+
+/**
+ * When the current answers were saved, as an ISO string, or null if the row
+ * does not say. The newest history entry is stamped at the moment the current
+ * answers replaced it, so its `at` is the current answers' save time; a row
+ * with no history yet may still carry the goals' own `answered_at`.
+ */
+export function lastSavedAt(stored: Record<string, unknown>): string | null {
+  const newest = historyOf(stored)[0];
+  if (newest?.at) return newest.at;
+  const goals = stored.goals as { answered_at?: unknown } | undefined;
+  return typeof goals?.answered_at === "string" ? goals.answered_at : null;
+}

@@ -4,7 +4,7 @@ import { useAuthStore } from "../store/authStore";
 import { GOAL_QUESTIONS, SURVEY_QUESTIONS } from "../utils/onboardingData";
 import { determinePsychometrics } from "../utils/scoringEngine";
 import { buildGoals, type GoalQuestionId } from "../utils/goals";
-import { withHistory, withoutHistory } from "../utils/profileHistory";
+import { lastSavedAt, withHistory, withoutHistory } from "../utils/profileHistory";
 
 /**
  * Reading and revising the answers a user's profile is derived from.
@@ -22,6 +22,8 @@ import { withHistory, withoutHistory } from "../utils/profileHistory";
  * the answers it used, and those answers would no longer exist anywhere.
  */
 
+export type ProfileSave = "goals" | "retake";
+
 export function useProfileAnswers() {
   const { profile, analysis, fetchProfile } = useAuthStore();
 
@@ -29,14 +31,15 @@ export function useProfileAnswers() {
   const [goalAnswers, setGoalAnswers] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  /** Which card's save just succeeded, so only that card says so. */
+  const [savedWhat, setSavedWhat] = useState<ProfileSave | null>(null);
 
   const stored = (analysis?.survey_answers ?? {}) as Record<string, unknown>;
 
   // Seeded from what is stored so a retake is a revision. Keys beginning with
   // "_" are onboarding metadata, and `goals` is its own nested object, so
   // neither belongs in the answers a question renders from.
-  useEffect(() => {
+  function seedFromStored() {
     const answers: Record<string, string> = {};
     for (const [key, value] of Object.entries(stored)) {
       if (key.startsWith("_") || key === "goals") continue;
@@ -51,8 +54,18 @@ export function useProfileAnswers() {
       if (typeof raw === "string") seeded[q.id] = raw;
     }
     setGoalAnswers(seeded);
-    // Re-seeded only when the stored row changes, so typing is not overwritten.
-  }, [analysis?.survey_answers]);
+  }
+
+  // Re-seeded only when the stored row changes, so typing is not overwritten.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(seedFromStored, [analysis?.survey_answers]);
+
+  /** Throw away unsaved edits: a closed retake or a cancelled goals edit. */
+  function discardChanges() {
+    seedFromStored();
+    setError(null);
+    setSavedWhat(null);
+  }
 
   const answeredSurvey = useMemo(
     () => SURVEY_QUESTIONS.filter((q) => surveyAnswers[q.id]).length,
@@ -65,19 +78,23 @@ export function useProfileAnswers() {
 
   function setSurveyAnswer(id: string, value: string) {
     setSurveyAnswers((prev) => ({ ...prev, [id]: value }));
-    setSaved(false);
+    setSavedWhat(null);
   }
 
   function setGoalAnswer(id: string, value: string) {
     setGoalAnswers((prev) => ({ ...prev, [id]: value }));
-    setSaved(false);
+    setSavedWhat(null);
   }
 
-  async function write(surveyPatch: Record<string, unknown>, riskLabel?: string) {
+  async function write(
+    what: ProfileSave,
+    surveyPatch: Record<string, unknown>,
+    riskLabel?: string,
+  ) {
     if (!profile?.id) return false;
     setIsSaving(true);
     setError(null);
-    setSaved(false);
+    setSavedWhat(null);
     try {
       const payload: Record<string, unknown> = {
         user_id: profile.id,
@@ -93,7 +110,7 @@ export function useProfileAnswers() {
       if (writeError) throw writeError;
 
       await fetchProfile(profile.id);
-      setSaved(true);
+      setSavedWhat(what);
       return true;
     } catch (e: unknown) {
       console.error("Could not save profile answers:", e);
@@ -109,13 +126,14 @@ export function useProfileAnswers() {
     // Same builder onboarding uses, so a horizon answered here ages the same
     // way: stored as a target year rather than as "five years" forever.
     const goals = buildGoals(goalAnswers as Partial<Record<GoalQuestionId, string>>);
-    return write({ ...withoutHistory(stored), goals });
+    return write("goals", { ...withoutHistory(stored), goals });
   }
 
   /** Save revised questionnaire answers, and the label they score to. */
   async function saveRetake() {
     const derived = determinePsychometrics(surveyAnswers);
     return write(
+      "retake",
       { ...withoutHistory(stored), ...surveyAnswers },
       derived.riskTolerance,
     );
@@ -129,11 +147,13 @@ export function useProfileAnswers() {
     setGoalAnswer,
     saveGoals,
     saveRetake,
+    discardChanges,
     isSaving,
     error,
-    saved,
+    savedWhat,
     answeredSurvey,
     answeredGoals,
+    /** When the stored answers were last written, if the row says. */
+    lastSavedAt: lastSavedAt(stored) ?? (analysis?.updated_at as string | undefined) ?? null,
   };
 }
-

@@ -1,3 +1,4 @@
+import { settingsPath } from "../../utils/settingsTabs";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import {
@@ -22,7 +23,7 @@ export default function CompleteProfilePrompt({ notice }: { notice?: string | nu
         {notice ?? COMPLETE_PROFILE_LEAD}
       </p>
       <Link
-        to="/settings"
+        to={settingsPath("profile")}
         className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary hover:underline"
       >
         {COMPLETE_PROFILE_ACTION}

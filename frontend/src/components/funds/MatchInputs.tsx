@@ -1,3 +1,4 @@
+import { settingsPath } from "../../utils/settingsTabs";
 import { Link } from "react-router-dom";
 import { SlidersHorizontal } from "lucide-react";
 import type { CatalogueBracket } from "../../services/api/fundCatalogue";
@@ -78,7 +79,7 @@ export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) 
           {MATCH_INPUTS_TITLE}
         </h2>
         <Link
-          to="/settings"
+          to={settingsPath("profile")}
           className="text-[11px] font-semibold text-brand-primary hover:underline"
         >
           {MATCH_INPUTS_ACTION}
