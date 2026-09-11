@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import { readLastHubPage } from "../../utils/lastHubPage";
 import {
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   Terminal,
   Settings,
   Waves,
+  Sparkles,
   Menu,
   X,
 } from "lucide-react";
@@ -47,6 +49,7 @@ export default function AppLayout() {
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
+    { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
     { name: "Whale Watching", path: "/whale-watching", icon: Waves },
     { name: "Settings", path: "/settings", icon: Settings },
@@ -57,6 +60,7 @@ export default function AppLayout() {
       i.name === "Dashboard" ||
       i.name === "Assets" ||
       i.name === "Watchlist" ||
+      i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
       i.name === "Settings"
@@ -145,6 +149,8 @@ export default function AppLayout() {
       <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">
         <Outlet />{" "}
       </main>
+
+      <AskAlphaSwarmChatbot />
     </div>
   );
 }

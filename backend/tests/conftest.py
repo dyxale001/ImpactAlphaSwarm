@@ -1,6 +1,6 @@
 """Shared test setup.
 
-Two jobs, both about determinism:
+Three jobs, all about determinism:
 
 1.  Put ``backend/`` on ``sys.path`` so ``import src.…`` works no matter which
     directory pytest was invoked from.
@@ -19,6 +19,12 @@ shift underneath it and the failures would look like real regressions.
 them here wins. The values below are the defaults written into the source; if a
 default legitimately changes, update it here and the failing expectations will
 show you exactly which behaviour moved.
+
+3.  Stop tests from making real ask_query_logs writes. /api/ask now writes one
+    row per request (Admin Reports Chatbot instrumentation); every existing ask
+    test calls api.ask_alphaswarm directly and none of them mock Supabase for
+    this, so without the autouse fixture below every one of them would attempt
+    a real network call on every run.
 """
 
 import os
@@ -72,3 +78,19 @@ _PINNED_DEFAULTS = {
 
 for _key, _value in _PINNED_DEFAULTS.items():
     os.environ[_key] = _value
+
+import pytest
+
+import src.api as api
+
+
+@pytest.fixture(autouse=True)
+def _no_real_ask_query_logging(monkeypatch):
+    """/api/ask now writes one ask_query_logs row per request (Admin Reports
+    Chatbot instrumentation). Every existing ask test calls api.ask_alphaswarm
+    directly and none of them mock Supabase for this, so without this
+    autouse no-op every one of them would attempt a real network call on
+    every run. Tests that specifically exercise the logging behaviour
+    re-patch api._log_ask_query (or api.supabase) themselves, which
+    overrides this fixture's patch within that test."""
+    monkeypatch.setattr(api, "_log_ask_query", lambda **kwargs: None)

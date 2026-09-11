@@ -161,13 +161,27 @@ export function useOnboarding() {
 
           const idByTicker = new Map((assetRows || []).map(a => [a.ticker, a.id]))
 
-          await supabase.from('user_watchlist_assets').insert(
-            familiarAssets.map(ticker => ({
+          // Only picks that resolve to a real assets row are persisted -- a
+          // bare {ticker, no asset_id} row used to slip past this and later
+          // break the recommendation writer (assets.universe is NOT NULL, so
+          // it can't mint the missing row mid-run). Unresolved picks are
+          // simply skipped; onboarding must not fail because of them.
+          const resolvedRows = familiarAssets
+            .filter(ticker => idByTicker.has(ticker))
+            .map(ticker => ({
               user_id: currentUserId,
               ticker,
-              ...(idByTicker.get(ticker) ? { asset_id: idByTicker.get(ticker) } : {}),
+              asset_id: idByTicker.get(ticker),
             }))
-          )
+
+          const skipped = familiarAssets.filter(ticker => !idByTicker.has(ticker))
+          if (skipped.length > 0) {
+            console.warn('Skipping unresolved familiar-asset picks (no assets row):', skipped)
+          }
+
+          if (resolvedRows.length > 0) {
+            await supabase.from('user_watchlist_assets').insert(resolvedRows)
+          }
         } catch (err) {
           console.warn('Could not save watchlist picks:', err)
         }

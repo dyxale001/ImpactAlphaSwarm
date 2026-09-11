@@ -1187,16 +1187,38 @@ def phase_3_synthesizer(state: AnalysisState) -> dict[str, Any]:
 
 
 def phase_4_output(state: AnalysisState) -> dict[str, Any]:
-    return _PHASES["phase_4_output"].run(state)
+    print("- Phase 4: Formatting output with reasoning traces...")
+
+    output = {
+        "run_id": state["run_id"],
+        "user_id": state["user_id"],
+        "risk_tolerance": state["risk_tolerance"],
+        "expertise_level": state["expertise_level"],
+        "top_5": state["final_rankings"],
+    }
+
+    print("Output ready for frontend:")
+    print(json.dumps(output, indent=2))
+    # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
+    # and watchlist cards need scores for assets outside the top 5. The dashboard
+    # still shows five, capped on its own read.
+    try:
+        save_res = save_top_assets(
+            run_id=state["run_id"],
+            user_id=state["user_id"],
+            top_5=state["final_rankings"],  # now contains all ranked assets
+            quant_results=state.get("quant_results", {}),
+            sentiment_results=state.get("sentiment_results", {}),
+        )
+        logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
+    except Exception as e:
+        logger.error(f"Failed to save top-5 to Supabase: {e}")
+
+    print("Output formatted and ready")
+    return {"status": "complete"}
 
 
-def build_graph(phases: dict[str, Phase] | None = None):
-    """Wire the phases into the analysis graph.
-
-    The two gathering phases both hang off phase 1 and both feed phase 3, which is
-    what makes quant and sentiment run in parallel.
-    """
-    phases = phases or _PHASES
+def build_graph():
     graph = StateGraph(AnalysisState)
 
     for name, phase in phases.items():

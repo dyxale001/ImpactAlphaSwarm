@@ -1168,6 +1168,16 @@ def save_top_assets(
     )
 
 
+# ---------------------------------------------------------------------------
+# Unified ranking v2 shadow log (see migrations/010)
+# ---------------------------------------------------------------------------
+# One row per (run, candidate) covering the WHOLE scoped set, not just the
+# surviving top 5. That breadth is the point: a strongly bearish asset never
+# reaches a top 5, and divergent hype names were already demoted out of it by the
+# old hype penalty, so neither the direction question nor the convergence term can
+# be evaluated from `ai_recommendation` alone.
+
+
 def save_ranking_shadow(run_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return _rankings.save_shadow(run_id, rows)
 

@@ -120,10 +120,16 @@ def test_narration_max_tokens_has_real_headroom():
 
 def test_truncated_single_asset_narration_is_rejected(monkeypatch):
     """GroqClient raising EmptyCompletionError on a truncated reply must
-    surface as _narrate_synthesis returning None — never a partial string."""
+    never surface the partial/truncated string itself. Since trusted
+    structured data IS available here, _narrate_synthesis now falls back to
+    a fully deterministic, data-grounded sentence (see
+    _deterministic_grounded_fallback) rather than the old generic refusal —
+    still never a fragment of the rejected Groq output."""
     _patch_narration_client(monkeypatch, _StubTruncatedClient())
     result = api._narrate_synthesis("What are the downsides of NVDA?", _RICH_ASSET)
-    assert result is None
+    assert result is not None
+    assert "1290 characters" not in result
+    assert "NVDA" in result
 
 
 def test_truncated_comparison_narration_is_rejected(monkeypatch):
@@ -137,9 +143,12 @@ def test_truncated_comparison_narration_is_rejected(monkeypatch):
 # ── 3. No partial/truncated answer ever reaches the user ───────────────────
 
 def test_context_synthesis_falls_back_to_no_data_message_on_truncation(monkeypatch):
-    """End-to-end through _ask_context_synthesis: when narration is truncated
-    (None), the AskResponse the API returns must carry the fixed
-    _ASK_NO_DATA_MESSAGE, never any fragment of what Groq generated."""
+    """End-to-end through _ask_context_synthesis: when narration is
+    truncated, the AskResponse must never carry any fragment of what Groq
+    generated. Trusted NVDA data is available, so the response is now the
+    deterministic grounded fallback rather than the old generic
+    _ASK_NO_DATA_MESSAGE — a real improvement (PART 11: don't claim data is
+    missing when it exists), still fully safe."""
     _patch_narration_client(monkeypatch, _StubTruncatedClient())
     monkeypatch.setattr(api, "_resolve_asset", lambda query: {"ticker": "NVDA"})
     monkeypatch.setattr(
@@ -149,7 +158,7 @@ def test_context_synthesis_falls_back_to_no_data_message_on_truncation(monkeypat
 
     response = api._ask_context_synthesis("What are the downsides of NVDA?", "fake-user-id")
 
-    assert response.narration == api._ASK_NO_DATA_MESSAGE
     assert response.intent == "CONTEXT_SYNTHESIS"
+    assert "NVDA" in response.narration
     # The rejected reply's characteristic text must not leak through.
     assert "1290 characters" not in response.narration
