@@ -5,20 +5,31 @@ Three jobs, all about determinism:
 1.  Put ``backend/`` on ``sys.path`` so ``import src.…`` works no matter which
     directory pytest was invoked from.
 
-2.  Give the Supabase client placeholder credentials if the environment has
-    none, so collection does not depend on a developer's ``.env``.
+2.  Load ``backend/.env`` first, then give the Supabase client placeholder
+    credentials if there are still none, so collection does not depend on a
+    developer's ``.env`` — but a developer's ``.env`` still wins when present.
 
 3.  Pin every env-tunable scoring constant to its DOCUMENTED DEFAULT before the
     modules under test are imported.
 
+4.  Stop tests from making real ask_query_logs writes.
+
 Point 2 is not hypothetical. ``supabase_client`` raises at *import* when
 ``SUPABASE_URL`` or ``SUPABASE_SERVICE_ROLE_KEY`` is missing, and several test
-modules import it transitively. Today the suite survives only because
+modules import it transitively. Without this, the suite survives only because
 ``langgraph_orchestrator`` calls ``load_dotenv()`` and a developer happens to have
 ``backend/.env`` — so in a fresh clone, a git worktree or CI, collection fails
 with four errors before a single test runs. ``setdefault`` leaves a real
 environment untouched; the placeholders only ever apply where there was nothing.
-Nothing in the suite reaches the network, so a fake URL is never dialled.
+
+The order matters. The Ask AlphaSwarm tests (``test_ask_learning``,
+``test_ask_recovery_and_metrics`` and friends) resolve tickers against the real
+``assets`` table and narrate through Groq, so they need the credentials in
+``.env``. If the placeholders were applied before ``.env`` was read, every one
+of those tests would dial ``localhost:54321`` and fail with a connection refused
+that looks like a regression. Loading ``.env`` here rather than trusting a
+transitive import to do it is what keeps the placeholder a fallback and not an
+override.
 
 Point 3 matters more than it looks. ``ranking.py``, ``quant_analyst.py`` and
 ``ss_aggregation.py`` all read their thresholds via ``os.getenv`` at *import*
@@ -32,24 +43,31 @@ them here wins. The values below are the defaults written into the source; if a
 default legitimately changes, update it here and the failing expectations will
 show you exactly which behaviour moved.
 
-3.  Stop tests from making real ask_query_logs writes. /api/ask now writes one
-    row per request (Admin Reports Chatbot instrumentation); every existing ask
-    test calls api.ask_alphaswarm directly and none of them mock Supabase for
-    this, so without the autouse fixture below every one of them would attempt
-    a real network call on every run.
+Point 4: /api/ask now writes one row per request (Admin Reports Chatbot
+instrumentation); every existing ask test calls api.ask_alphaswarm directly and
+none of them mock Supabase for this, so without the autouse fixture below every
+one of them would attempt a real network call on every run.
 """
 
 import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+# ── the developer's .env, before any fallback is chosen ──────────────────────
+# load_dotenv never overrides a variable that is already set, so a value exported
+# in the shell still beats the file, and the file beats the placeholders below.
+load_dotenv(BACKEND_ROOT / ".env")
+
 # ── credentials the client insists on at import ──────────────────────────────
 # setdefault, not assignment: a real environment must win, because some tests are
-# run against a scratch project deliberately.
+# run against a scratch project deliberately, and the Ask AlphaSwarm tests read
+# the real assets table.
 _IMPORT_TIME_REQUIRED = {
     "SUPABASE_URL": "http://localhost:54321",
     "SUPABASE_SERVICE_ROLE_KEY": "test-service-role-key",
