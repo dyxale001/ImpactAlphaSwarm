@@ -483,6 +483,52 @@ export const DETAIL_PERFORMANCE_TITLE = "Past returns, as published";
 export const DETAIL_PERFORMANCE_NOTE =
   "Published by the manager for the period ending on the fact sheet date. Past returns do not predict future returns.";
 
+/* ── The dashboard tile ──────────────────────────────────────────────────
+ *
+ * The one place the funds section touches the rest of the product: a tile
+ * named for the BRACKET and not for any fund. A dashboard is the most-read
+ * surface in the app, and a tile that named funds there would be the product
+ * choosing, which is the line the whole section is built to stay behind. So
+ * the tile shows the rating the answers score to, the ceiling that rating
+ * puts on a manager's published label, and the categories in play — and
+ * sends the reader to the page that lists the funds under that rule.
+ *
+ * Every value it prints comes off the same server bracket the funds page
+ * shows, so the two never disagree about what the answers map to.
+ */
+export const FUND_BRACKET_APPLIED_LABEL = "Risk bracket applied";
+
+export const FUND_BRACKET_CATEGORIES_LABEL = "Fund categories in play";
+
+/** Appended to a category where the curation rule admits index trackers only. */
+export const FUND_BRACKET_TRACKER_ONLY = "index trackers only";
+
+export const FUND_BRACKET_NONE =
+  "No fund carries a published risk label at or below yours yet.";
+
+/** Shown in place of the bracket when the risk questionnaire has not been
+ *  answered. States what the tile will show, not what the reader ought to do. */
+export const FUND_BRACKET_NO_PROFILE =
+  "Answer the risk questions in your profile and this tile shows the fund categories whose published risk labels sit at or below yours.";
+
+export const FUND_BRACKET_LOAD_FAILED =
+  "Unable to work out which fund categories your profile maps to right now.";
+
+export const FUND_BRACKET_ACTION = "See the funds in your bracket";
+
+/** The attribution a tile that shows risk labels has to carry, in one line. */
+export const FUND_BRACKET_PROVENANCE =
+  "Risk labels are the fund managers' own, from each fund's Minimum Disclosure Document.";
+
+/** "3 funds carry a published risk label at or below it." — the count the
+ *  tile leads its link with. Zero is a real outcome of a small catalogue and
+ *  gets its own sentence rather than "0 funds carry", which reads as a fault. */
+export function formatBracketCount(count: number): string {
+  if (count <= 0) return FUND_BRACKET_NONE;
+  const verb = count === 1 ? "carries" : "carry";
+  return `${formatFundCount(count)} ${verb} a published risk label at or below it.`;
+}
+
 /** Every string this module can put on screen, for the scan test. */
 export function allStrings(): string[] {
   return [
@@ -631,6 +677,18 @@ export function allStrings(): string[] {
     // separate strings once a formatter builds them.
     formatFundCount(1),
     formatFundCount(3),
+    // The dashboard tile.
+    FUND_BRACKET_APPLIED_LABEL,
+    FUND_BRACKET_CATEGORIES_LABEL,
+    FUND_BRACKET_TRACKER_ONLY,
+    FUND_BRACKET_NONE,
+    FUND_BRACKET_NO_PROFILE,
+    FUND_BRACKET_LOAD_FAILED,
+    FUND_BRACKET_ACTION,
+    FUND_BRACKET_PROVENANCE,
+    formatBracketCount(0),
+    formatBracketCount(1),
+    formatBracketCount(3),
   ].filter((text): text is string => Boolean(text));
 }
 

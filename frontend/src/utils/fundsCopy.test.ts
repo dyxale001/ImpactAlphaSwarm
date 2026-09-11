@@ -3,10 +3,12 @@ import { describe, it, expect } from 'vitest'
 import * as copy from './fundsCopy'
 import {
   FORBIDDEN_TERMS,
+  FUND_BRACKET_NONE,
   allStrings,
   factSheetAgeDays,
   findForbiddenTerms,
   formatAsAt,
+  formatBracketCount,
   formatFundCount,
   formatFundSize,
   formatMinTerm,
@@ -151,6 +153,20 @@ describe('formatMinTerm', () => {
     // Silence is not a claim, and the card omits the line.
     expect(formatMinTerm(null)).toBeNull()
     expect(formatMinTerm(0)).toBeNull()
+  })
+})
+
+describe('formatBracketCount', () => {
+  it('agrees the verb with the count', () => {
+    expect(formatBracketCount(1)).toBe('1 fund carries a published risk label at or below it.')
+    expect(formatBracketCount(3)).toBe('3 funds carry a published risk label at or below it.')
+  })
+
+  it('states an empty bracket as an outcome, not as a count of zero', () => {
+    // "0 funds carry" reads as a fault on a tile; the catalogue being small is
+    // a fact about the catalogue, and the sentence says so.
+    expect(formatBracketCount(0)).toBe(FUND_BRACKET_NONE)
+    expect(formatBracketCount(0)).not.toMatch(/^0 /)
   })
 })
 

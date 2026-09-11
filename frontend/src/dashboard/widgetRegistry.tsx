@@ -41,6 +41,8 @@ import {
   LearningProgressWidget,
   LearningNextWidget,
 } from "../components/dashboard/widgets/learningWidgets";
+import { FundBracketWidget } from "../components/dashboard/widgets/fundWidgets";
+import { FUNDS_ENABLED } from "../utils/fundsFlags";
 
 // The widget library: the single place a widget is declared.
 //
@@ -56,13 +58,20 @@ export type WidgetGroup =
   | "Watchlist"
   | "Sentiment"
   | "Whales"
+  | "Funds"
   | "Learning";
 
+// Funds is the one group behind a flag. The same VITE_FUNDS_ENABLED that mounts
+// the /funds route decides whether the drawer offers the group at all. With the
+// flag off the tile is never spread into WIDGETS, so a layout saved with it in
+// loses it the way it loses a retired widget, and the widget module is dead
+// code the bundler drops, as the page's already is.
 export const WIDGET_GROUPS: WidgetGroup[] = [
   "Signals",
   "Watchlist",
   "Sentiment",
   "Whales",
+  ...(FUNDS_ENABLED ? (["Funds"] as WidgetGroup[]) : []),
   "Learning",
 ];
 
@@ -228,6 +237,27 @@ export const WIDGETS: WidgetDef[] = [
     defaultSize: "medium",
     Component: TopFundsWidget,
   },
+
+  // ── Funds ──────────────────────────────────────────────────────────────
+  // Named for the bracket, not for any fund: a dashboard tile that listed funds
+  // would be the product choosing, which is what the section's design keeps
+  // behind. The tile shows the rating the answers score to and the categories
+  // in play, and links to the page that applies the rule.
+  ...(FUNDS_ENABLED
+    ? [
+        {
+          id: "fund-bracket",
+          title: "Your fund bracket",
+          blurb:
+            "The risk bracket your profile answers map to, and the fund categories in play.",
+          icon: Landmark,
+          group: "Funds",
+          sizes: ALL,
+          defaultSize: "medium",
+          Component: FundBracketWidget,
+        } satisfies WidgetDef,
+      ]
+    : []),
 
   // ── Learning ───────────────────────────────────────────────────────────
   {
