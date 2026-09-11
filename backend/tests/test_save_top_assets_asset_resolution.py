@@ -41,6 +41,10 @@ class _Query:
         self._filters[col] = value
         return self
 
+    def in_(self, col, values):
+        self._filters[col] = set(values)
+        return self
+
     def gt(self, *_a, **_k):
         self._filters["__gt__"] = True
         return self
@@ -92,7 +96,10 @@ class _Query:
         for col, val in self._filters.items():
             if col == "__gt__":
                 continue
-            results = [r for r in results if r.get(col) == val]
+            if isinstance(val, set):
+                results = [r for r in results if r.get(col) in val]
+            else:
+                results = [r for r in results if r.get(col) == val]
         limit = getattr(self, "_limit", None)
         if limit is not None:
             results = results[:limit]
@@ -124,11 +131,30 @@ def _asset(rank, ticker, score=80):
     }
 
 
+class _FixedPrices:
+    """Stands in for supabase_client.zar_prices, which RecommendationWriter uses
+    for its concurrent price lookups."""
+
+    def fx_rate(self, _currency):
+        return 1.0
+
+    def price_in_zar(self, _ticker):
+        return 100.0
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
     # save_top_assets falls back to a live price fetch when no price_cache
     # entry exists; keep everything in-process for these tests.
     monkeypatch.setattr(sc, "fetch_price_at_run_in_zar", lambda ticker: 100.0)
+    monkeypatch.setattr(sc, "zar_prices", _FixedPrices())
+
+    # phase_4_output marks the run complete and publishes progress once a save
+    # lands; keep those writes off the live ai_runs table.
+    import src.orchestration.langgraph_orchestrator as orch
+
+    monkeypatch.setattr(orch, "update_ai_run_status", lambda *_a, **_k: None)
+    monkeypatch.setattr(orch, "update_ai_run_progress", lambda *_a, **_k: None)
 
 
 def test_get_or_create_asset_id_returns_none_instead_of_raising(monkeypatch):

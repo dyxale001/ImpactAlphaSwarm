@@ -126,9 +126,18 @@ class RecommendationWriter:
             )
 
         if not rows:
-            return {"status": "no_rows"}
+            # Every ranked ticker failed asset resolution (a batch of watchlist
+            # tickers with no assets row, say). That is a failed save, not the
+            # benign "nothing to save" case above: nothing was cleared or written,
+            # so the previous run's rows still sit under this run_id and the
+            # caller must not report the run complete.
+            return {"status": "resolution_failed", "requested": len(ranked)}
 
-        return self._insert(run_id, rows)
+        result = self._insert(run_id, rows)
+        # Counts let the caller tell a full save from a partial one (some tickers
+        # skipped for lack of a resolvable asset) without re-deriving it.
+        result.update(requested=len(ranked), saved=len(rows))
+        return result
 
     # -- batched gathers ---------------------------------------------------
 
