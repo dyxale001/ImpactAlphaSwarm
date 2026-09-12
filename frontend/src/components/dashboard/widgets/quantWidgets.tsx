@@ -3,9 +3,22 @@ import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import { HORIZON_SETTING, readHorizon } from "../../../dashboard/quantWidgetSettings";
 import { useAssetDetails } from "../../../hooks/useAssetDetails";
 import { useQuantHistory } from "../../../hooks/useQuantHistory";
-import QuantMetricsPanel from "../../research/QuantMetricsPanel";
+import { PercentileTrack, ordinal } from "../../research/QuantMetricsPanel";
 import { HorizonPicker, QuantTrendChart } from "../../research/QuantTrendChart";
-import { PERCENTILE_CAPTION } from "../../../data/quantExplainers";
+import {
+  BETA_BANDS,
+  BETA_BAND_MEANING,
+  INSUFFICIENT_UNIVERSE_NOTE,
+  NO_DATA_NOTE,
+  PERCENTILE_CAPTION,
+  RSI_BANDS,
+  RSI_BAND_MEANING,
+  SUB_DIMENSIONS,
+  SUB_DIMENSION_ORDER,
+  type BetaBand,
+  type RsiBand,
+  type SubDimensionKey,
+} from "../../../data/quantExplainers";
 import { WidgetEmpty, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChrome";
 
 // Quant widgets: the asset page's Quant tab, one card at a time, each scoped to
@@ -120,11 +133,132 @@ export function QuantReadingWidget({ ticker, setTicker }: WidgetProps) {
   return (
     <div className="space-y-3">
       {header}
-      {/* Relative to the other assets in THIS user's run. The caption travels
-          with the numbers because a dashboard card is where a percentile is most
-          easily read as an absolute score. */}
-      <p className="text-[11px] text-brand-muted-fg">{PERCENTILE_CAPTION}</p>
-      <QuantMetricsPanel recommendation={recommendation} />
+      <QuantReadingCompact recommendation={recommendation} />
     </div>
   );
+}
+
+function formatMetric(value: unknown, digits: number) {
+  return typeof value === "number" ? value.toFixed(digits) : "—";
+}
+
+/**
+ * The Quant tab's measurements panel cut down to what a card can hold: each
+ * sub-dimension as its name, its percentile and the position track, then the
+ * two context readings as chips with their one-line meaning. The subtitles,
+ * the per-row explainers and the raw-metrics grid stay on the asset page, one
+ * click away through the header link.
+ *
+ * What is kept is not arbitrary. The track is what stops a percentile reading
+ * as a score, and the band meanings are D-122's plain-language explanation of
+ * RSI and beta, which a beginner needs wherever the numbers appear.
+ */
+function QuantReadingCompact({
+  recommendation,
+}: {
+  recommendation: Record<string, unknown>;
+}) {
+  const normalisation = recommendation.quant_normalisation ?? null;
+  const percentiles: Record<SubDimensionKey, number | null> = {
+    momentum: numberOrNull(recommendation.momentum_pctile),
+    risk_adjusted_return: numberOrNull(recommendation.risk_adj_pctile),
+    stability: numberOrNull(recommendation.stability_pctile),
+  };
+  const rsiBand = (recommendation.rsi_band ?? null) as RsiBand | null;
+  const betaBand = (recommendation.beta_band ?? null) as BetaBand | null;
+  const hasPercentiles = SUB_DIMENSION_ORDER.some((k) => percentiles[k] !== null);
+  const hasBands = rsiBand !== null || betaBand !== null;
+
+  if (normalisation === "no_data") {
+    return <WidgetEmpty grow message={NO_DATA_NOTE} />;
+  }
+  if (!hasPercentiles && !hasBands) {
+    return (
+      <WidgetEmpty
+        grow
+        message={
+          normalisation === "insufficient_universe"
+            ? INSUFFICIENT_UNIVERSE_NOTE
+            : "This run recorded no quant reading for the asset."
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {hasPercentiles ? (
+        <div className="space-y-3">
+          {SUB_DIMENSION_ORDER.map((key) => {
+            const pctile = percentiles[key];
+            return (
+              <div key={key}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+                    {SUB_DIMENSIONS[key].label}
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-sm font-semibold text-brand-fg">
+                    {pctile !== null ? `${ordinal(Math.round(pctile))} percentile` : "—"}
+                  </span>
+                </div>
+                {pctile !== null && <PercentileTrack pctile={pctile} />}
+              </div>
+            );
+          })}
+          {/* Relative to the other assets in THIS user's run. Said under the
+              tracks because a dashboard card is where a percentile is most
+              easily read as an absolute score. */}
+          <p className="text-[11px] text-brand-muted-fg">{PERCENTILE_CAPTION}</p>
+        </div>
+      ) : (
+        normalisation === "insufficient_universe" && (
+          <p className="text-xs text-brand-muted-fg">{INSUFFICIENT_UNIVERSE_NOTE}</p>
+        )
+      )}
+
+      {hasBands && (
+        <div className="space-y-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+            Context readings
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {rsiBand && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1 text-xs">
+                <span className="font-mono font-semibold text-brand-fg">
+                  RSI {formatMetric(recommendation.rsi, 0)}
+                </span>
+                {/* Neutral slate on purpose: colouring "oversold" green would
+                    re-encode the buy signal the bands replace. */}
+                <span className="font-medium text-slate-600">{RSI_BANDS[rsiBand]}</span>
+              </span>
+            )}
+            {betaBand && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1 text-xs">
+                <span className="font-mono font-semibold text-brand-fg">
+                  Beta {formatMetric(recommendation.beta, 2)}
+                </span>
+                <span className="font-medium text-slate-600">{BETA_BANDS[betaBand]}</span>
+              </span>
+            )}
+          </div>
+          <div className="space-y-1 text-[11px] text-brand-fg/80">
+            {rsiBand && (
+              <p>
+                <span className="font-medium text-brand-fg">RSI:</span> {RSI_BAND_MEANING[rsiBand]}
+              </p>
+            )}
+            {betaBand && (
+              <p>
+                <span className="font-medium text-brand-fg">Beta:</span> {BETA_BAND_MEANING[betaBand]}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

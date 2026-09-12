@@ -34,7 +34,7 @@ function sentenceCase(text: string) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function ordinal(n: number) {
+export function ordinal(n: number) {
   const v = n % 100;
   if (v >= 11 && v <= 13) return `${n}th`;
   switch (n % 10) {
@@ -53,7 +53,7 @@ function ordinal(n: number) {
 // filled bar reads as "score, more = better", which is the covert verdict the
 // sub-dimensions exist to avoid. Same reason the marker is a single brand
 // colour: no red-to-green gradient.
-function PercentileTrack({ pctile }: { pctile: number }) {
+export function PercentileTrack({ pctile }: { pctile: number }) {
   const pos = Math.max(2, Math.min(98, pctile));
   return (
     <div className="relative h-1.5 w-full bg-background rounded-full mt-2">
