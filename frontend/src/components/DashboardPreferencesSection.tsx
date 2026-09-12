@@ -132,12 +132,17 @@ export default function DashboardPreferencesSection() {
         <div className="flex flex-wrap gap-1.5">
           {layout.widgets.map((w) => {
             const def = widgetById(w.id);
+            const ticker =
+              def?.needsTicker && typeof w.settings?.ticker === "string"
+                ? w.settings.ticker
+                : null;
             return def ? (
               <span
-                key={w.id}
+                key={w.instanceId}
                 className="rounded-full border border-brand-border/60 px-2 py-0.5 text-[11px] text-brand-muted-fg"
               >
                 {def.title}
+                {ticker ? ` · ${ticker}` : ""}
               </span>
             ) : null;
           })}

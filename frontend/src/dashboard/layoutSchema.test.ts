@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  allowsMultiple,
   arrayMove,
   emptyLayout,
+  newInstanceId,
   parseLayout,
   LAYOUT_VERSION,
   type WidgetSpecMap,
@@ -37,8 +39,8 @@ describe("parseLayout", () => {
     expect(parsed).toEqual({
       version: 2,
       widgets: [
-        { id: "top-pick", size: "medium" },
-        { id: "run-status", size: "small", settings: { foo: 1 } },
+        { id: "top-pick", instanceId: "top-pick", size: "medium" },
+        { id: "run-status", instanceId: "run-status", size: "small", settings: { foo: 1 } },
       ],
     });
   });
@@ -56,7 +58,7 @@ describe("parseLayout", () => {
       SPEC,
     );
 
-    expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
+    expect(parsed?.widgets).toEqual([{ id: "top-pick", instanceId: "top-pick", size: "wide" }]);
   });
 
   it("falls back to the default when the size is one the widget does not offer", () => {
@@ -67,7 +69,7 @@ describe("parseLayout", () => {
       SPEC,
     );
 
-    expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
+    expect(parsed?.widgets).toEqual([{ id: "top-pick", instanceId: "top-pick", size: "wide" }]);
   });
 
   it("falls back to the default when the size is not a size at all", () => {
@@ -76,22 +78,115 @@ describe("parseLayout", () => {
       SPEC,
     );
 
-    expect(parsed?.widgets).toEqual([{ id: "run-status", size: "small" }]);
+    expect(parsed?.widgets).toEqual([{ id: "run-status", instanceId: "run-status", size: "small" }]);
   });
 
-  it("keeps only the first copy of a repeated widget", () => {
-    // Two copies would fight over one settings object.
+  it("keeps only the first copy of a widget that is not ticker-scoped", () => {
+    // A second run-status would show the same thing twice.
     const parsed = parseLayout(
       {
         widgets: [
-          { id: "top-pick", size: "wide" },
-          { id: "top-pick", size: "medium" },
+          { id: "top-pick", instanceId: "a", size: "wide" },
+          { id: "top-pick", instanceId: "b", size: "medium" },
         ],
       },
       SPEC,
     );
 
-    expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
+    expect(parsed?.widgets).toEqual([{ id: "top-pick", instanceId: "a", size: "wide" }]);
+  });
+
+  describe("instances", () => {
+    it("gives a v2 entry its widget id as its instance id", () => {
+      // A v2 board held each widget once, so the id was already unique, and
+      // taking it means the first read after the upgrade changes nothing.
+      const parsed = parseLayout(
+        { version: 2, widgets: [{ id: "social-buzz", size: "medium" }] },
+        SPEC,
+      );
+      expect(parsed?.widgets[0].instanceId).toBe("social-buzz");
+    });
+
+    it("keeps two copies of a ticker-scoped widget, each with its own asset", () => {
+      const parsed = parseLayout(
+        {
+          version: 3,
+          widgets: [
+            { id: "social-buzz", instanceId: "social-buzz:a", size: "medium", settings: { ticker: "NVDA" } },
+            { id: "social-buzz", instanceId: "social-buzz:b", size: "wide", settings: { ticker: "GOOG" } },
+          ],
+        },
+        SPEC,
+      );
+      expect(parsed?.widgets).toEqual([
+        { id: "social-buzz", instanceId: "social-buzz:a", size: "medium", settings: { ticker: "NVDA" } },
+        { id: "social-buzz", instanceId: "social-buzz:b", size: "wide", settings: { ticker: "GOOG" } },
+      ]);
+    });
+
+    it("drops a second entry that repeats an instance id", () => {
+      const parsed = parseLayout(
+        {
+          widgets: [
+            { id: "social-buzz", instanceId: "same", size: "medium" },
+            { id: "social-buzz", instanceId: "same", size: "wide" },
+          ],
+        },
+        SPEC,
+      );
+      expect(parsed?.widgets).toEqual([{ id: "social-buzz", instanceId: "same", size: "medium" }]);
+    });
+
+    it("gives a repeated ticker-scoped entry with no instance id a fresh one", () => {
+      // Two copies with no instance id can only come from a hand-edited row;
+      // the reader put two there, and for this widget that is allowed.
+      const parsed = parseLayout(
+        {
+          widgets: [
+            { id: "social-buzz", size: "medium" },
+            { id: "social-buzz", size: "wide" },
+          ],
+        },
+        SPEC,
+      );
+      expect(parsed?.widgets).toHaveLength(2);
+      expect(parsed?.widgets[0].instanceId).toBe("social-buzz");
+      expect(parsed?.widgets[1].instanceId).toMatch(/^social-buzz:/);
+      expect(parsed?.widgets[1].instanceId).not.toBe("social-buzz");
+    });
+
+    it("treats a blank instance id as missing", () => {
+      const parsed = parseLayout(
+        { widgets: [{ id: "run-status", instanceId: "  ", size: "small" }] },
+        SPEC,
+      );
+      expect(parsed?.widgets[0].instanceId).toBe("run-status");
+
+      // Blank on a repeat is minted fresh like an absent one, not dropped like
+      // a genuine duplicate.
+      const twice = parseLayout(
+        {
+          widgets: [
+            { id: "social-buzz", size: "medium" },
+            { id: "social-buzz", instanceId: "", size: "wide" },
+          ],
+        },
+        SPEC,
+      );
+      expect(twice?.widgets).toHaveLength(2);
+    });
+
+    it("mints instance ids that name the widget and never repeat", () => {
+      const ids = new Set(Array.from({ length: 50 }, () => newInstanceId("social-buzz")));
+      expect(ids.size).toBe(50);
+      for (const id of ids) expect(id.startsWith("social-buzz:")).toBe(true);
+    });
+
+    it("only ticker-scoped widgets allow more than one copy", () => {
+      expect(allowsMultiple(SPEC["social-buzz"])).toBe(true);
+      expect(allowsMultiple(SPEC["top-pick"])).toBe(false);
+      expect(allowsMultiple(undefined)).toBe(false);
+    });
   });
 
   it("normalises a widget's own ticker and drops a blank one", () => {
@@ -117,7 +212,7 @@ describe("parseLayout", () => {
     );
 
     expect(parsed?.widgets).toEqual([
-      { id: "social-buzz", size: "medium", settings: { sort: "added" } },
+      { id: "social-buzz", instanceId: "social-buzz", size: "medium", settings: { sort: "added" } },
     ]);
   });
 
@@ -138,9 +233,9 @@ describe("parseLayout", () => {
     );
 
     expect(parsed?.widgets).toEqual([
-      { id: "social-buzz", size: "medium", settings: { ticker: "NVDA" } },
+      { id: "social-buzz", instanceId: "social-buzz", size: "medium", settings: { ticker: "NVDA" } },
       // Not ticker-scoped, so it gets nothing.
-      { id: "run-status", size: "small" },
+      { id: "run-status", instanceId: "run-status", size: "small" },
     ]);
     // The field itself does not survive, so the migration runs exactly once.
     expect(parsed).not.toHaveProperty("pinnedTicker");
@@ -191,7 +286,7 @@ describe("parseLayout", () => {
       SPEC,
     );
 
-    expect(parsed?.widgets).toEqual([{ id: "top-pick", size: "wide" }]);
+    expect(parsed?.widgets).toEqual([{ id: "top-pick", instanceId: "top-pick", size: "wide" }]);
   });
 
   it("defaults a missing version", () => {

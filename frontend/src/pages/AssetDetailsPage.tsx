@@ -8,7 +8,6 @@ import {
   MessageSquare,
   TriangleAlert,
   HelpCircle,
-  Scale,
   ArrowRight,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
@@ -16,13 +15,14 @@ import SignalScorecard, {
   type SignalTerms,
 } from "../components/dashboard/SignalScorecard";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
-import {
-  CONVERGENCE_DETAIL,
-  QUANT_STATE_NOTE,
-  type ConvergenceState,
-} from "../data/signalCopy";
+import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
+import {
+  HorizonPicker,
+  QuantTrendChart,
+} from "../components/research/QuantTrendChart";
+import { QuantTracePanel } from "../components/research/QuantTracePanel";
 import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
@@ -38,6 +38,11 @@ import {
 } from "../components/research/sentimentDisplay";
 import { useAssetDetails } from "../hooks/useAssetDetails";
 import { useSentimentHistory } from "../hooks/useSentimentHistory";
+import { useQuantHistory } from "../hooks/useQuantHistory";
+import {
+  DEFAULT_QUANT_HORIZON,
+  type QuantHorizon,
+} from "../data/quantExplainers";
 import { HUB_PAGE_LABELS, readLastHubPage } from "../utils/lastHubPage";
 import {
   NEWS_LOOKBACK_DAYS,
@@ -387,6 +392,11 @@ export default function AssetDetailsPage() {
       : "ranking";
   });
 
+  // The Quant tab's window. Fetched only while that tab is showing: a reader who opened
+  // the page for the ranking should not cost a price fetch for a chart they never saw.
+  const [horizon, setHorizon] = useState<QuantHorizon>(DEFAULT_QUANT_HORIZON);
+  const quantHistory = useQuantHistory(ticker?.toUpperCase(), horizon, tab === "quant");
+
   // Per-day news for the chart's second line: the history the backend stored where it
   // has any, and only otherwise the figure derived here from the run's article list.
   //
@@ -463,37 +473,6 @@ export default function AssetDetailsPage() {
     profileFit: recommendation?.profile_fit ?? null,
     quantState: recommendation?.quant_state ?? null,
   };
-
-  // Only surface a factor when it actually affected placement. Listing all four
-  // every time (including a profile fit of 1.00 that changed nothing) is noise,
-  // and noise is what made the old penalty panel unreadable.
-  const placementNotes: string[] = [];
-  if (convergenceState === "conflict" || convergenceState === "mixed") {
-    placementNotes.push(CONVERGENCE_DETAIL[convergenceState]);
-  }
-  if (
-    typeof signalTerms.dataSufficiency === "number" &&
-    signalTerms.dataSufficiency < 0.75
-  ) {
-    placementNotes.push(
-      "Ranked lower because there is relatively little to go on: fewer trusted articles, posts or days of price history than for other candidates. That reflects what we know, not the asset itself.",
-    );
-  }
-  if (typeof signalTerms.profileFit === "number" && signalTerms.profileFit < 1) {
-    placementNotes.push(
-      "Ranked lower for you specifically: it moves more sharply than the risk preference you set during onboarding. Another user with a different preference would see it placed differently.",
-    );
-  }
-  if (signalTerms.quantState && signalTerms.quantState !== "cross_sectional") {
-    placementNotes.push(
-      QUANT_STATE_NOTE[signalTerms.quantState] ??
-        "The price measurements could not be ranked for this run.",
-    );
-  }
-  const needsAttention =
-    convergenceState === "conflict" ||
-    (typeof signalTerms.dataSufficiency === "number" &&
-      signalTerms.dataSufficiency < 0.75);
 
   return (
     <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
@@ -593,7 +572,7 @@ export default function AssetDetailsPage() {
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className={showScorecard ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
                   <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
                     <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
                       <BrainCircuit className="w-3 h-3 text-brand-primary" />
@@ -604,41 +583,11 @@ export default function AssetDetailsPage() {
                     </p>
                   </div>
 
-                  {/* Under the disclosed factors this panel reports WHY the asset
-                      placed where it did. The old version listed the hype and risk
-                      penalties — the mechanism convergence replaced — so it
-                      described arithmetic that no longer happens. */}
-                  {showScorecard ? (
-                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
-                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                        <Scale className="w-3 h-3 text-brand-primary" />
-                        What moved this asset
-                      </div>
-
-                      {placementNotes.length > 0 ? (
-                        <ul className="space-y-2 text-sm text-brand-fg/90">
-                          {placementNotes.map((note) => (
-                            <li key={note} className="leading-relaxed">
-                              {note}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-sm leading-relaxed text-brand-muted-fg">
-                          Nothing stood out: the signals agree, the evidence is
-                          reasonably deep, and the volatility matches the risk
-                          preference on file.
-                        </p>
-                      )}
-
-                      {needsAttention && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                          <TriangleAlert className="w-4 h-4" />
-                          Worth a closer look before drawing conclusions
-                        </div>
-                      )}
-                    </div>
-                  ) : (
+                  {/* The legacy penalty panel, for rows without the disclosed factors.
+                      Under the disclosed factors the trace stands alone: the
+                      "what moved this asset" notes were cut on review, since the
+                      scorecard beside the trace already names each factor. */}
+                  {!showScorecard && (
                     <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Flame className="w-3 h-3 text-brand-primary" />
@@ -813,7 +762,56 @@ export default function AssetDetailsPage() {
           icon={BarChart3}
           action={<ExplainerLink ticker={asset.ticker} section="quant" />}
         >
-          <QuantMetricsPanel recommendation={recommendation} />
+          {/* One wrapper, for the same reason the sentiment card has one: the card's
+              uniform space-y would otherwise put the window switch, the chart and the
+              measurements all exactly as far apart as each other. */}
+          <div className="space-y-5">
+            {/* The window switch first, then the chart, then the tab's own reasoning
+                trace of that chart, then the run's own measurements. The chart leads
+                so the paragraph is read against the line it describes (a departure
+                from D-125's trace-first order, chosen on review). The switch sits
+                above both rather than on the chart so it is found before the two
+                things it changes. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-brand-muted-fg">
+                Price history over a window you choose, shown in rand. The
+                measurements further down come from the most recent analysis run.
+              </p>
+              <HorizonPicker value={horizon} onChange={setHorizon} />
+            </div>
+
+            <QuantTrendChart
+              points={quantHistory.points}
+              facts={quantHistory.facts}
+              currency={quantHistory.currency}
+              displayCurrency={quantHistory.displayCurrency}
+              fxRate={quantHistory.fxRate}
+              converted={quantHistory.converted}
+              exchangeName={quantHistory.exchangeName}
+              horizon={horizon}
+              available={quantHistory.available}
+              isLoading={quantHistory.isLoading}
+              error={quantHistory.error}
+            />
+
+            {/* Held back while the chart's own answer says the feature is off, so the
+                tab does not show two panels explaining the same absence. Once the
+                window has answered, the panel decides for itself. */}
+            {quantHistory.available && (
+              <QuantTracePanel
+                ticker={asset.ticker}
+                horizon={horizon}
+                active={tab === "quant"}
+              />
+            )}
+
+            <div className="pt-4 border-t border-brand-border/50">
+              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-3">
+                From the latest analysis run
+              </p>
+              <QuantMetricsPanel recommendation={recommendation} />
+            </div>
+          </div>
         </SectionCard>
       )}
 

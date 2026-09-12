@@ -134,3 +134,101 @@ export const INSUFFICIENT_UNIVERSE_NOTE =
 
 export const NO_DATA_NOTE =
   "Not enough price history was available for this asset in this run, so the quantitative measurements couldn't be computed.";
+
+// ── D-122: the direction of "good", stated ─────────────────────────────────
+//
+// A percentile with no stated direction is as opaque as the raw number it replaced.
+// "78th percentile" on stability does not say whether that is steady or jumpy, and it
+// differs per row: on momentum higher means a stronger trend, on stability higher means
+// a calmer price. So every row carries one sentence saying which way is which, and one
+// plain reading that turns the ordinal into a comparison a beginner can picture.
+//
+// Still not a verdict. "Steadier than about 8 in 10 peers" is a fact about the past
+// window; whether steadiness is what a reader wants depends on the reader.
+export const SUB_DIMENSION_DIRECTION: Record<SubDimensionKey, string> = {
+  momentum: "Higher means a stronger recent price trend, in either direction of travel.",
+  risk_adjusted_return:
+    "Higher means more past return for each unit of turbulence along the way.",
+  stability: "Higher means a steadier price from day to day; lower means a jumpier one.",
+};
+
+// The word a row uses for "more of this", so the reading below can say what a high
+// rank means in this row's own terms.
+const SUB_DIMENSION_QUALITY: Record<SubDimensionKey, { high: string; low: string }> = {
+  momentum: { high: "a stronger trend", low: "a weaker trend" },
+  risk_adjusted_return: {
+    high: "more return per unit of turbulence",
+    low: "less return per unit of turbulence",
+  },
+  stability: { high: "a steadier price", low: "a jumpier price" },
+};
+
+// "in the 82nd percentile" as something a reader can picture: how many of ten peers
+// this asset sat above. Rounded to whole peers; the middle of the pack is named as such
+// rather than as "above 5 in 10", which sounds like a claim.
+export function percentileReading(key: SubDimensionKey, pctile: number): string {
+  const tenths = Math.round(pctile / 10);
+  const quality = SUB_DIMENSION_QUALITY[key];
+  if (tenths >= 9) return `${quality.high} than nearly every other asset in this run`;
+  if (tenths <= 1) return `${quality.low} than nearly every other asset in this run`;
+  if (tenths >= 4 && tenths <= 6) return `about the middle of this run's assets`;
+  const noun = tenths >= 7 ? quality.high : quality.low;
+  const count = tenths >= 7 ? tenths : 10 - tenths;
+  return `${noun} than about ${count} in 10 assets in this run`;
+}
+
+// One line under each band chip saying what the label means for a reader who has not
+// met the term, stated as description rather than as a cue. Both extremes of RSI are
+// "notable"; neither is an instruction.
+export const RSI_BAND_MEANING: Record<RsiBand, string> = {
+  oversold:
+    "The price has fallen fast recently by this measure. That is a description of the move, not a sign it will recover.",
+  neutral:
+    "Recent price moves have been moderate by this measure, neither sharply up nor sharply down.",
+  overbought:
+    "The price has risen fast recently by this measure. That is a description of the move, not a sign it will fall.",
+};
+
+export const BETA_BAND_MEANING: Record<BetaBand, string> = {
+  inverse:
+    "Over the window this price tended to move opposite to the wider market. Unusual, and worth knowing about, but not a quality in itself.",
+  low: "Over the window this price moved less than the wider market did, in both directions.",
+  market: "Over the window this price moved roughly in step with the wider market.",
+  high: "Over the window this price swung more than the wider market did, in both directions.",
+};
+
+// ── The historical window (D-125 horizons) ─────────────────────────────────
+
+export type QuantHorizon = "1M" | "6M" | "3Y" | "5Y";
+
+export const QUANT_HORIZONS: QuantHorizon[] = ["1M", "6M", "3Y", "5Y"];
+export const DEFAULT_QUANT_HORIZON: QuantHorizon = "6M";
+
+export const QUANT_HORIZON_LABELS: Record<QuantHorizon, string> = {
+  "1M": "the last month",
+  "6M": "the last six months",
+  "3Y": "the last three years",
+  "5Y": "the last five years",
+};
+
+// What the chart is and is not. The price line is public closes; the RSI line under it
+// is the same arithmetic the run's own reading uses, drawn at every day instead of the
+// last one. Neither is a signal to act on.
+export const QUANT_CHART_NOTE =
+  "Closing prices in the asset's own listing currency, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
+
+// The same note once the window is in rand, which it is whenever the day's rate could be
+// fetched. Converting every close at one rate keeps the share's own moves and the
+// exchange rate's moves apart: the line is the share, and the rate is stated beside it.
+export const QUANT_CHART_NOTE_RAND =
+  "Closing prices shown in rand, every day converted at the same rate stated above, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
+
+export const QUANT_CHART_UNAVAILABLE =
+  "The historical view is not switched on for this deployment. The measurements below still describe the most recent analysis.";
+
+export const QUANT_CHART_EMPTY =
+  "No price history could be fetched for this asset over this window.";
+
+// The Quant tab's own reasoning trace: what it was written from and what it will not do.
+export const QUANT_TRACE_DISCLOSURE =
+  "Written from the window's own figures and this asset's stored measurements only. It describes past price behaviour; it does not predict, rate or advise.";

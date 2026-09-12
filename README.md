@@ -39,8 +39,9 @@ ImpactAlphaSwarm/
 │   │   ├── agents/                   # sentiment_scout, quant_analyst, asset_discovery, gcp_nlp
 │   │   ├── orchestration/            # LangGraph orchestrator + unified ranking
 │   │   ├── funds/                    # funds catalogue: classification, matcher, fact sheets (flagged off)
+│   │   ├── quant/                    # Quant tab: price/RSI window and reasoning trace (flagged off)
 │   │   └── utils/                    # Supabase client, sentiment modules, whale watching, traces
-│   ├── migrations/                   # 001-026, applied in the Supabase SQL editor
+│   ├── migrations/                   # 001-027, applied in the Supabase SQL editor
 │   ├── data/funds/                   # transcribed fact-sheet seed for the funds catalogue
 │   ├── scripts/                      # ranking shadow / stability reports, fund seed loader
 │   ├── tests/                        # pytest suite
@@ -87,19 +88,23 @@ From your Supabase project:
 ### Step 1.2: Apply the Migrations
 
 `backend/migrations/` holds the schema changes made since the base tables, in
-numbered order (001 through 026): news and social sentiment columns, the quant
+numbered order (001 through 027): news and social sentiment columns, the quant
 sub-dimensions, the whale-watching and news caches, asset discovery, entity
-descriptions, the unified ranking tables, the sentiment day summaries, the funds
-catalogue, the rest of what a fact sheet publishes, and the fact-sheet text
-archive.
+descriptions, the unified ranking tables, the daily sentiment history and its
+generated day summaries, the dashboard layout, the funds catalogue and its
+fact-sheet archive (024-026), and the Quant tab's reasoning traces (027).
+Migrations behind a feature flag (019-023, the funds migrations 024-026, and 027)
+are only needed once that flag is switched on; the backend never touches their
+tables before then.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
 
-Migrations 024, 025 and 026 are the only ones you can skip: together they create
-the funds catalogue, which does nothing until `FUNDS_ENABLED` is set. Apply all
-three before turning that flag on, not after — the page needs the tables and a
-loaded seed to show anything, and 025 adds columns the seed now fills.
+Migrations 024, 025 and 026 together create the funds catalogue, which does
+nothing until `FUNDS_ENABLED` is set. Apply all three before turning that flag
+on, not after — the page needs the tables and a loaded seed to show anything,
+and 025 adds columns the seed now fills. Likewise 027 is only needed once
+`QUANT_TRACE_ENABLED` is set.
 
 ---
 
@@ -338,6 +343,8 @@ UNIFIED_RANKING_ENABLED         → (Optional) four-factor ordering, default fal
 UNIFIED_RANKING_SHADOW          → (Optional) record without reordering, default true
 FUNDS_ENABLED                   → (Optional) serve the funds catalogue, default false
 FUND_TRACES_ENABLED             → (Optional) LLM fund explanations, default false
+QUANT_HISTORY_ENABLED           → (Optional) Quant tab price/RSI window over 1M-5Y, default false
+QUANT_TRACE_ENABLED             → (Optional) Quant tab reasoning trace (needs 027 + history), default false
 ```
 
 Further tuning variables (discovery thresholds, news weighting, quant window,
@@ -354,6 +361,6 @@ VITE_FUNDS_ENABLED              → (Optional) "true" shows the Funds page and n
 
 ---
 
-**Last Updated**: August 10, 2026
+**Last Updated**: September 12, 2026
 **Project**: ImpactAlphaSwarm - Information Systems Honours Project
 **Stack**: Python FastAPI + LangGraph + React + TypeScript + Supabase

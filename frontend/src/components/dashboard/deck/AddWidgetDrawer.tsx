@@ -18,11 +18,15 @@ import {
 export default function AddWidgetDrawer({
   open,
   available,
+  placed,
   onAdd,
   onClose,
 }: {
   open: boolean;
   available: WidgetDef[];
+  /** Widget ids already on the board. A ticker-scoped widget stays in the list
+   *  while placed, and this is what lets its row say so. */
+  placed?: Set<string>;
   onAdd: (id: string) => void;
   onClose: () => void;
 }) {
@@ -125,8 +129,17 @@ export default function AddWidgetDrawer({
                           {widget.blurb}
                         </span>
                         {widget.needsTicker ? (
-                          <span className="mt-1.5 inline-block rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] text-white">
-                            Picks its own asset
+                          <span className="mt-1.5 inline-flex flex-wrap gap-1">
+                            <span className="inline-block rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] text-white">
+                              Picks its own asset
+                            </span>
+                            {/* Already on the board, and offered again on
+                                purpose: another copy can watch another asset. */}
+                            {placed?.has(widget.id) ? (
+                              <span className="inline-block rounded-full border border-brand-border/60 px-1.5 py-0.5 text-[10px] text-brand-muted-fg">
+                                Add another for a different asset
+                              </span>
+                            ) : null}
                           </span>
                         ) : null}
                       </span>

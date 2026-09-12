@@ -35,6 +35,7 @@ export default function DashboardPage() {
     layout,
     placedWidgets,
     availableWidgets,
+    placedIds,
     needsGuide,
     activity,
     isEditing,
@@ -128,8 +129,8 @@ export default function DashboardPage() {
             </p>
             <p className="max-w-sm text-xs leading-relaxed text-brand-muted-fg">
               Add the pieces you want to see. Your watchlist, the assets your
-              latest run ranked, sentiment, insider activity and your learning
-              progress are all available.
+              latest run ranked, sentiment, price history, insider activity and
+              your learning progress are all available.
             </p>
             <button
               type="button"
@@ -155,7 +156,7 @@ export default function DashboardPage() {
               // makes the whole grid cell the drop target, including the gap
               // around the card that its own padding leaves.
               <div
-                key={entry.id}
+                key={entry.instanceId}
                 className={SIZE_CLASS[entry.size]}
                 // Draggable only in edit mode: a draggable card in normal use
                 // hijacks text selection and turns a stray swipe into a layout
@@ -166,7 +167,7 @@ export default function DashboardPage() {
                     ? (e) => {
                         // Firefox refuses to start a drag with nothing on the
                         // transfer.
-                        e.dataTransfer.setData("text/plain", entry.id);
+                        e.dataTransfer.setData("text/plain", entry.instanceId);
                         e.dataTransfer.effectAllowed = "move";
                         setDragFrom(index);
                       }
@@ -196,14 +197,17 @@ export default function DashboardPage() {
                 <WidgetFrame
                   def={def}
                   size={entry.size}
+                  // The asset in the title, so two copies of the same widget
+                  // can be told apart before either has loaded.
+                  subtitle={def.needsTicker ? normaliseTicker(entry.settings?.ticker) : null}
                   index={index}
                   total={placedWidgets.length}
                   isEditing={isEditing}
                   isDragging={dragFrom === index}
                   isDropTarget={dragOver === index}
                   onMove={(to) => moveWidget(index, to)}
-                  onCycleSize={() => cycleSize(entry.id)}
-                  onRemove={() => removeWidget(entry.id)}
+                  onCycleSize={() => cycleSize(entry.instanceId)}
+                  onRemove={() => removeWidget(entry.instanceId)}
                 >
                   <def.Component
                     size={entry.size}
@@ -212,12 +216,12 @@ export default function DashboardPage() {
                     // and nothing else on the page.
                     ticker={normaliseTicker(entry.settings?.ticker)}
                     setTicker={(next) =>
-                      updateSettings(entry.id, {
+                      updateSettings(entry.instanceId, {
                         ticker: normaliseTicker(next),
                       })
                     }
                     settings={entry.settings ?? {}}
-                    updateSettings={(patch) => updateSettings(entry.id, patch)}
+                    updateSettings={(patch) => updateSettings(entry.instanceId, patch)}
                   />
                 </WidgetFrame>
               </div>
@@ -256,6 +260,7 @@ export default function DashboardPage() {
         <AddWidgetDrawer
           open={drawerOpen}
           available={availableWidgets}
+          placed={placedIds}
           onAdd={(id) => addWidget(id)}
           onClose={() => setDrawerOpen(false)}
         />

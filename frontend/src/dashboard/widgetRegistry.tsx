@@ -1,11 +1,13 @@
 import type { ComponentType } from "react";
 import {
+  Activity,
   Award,
   BarChart3,
   BookOpen,
   Building2,
   Clock,
   Eye,
+  Gauge,
   Landmark,
   LineChart,
   MessageCircle,
@@ -33,6 +35,10 @@ import {
   SentimentFreshnessWidget,
 } from "../components/dashboard/widgets/sentimentWidgets";
 import {
+  QuantWindowWidget,
+  QuantReadingWidget,
+} from "../components/dashboard/widgets/quantWidgets";
+import {
   WhaleClusterWidget,
   InstitutionalOwnersWidget,
   TopFundsWidget,
@@ -57,6 +63,7 @@ export type WidgetGroup =
   | "Signals"
   | "Watchlist"
   | "Sentiment"
+  | "Quant"
   | "Whales"
   | "Funds"
   | "Learning";
@@ -70,6 +77,7 @@ export const WIDGET_GROUPS: WidgetGroup[] = [
   "Signals",
   "Watchlist",
   "Sentiment",
+  "Quant",
   "Whales",
   ...(FUNDS_ENABLED ? (["Funds"] as WidgetGroup[]) : []),
   "Learning",
@@ -202,6 +210,35 @@ export const WIDGETS: WidgetDef[] = [
     sizes: SMALL_MEDIUM,
     defaultSize: "small",
     Component: SentimentFreshnessWidget,
+  },
+
+  // ── Quant ──────────────────────────────────────────────────────────────
+  // The asset page's Quant tab, a card at a time. The trace that tab also
+  // carries is deliberately not a widget: the chart and the reading are the
+  // things a reader checks at a glance, the paragraph is for the page.
+  {
+    id: "quant-window",
+    title: "Price window",
+    blurb:
+      "Closing price and RSI for your focused asset over a month, six months, three years or five, in rand.",
+    icon: Activity,
+    group: "Quant",
+    sizes: MEDIUM_UP,
+    defaultSize: "wide",
+    needsTicker: true,
+    Component: QuantWindowWidget,
+  },
+  {
+    id: "quant-reading",
+    title: "Quant reading",
+    blurb:
+      "Where your focused asset's momentum, risk-adjusted return and stability sit against the rest of your latest run, with RSI and beta explained.",
+    icon: Gauge,
+    group: "Quant",
+    sizes: MEDIUM_UP,
+    defaultSize: "medium",
+    needsTicker: true,
+    Component: QuantReadingWidget,
   },
 
   // ── Whales ─────────────────────────────────────────────────────────────

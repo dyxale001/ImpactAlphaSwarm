@@ -26,6 +26,7 @@ import type { WidgetDef } from "../../../dashboard/widgetRegistry";
 export default function WidgetFrame({
   def,
   size,
+  subtitle,
   index,
   total,
   isEditing,
@@ -38,6 +39,9 @@ export default function WidgetFrame({
 }: {
   def: WidgetDef;
   size: WidgetSize;
+  /** Shown after the title, e.g. the asset a ticker-scoped widget watches, so
+   *  two copies of one widget read differently in the header. */
+  subtitle?: string | null;
   index: number;
   total: number;
   isEditing: boolean;
@@ -82,6 +86,9 @@ export default function WidgetFrame({
           <Icon className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
           <span className="min-w-0 flex-1 truncate text-xs font-semibold text-brand-fg">
             {def.title}
+            {subtitle ? (
+              <span className="font-normal text-brand-muted-fg"> · {subtitle}</span>
+            ) : null}
           </span>
 
           <div className="flex shrink-0 items-center gap-1">
@@ -134,6 +141,7 @@ export default function WidgetFrame({
           <Icon className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
           <h2 className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
             {def.title}
+            {subtitle ? <span className="normal-case tracking-normal"> · {subtitle}</span> : null}
           </h2>
         </header>
       ) : null}
