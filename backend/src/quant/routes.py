@@ -79,6 +79,9 @@ async def get_quant_history(ticker: str, horizon: str = "6M"):
 			"horizon": key,
 			"available": False,
 			"currency": "",
+			"display_currency": "",
+			"fx_rate": None,
+			"converted": False,
 			"exchange": "",
 			"exchange_name": "",
 			"points": [],
@@ -116,6 +119,9 @@ async def get_quant_trace(ticker: str, horizon: str = "6M"):
 			"source": None,
 			"model": None,
 			"generated_at": None,
+			"currency": None,
+			"listing_currency": None,
+			"fx_rate": None,
 		}
 
 	loop = asyncio.get_running_loop()
@@ -134,6 +140,9 @@ async def get_quant_trace(ticker: str, horizon: str = "6M"):
 			"source": None,
 			"model": None,
 			"generated_at": None,
+			"currency": None,
+			"listing_currency": None,
+			"fx_rate": None,
 		}
 	return {"ticker": symbol, "horizon": key, "available": True, **point}
 

@@ -38,7 +38,7 @@ TODAY = datetime.date(2026, 9, 10)
 
 
 def cfg(**overrides) -> QuantViewConfig:
-	base = dict(history_enabled=True, trace_enabled=True, trace_max_chars=900, trace_min_chars=40)
+	base = dict(history_enabled=True, trace_enabled=True, trace_max_chars=1000, trace_min_chars=40)
 	base.update(overrides)
 	return QuantViewConfig(**base)
 
@@ -89,9 +89,25 @@ def evidence(**overrides) -> QuantEvidence:
 		exchange_name="Nasdaq",
 		facts=facts(),
 		run=run(),
+		listing_currency="USD",
+		fx_rate=None,
 	)
 	base.update(overrides)
 	return QuantEvidence(**base)
+
+
+def rand_facts() -> dict:
+	"""The same window in rand at 18 to the dollar, as the history service would serve it."""
+	f = facts()
+	for key in ("first_close", "last_close", "high", "low"):
+		f[key] = round(f[key] * 18.0, 4)
+	return f
+
+
+def rand_evidence(**overrides) -> QuantEvidence:
+	base = dict(currency="ZAR", listing_currency="USD", fx_rate=18.0, facts=rand_facts())
+	base.update(overrides)
+	return evidence(**base)
 
 
 class FakeHistory:
@@ -108,11 +124,30 @@ class FakeHistory:
 			"ticker": ticker,
 			"horizon": horizon,
 			"currency": "USD",
+			"display_currency": "USD",
+			"fx_rate": None,
+			"converted": False,
 			"exchange": "NMS",
 			"exchange_name": "Nasdaq",
 			"points": [{"date": "2026-09-09", "close": 182.4, "rsi": 58.0}],
 			"facts": facts(),
 		}
+
+
+def rand_window() -> dict:
+	"""What the history service serves once the rate is known: rand, and the rate used."""
+	return {
+		"ticker": "NVDA",
+		"horizon": "6M",
+		"currency": "USD",
+		"display_currency": "ZAR",
+		"fx_rate": 18.0,
+		"converted": True,
+		"exchange": "NMS",
+		"exchange_name": "Nasdaq",
+		"points": [{"date": "2026-09-09", "close": 3283.2, "rsi": 58.0}],
+		"facts": rand_facts(),
+	}
 
 
 class FakeRepo:
@@ -208,6 +243,21 @@ class TestGuard:
 		assert guard.ungrounded_numbers("the low fell on 3 April 2026", evidence()) == []
 		assert guard.ungrounded_numbers("the low fell on 3 April 2019", evidence()) == ["2019"]
 
+	def test_the_conversion_rate_is_a_number_the_paragraph_may_quote(self):
+		guard = TraceGuard(cfg())
+		# A rate clear of every figure in the fixture; 18 would be read as the 18.7 drawdown.
+		rate = 41.3
+		assert not any(abs(rate - a) <= TraceGuard.TOLERANCE for a in evidence().numbers())
+		assert guard.ungrounded_numbers(f"converted at R{rate} per dollar", rand_evidence(fx_rate=rate)) == []
+		assert guard.ungrounded_numbers(f"converted at R{rate} per dollar", evidence()) == [str(rate)]
+
+	def test_a_rand_price_glued_to_its_r_is_still_read(self):
+		guard = TraceGuard(cfg())
+		assert guard.ungrounded_numbers("closed at R3283.2 and R3,513.6", rand_evidence()) == []
+		assert guard.ungrounded_numbers("closed at R9999", rand_evidence()) == ["9999"]
+		# The indicator's own name is not a rand prefix.
+		assert guard.ungrounded_numbers("RSI14 read 58", rand_evidence()) == []
+
 	def test_the_rsi_scale_and_lines_are_always_allowed(self):
 		guard = TraceGuard(cfg())
 		assert guard.ungrounded_numbers("on a 0 to 100 scale, above 70 and below 30, near 50, over 14 days", evidence()) == []
@@ -266,6 +316,17 @@ class TestTemplate:
 		assert "beta" in text and "1.34" in text
 		assert "more sharply than the market" in text
 
+	def test_in_rand_it_says_so_prints_rand_and_names_the_rate(self):
+		text = QuantTraceTemplate().render(rand_evidence())
+		assert "R3283.2" in text
+		assert "in rand converted from USD at today's rate of R18 per USD" in text
+		assert TraceGuard(cfg()).check(text, rand_evidence()) is None
+
+	def test_a_rand_listing_prints_rand_without_a_conversion_sentence(self):
+		text = QuantTraceTemplate().render(evidence(currency="ZAR", listing_currency="ZAR", fx_rate=1.0))
+		assert "R182.4" in text
+		assert "converted" not in text
+
 	def test_it_passes_its_own_guard(self):
 		for ev in (
 			evidence(),
@@ -309,6 +370,18 @@ class TestPrompt:
 		prompt = QuantTracePromptBuilder().build(evidence())
 		for needle in ("the last six months", "162.35", "182.4", "12.4 percent", "195.2", "21 July 2026", "148.9", "18.7", "9 of them above 70", "4 below 30", "1.34", "0.92", "Nasdaq"):
 			assert needle in prompt, needle
+
+	def test_in_rand_it_tells_the_model_the_currency_the_rate_and_to_say_so(self):
+		prompt = QuantTracePromptBuilder().build(rand_evidence())
+		assert "R3283.2" in prompt
+		assert "converted from USD at today's rate of R18 per USD" in prompt
+		assert "Say once, plainly, that the prices are shown in rand" in prompt
+		assert "182.4 USD" not in prompt
+
+	def test_unconverted_it_still_names_the_listing_currency(self):
+		prompt = QuantTracePromptBuilder().build(evidence())
+		assert "Prices are in USD" in prompt
+		assert "converted" not in prompt
 
 	def test_it_forbids_advice_and_invention(self):
 		prompt = QuantTracePromptBuilder().build(evidence())
@@ -407,6 +480,34 @@ class TestService:
 		assert row["facts"]["run"]["beta"] == 1.34
 		assert repo.pruned
 
+	def test_a_rand_window_is_written_in_rand_and_the_row_remembers_the_rate(self):
+		repo = FakeRepo()
+		out = service(repo=repo, history=FakeHistory(window=rand_window()), generator=NoClientGenerator(cfg())).trace_for("NVDA", "6M")
+		assert "R3283.2" in out["trace"]
+		assert (out["currency"], out["listing_currency"], out["fx_rate"]) == ("ZAR", "USD", 18.0)
+		fp = repo.writes[0]["facts"]
+		assert (fp["currency"], fp["listing_currency"], fp["fx_rate"]) == ("ZAR", "USD", 18.0)
+		assert fp["window"]["last_close"] == 3283.2
+
+	def test_a_paragraph_stored_before_rand_is_written_again(self):
+		"""Its fingerprint names a currency but no listing currency: written over dollar closes."""
+		stale = {"trace": "dollar words", "source": "model", "model": "m", "generated_at": "x",
+			"facts": {"window": facts(), "run": run(), "currency": "USD"}}
+		repo = FakeRepo(stored=stale)
+		history = FakeHistory(window=rand_window())
+		out = service(repo=repo, history=history, generator=NoClientGenerator(cfg())).trace_for("NVDA", "6M")
+		assert out["trace"] != "dollar words"
+		assert history.calls == 1 and len(repo.writes) == 1
+
+	def test_a_paragraph_stored_in_rand_is_served_with_its_currency(self):
+		stored = {"trace": "rand words", "source": "model", "model": "m", "generated_at": "x",
+			"facts": {"window": rand_facts(), "run": run(), "currency": "ZAR", "listing_currency": "USD", "fx_rate": 18.0}}
+		history = FakeHistory()
+		out = service(repo=FakeRepo(stored=stored), history=history).trace_for("NVDA", "6M")
+		assert out["trace"] == "rand words"
+		assert (out["currency"], out["listing_currency"], out["fx_rate"]) == ("ZAR", "USD", 18.0)
+		assert history.calls == 0
+
 	def test_a_rejected_paragraph_falls_back_to_the_template_and_says_so(self):
 		repo = FakeRepo()
 		gen = QuantTraceGenerator(cfg(), client=FakeClient(GOOD_REPLY + " You should buy."))
@@ -484,3 +585,4 @@ def test_a_quiet_answer_is_still_available_true(client, monkeypatch):
 	body = client.get("/api/assets/nvda/quant-trace?horizon=6M").json()
 	assert body["available"] is True
 	assert body["trace"] is None
+	assert body["currency"] is None and body["fx_rate"] is None

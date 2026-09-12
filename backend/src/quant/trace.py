@@ -103,6 +103,10 @@ FORBIDDEN_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 ALWAYS_ALLOWED_NUMBERS: frozenset[float] = frozenset({0.0, 14.0, RSI_OVERSOLD, 50.0, RSI_OVERBOUGHT, 100.0})
 
 _NUMBER = re.compile(r"(?<![\w.])[-−]?\d[\d,]*(?:\.\d+)?")
+#: A rand prefix glued to its figure, "R3283.2". The number pattern above refuses a digit
+#: that follows a letter, so a price written the way the app prints rand would slip past
+#: the guard unread. Split before matching; the R stays, the figure becomes visible.
+_RAND_PREFIX = re.compile(r"\bR(?=\d)")
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
@@ -120,12 +124,24 @@ class QuantEvidence:
 	ticker: str
 	horizon: str
 	day: str
+	#: The currency the facts are in: rand whenever the window could be converted.
 	currency: str
 	exchange_name: str
 	#: WindowFacts.compute's output, unchanged.
 	facts: dict[str, Any]
 	#: The latest ai_recommendation quant columns for the ticker, or {} when none.
 	run: dict[str, Any] = field(default_factory=dict)
+	#: What the share actually trades in, and the rand per unit of it the facts were
+	#: converted at. The paragraph says both, once, so a reader who knows the share
+	#: trades in dollars is not left wondering why the numbers are so large.
+	listing_currency: str = ""
+	fx_rate: float | None = None
+
+	@property
+	def converted(self) -> bool:
+		"""Whether the facts are in a currency other than the one the share trades in."""
+		listing = (self.listing_currency or "").upper()
+		return bool(self.fx_rate) and bool(listing) and listing != (self.currency or "").upper()
 
 	@property
 	def horizon_label(self) -> str:
@@ -148,11 +164,24 @@ class QuantEvidence:
 		# A horizon's own count: "six months", "5 years", "three years".
 		allowed.update(_numbers_in(HORIZONS.get(self.horizon)))
 		allowed.update({1.0, 6.0, 3.0, 5.0})
+		# The rate the prices were converted at, which the paragraph states.
+		if self.fx_rate:
+			allowed.add(abs(float(self.fx_rate)))
 		return allowed
 
 	def fingerprint(self) -> dict[str, Any]:
-		"""What was written from, for the facts column."""
-		return {"window": self.facts, "run": self.run, "currency": self.currency}
+		"""What was written from, for the facts column.
+
+		Carries the listing currency and rate as well as the display currency, so a
+		stored paragraph can be recognised as written in the currency now served.
+		"""
+		return {
+			"window": self.facts,
+			"run": self.run,
+			"currency": self.currency,
+			"listing_currency": self.listing_currency,
+			"fx_rate": self.fx_rate,
+		}
 
 
 def _numbers_in(value: Any) -> set[float]:
@@ -201,6 +230,23 @@ def _trim(number: Any, digits: int = 2) -> str:
 	return text if text not in ("", "-0") else "0"
 
 
+def _money(number: Any, currency: str) -> str:
+	"""A price as the paragraph prints it: "R3412.55" in rand, "182.4 USD" otherwise.
+
+	Rand takes the R prefix the rest of the app uses for the headline price; any other
+	code follows the number, as itself, so an unfamiliar one is never dressed as a symbol.
+	"""
+	code = (currency or "").upper()
+	if code == "ZAR":
+		return f"R{_trim(number)}"
+	return f"{_trim(number)} {code}" if code else _trim(number)
+
+
+def _rate_phrase(evidence: "QuantEvidence") -> str:
+	"""How the prices got into rand, in words: "today's rate of R18.42 per USD"."""
+	return f"today's rate of R{_trim(evidence.fx_rate)} per {evidence.listing_currency.upper()}"
+
+
 # ── the guard ────────────────────────────────────────────────────────────────
 
 class TraceGuard:
@@ -231,7 +277,7 @@ class TraceGuard:
 	def ungrounded_numbers(self, text: str, evidence: QuantEvidence) -> list[str]:
 		allowed = evidence.numbers()
 		stray: list[str] = []
-		for token in _NUMBER.findall(text):
+		for token in _NUMBER.findall(_RAND_PREFIX.sub("R ", text)):
 			cleaned = token.replace(",", "").replace("−", "-")
 			try:
 				value = abs(float(cleaned))
@@ -249,7 +295,25 @@ class QuantTracePromptBuilder:
 
 	def build(self, evidence: QuantEvidence) -> str:
 		unit = evidence.currency or "its listing currency"
-		example = f"182.4 {evidence.currency}" if evidence.currency else "182.4"
+		example = _money(evidence.facts.get("last_close"), evidence.currency)
+		if evidence.converted:
+			price_rule = (
+				f"- Prices are in South African rand (ZAR), converted from {evidence.listing_currency.upper()} at"
+				f" {_rate_phrase(evidence)}. Write them as R followed by the number, for example {example}."
+			)
+			conversion_point = (
+				f"- Say once, plainly, that the prices are shown in rand converted from"
+				f" {evidence.listing_currency.upper()} at {_rate_phrase(evidence)}, and that the share itself"
+				f" trades in {evidence.listing_currency.upper()}"
+				+ (f" on {evidence.exchange_name}" if evidence.exchange_name else "")
+				+ ".\n"
+			)
+		elif (evidence.currency or "").upper() == "ZAR":
+			price_rule = f"- Prices are in South African rand. Write them as R followed by the number, for example {example}."
+			conversion_point = ""
+		else:
+			price_rule = f"- Prices are in {unit}. Write them as plain numbers with that unit, for example {example}."
+			conversion_point = ""
 		return f"""You are writing one short paragraph for a retail investing app, describing what {evidence.ticker}'s share price did over {evidence.horizon_label}. The reader is a beginner.
 
 {self._window_block(evidence, unit)}
@@ -263,12 +327,12 @@ Cover, in whatever order reads best:
 - Where the high and the low fell, and how large the largest fall from a peak to a later low was. Say plainly that a fall of that size happened inside the window.
 - What RSI did. Explain in a few plain words what RSI measures (how fast and how far the price has moved recently, on a 0 to 100 scale, where above 70 is conventionally called overbought and below 30 oversold), then say how many of the measured days sat past those lines and where the latest reading is. Say that these are descriptions of the move, not signals.
 - If beta is given, say in plain words what it means (how much the price tends to move when the wider market moves) and which band it fell in.
-
+{conversion_point}
 Rules you must follow:
 - Use ONLY the figures listed above. You know nothing else about {evidence.ticker}: not its business, not its earnings, not its sector, not the news, not what happened outside this window. If a figure is not listed, it does not go in. Do not invent, estimate or round to a different number.
 - Never say or imply what the price will do next, and never tell the reader to buy, sell, hold, wait or avoid. Do not use the words buy, sell, hold, should, undervalued, overvalued, opportunity, outlook, potential, bullish or bearish.
 - Describe the price, not the company. A price that rose is not a company that did well.
-- Prices are in {unit}. Write them as plain numbers with that unit, for example {example}.
+{price_rule}
 - Call the final figure the most recent close, not today's close; the window may end on a day that is not over.
 - Write British English, in a plain, level voice. No hype, no filler openers like "Overall" or "In summary".
 - Never use a dash of any kind as punctuation. Use a comma, a full stop or a rewrite.
@@ -279,16 +343,22 @@ Write only the paragraph itself."""
 	@staticmethod
 	def _window_block(evidence: QuantEvidence, unit: str) -> str:
 		f = evidence.facts
+		cur = evidence.currency
 		lines = [
 			f"The window: {spell_date(f.get('start'))} to {spell_date(f.get('end'))}, {f.get('trading_days')} trading days"
 			+ (f", listed on {evidence.exchange_name}" if evidence.exchange_name else "")
+			+ (
+				f". Prices below are in rand, converted from {evidence.listing_currency.upper()} at {_rate_phrase(evidence)}"
+				if evidence.converted
+				else ""
+			)
 			+ ".",
-			f"- First close: {_trim(f.get('first_close'))} {unit}",
-			f"- Most recent close: {_trim(f.get('last_close'))} {unit}",
+			f"- First close: {_money(f.get('first_close'), cur)}",
+			f"- Most recent close: {_money(f.get('last_close'), cur)}",
 			f"- Change over the window: {_trim(f.get('change_pct'), 1)} percent"
 			+ (" (a rise)" if (f.get("change_pct") or 0) > 0 else " (a fall)" if (f.get("change_pct") or 0) < 0 else " (flat)"),
-			f"- Highest close: {_trim(f.get('high'))} {unit} on {spell_date(f.get('high_date'))}",
-			f"- Lowest close: {_trim(f.get('low'))} {unit} on {spell_date(f.get('low_date'))}",
+			f"- Highest close: {_money(f.get('high'), cur)} on {spell_date(f.get('high_date'))}",
+			f"- Lowest close: {_money(f.get('low'), cur)} on {spell_date(f.get('low_date'))}",
 			f"- Largest fall from a peak to a later low inside the window: {_trim(abs(f.get('max_drawdown_pct') or 0), 1)} percent",
 		]
 		if f.get("volatility_pct") is not None:
@@ -352,15 +422,15 @@ class QuantTraceTemplate:
 
 	def render(self, evidence: QuantEvidence) -> str:
 		f = evidence.facts
-		unit = evidence.currency or ""
-		unit_sfx = f" {unit}" if unit else ""
+		cur = evidence.currency or ""
+		money = lambda v: _money(v, cur)  # noqa: E731
 		change = f.get("change_pct")
 		sentences: list[str] = []
 
 		if change is None:
 			sentences.append(
-				f"Over {evidence.horizon_label} {evidence.ticker} moved from {_trim(f.get('first_close'))}{unit_sfx}"
-				f" on {spell_date(f.get('start'))} to a most recent close of {_trim(f.get('last_close'))}{unit_sfx}"
+				f"Over {evidence.horizon_label} {evidence.ticker} moved from {money(f.get('first_close'))}"
+				f" on {spell_date(f.get('start'))} to a most recent close of {money(f.get('last_close'))}"
 				f" on {spell_date(f.get('end'))}."
 			)
 		else:
@@ -368,19 +438,26 @@ class QuantTraceTemplate:
 			if direction == "flat":
 				sentences.append(
 					f"Over {evidence.horizon_label} {evidence.ticker} ended flat, closing most recently at"
-					f" {_trim(f.get('last_close'))}{unit_sfx} on {spell_date(f.get('end'))}, the same level as its first close"
+					f" {money(f.get('last_close'))} on {spell_date(f.get('end'))}, the same level as its first close"
 					f" on {spell_date(f.get('start'))}."
 				)
 			else:
 				sentences.append(
 					f"Over {evidence.horizon_label} {evidence.ticker} moved {direction} {_trim(abs(change), 1)} percent,"
-					f" from {_trim(f.get('first_close'))}{unit_sfx} on {spell_date(f.get('start'))}"
-					f" to a most recent close of {_trim(f.get('last_close'))}{unit_sfx} on {spell_date(f.get('end'))}."
+					f" from {money(f.get('first_close'))} on {spell_date(f.get('start'))}"
+					f" to a most recent close of {money(f.get('last_close'))} on {spell_date(f.get('end'))}."
 				)
 
+		if evidence.converted:
+			# Appended to the opening sentence rather than given one of its own: the
+			# template runs close to the guard's length cap once RSI and beta are in.
+			sentences[-1] = sentences[-1].rstrip(".") + (
+				f", in rand converted from {evidence.listing_currency.upper()} at {_rate_phrase(evidence)}."
+			)
+
 		sentences.append(
-			f"Its highest close in the window was {_trim(f.get('high'))}{unit_sfx} on {spell_date(f.get('high_date'))}"
-			f" and its lowest {_trim(f.get('low'))}{unit_sfx} on {spell_date(f.get('low_date'))};"
+			f"Its highest close in the window was {money(f.get('high'))} on {spell_date(f.get('high_date'))}"
+			f" and its lowest {money(f.get('low'))} on {spell_date(f.get('low_date'))};"
 			f" the largest fall from a peak to a later low was {_trim(abs(f.get('max_drawdown_pct') or 0), 1)} percent."
 		)
 
@@ -504,7 +581,7 @@ class QuantTraceRepository:
 
 	TABLE = "quant_trace_daily"
 	UPSERT_RPC = "upsert_quant_traces"
-	READ_COLUMNS = "ticker, as_of_day, horizon, trace, source, model, generated_at"
+	READ_COLUMNS = "ticker, as_of_day, horizon, trace, source, model, generated_at, facts"
 	RUN_COLUMNS = (
 		"rsi, rsi_band, beta, beta_band, sharpe_ratio, volatility, macd, macd_histogram, "
 		"quant_normalisation, created_at"
@@ -646,7 +723,7 @@ class QuantTraceService:
 		day = self._today().isoformat()
 
 		stored = self.repository.read(sym, day, horizon)
-		if stored:
+		if stored and not self._stale(stored):
 			return self._point(stored)
 
 		window = self.history.window(sym, horizon)
@@ -658,10 +735,12 @@ class QuantTraceService:
 			ticker=sym,
 			horizon=horizon,
 			day=day,
-			currency=window.get("currency") or "",
+			currency=window.get("display_currency") or window.get("currency") or "",
 			exchange_name=window.get("exchange_name") or "",
 			facts=facts,
 			run=self.repository.latest_run_metrics(sym),
+			listing_currency=window.get("currency") or "",
+			fx_rate=window.get("fx_rate"),
 		)
 		if not evidence.has_evidence:
 			return None
@@ -696,10 +775,25 @@ class QuantTraceService:
 		self.repository.prune(self._today() - datetime.timedelta(days=RETENTION_DAYS))
 
 	@staticmethod
+	def _stale(row: dict[str, Any]) -> bool:
+		"""A paragraph written before windows were served in rand.
+
+		Its fingerprint names a currency but not the listing currency, so it was written
+		over closes in the listing currency and would disagree with the chart now drawn
+		under it. Regenerated once; a row with no fingerprint at all is served as it is.
+		"""
+		facts = row.get("facts")
+		return isinstance(facts, dict) and "currency" in facts and "listing_currency" not in facts
+
+	@staticmethod
 	def _point(row: dict[str, Any]) -> dict[str, Any]:
+		facts = row.get("facts") if isinstance(row.get("facts"), dict) else {}
 		return {
 			"trace": row.get("trace"),
 			"source": row.get("source"),
 			"model": row.get("model"),
 			"generated_at": row.get("generated_at"),
+			"currency": facts.get("currency"),
+			"listing_currency": facts.get("listing_currency"),
+			"fx_rate": facts.get("fx_rate"),
 		}

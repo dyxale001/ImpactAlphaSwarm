@@ -39,6 +39,7 @@ from src.quant.history import (  # noqa: E402
 	MIN_POINTS,
 	WARMUP_DAYS,
 	QuantHistoryService,
+	RandRates,
 	TTLCache,
 	WindowFacts,
 	exchange_name,
@@ -86,13 +87,36 @@ class FakeSource:
 		return dict(self.profile_data)
 
 
-def service(config=None, source=None, cache=None) -> QuantHistoryService:
+class FakeRates:
+	"""A rand rate lookup that answers from a table and counts its calls."""
+
+	def __init__(self, table: dict | None = None, fail: bool = False):
+		self.table = table if table is not None else {"USD": 18.0}
+		self.fail = fail
+		self.calls: list[str] = []
+
+	def __call__(self, code: str):
+		self.calls.append(code)
+		if self.fail:
+			raise RuntimeError("fx down")
+		return self.table.get(code)
+
+
+def service(config=None, source=None, cache=None, rates=None) -> QuantHistoryService:
+	# The window tests below assert the arithmetic against the fake's own closes, so
+	# their default rate lookup finds nothing and the window is served in listing units.
+	# Conversion has its own tests, which hand in a rate.
 	return QuantHistoryService(
 		config=config or cfg(),
 		data_source=source or FakeSource(),
 		cache=cache if cache is not None else TTLCache(3600),
 		today=lambda: TODAY,
+		rates=rates if rates is not None else RandRates(lookup=FakeRates(table={})),
 	)
+
+
+def rand_service(source=None, lookup=None, cache=None) -> QuantHistoryService:
+	return service(source=source, cache=cache, rates=RandRates(lookup=lookup or FakeRates(), cache=TTLCache(3600)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +188,83 @@ class TestWindow:
 		out = service(source=src).window("test", "1M")
 		assert len([p for p in out["points"]]) < MIN_POINTS
 		assert out["points"] == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# rand
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRand:
+	"""Windows are served in rand, the way the headline price is, and say so."""
+
+	def test_closes_and_price_facts_are_converted_and_ratios_are_not(self):
+		plain = service().window("test", "1M")
+		rand = rand_service().window("test", "1M")
+		assert rand["display_currency"] == "ZAR"
+		assert rand["currency"] == "USD"
+		assert rand["converted"] is True
+		assert rand["fx_rate"] == 18.0
+		for a, b in zip(plain["points"], rand["points"]):
+			assert b["close"] == pytest.approx(a["close"] * 18.0, rel=1e-6)
+			assert b["rsi"] == a["rsi"]
+		for key in ("first_close", "last_close", "high", "low"):
+			assert rand["facts"][key] == pytest.approx(plain["facts"][key] * 18.0, rel=1e-6)
+		for key in ("change_pct", "max_drawdown_pct", "volatility_pct", "latest_rsi", "high_date", "low_date"):
+			assert rand["facts"][key] == plain["facts"][key]
+
+	def test_a_rand_listing_is_left_alone_and_not_called_converted(self):
+		lookup = FakeRates()
+		out = rand_service(source=FakeSource(profile={"currency": "ZAR", "exchange": "JNB"}), lookup=lookup).window("test", "1M")
+		plain = service(source=FakeSource(profile={"currency": "ZAR", "exchange": "JNB"})).window("test", "1M")
+		assert out["display_currency"] == "ZAR"
+		assert out["converted"] is False
+		assert out["fx_rate"] == 1.0
+		assert out["facts"]["last_close"] == plain["facts"]["last_close"]
+		assert lookup.calls == [], "rand needs no rate"
+
+	def test_rand_cents_are_divided_by_a_hundred_without_a_lookup(self):
+		lookup = FakeRates()
+		out = rand_service(source=FakeSource(profile={"currency": "ZAc", "exchange": "JNB"}), lookup=lookup).window("test", "1M")
+		# The same closes served unconverted: the fake source hands every profile one series.
+		plain = service().window("test", "1M")
+		assert out["display_currency"] == "ZAR"
+		assert out["converted"] is True
+		assert out["facts"]["last_close"] == pytest.approx(plain["facts"]["last_close"] / 100.0, rel=1e-3)
+		assert lookup.calls == []
+
+	def test_without_a_rate_the_window_is_served_in_its_listing_currency_and_says_so(self):
+		out = rand_service(lookup=FakeRates(table={})).window("test", "1M")
+		plain = service().window("test", "1M")
+		assert out["display_currency"] == "USD"
+		assert out["converted"] is False
+		assert out["fx_rate"] is None
+		assert out["facts"] == plain["facts"]
+
+	def test_a_failing_lookup_is_the_same_as_no_rate(self):
+		out = rand_service(lookup=FakeRates(fail=True)).window("test", "1M")
+		assert out["display_currency"] == "USD" and out["converted"] is False and out["points"]
+
+	def test_the_rate_is_fetched_once_a_day_and_shared_by_every_horizon(self):
+		lookup = FakeRates()
+		svc = rand_service(lookup=lookup)
+		a = svc.window("test", "1M")
+		b = svc.window("test", "6M")
+		c = svc.window("other", "1M")
+		assert lookup.calls == ["USD"]
+		assert a["fx_rate"] == b["fx_rate"] == c["fx_rate"] == 18.0
+
+	def test_a_missing_rate_is_not_pinned_for_the_day(self):
+		lookup = FakeRates(table={})
+		svc = rand_service(lookup=lookup)
+		svc.window("test", "1M")
+		lookup.table["USD"] = 18.0
+		out = svc.window("test", "6M")
+		assert lookup.calls == ["USD", "USD"]
+		assert out["converted"] is True
+
+	def test_the_empty_window_carries_the_currency_fields(self):
+		out = rand_service(source=FakeSource(fail=True)).window("test", "6M")
+		assert out["display_currency"] == "" and out["fx_rate"] is None and out["converted"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,6 +431,7 @@ def test_the_endpoint_says_when_the_feature_is_off(client, monkeypatch):
 	assert body["available"] is False
 	assert body["points"] == []
 	assert body["ticker"] == "NVDA"
+	assert body["display_currency"] == "" and body["fx_rate"] is None and body["converted"] is False
 
 
 def test_the_endpoint_serves_a_window(client, monkeypatch):
@@ -342,6 +444,15 @@ def test_the_endpoint_serves_a_window(client, monkeypatch):
 	assert body["points"]
 	assert body["facts"]["trading_days"] == len(body["points"])
 	assert body["exchange_name"] == "Nasdaq"
+
+
+def test_the_endpoint_serves_the_window_in_rand_and_names_the_rate(client, monkeypatch):
+	install(monkeypatch, rand_service())
+	body = client.get("/api/assets/test/quant-history?horizon=1m").json()
+	assert body["display_currency"] == "ZAR"
+	assert body["currency"] == "USD"
+	assert body["converted"] is True
+	assert body["fx_rate"] == 18.0
 
 
 def test_the_endpoint_defaults_to_six_months(client, monkeypatch):

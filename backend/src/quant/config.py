@@ -31,7 +31,10 @@ class QuantViewConfig:
 	#: The written paragraph over the window. Needs the history on, since that is what
 	#: it is written from.
 	trace_enabled: bool = False
-	trace_max_chars: int = 900
+	#: The guard against an essay. The prompt asks for at most 110 words, roughly 650
+	#: characters; the template, which must pass the same guard, runs to about 920 once
+	#: RSI, beta and the rand conversion are all in, which is what set this figure.
+	trace_max_chars: int = 1000
 	trace_min_chars: int = 40
 
 	@classmethod
@@ -41,6 +44,6 @@ class QuantViewConfig:
 			history_cache_minutes=max(1, _env_int("QUANT_HISTORY_CACHE_MINUTES", 720)),
 			history_max_points=max(30, _env_int("QUANT_HISTORY_MAX_POINTS", 260)),
 			trace_enabled=_env_bool("QUANT_TRACE_ENABLED", False),
-			trace_max_chars=max(120, _env_int("QUANT_TRACE_MAX_CHARS", 900)),
+			trace_max_chars=max(120, _env_int("QUANT_TRACE_MAX_CHARS", 1000)),
 			trace_min_chars=max(1, _env_int("QUANT_TRACE_MIN_CHARS", 40)),
 		)

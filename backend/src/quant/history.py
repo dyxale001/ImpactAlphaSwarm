@@ -15,6 +15,12 @@ What comes back for a window is two things, deliberately separated:
                 over the window, its high and low, the worst peak to trough fall, how many
                 days RSI spent past 70 or under 30.
 
+Both are served in rand, the way the page's headline price is: every close is multiplied
+by the day's rand rate for the listing currency, pinned once per day so the four horizons,
+the chart and the paragraph written over it all agree. The listing currency and the rate
+used travel with the window so the reader can be told, not left to guess. A window whose
+rate could not be fetched is served in its listing currency and says so.
+
 The cross-sectional percentiles the Quant panel shows are NOT here. They are relative to
 the other assets in one user's run and belong to ``ai_recommendation``; a window is the
 same for every reader, which is what lets one fetch be cached and shared.
@@ -77,6 +83,17 @@ EXCHANGE_NAMES: dict[str, str] = {
 	"JNB": "JSE",
 }
 
+#: Rand cents, the unit the JSE quotes some lines in. A hundred of them to the rand, so
+#: no rate is fetched: the conversion is a fixed division.
+SUBUNIT_CURRENCIES: frozenset[str] = frozenset({"ZAC", "ZA CENT", "ZACP"})
+
+#: The currency every window is served in.
+DISPLAY_CURRENCY = "ZAR"
+
+#: How long a day's rand rate is held. A calendar day: the key carries the date, so this
+#: is a bound on memory, not on freshness.
+RATE_TTL_SECONDS = 86_400
+
 
 def utc_today() -> datetime.date:
 	return datetime.datetime.now(datetime.timezone.utc).date()
@@ -137,6 +154,55 @@ def _round(value: float | None, digits: int) -> float | None:
 	except TypeError:
 		return None
 	return round(float(value), digits)
+
+
+class RandRates:
+	"""Rand per unit of a listing currency, pinned for the day.
+
+	The headline price on the asset page is the latest close times the same lookup
+	(``ZarPriceConverter.fx_rate``), so a window converted here reads against it. Pinned
+	per day rather than per fetch so a reader switching 1M to 6M sees one rate on both,
+	and so the paragraph written over a window quotes the rate the chart used.
+	"""
+
+	def __init__(self, lookup=None, cache: TTLCache | None = None):
+		self._lookup = lookup
+		self._cache = cache if cache is not None else TTLCache(RATE_TTL_SECONDS)
+
+	def rate(self, currency: str, today: datetime.date) -> float | None:
+		"""Rand per unit of ``currency`` for the day, or None when it cannot be had."""
+		code = (currency or "").upper()
+		if not code:
+			return None
+		if code == DISPLAY_CURRENCY:
+			return 1.0
+		if code in SUBUNIT_CURRENCIES:
+			return 0.01
+
+		key = (code, today.isoformat())
+		hit = self._cache.get(key)
+		if hit is not None:
+			return hit
+
+		try:
+			rate = self._lookup_fn()(code)
+		except Exception as exc:
+			logger.info("Rand rate lookup failed for %s: %s", code, exc)
+			return None
+		if rate is None or rate <= 0:
+			return None
+		rate = float(rate)
+		self._cache.put(key, rate)
+		return rate
+
+	def _lookup_fn(self):
+		if self._lookup is None:
+			# Deferred: the shared converter lives beside the Supabase client, which is
+			# not something a unit test of a price window should have to construct.
+			from src.utils.supabase_client import fetch_fx_rate_to_zar
+
+			self._lookup = fetch_fx_rate_to_zar
+		return self._lookup
 
 
 class WindowFacts:
@@ -219,12 +285,14 @@ class QuantHistoryService:
 		rsi: RSI | None = None,
 		cache: TTLCache | None = None,
 		today: Any = None,
+		rates: RandRates | None = None,
 	):
 		self.config = config or QuantViewConfig.from_env()
 		self.data_source = data_source or MarketDataSource()
 		self.rsi = rsi or RSI()
 		self.cache = cache if cache is not None else TTLCache(self.config.history_cache_minutes * 60)
 		self._today = today or utc_today
+		self.rates = rates or RandRates()
 
 	@property
 	def enabled(self) -> bool:
@@ -308,6 +376,18 @@ class QuantHistoryService:
 				value = None if raw is None or (isinstance(raw, float) and math.isnan(raw)) else float(raw)
 			rsi_values.append(value)
 
+		# Into rand before anything is measured, so the facts, the plotted line and the
+		# paragraph written from the facts are all in the currency the reader sees. RSI
+		# was computed above on the raw closes; it is a ratio of moves and does not care.
+		profile = self._profile(symbol)
+		listing = (profile.get("currency") or "").upper()
+		rate = self.rates.rate(listing, today)
+		if rate is None:
+			display, converted = listing, False
+		else:
+			display, converted = DISPLAY_CURRENCY, listing != DISPLAY_CURRENCY
+			closes = [c * rate for c in closes]
+
 		facts = WindowFacts.compute(dates, closes, rsi_values)
 		points = [
 			{"date": d, "close": _round(c, 4), "rsi": _round(r, 1)}
@@ -315,11 +395,13 @@ class QuantHistoryService:
 		]
 		points = self._thin(points, self.config.history_max_points)
 
-		profile = self._profile(symbol)
 		return {
 			"ticker": symbol,
 			"horizon": horizon,
-			"currency": profile.get("currency", ""),
+			"currency": listing,
+			"display_currency": display,
+			"fx_rate": _round(rate, 4),
+			"converted": converted,
 			"exchange": profile.get("exchange", ""),
 			"exchange_name": exchange_name(profile.get("exchange")),
 			"points": points,
@@ -339,6 +421,9 @@ class QuantHistoryService:
 			"ticker": symbol,
 			"horizon": horizon,
 			"currency": "",
+			"display_currency": "",
+			"fx_rate": None,
+			"converted": False,
 			"exchange": "",
 			"exchange_name": "",
 			"points": [],
