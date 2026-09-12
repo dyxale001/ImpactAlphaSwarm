@@ -38,9 +38,12 @@ ImpactAlphaSwarm/
 │   │   ├── api.py                    # FastAPI endpoints (analysis, assets, whales, admin)
 │   │   ├── agents/                   # sentiment_scout, quant_analyst, asset_discovery, gcp_nlp
 │   │   ├── orchestration/            # LangGraph orchestrator + unified ranking
+│   │   ├── funds/                    # funds catalogue: classification, matcher, fact sheets (flagged off)
+│   │   ├── quant/                    # Quant tab: price/RSI window and reasoning trace (flagged off)
 │   │   └── utils/                    # Supabase client, sentiment modules, whale watching, traces
 │   ├── migrations/                   # 001-027, applied in the Supabase SQL editor
-│   ├── scripts/                      # ranking shadow / stability reports
+│   ├── data/funds/                   # transcribed fact-sheet seed for the funds catalogue
+│   ├── scripts/                      # ranking shadow / stability reports, fund seed loader
 │   ├── tests/                        # pytest suite
 │   ├── Dockerfile                    # Cloud Run image (gunicorn + uvicorn worker)
 │   ├── main.py                       # CLI entry point for a local orchestrator run
@@ -88,12 +91,20 @@ From your Supabase project:
 numbered order (001 through 027): news and social sentiment columns, the quant
 sub-dimensions, the whale-watching and news caches, asset discovery, entity
 descriptions, the unified ranking tables, the daily sentiment history and its
-generated day summaries, the dashboard layout, and the Quant tab's reasoning
-traces (027). Migrations behind a feature flag (019-023, 027) are only needed once
-that flag is switched on; the backend never touches their tables before then.
+generated day summaries, the dashboard layout, the funds catalogue and its
+fact-sheet archive (024-026), and the Quant tab's reasoning traces (027).
+Migrations behind a feature flag (019-023, the funds migrations 024-026, and 027)
+are only needed once that flag is
+switched on; the backend never touches their tables before then.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
+
+Migrations 024, 025 and 026 together create the funds catalogue, which does
+nothing until `FUNDS_ENABLED` is set. Apply all three before turning that flag
+on, not after — the page needs the tables and a loaded seed to show anything,
+and 025 adds columns the seed now fills. Likewise 027 is only needed once
+`QUANT_TRACE_ENABLED` is set.
 
 ---
 
@@ -330,6 +341,8 @@ LANGSMITH_PROJECT               → (Optional) LangSmith project name
 DISCOVERY_ENABLED               → (Optional) run the discovery agent, default false
 UNIFIED_RANKING_ENABLED         → (Optional) four-factor ordering, default false
 UNIFIED_RANKING_SHADOW          → (Optional) record without reordering, default true
+FUNDS_ENABLED                   → (Optional) serve the funds catalogue, default false
+FUND_TRACES_ENABLED             → (Optional) LLM fund explanations, default false
 QUANT_HISTORY_ENABLED           → (Optional) Quant tab price/RSI window over 1M-5Y, default false
 QUANT_TRACE_ENABLED             → (Optional) Quant tab reasoning trace (needs 027 + history), default false
 ```
@@ -343,10 +356,11 @@ VITE_SUPABASE_URL               → Supabase project URL (same as backend)
 VITE_SUPABASE_ANON_KEY          → Supabase anon key
 VITE_API_BASE                   → Backend URL (localhost:8000 locally)
 VITE_UNIFIED_SCORECARD          → (Optional) "true" renders the Signal Scorecard panel
+VITE_FUNDS_ENABLED              → (Optional) "true" shows the Funds page and nav entry
 ```
 
 ---
 
-**Last Updated**: September 10, 2026
+**Last Updated**: September 12, 2026
 **Project**: ImpactAlphaSwarm - Information Systems Honours Project
 **Stack**: Python FastAPI + LangGraph + React + TypeScript + Supabase

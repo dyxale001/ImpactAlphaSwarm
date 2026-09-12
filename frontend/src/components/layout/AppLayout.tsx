@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import { readLastHubPage } from "../../utils/lastHubPage";
 import {
   LayoutDashboard,
@@ -11,9 +12,12 @@ import {
   Terminal,
   Settings,
   Waves,
+  Landmark,
+  Sparkles,
   Menu,
   X,
 } from "lucide-react";
+import { FUNDS_ENABLED } from "../../utils/fundsFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,9 +48,11 @@ export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Assets", path: "/assets", icon: CandlestickChart },
+    { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
+    { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
     { name: "Whale Watching", path: "/whale-watching", icon: Waves },
     { name: "Settings", path: "/settings", icon: Settings },
@@ -57,9 +63,14 @@ export default function AppLayout() {
       i.name === "Dashboard" ||
       i.name === "Assets" ||
       i.name === "Watchlist" ||
+      i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
-      i.name === "Settings"
+      i.name === "Settings" ||
+      // Behind the flag: the entry has to be in both the list above and this
+      // allow-list to appear, and the page it links to needs the backend flag
+      // as well, so nothing half-appears.
+      (FUNDS_ENABLED && i.name === "Funds")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
@@ -145,6 +156,8 @@ export default function AppLayout() {
       <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">
         <Outlet />{" "}
       </main>
+
+      <AskAlphaSwarmChatbot />
     </div>
   );
 }

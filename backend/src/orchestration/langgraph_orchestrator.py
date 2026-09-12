@@ -845,6 +845,7 @@ class OutputPhase(Phase):
         # Persist ALL ranked assets to Supabase: the assets page shows the whole feed,
         # and watchlist cards need scores for assets outside the top 5. The dashboard
         # still shows five, capped on its own read.
+        save_status = "complete"
         try:
             save_res = save_top_assets(
                 run_id=state["run_id"],
@@ -854,22 +855,38 @@ class OutputPhase(Phase):
                 sentiment_results=state.get("sentiment_results", {}),
             )
             logger.info(f"Saved {len(state['final_rankings'])} assets to Supabase: {save_res.get('status')}")
+            if save_res.get("status") == "resolution_failed":
+                # Every ranked ticker failed asset resolution, so nothing new was
+                # written and the previous run's rows are still sitting under this
+                # run_id. Reporting "complete" here would let the caller display
+                # them as though they were this run's fresh result.
+                logger.error(
+                    f"Run {state['run_id']}: no recommendations could be saved "
+                    f"({save_res.get('requested')} requested, 0 resolved)"
+                )
+                save_status = "failed"
+        except Exception as e:
+            logger.error(f"Failed to save ranked assets to Supabase: {e}")
+            save_status = "failed"
+
+        if save_status == "complete":
             # Mark the run complete the moment its data exists, rather than waiting for
             # the pipeline to unwind back to the API layer. A run whose worker died
             # between the insert and that later update stayed 'running' forever, and the
             # page polled a status that would never change, which is why a completed run
             # looked like nothing had happened. api.py still marks it too; the update is
-            # idempotent.
-            update_ai_run_status(state["run_id"], "complete")
+            # idempotent, so a failure here is logged rather than failing a saved run.
+            try:
+                update_ai_run_status(state["run_id"], "complete")
+            except Exception as e:
+                logger.error(f"Could not mark run {state['run_id']} complete: {e}")
             update_ai_run_progress(
                 state["run_id"],
                 {"phase": "complete", "message": "Analysis complete", "active": []},
             )
-        except Exception as e:
-            logger.error(f"Failed to save ranked assets to Supabase: {e}")
 
         print("Output formatted and ready")
-        return {"status": "complete"}
+        return {"status": save_status}
 
 
 # The phases the graph is wired from, in the order they appear in it.

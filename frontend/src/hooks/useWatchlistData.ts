@@ -1,6 +1,6 @@
 
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 
@@ -187,12 +187,25 @@ export function useWatchlistData() {
   // ── Add ───────────────────────────────────────────────────────────────
 const addToWatchlist = async (result: AssetSearchResult) => {
   if (!userId) return
+
+  // A search result with no asset_id has no corresponding `assets` row --
+  // inserting it anyway used to create a bare-ticker watchlist row that the
+  // recommendation pipeline couldn't resolve later (assets.universe is
+  // NOT NULL, so it can't be minted on the fly during a run). Reject it
+  // here instead, with a message the UI can show directly.
+  if (!result.asset_id) {
+    setError(
+      `${result.ticker} couldn't be added because it isn't available in AlphaSwarm's asset data.`
+    )
+    return
+  }
+
   const { error } = await supabase
     .from('user_watchlist_assets')
     .insert({
       user_id:  userId,
       ticker:   result.ticker,
-      ...(result.asset_id ? { asset_id: result.asset_id } : {}),
+      asset_id: result.asset_id,
     })
   if (error) { setError(`Failed to add: ${error.message}`); return }
   setSearch('')

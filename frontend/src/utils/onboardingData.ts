@@ -291,3 +291,59 @@ export const SURVEY_QUESTIONS = [
     ]
   }
 ]
+
+// --- PHASE 2b: GOALS ---
+//
+// Four questions about what the money is for, asked before the risk questions
+// because they are the easier ones to answer and they frame what follows.
+//
+// Kept OUT of SURVEY_QUESTIONS deliberately, for two reasons. The risk scorer
+// sums every answer whose id starts with `q_`, and reads `demo_age` and
+// `demo_income` by name, so an id in either style would silently join someone's
+// risk score. And the assessment progress counter counts SURVEY_QUESTIONS, which
+// should go on measuring the assessment.
+//
+// Each question maps to something a fund manager already publishes — the minimum
+// investment term on a fact sheet, the liquidity and income categories of the
+// ASISA classification, tax-free eligibility, the stated minimums — so the funds
+// page filters on disclosed labels rather than on an opinion of ours. See
+// `utils/goals.ts`.
+export const GOAL_QUESTIONS = [
+  {
+    id: "goal_horizon",
+    question: "When do you expect to need this money?",
+    options: [
+      { value: "under_2", label: "Within the next 2 years" },
+      { value: "2_to_5", label: "In 2 to 5 years" },
+      { value: "5_plus", label: "In 5 years or more" }
+    ]
+  },
+  {
+    id: "goal_purpose",
+    question: "What is this money for?",
+    options: [
+      { value: "emergency_fund", label: "An emergency fund I may need at short notice" },
+      { value: "goal", label: "A particular goal, like a deposit or a car" },
+      { value: "growth", label: "Long-term growth" },
+      { value: "income", label: "An income I can draw on" }
+    ]
+  },
+  {
+    id: "goal_account_type",
+    question: "Which kind of account are you investing through?",
+    options: [
+      { value: "tfsa", label: "A tax-free savings account" },
+      { value: "discretionary", label: "An ordinary investment account" },
+      { value: "unsure", label: "I am not sure yet" }
+    ]
+  },
+  {
+    id: "goal_contribution",
+    question: "How do you plan to put money in?",
+    options: [
+      { value: "lump_sum", label: "A lump sum" },
+      { value: "monthly", label: "A monthly amount" },
+      { value: "both", label: "Both" }
+    ]
+  }
+]

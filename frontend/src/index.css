@@ -46,6 +46,14 @@
   --color-danger: #e25757;
   --color-info: #5ba4e6;
 
+  /* `semantic-*` aliases. Forty-odd components already use bg/text-semantic-danger,
+     -success and -warning; without these the classes compiled to nothing and a
+     red confirm button was white text on a transparent ground. */
+  --color-semantic-danger: var(--color-danger);
+  --color-semantic-success: var(--color-success);
+  --color-semantic-warning: var(--color-warning);
+  --color-semantic-info: var(--color-info);
+
   /* Warning text on the light warning tint (hype chips) */
   --color-warning-strong: #b28a1a;
 

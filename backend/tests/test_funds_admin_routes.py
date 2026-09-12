@@ -1,0 +1,767 @@
+"""Tests for the fund catalogue's admin surface.
+
+Three claims.
+
+The first is that **nothing here can delete anything**, because the schema will
+not allow it: migration 024 grants only select/insert/update on funds and
+snapshots. A catalogue of published documents is evidence, so a fund is retired
+by clearing a flag and a fact sheet is corrected by recording another one. An
+interface offering a delete would be promising what the database refuses.
+
+The second is that a form and a CSV are held to **one standard** — the same
+``ValidatorChain`` the seed loader runs — and that a rejection lists every
+problem rather than the first, because someone filling a form wants to fix it
+all in one pass.
+
+The third is the flag and the admin check: with the feature off nothing mounts,
+and with it on every route still requires an admin.
+
+No network, no Supabase.
+"""
+
+from __future__ import annotations
+
+import sys
+from datetime import date
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fund_fakes import FakeClient  # noqa: E402
+from src.funds.admin_routes import (  # noqa: E402
+    SOFT_STALE_DAYS,
+    STALE_DAYS,
+    _staleness,
+    get_repository,
+    mount_fund_catalogue_admin,
+    require_admin,
+    router,
+)
+from src.funds.admin_routes import SnapshotIn  # noqa: E402
+from src.funds.repository import FundRepository  # noqa: E402
+
+TODAY = date(2026, 9, 5)
+
+FUND = {
+    "id": "f-1",
+    "isin": "ZAE000000001",
+    "name": "Alpha Money Market Fund",
+    "fund_house": "Alpha",
+    "manco": "Alpha Collective Investments (RF) (Pty) Ltd",
+    "vehicle": "unit_trust",
+    "is_index_tracker": False,
+    "jse_code": None,
+    "yahoo_symbol": None,
+    "asisa_geography": "South African",
+    "asisa_asset_class": "Interest Bearing",
+    "asisa_category": "South African - Interest Bearing - Money Market",
+    "tfsa_eligible": False,
+    "platforms": ["EasyEquities"],
+    "curation_rule": "largest money market fund by fund size",
+    "mdd_page_url": "https://alpha.invalid/funds",
+    "is_active": True,
+}
+
+SHEET = {
+    "id": "s-1",
+    "fund_id": "f-1",
+    "as_of": "2026-07-31",
+    "mdd_url": "https://alpha.invalid/mm.pdf",
+    "mdd_sha256": "abc",
+    "risk_indicator_raw": "Low",
+    "risk_indicator_1to5": 1,
+    "ter": 0.3,
+    "tc": 0.0,
+    "tic": 0.3,
+    "review_status": "approved",
+    "created_at": "2026-08-01T00:00:00Z",
+}
+
+VALID_FUND_BODY = {
+    "isin": "ZAE000000002",
+    "name": "Beta Income Fund",
+    "fund_house": "Beta",
+    "manco": "Beta Collective Investments",
+    "vehicle": "unit_trust",
+    "asisa_geography": "South African",
+    "asisa_asset_class": "Multi Asset",
+    "asisa_category": "South African - Multi Asset - Income",
+}
+
+
+def build_app(rows=None, admin: bool = True) -> FastAPI:
+    app = FastAPI()
+    assert mount_fund_catalogue_admin(app, enabled=True) is True
+    client = FakeClient(
+        rows=rows if rows is not None else {"funds": [FUND], "fund_factsheet_snapshots": [SHEET]}
+    )
+    app.dependency_overrides[get_repository] = lambda: FundRepository(client)
+    if admin:
+        # Stands in for a verified admin token; the real dependency is the
+        # backend's own two helpers, exercised by TestTheAdminCheck.
+        app.dependency_overrides[require_admin] = lambda: "admin-1"
+    app.state.fake = client
+    return app
+
+
+@pytest.fixture
+def client() -> TestClient:
+    return TestClient(build_app())
+
+
+class TestNothingDeletes:
+    """INVARIANT: the surface offers no way to destroy a record."""
+
+    def test_no_route_accepts_delete(self):
+        for route in router.routes:
+            assert "DELETE" not in getattr(route, "methods", set()), route.path
+
+    def test_retiring_a_fund_is_an_update_not_a_removal(self, client):
+        res = client.patch("/api/admin/fund-catalogue/funds/f-1", json={"is_active": False})
+        assert res.status_code == 200
+        calls = client.app.state.fake.calls_on("funds")
+        assert any(name == "update" for name, *_ in calls)
+        assert not any(name == "delete" for name, *_ in calls)
+
+    def test_a_retired_fund_can_still_be_edited_and_restored(self):
+        # The public side hides it; the admin must not, or retiring would be a
+        # one-way door and this feature's only removal would be irreversible.
+        app = build_app(rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []})
+        res = TestClient(app).patch("/api/admin/fund-catalogue/funds/f-1", json={"is_active": True})
+        assert res.status_code == 200
+
+    def test_a_sheet_can_be_recorded_against_a_retired_fund(self):
+        # The document was published whether or not we still list the fund.
+        app = build_app(rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []})
+        res = TestClient(app).post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "risk_indicator_raw": "Low", "risk_indicator_1to5": 1},
+        )
+        assert res.status_code == 201
+
+    def test_a_correction_is_recorded_as_another_sheet(self, client):
+        # Same fund, same date, a different reading. It must insert, because
+        # the earlier reading is the record of what the catalogue said then.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "risk_indicator_raw": "Low", "risk_indicator_1to5": 1, "ter": 0.35},
+        )
+        assert res.status_code == 201
+        calls = client.app.state.fake.calls_on("fund_factsheet_snapshots")
+        assert not any(name == "delete" for name, *_ in calls)
+
+
+class TestOneStandardForFormsAndCsv:
+    """INVARIANT: the form runs the validators the seed loader runs."""
+
+    def test_a_bad_isin_is_refused(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds", json={**VALID_FUND_BODY, "isin": "nonsense"}
+        )
+        assert res.status_code == 422
+        fields = [p["field"] for p in res.json()["detail"]["problems"]]
+        assert "isin" in fields
+
+    def test_an_unknown_category_is_refused(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "asisa_category": "South African - Equity - Mining"},
+        )
+        assert res.status_code == 422
+        assert any(p["field"] == "asisa_category" for p in res.json()["detail"]["problems"])
+
+    def test_every_problem_is_listed_not_just_the_first(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "isin": "nonsense", "asisa_category": "Nowhere - Nothing - None"},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert {"isin", "asisa_category"} <= fields
+
+    def test_fees_that_cannot_both_be_true_are_refused(self, client):
+        # ter + tc should equal tic; a tic below the ter is a transcription slip.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "ter": 2.0, "tc": 0.1, "tic": 0.5},
+        )
+        assert res.status_code == 422
+
+    def test_a_complete_allocation_is_accepted(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={
+                "as_of": "2026-07-31",
+                "asset_allocation": {"Domestic bonds": 40.0, "Domestic cash": 59.5},
+            },
+        )
+        assert res.status_code == 201
+
+    def test_a_partial_allocation_is_refused(self, client):
+        # The failure this guards is subtle: a donut summing to 60% renders
+        # perfectly and reads as a fund holding 40% of nothing.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "asset_allocation": {"Domestic equity": 60.0}},
+        )
+        assert res.status_code == 422
+        problems = res.json()["detail"]["problems"]
+        assert any(p["field"] == "asset_allocation" for p in problems)
+        assert any("line item" in p["message"] for p in problems)
+
+    def test_published_returns_are_stored_as_given(self, client):
+        # Quoted from the sheet's own table, never recomputed, so they must go
+        # in exactly as typed — including a negative period.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2026-07-31", "performance": {"1y": 14.41, "3y": -2.5}},
+        )
+        assert res.status_code == 201
+        call = [c for c in client.app.state.fake.calls_on("fund_factsheet_snapshots") if c[0] == "upsert"][0]
+        payload = call[1][0]
+        assert payload["performance"] == {"1y": 14.41, "3y": -2.5}
+
+    def test_a_valid_fund_is_written(self, client):
+        res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
+        assert res.status_code == 201
+        assert any(name == "upsert" for name, *_ in client.app.state.fake.calls_on("funds"))
+
+    def test_a_duplicate_isin_is_a_conflict_not_a_silent_overwrite(self, client):
+        res = client.post("/api/admin/fund-catalogue/funds", json={**VALID_FUND_BODY, "isin": FUND["isin"]})
+        assert res.status_code == 409
+
+    def test_a_warning_does_not_block_the_save(self, client):
+        # A sheet older than the freshness threshold may still be the newest one
+        # the manager has published, so it saves and says so.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds/f-1/snapshots",
+            json={"as_of": "2020-01-31", "risk_indicator_raw": "Low", "risk_indicator_1to5": 1},
+        )
+        assert res.status_code == 201
+        assert res.json()["warnings"], "a five-year-old sheet should warn"
+
+
+class TestTheStalenessOrdering:
+    """PINNED: the list answers 'what needs re-reading' before anything else."""
+
+    def test_the_oldest_sheet_comes_first_and_no_sheet_beats_it(self):
+        # Three funds: one never transcribed, one long overdue, one current.
+        # The page exists to answer "what needs re-reading", so that is the
+        # order it must return regardless of name or insertion order.
+        never = {**FUND, "id": "f-never", "isin": "ZAE000000009", "name": "Aaa Never Read"}
+        current = {**FUND, "id": "f-current", "isin": "ZAE000000008", "name": "Zzz Current"}
+        app = build_app(
+            rows={
+                "funds": [current, FUND, never],
+                "fund_factsheet_snapshots": [
+                    {**SHEET, "id": "s-old", "fund_id": "f-1", "as_of": "2025-01-31"},
+                    {**SHEET, "id": "s-new", "fund_id": "f-current", "as_of": "2026-09-01"},
+                ],
+            }
+        )
+        body = TestClient(app).get("/api/admin/fund-catalogue/funds").json()
+        assert [f["id"] for f in body["funds"]] == ["f-never", "f-1", "f-current"]
+        assert [f["staleness"]["status"] for f in body["funds"]] == ["missing", "stale", "current"]
+
+    def test_the_thresholds_are_published_with_the_list(self, client):
+        # The page renders the badges, so it needs the numbers rather than a
+        # second copy of them.
+        body = client.get("/api/admin/fund-catalogue/funds").json()
+        assert body["soft_stale_days"] == SOFT_STALE_DAYS
+        assert body["stale_days"] == STALE_DAYS
+
+    @pytest.mark.parametrize(
+        "age,expected",
+        [(0, "current"), (SOFT_STALE_DAYS, "current"), (SOFT_STALE_DAYS + 1, "ageing"),
+         (STALE_DAYS, "ageing"), (STALE_DAYS + 1, "stale")],
+    )
+    def test_the_thresholds_are_the_ones_decided(self, age, expected):
+        from datetime import timedelta
+
+        as_of = (TODAY - timedelta(days=age)).isoformat()
+        assert _staleness(as_of, TODAY)["status"] == expected
+
+    def test_a_missing_sheet_is_its_own_status(self):
+        assert _staleness(None, TODAY)["status"] == "missing"
+
+    def test_an_unreadable_date_is_not_silently_treated_as_fresh(self):
+        # Failing toward "current" would hide a fund from the list that exists
+        # to surface exactly this.
+        assert _staleness("not a date", TODAY)["status"] == "unreadable"
+
+
+class TestAddingAFundAndItsFirstSheetTogether:
+    """INVARIANT: a fund and its first fact sheet arrive in one request.
+
+    Both halves come off the same document — the ISIN and ASISA category from
+    its fund-facts block, the fees and risk from its fee and risk blocks. When
+    they were two requests on two screens, adding a fund left it listed,
+    browsable and matchable to nobody until somebody went back and recorded the
+    sheet separately.
+
+    The important claim is the seed loader's: **everything is validated before
+    anything is written.** The two tables are separate writes because PostgREST
+    has no cross-table transaction, so up-front validation is what actually
+    stops a half-loaded fund existing.
+    """
+
+    SHEET = {
+        "as_of": "2026-07-31",
+        "risk_indicator_raw": "Low",
+        "risk_indicator_1to5": 1,
+        "ter": 0.5,
+        "tc": 0.1,
+        "tic": 0.6,
+    }
+
+    def test_both_are_written_in_one_request(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": self.SHEET},
+        )
+        assert res.status_code == 201
+        body = res.json()
+        assert body["fund"] is not None
+        assert body["snapshot"] is not None
+
+        fake = client.app.state.fake
+        assert any(name == "upsert" for name, *_ in fake.calls_on("funds"))
+        assert any(name == "upsert" for name, *_ in fake.calls_on("fund_factsheet_snapshots"))
+
+    def test_a_bad_sheet_stops_the_fund_being_created(self, client):
+        # The whole point. ter + tc cannot exceed tic, so this sheet is refused
+        # — and the fund must not be written either, or the catalogue gains a
+        # fund with no figures because of a typo in a different field.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": {**self.SHEET, "tic": 0.1}},
+        )
+        assert res.status_code == 422
+        assert not any(
+            name in ("insert", "upsert") for name, *_ in client.app.state.fake.calls_on("funds")
+        )
+
+    def test_a_bad_fund_stops_the_sheet_being_written(self, client):
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "isin": "nonsense", "snapshot": self.SHEET},
+        )
+        assert res.status_code == 422
+        assert not any(
+            name in ("insert", "upsert")
+            for name, *_ in client.app.state.fake.calls_on("fund_factsheet_snapshots")
+        )
+
+    def test_problems_from_both_halves_come_back_at_once(self, client):
+        # One pass to fix everything, rather than one field per attempt.
+        res = client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "isin": "nonsense", "snapshot": {**self.SHEET, "tic": 0.1}},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert "isin" in fields
+        assert any(f in fields for f in ("tic", "ter", "tc"))
+
+    def test_the_sheet_stays_optional(self, client):
+        # A fund can legitimately be added before its sheet is to hand.
+        res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
+        assert res.status_code == 201
+        assert res.json()["snapshot"] is None
+
+    def test_the_sheet_carries_its_provenance(self, client):
+        client.post(
+            "/api/admin/fund-catalogue/funds",
+            json={**VALID_FUND_BODY, "snapshot": self.SHEET},
+        )
+        call = [
+            c for c in client.app.state.fake.calls_on("fund_factsheet_snapshots") if c[0] == "upsert"
+        ][0]
+        row = call[1][0]
+        assert row["source"] == "manual"
+        assert row["entered_by"] == "admin-1"
+        assert row["review_status"] == "approved"
+        # The stand-in hash, without which the row cannot de-duplicate.
+        assert row["mdd_sha256"]
+
+    def test_the_hash_is_the_same_rule_both_paths_use(self, client):
+        # Recorded with a new fund and recorded against an existing one must
+        # produce the same identity, or a correction made through one path would
+        # not supersede a reading made through the other.
+        from src.funds.admin_routes import _snapshot_row
+        from src.funds.repository import FundRepository as Repo
+
+        fund = {"isin": "ZAE000000002", "id": "f-new"}
+        row = _snapshot_row(fund, SnapshotIn(**self.SHEET), "admin-1", "f-new")
+        expected = Repo.transcription_hash("ZAE000000002", {k: v for k, v in row.items()})
+        assert row["mdd_sha256"] == expected
+
+
+class TestEditingAFundFromItsOwnPage:
+    """INVARIANT: the fields the edit form offers can actually be saved.
+
+    An admin reaching this from a fund's page expects to correct what that page
+    shows. Two of those corrections were impossible until the form sent the
+    whole ASISA triple, and the failure was silent in the worst way: a 422 on a
+    field the admin had not touched.
+    """
+
+    def test_the_category_cannot_be_changed_on_its_own(self, client):
+        """This is the bug the category dropdown exists to prevent.
+
+        `asisa_geography` and `asisa_asset_class` are denormalised off the
+        category for filtering, and the validator checks the three agree. A
+        patch carrying only the category is merged onto the row's existing tier
+        columns, which still describe the OLD category - so the row that gets
+        validated contradicts itself and the save is refused, naming two fields
+        the admin never edited.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"asisa_category": "Global - Equity - General"},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert fields == {"asisa_geography", "asisa_asset_class"}
+
+    def test_and_a_partial_mismatch_flags_only_the_column_that_disagrees(self, client):
+        """Worth its own case, because this is the version that slips past a reader.
+
+        Moving the seeded fund to SA Equity leaves the geography correct and only
+        the asset class wrong, so the refusal names one field rather than two -
+        which reads much more like a typo in something the admin did touch.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"asisa_category": "South African - Equity - SA General"},
+        )
+        assert res.status_code == 422
+        fields = {p["field"] for p in res.json()["detail"]["problems"]}
+        assert fields == {"asisa_asset_class"}
+
+    def test_the_category_and_its_tiers_together_are_accepted(self, client):
+        """Which is what the form now sends, taking all three off one record."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={
+                "asisa_category": "South African - Equity - SA General",
+                "asisa_geography": "South African",
+                "asisa_asset_class": "Equity",
+            },
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_the_badges_a_reader_sees_can_be_corrected(self, client):
+        """The tracker and tax-free flags are badges on the public page, so an
+        admin looking at a wrong one has to be able to fix it here."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"is_index_tracker": True, "tfsa_eligible": True},
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_a_unit_trusts_dealing_code_can_be_set_and_cleared(self, client):
+        """FundRock prints a JSE code on unit trusts, for dealing rather than a
+        listing, so this is editable without touching the vehicle."""
+        assert client.patch(
+            "/api/admin/fund-catalogue/funds/f-1", json={"jse_code": "BCIIFA"}
+        ).status_code == 200
+        assert client.patch(
+            "/api/admin/fund-catalogue/funds/f-1", json={"jse_code": None}
+        ).status_code == 200
+
+    def test_a_unit_trust_becomes_an_etf_when_the_symbol_comes_with_it(self, client):
+        """The change that was impossible until the form could read the symbol.
+
+        `VehicleConsistencyValidator` wants an ETF to carry a '.JO' symbol and a
+        unit trust to carry none, so the vehicle and the symbol are one edit.
+        The edit page read the PUBLIC fund detail, which does not include
+        `yahoo_symbol`, so there was no box for it and every vehicle change
+        refused naming a field the admin could not see.
+        """
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"vehicle": "etf", "jse_code": "ALPHA", "yahoo_symbol": "ALPHA.JO"},
+        )
+        assert res.status_code == 200, res.json()
+
+    def test_changing_the_vehicle_alone_still_refuses(self, client):
+        """Which is correct, and is why the two boxes sit next to each other."""
+        res = client.patch("/api/admin/fund-catalogue/funds/f-1", json={"vehicle": "etf"})
+        assert res.status_code == 422
+        assert "yahoo_symbol" in {p["field"] for p in res.json()["detail"]["problems"]}
+
+    def test_a_symbol_that_is_not_a_jse_listing_is_refused(self, client):
+        """A symbol found for a rand fund is usually an offshore share class."""
+        res = client.patch(
+            "/api/admin/fund-catalogue/funds/f-1",
+            json={"vehicle": "etf", "jse_code": "ALPHA", "yahoo_symbol": "ALPHA"},
+        )
+        assert res.status_code == 422
+        assert "yahoo_symbol" in {p["field"] for p in res.json()["detail"]["problems"]}
+
+    def test_a_fund_can_be_retired_and_restored_from_its_own_page(self, client):
+        """Retiring used to live only on the list. It is the only removal there
+        is, so the screen that edits a fund should be able to do it."""
+        for state in (False, True):
+            res = client.patch(
+                "/api/admin/fund-catalogue/funds/f-1", json={"is_active": state}
+            )
+            assert res.status_code == 200, res.json()
+
+    def test_every_editable_fund_field_can_be_saved_in_one_request(self, client):
+        """INVARIANT: the form can save the whole row, not a subset of it.
+
+        The form binds to every field `FundPatch` accepts, so this sends the same
+        shape. A field added to the patch model and not to the form would leave a
+        column nobody can correct without a SQL console; this fails when the two
+        drift, which is the cheapest place to notice.
+        """
+        from src.funds.admin_routes import FundPatch
+
+        patch = {
+            "name": "Alpha Money Market Fund (A)",
+            "fund_house": "Alpha",
+            "manco": "Alpha Collective Investments (RF) (Pty) Ltd",
+            "vehicle": "unit_trust",
+            "asisa_geography": "South African",
+            "asisa_asset_class": "Multi Asset",
+            "asisa_category": "South African - Multi Asset - Income",
+            "is_index_tracker": True,
+            "jse_code": "ALPHAA",
+            "yahoo_symbol": None,
+            "tfsa_eligible": True,
+            "platforms": ["EasyEquities"],
+            "mdd_page_url": "https://alpha.invalid/funds/mm",
+            "curation_rule": "a manager most South African investors will recognise",
+            "is_active": True,
+        }
+        assert set(patch) == set(FundPatch.model_fields), (
+            "the patch model and this test have drifted: "
+            f"{sorted(set(FundPatch.model_fields) ^ set(patch))}"
+        )
+
+        res = client.patch("/api/admin/fund-catalogue/funds/f-1", json=patch)
+        assert res.status_code == 200, res.json()
+
+    def test_the_isin_is_not_editable_and_that_is_deliberate(self, client):
+        """It keys the archived documents in storage and goes into each fact
+        sheet's transcription hash, so changing it would orphan the one and
+        re-key the other. The patch model does not accept it at all."""
+        from src.funds.admin_routes import FundPatch
+
+        assert "isin" not in FundPatch.model_fields
+
+
+class TestCorrectingASheetOnFile:
+    """INVARIANT: re-saving a prefilled sheet unchanged writes nothing.
+
+    The edit form opens with the stored sheet filled in, because a correction
+    that required retyping all thirty figures was not a correction anyone would
+    make. That only works if an unchanged save is inert, and what decides it is
+    `transcription_hash`: it covers every transcribed value, so an identical
+    reading collides on (fund_id, as_of, mdd_sha256) and is ignored, while a
+    changed figure lands as a new row that the read layer prefers.
+
+    The risk is narrow and worth a test rather than an argument. The hash
+    formats values with `repr`, so a figure that came back from the database and
+    went out through a text input has to arrive as the SAME Python type it went
+    in as. `923.0` reaching the hash as `923` is a different string, and the
+    result would be a fund quietly accumulating a "correction" per visit —
+    permanently, since migration 024 grants no delete.
+    """
+
+    NUMERIC = {
+        "risk_indicator_1to5",
+        "ter",
+        "tc",
+        "tic",
+        "fund_size_zar",
+        "recommended_min_term_years",
+        "min_lump_sum",
+        "min_debit_order",
+        "nav_cpu",
+        "annual_management_fee",
+        "return_high_12m",
+        "return_low_12m",
+    }
+
+    #: A sheet with the shapes that could round-trip badly: an integral float,
+    #: a real zero, a value with decimals, and an int.
+    FULL = {
+        "as_of": "2026-07-31",
+        "mdd_url": "https://alpha.invalid/mm.pdf",
+        "risk_indicator_raw": "Low",
+        "risk_indicator_1to5": 1,
+        "ter": 0.3,
+        "tc": 0.0,
+        "tic": 0.3,
+        "nav_cpu": 923.0,
+        "nav_date": "2026-07-31",
+        "fund_size_zar": 527491584.0,
+        "annual_management_fee": 0.25,
+        "fee_period": "1y",
+        "return_high_12m": 14.41,
+        "return_low_12m": -4.49,
+        "return_extremes_basis": "calendar_year",
+        "min_lump_sum": 500.0,
+        "min_debit_order": 0.0,
+        "regulation_28": True,
+        "distribution_frequency": "Quarterly",
+        "top_holdings": {"Naspers Ltd": 7.2},
+        "income_distribution": {"2026-06": 0.0},
+    }
+
+    @staticmethod
+    def _as_input_text(value):
+        """What the form's text input holds, matching JavaScript's String().
+
+        The difference that matters: JS renders an integral float without its
+        fractional part, so a stored 923.0 reaches the box as "923".
+        """
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    def _resubmit(self, stored: dict) -> dict:
+        """The stored row as the prefilled form would send it back."""
+        body: dict = {}
+        for key, value in stored.items():
+            if key in ("regulation_28", "top_holdings", "income_distribution"):
+                continue
+            text = self._as_input_text(value)
+            if key != "as_of" and text.strip() == "":
+                continue
+            body[key] = float(text) if key in self.NUMERIC else text
+        body["regulation_28"] = stored["regulation_28"]
+        body["top_holdings"] = stored["top_holdings"]
+        body["income_distribution"] = stored["income_distribution"]
+        return body
+
+    def test_a_prefilled_sheet_resubmitted_unchanged_keeps_its_hash(self):
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        again = _snapshot_row(FUND, SnapshotIn(**self._resubmit(first)), "admin-1", "f-1")
+        assert again["mdd_sha256"] == first["mdd_sha256"], (
+            "an unchanged re-save would land as a correction, one per visit, "
+            "and 024 grants no delete"
+        )
+
+    def test_changing_one_figure_does_change_the_hash(self):
+        """The other half: a correction has to be able to land."""
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        corrected = {**self._resubmit(first), "ter": 0.31}
+        again = _snapshot_row(FUND, SnapshotIn(**corrected), "admin-1", "f-1")
+        assert again["mdd_sha256"] != first["mdd_sha256"]
+
+    def test_a_declared_zero_survives_the_round_trip(self):
+        """0.00 is a published figure and blank is not, so they must not merge.
+
+        `tc` and `min_debit_order` are zero in the fixture above. If either came
+        back as blank the hash would change, and the stored zero would be
+        replaced by a row that says the sheet did not state it.
+        """
+        from src.funds.admin_routes import SnapshotIn, _snapshot_row
+
+        first = _snapshot_row(FUND, SnapshotIn(**self.FULL), "admin-1", "f-1")
+        resent = self._resubmit(first)
+        assert resent["tc"] == 0.0
+        assert resent["min_debit_order"] == 0.0
+        again = _snapshot_row(FUND, SnapshotIn(**resent), "admin-1", "f-1")
+        assert again["mdd_sha256"] == first["mdd_sha256"]
+
+    def test_recording_the_same_sheet_twice_is_ignored_not_duplicated(self, client):
+        """End to end: the second identical save must not add a row."""
+        body = {"as_of": "2026-07-31", "ter": 0.3, "tc": 0.0, "tic": 0.3}
+        for _ in range(2):
+            res = client.post(
+                "/api/admin/fund-catalogue/funds/f-1/snapshots", json=body
+            )
+            assert res.status_code == 201, res.json()
+
+        upserts = [
+            call
+            for call in client.app.state.fake.calls_on("fund_factsheet_snapshots")
+            if call[0] == "upsert"
+        ]
+        assert len(upserts) == 2
+        for call in upserts:
+            assert call[2]["ignore_duplicates"] is True
+            assert call[2]["on_conflict"] == "fund_id,as_of,mdd_sha256"
+
+
+class TestTheStoredRowIsReadableForEditing:
+    """INVARIANT: the edit screen can read every field it offers to write.
+
+    A form cannot bind to a field its data does not carry, and that is not a
+    theoretical failure — it is exactly how `yahoo_symbol` came to be
+    uneditable. The page used to read the public detail, which drops it.
+    """
+
+    def test_it_returns_the_row_as_stored(self, client):
+        body = client.get("/api/admin/fund-catalogue/funds/f-1").json()
+        fund = body["fund"]
+        # The three the public view does not carry.
+        for field in ("yahoo_symbol", "is_active", "platforms"):
+            assert field in fund, field
+
+    def test_a_retired_fund_is_still_readable_here(self):
+        """Restoring one means editing it, so it has to be fetchable."""
+        app = build_app(
+            rows={"funds": [{**FUND, "is_active": False}], "fund_factsheet_snapshots": []}
+        )
+        res = TestClient(app).get("/api/admin/fund-catalogue/funds/f-1")
+        assert res.status_code == 200
+        assert res.json()["fund"]["is_active"] is False
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        assert client.get("/api/admin/fund-catalogue/funds/nope").status_code == 404
+
+    def test_reading_it_needs_an_admin(self):
+        app = build_app(admin=False)
+        res = TestClient(app).get("/api/admin/fund-catalogue/funds/f-1")
+        assert res.status_code in (401, 403)
+
+
+class TestTheFlagAndTheAdminCheck:
+    def test_nothing_mounts_when_the_feature_is_off(self):
+        app = FastAPI()
+        assert mount_fund_catalogue_admin(app, enabled=False) is False
+        assert TestClient(app).get("/api/admin/fund-catalogue/funds").status_code == 404
+
+    def test_the_router_owns_the_admin_prefix(self):
+        assert router.prefix == "/api/admin/fund-catalogue"
+
+    def test_no_route_reads_a_sheet(self):
+        """Funds are entered by hand, and this is what says so in code.
+
+        The reading endpoints and the readers behind them were removed
+        deliberately: a figure in this catalogue is one a person typed off the
+        document. Re-adding a prefill route is a product decision, so it should
+        fail a test rather than arrive quietly with a form field.
+        """
+        paths = [route.path for route in router.routes]
+        assert not [path for path in paths if "extract" in path], paths
+
+    def test_every_route_requires_the_admin_dependency(self):
+        # The check is a dependency rather than a line in each handler, so this
+        # asserts none was added without one.
+        for route in router.routes:
+            names = [d.call.__name__ for d in getattr(route, "dependant", None).dependencies]
+            assert "require_admin" in names, route.path
+
+    def test_without_a_token_the_request_is_refused(self):
+        app = build_app(admin=False)
+        res = TestClient(app).get("/api/admin/fund-catalogue/funds")
+        assert res.status_code in (401, 403)

@@ -1,5 +1,5 @@
 import { type FormEvent } from "react";
-import { BookOpen, RotateCcw, Save } from "lucide-react";
+import { RotateCcw, Save } from "lucide-react";
 import type { LearningCategoryFormValues } from "../../hooks/useAdminLearningCategories";
 
 type LearningCategoryFormProps = {

@@ -1,14 +1,37 @@
 """Shared test setup.
 
-Two jobs, both about determinism:
+Three jobs, all about determinism:
 
 1.  Put ``backend/`` on ``sys.path`` so ``import src.…`` works no matter which
     directory pytest was invoked from.
 
-2.  Pin every env-tunable scoring constant to its DOCUMENTED DEFAULT before the
+2.  Load ``backend/.env`` first, then give the Supabase client placeholder
+    credentials if there are still none, so collection does not depend on a
+    developer's ``.env`` — but a developer's ``.env`` still wins when present.
+
+3.  Pin every env-tunable scoring constant to its DOCUMENTED DEFAULT before the
     modules under test are imported.
 
-Point 2 matters more than it looks. ``ranking.py``, ``quant_analyst.py`` and
+4.  Stop tests from making real ask_query_logs writes.
+
+Point 2 is not hypothetical. ``supabase_client`` raises at *import* when
+``SUPABASE_URL`` or ``SUPABASE_SERVICE_ROLE_KEY`` is missing, and several test
+modules import it transitively. Without this, the suite survives only because
+``langgraph_orchestrator`` calls ``load_dotenv()`` and a developer happens to have
+``backend/.env`` — so in a fresh clone, a git worktree or CI, collection fails
+with four errors before a single test runs. ``setdefault`` leaves a real
+environment untouched; the placeholders only ever apply where there was nothing.
+
+The order matters. The Ask AlphaSwarm tests (``test_ask_learning``,
+``test_ask_recovery_and_metrics`` and friends) resolve tickers against the real
+``assets`` table and narrate through Groq, so they need the credentials in
+``.env``. If the placeholders were applied before ``.env`` was read, every one
+of those tests would dial ``localhost:54321`` and fail with a connection refused
+that looks like a regression. Loading ``.env`` here rather than trusting a
+transitive import to do it is what keeps the placeholder a fallback and not an
+override.
+
+Point 3 matters more than it looks. ``ranking.py``, ``quant_analyst.py`` and
 ``ss_aggregation.py`` all read their thresholds via ``os.getenv`` at *import*
 time, and ``langgraph_orchestrator`` calls ``load_dotenv()``, which pulls
 ``backend/.env`` into the environment. None of the scoring tunables are set in
@@ -19,18 +42,49 @@ shift underneath it and the failures would look like real regressions.
 them here wins. The values below are the defaults written into the source; if a
 default legitimately changes, update it here and the failing expectations will
 show you exactly which behaviour moved.
+
+Point 4: /api/ask now writes one row per request (Admin Reports Chatbot
+instrumentation); every existing ask test calls api.ask_alphaswarm directly and
+none of them mock Supabase for this, so without the autouse fixture below every
+one of them would attempt a real network call on every run.
 """
 
 import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+# ── the developer's .env, before any fallback is chosen ──────────────────────
+# load_dotenv never overrides a variable that is already set, so a value exported
+# in the shell still beats the file, and the file beats the placeholders below.
+load_dotenv(BACKEND_ROOT / ".env")
+
+# ── credentials the client insists on at import ──────────────────────────────
+# setdefault, not assignment: a real environment must win, because some tests are
+# run against a scratch project deliberately, and the Ask AlphaSwarm tests read
+# the real assets table.
+_IMPORT_TIME_REQUIRED = {
+    "SUPABASE_URL": "http://localhost:54321",
+    "SUPABASE_SERVICE_ROLE_KEY": "test-service-role-key",
+}
+
+for _key, _value in _IMPORT_TIME_REQUIRED.items():
+    os.environ.setdefault(_key, _value)
+
 # ── documented defaults, pinned ──────────────────────────────────────────────
 _PINNED_DEFAULTS = {
+    # funds/config.py — read ONCE at import, so a developer's .env must not
+    # decide what a test gets. Assignment rather than setdefault, because that
+    # is exactly how it bit on 2026-09-07: a flag set in backend/.env to try
+    # something live shifted the suite underneath it, and three tests failed
+    # looking like regressions when nothing had regressed.
+    "FUNDS_ENABLED": "true",
+    "FUND_TRACES_ENABLED": "false",
     # ranking.py
     "RANK_W_QUANT": "0.5",
     "RANK_W_SENT": "0.5",
@@ -72,3 +126,19 @@ _PINNED_DEFAULTS = {
 
 for _key, _value in _PINNED_DEFAULTS.items():
     os.environ[_key] = _value
+
+import pytest
+
+import src.api as api
+
+
+@pytest.fixture(autouse=True)
+def _no_real_ask_query_logging(monkeypatch):
+    """/api/ask now writes one ask_query_logs row per request (Admin Reports
+    Chatbot instrumentation). Every existing ask test calls api.ask_alphaswarm
+    directly and none of them mock Supabase for this, so without this
+    autouse no-op every one of them would attempt a real network call on
+    every run. Tests that specifically exercise the logging behaviour
+    re-patch api._log_ask_query (or api.supabase) themselves, which
+    overrides this fixture's patch within that test."""
+    monkeypatch.setattr(api, "_log_ask_query", lambda **kwargs: None)
