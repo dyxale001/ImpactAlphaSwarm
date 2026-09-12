@@ -129,8 +129,8 @@ export default function DashboardPage() {
             </p>
             <p className="max-w-sm text-xs leading-relaxed text-brand-muted-fg">
               Add the pieces you want to see. Your watchlist, the assets your
-              latest run ranked, sentiment, insider activity and your learning
-              progress are all available.
+              latest run ranked, sentiment, price history, insider activity and
+              your learning progress are all available.
             </p>
             <button
               type="button"
