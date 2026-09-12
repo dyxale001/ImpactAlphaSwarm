@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthStore } from "../store/authStore";
 import {
+  allowsMultiple,
   arrayMove,
   emptyLayout,
+  newInstanceId,
   parseLayout,
   type DashboardLayout,
   type LayoutEntry,
@@ -215,38 +217,52 @@ export function useDashboardLayout() {
     }
   }, [userId, syncStore]);
 
+  /**
+   * Place a widget. A ticker-scoped widget may be placed again while a copy is
+   * already on the board, since the new one will watch an asset of its own;
+   * every other widget is one per board and a repeat request is a no-op.
+   */
   const addWidget = useCallback(
     (id: string) => {
       const def = widgetById(id);
       if (!def) return;
       mark("added");
       mutate((current) =>
-        current.widgets.some((w) => w.id === id)
+        !allowsMultiple(def) && current.widgets.some((w) => w.id === id)
           ? current
           : {
               ...current,
-              widgets: [...current.widgets, { id, size: def.defaultSize }],
+              widgets: [
+                ...current.widgets,
+                { id, instanceId: newInstanceId(id), size: def.defaultSize },
+              ],
             },
       );
     },
     [mutate, mark],
   );
 
+  // Every operation below addresses a placement by its instance id, not its
+  // widget id: two copies of the same widget must be movable, resizable and
+  // removable independently.
+
   const removeWidget = useCallback(
-    (id: string) =>
+    (instanceId: string) =>
       mutate((current) => ({
         ...current,
-        widgets: current.widgets.filter((w) => w.id !== id),
+        widgets: current.widgets.filter((w) => w.instanceId !== instanceId),
       })),
     [mutate],
   );
 
   const setSize = useCallback(
-    (id: string, size: WidgetSize) => {
+    (instanceId: string, size: WidgetSize) => {
       mark("resized");
       mutate((current) => ({
         ...current,
-        widgets: current.widgets.map((w) => (w.id === id ? { ...w, size } : w)),
+        widgets: current.widgets.map((w) =>
+          w.instanceId === instanceId ? { ...w, size } : w,
+        ),
       }));
     },
     [mutate, mark],
@@ -255,14 +271,14 @@ export function useDashboardLayout() {
   /** Step a widget through the sizes it offers, wrapping at the end. One button
    *  rather than three, since a widget rarely offers more than two. */
   const cycleSize = useCallback(
-    (id: string) => {
-      const def = widgetById(id);
-      if (!def) return;
+    (instanceId: string) => {
       mark("resized");
       mutate((current) => ({
         ...current,
         widgets: current.widgets.map((w) => {
-          if (w.id !== id) return w;
+          if (w.instanceId !== instanceId) return w;
+          const def = widgetById(w.id);
+          if (!def) return w;
           const at = def.sizes.indexOf(w.size);
           return { ...w, size: def.sizes[(at + 1) % def.sizes.length] };
         }),
@@ -286,21 +302,31 @@ export function useDashboardLayout() {
   );
 
   const updateSettings = useCallback(
-    (id: string, patch: WidgetSettings) =>
+    (instanceId: string, patch: WidgetSettings) =>
       mutate((current) => ({
         ...current,
         widgets: current.widgets.map((w) =>
-          w.id === id ? { ...w, settings: { ...w.settings, ...patch } } : w,
+          w.instanceId === instanceId
+            ? { ...w, settings: { ...w.settings, ...patch } }
+            : w,
         ),
       })),
     [mutate],
   );
 
-  /** Widgets not currently placed, for the add drawer. */
-  const availableWidgets = useMemo(() => {
-    const placed = new Set((layout?.widgets ?? []).map((w) => w.id));
-    return WIDGETS.filter((w) => !placed.has(w.id));
-  }, [layout?.widgets]);
+  /** Widget ids with at least one copy on the board. */
+  const placedIds = useMemo(
+    () => new Set((layout?.widgets ?? []).map((w) => w.id)),
+    [layout?.widgets],
+  );
+
+  /** What the add drawer offers: everything not yet placed, plus the
+   *  ticker-scoped widgets whether placed or not, since another copy of one of
+   *  those can watch another asset. */
+  const availableWidgets = useMemo(
+    () => WIDGETS.filter((w) => allowsMultiple(w) || !placedIds.has(w.id)),
+    [placedIds],
+  );
 
   /** Entries paired with their definition, so the page never looks a widget up
    *  itself. Entries whose widget has vanished from the registry are dropped,
@@ -317,6 +343,7 @@ export function useDashboardLayout() {
   return {
     layout,
     placedWidgets,
+    placedIds,
     availableWidgets,
     needsGuide,
     activity,

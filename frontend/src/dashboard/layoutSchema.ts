@@ -14,15 +14,38 @@ export const WIDGET_SIZES: WidgetSize[] = ["small", "medium", "wide"];
 
 /** Bumped when a stored layout needs reshaping in code. 2 moved the chosen
  *  asset from one dashboard-wide `pinnedTicker` to a per-widget
- *  `settings.ticker`; see migrateTicker below. */
-export const LAYOUT_VERSION = 2;
+ *  `settings.ticker`. 3 gave every entry an `instanceId` of its own, so a
+ *  ticker-scoped widget can be placed more than once; see parseLayout. */
+export const LAYOUT_VERSION = 3;
 
 export type WidgetSettings = Record<string, unknown>;
 
 export interface LayoutEntry {
+  /** Which widget this is: a key into the registry. */
   id: string;
+  /**
+   * Which placement this is. Two sentiment-trend widgets pointing at two
+   * different assets share an `id` and differ here, and every operation on a
+   * placed widget (move, resize, remove, retarget) addresses this rather than
+   * the widget id. A v2 entry had no instanceId; the parser gives it its
+   * widget id, which was unique on a v2 board.
+   */
+  instanceId: string;
   size: WidgetSize;
   settings?: WidgetSettings;
+}
+
+/**
+ * A fresh instance id for a placement of `id`. Prefixed with the widget id so a
+ * saved layout stays readable in the SQL editor, and random after that so two
+ * placements made in the same millisecond cannot collide.
+ */
+export function newInstanceId(id: string): string {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `${id}:${random}`;
 }
 
 export interface DashboardLayout {
@@ -34,8 +57,16 @@ export interface DashboardLayout {
 export interface WidgetSpec {
   sizes: WidgetSize[];
   defaultSize: WidgetSize;
-  /** Scoped to one asset, and so carries a `ticker` in its settings. */
+  /** Scoped to one asset, and so carries a `ticker` in its settings. Also the
+   *  widgets that may be placed more than once: a second copy watching a
+   *  second asset says something a single copy cannot. Every other widget shows
+   *  the same thing twice, and is held to one per board. */
   needsTicker?: boolean;
+}
+
+/** Whether a widget may appear on the board more than once. */
+export function allowsMultiple(spec: WidgetSpec | undefined): boolean {
+  return Boolean(spec?.needsTicker);
 }
 
 /** What every widget component is handed. Lives here rather than in the registry
@@ -94,7 +125,14 @@ function isSize(value: unknown): value is WidgetSize {
  * widget that has no `ticker` of its own inherits it, so a dashboard that was
  * showing one asset everywhere keeps showing it, and only then diverges as the
  * reader retargets widgets one at a time. The field itself does not survive the
- * parse, so the migration runs once and the next write is clean v2.
+ * parse, so the migration runs once and the next write is clean.
+ *
+ * A v2 entry has no `instanceId`. It is given its widget id, which a v2 board
+ * held once, so the first read after this build lands changes nothing the
+ * reader can see and the next write is v3. Two entries that arrive with the
+ * same instance id keep only the first; two entries for the same widget keep
+ * only the first unless that widget is ticker-scoped, where each placement is
+ * its own thing.
  */
 export function parseLayout(
   raw: unknown,
@@ -107,7 +145,8 @@ export function parseLayout(
 
   const legacyTicker = normaliseTicker(record.pinnedTicker);
 
-  const seen = new Set<string>();
+  const seenInstances = new Set<string>();
+  const seenWidgets = new Set<string>();
   const widgets: LayoutEntry[] = [];
 
   for (const candidate of record.widgets) {
@@ -117,10 +156,25 @@ export function parseLayout(
     if (typeof id !== "string") continue;
 
     const widgetSpec = spec[id];
-    // Unknown to this build, or already placed. A layout holds each widget once:
-    // two copies of the same widget would fight over the same settings.
-    if (!widgetSpec || seen.has(id)) continue;
-    seen.add(id);
+    if (!widgetSpec) continue;
+    // One per board for a widget that would only show the same thing twice.
+    if (!allowsMultiple(widgetSpec) && seenWidgets.has(id)) continue;
+
+    // A v2 entry carries no instance id and takes its widget id, which was
+    // unique on a v2 board. A repeat of that id with no instance id of its own
+    // (a hand-edited row) is given a fresh one rather than dropped: the reader
+    // put two there, and for a ticker-scoped widget that is allowed.
+    const provided =
+      typeof entry.instanceId === "string" && entry.instanceId.trim()
+        ? entry.instanceId
+        : null;
+    let instanceId = provided ?? id;
+    if (seenInstances.has(instanceId)) {
+      if (provided) continue;
+      instanceId = newInstanceId(id);
+    }
+    seenInstances.add(instanceId);
+    seenWidgets.add(id);
 
     const size =
       isSize(entry.size) && widgetSpec.sizes.includes(entry.size)
@@ -145,7 +199,9 @@ export function parseLayout(
       }
     }
 
-    widgets.push(settings ? { id, size, settings } : { id, size });
+    widgets.push(
+      settings ? { id, instanceId, size, settings } : { id, instanceId, size },
+    );
   }
 
   // A `deck` field on an older row is read straight past. Starter decks were
