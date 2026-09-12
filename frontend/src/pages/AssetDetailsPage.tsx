@@ -8,7 +8,6 @@ import {
   MessageSquare,
   TriangleAlert,
   HelpCircle,
-  Scale,
   ArrowRight,
 } from "lucide-react";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
@@ -16,11 +15,7 @@ import SignalScorecard, {
   type SignalTerms,
 } from "../components/dashboard/SignalScorecard";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
-import {
-  CONVERGENCE_DETAIL,
-  QUANT_STATE_NOTE,
-  type ConvergenceState,
-} from "../data/signalCopy";
+import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
 import {
@@ -479,37 +474,6 @@ export default function AssetDetailsPage() {
     quantState: recommendation?.quant_state ?? null,
   };
 
-  // Only surface a factor when it actually affected placement. Listing all four
-  // every time (including a profile fit of 1.00 that changed nothing) is noise,
-  // and noise is what made the old penalty panel unreadable.
-  const placementNotes: string[] = [];
-  if (convergenceState === "conflict" || convergenceState === "mixed") {
-    placementNotes.push(CONVERGENCE_DETAIL[convergenceState]);
-  }
-  if (
-    typeof signalTerms.dataSufficiency === "number" &&
-    signalTerms.dataSufficiency < 0.75
-  ) {
-    placementNotes.push(
-      "Ranked lower because there is relatively little to go on: fewer trusted articles, posts or days of price history than for other candidates. That reflects what we know, not the asset itself.",
-    );
-  }
-  if (typeof signalTerms.profileFit === "number" && signalTerms.profileFit < 1) {
-    placementNotes.push(
-      "Ranked lower for you specifically: it moves more sharply than the risk preference you set during onboarding. Another user with a different preference would see it placed differently.",
-    );
-  }
-  if (signalTerms.quantState && signalTerms.quantState !== "cross_sectional") {
-    placementNotes.push(
-      QUANT_STATE_NOTE[signalTerms.quantState] ??
-        "The price measurements could not be ranked for this run.",
-    );
-  }
-  const needsAttention =
-    convergenceState === "conflict" ||
-    (typeof signalTerms.dataSufficiency === "number" &&
-      signalTerms.dataSufficiency < 0.75);
-
   return (
     <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
@@ -608,7 +572,7 @@ export default function AssetDetailsPage() {
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className={showScorecard ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
                   <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
                     <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
                       <BrainCircuit className="w-3 h-3 text-brand-primary" />
@@ -619,41 +583,11 @@ export default function AssetDetailsPage() {
                     </p>
                   </div>
 
-                  {/* Under the disclosed factors this panel reports WHY the asset
-                      placed where it did. The old version listed the hype and risk
-                      penalties — the mechanism convergence replaced — so it
-                      described arithmetic that no longer happens. */}
-                  {showScorecard ? (
-                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
-                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                        <Scale className="w-3 h-3 text-brand-primary" />
-                        What moved this asset
-                      </div>
-
-                      {placementNotes.length > 0 ? (
-                        <ul className="space-y-2 text-sm text-brand-fg/90">
-                          {placementNotes.map((note) => (
-                            <li key={note} className="leading-relaxed">
-                              {note}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-sm leading-relaxed text-brand-muted-fg">
-                          Nothing stood out: the signals agree, the evidence is
-                          reasonably deep, and the volatility matches the risk
-                          preference on file.
-                        </p>
-                      )}
-
-                      {needsAttention && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                          <TriangleAlert className="w-4 h-4" />
-                          Worth a closer look before drawing conclusions
-                        </div>
-                      )}
-                    </div>
-                  ) : (
+                  {/* The legacy penalty panel, for rows without the disclosed factors.
+                      Under the disclosed factors the trace stands alone: the
+                      "what moved this asset" notes were cut on review, since the
+                      scorecard beside the trace already names each factor. */}
+                  {!showScorecard && (
                     <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
                       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
                         <Flame className="w-3 h-3 text-brand-primary" />
