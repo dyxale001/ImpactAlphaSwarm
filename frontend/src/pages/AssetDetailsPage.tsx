@@ -840,8 +840,8 @@ export default function AssetDetailsPage() {
                 things it changes. */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-brand-muted-fg">
-                Price history over a window you choose. The measurements further
-                down come from the most recent analysis run.
+                Price history over a window you choose, shown in rand. The
+                measurements further down come from the most recent analysis run.
               </p>
               <HorizonPicker value={horizon} onChange={setHorizon} />
             </div>
@@ -850,6 +850,9 @@ export default function AssetDetailsPage() {
               points={quantHistory.points}
               facts={quantHistory.facts}
               currency={quantHistory.currency}
+              displayCurrency={quantHistory.displayCurrency}
+              fxRate={quantHistory.fxRate}
+              converted={quantHistory.converted}
               exchangeName={quantHistory.exchangeName}
               horizon={horizon}
               available={quantHistory.available}

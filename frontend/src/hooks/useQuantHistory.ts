@@ -68,6 +68,9 @@ export function useQuantHistory(
     points: data?.points ?? [],
     facts: data?.facts ?? null,
     currency: data?.currency ?? "",
+    displayCurrency: data?.display_currency || data?.currency || "",
+    fxRate: data?.fx_rate ?? null,
+    converted: data?.converted ?? false,
     exchangeName: data?.exchange_name ?? "",
     // Unknown until the first answer arrives; treated as available so the chart shows
     // its loading state rather than flashing "not enabled" before it knows.

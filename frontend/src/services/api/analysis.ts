@@ -297,7 +297,7 @@ import type { QuantHorizon } from "../../data/quantExplainers";
 export interface QuantHistoryPoint {
   /** Trading day, YYYY-MM-DD. */
   date: string;
-  /** Close in the asset's own listing currency. */
+  /** Close in the window's display currency: rand whenever the rate was available. */
   close: number;
   /** RSI(14) on that day, or null while the indicator has too little history. */
   rsi: number | null;
@@ -331,8 +331,18 @@ export interface QuantHistoryResponse {
   horizon: QuantHorizon;
   /** False when the deployment has not switched the feature on. Distinct from empty. */
   available: boolean;
-  /** ISO currency code the closes are in, e.g. "USD", or "" when yfinance did not say. */
+  /** ISO code of the currency the share trades in, e.g. "USD", or "" when yfinance did not say. */
   currency: string;
+  /**
+   * The currency the closes and facts are actually in. "ZAR" whenever the day's rand
+   * rate for the listing currency was available, the way the headline price is; the
+   * listing currency itself when it was not.
+   */
+  display_currency: string;
+  /** Rand per unit of the listing currency the closes were multiplied by, or null. */
+  fx_rate: number | null;
+  /** True when the closes are in a different currency from the one the share trades in. */
+  converted: boolean;
   /** yfinance's exchange code, e.g. "NMS". */
   exchange: string;
   /** The same exchange as a reader would name it, e.g. "Nasdaq". */
@@ -366,6 +376,12 @@ export interface QuantTraceResponse {
   source: "model" | "template" | null;
   model: string | null;
   generated_at: string | null;
+  /** The currency the paragraph's prices are in, e.g. "ZAR". Null with a null trace. */
+  currency: string | null;
+  /** The currency the share trades in, e.g. "USD". */
+  listing_currency: string | null;
+  /** Rand per unit of the listing currency the paragraph's prices were converted at. */
+  fx_rate: number | null;
 }
 
 // The written paragraph over one ticker's window. Generated the first time a

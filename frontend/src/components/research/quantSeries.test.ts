@@ -5,6 +5,7 @@ import {
   formatDrawdown,
   formatFullDate,
   formatNumber,
+  conversionNote,
   formatPrice,
   priceDomain,
   rsiNote,
@@ -37,6 +38,34 @@ describe("formatPrice", () => {
 
   it("carries a proper minus for a negative number", () => {
     expect(formatNumber(-1234.5, 1)).toBe("−1,234.5");
+  });
+});
+
+describe("conversionNote", () => {
+  it("names the listing currency and the rate when the window was converted", () => {
+    expect(conversionNote("USD", "ZAR", 18.4231, true)).toBe(
+      "Shown in rand, converted from USD at today's rate of R18.42 per USD.",
+    );
+  });
+
+  it("says nothing for a rand listing shown in rand", () => {
+    expect(conversionNote("ZAR", "ZAR", 1, false)).toBeNull();
+  });
+
+  it("explains rand cents without quoting a rate", () => {
+    expect(conversionNote("ZAc", "ZAR", 0.01, true)).toBe(
+      "Quoted in rand cents on the exchange; shown here in rand.",
+    );
+  });
+
+  it("says when the rate was missing and the window stayed in its own currency", () => {
+    expect(conversionNote("USD", "USD", null, false)).toBe(
+      "Shown in USD, the currency it trades in; today's rand rate was not available.",
+    );
+  });
+
+  it("has nothing to say when the listing currency is unknown", () => {
+    expect(conversionNote("", "", null, false)).toBeNull();
   });
 });
 

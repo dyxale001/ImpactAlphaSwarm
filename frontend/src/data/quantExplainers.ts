@@ -217,6 +217,12 @@ export const QUANT_HORIZON_LABELS: Record<QuantHorizon, string> = {
 export const QUANT_CHART_NOTE =
   "Closing prices in the asset's own listing currency, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
 
+// The same note once the window is in rand, which it is whenever the day's rate could be
+// fetched. Converting every close at one rate keeps the share's own moves and the
+// exchange rate's moves apart: the line is the share, and the rate is stated beside it.
+export const QUANT_CHART_NOTE_RAND =
+  "Closing prices shown in rand, every day converted at the same rate stated above, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
+
 export const QUANT_CHART_UNAVAILABLE =
   "The historical view is not switched on for this deployment. The measurements below still describe the most recent analysis.";
 

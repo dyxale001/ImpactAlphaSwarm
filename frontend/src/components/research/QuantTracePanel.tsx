@@ -1,5 +1,6 @@
 import { BrainCircuit } from "lucide-react";
 import { useQuantTrace } from "../../hooks/useQuantTrace";
+import { conversionNote } from "./quantSeries";
 import {
   QUANT_HORIZON_LABELS,
   QUANT_TRACE_DISCLOSURE,
@@ -36,6 +37,13 @@ export function QuantTracePanel({ ticker, horizon, active }: Props) {
   if (trace && !trace.available) return null;
 
   const source = trace?.source ?? null;
+  // The paragraph states its own currency, but a reader skimming to the numbers may
+  // miss the sentence, so the panel says it again in small type under the paragraph.
+  const listing = trace?.listing_currency ?? "";
+  const shownIn = trace?.currency ?? "";
+  const note = trace?.trace
+    ? conversionNote(listing, shownIn, trace?.fx_rate ?? null, Boolean(listing) && listing !== shownIn)
+    : null;
 
   return (
     <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
@@ -70,7 +78,10 @@ export function QuantTracePanel({ ticker, horizon, active }: Props) {
           <>
             <p className="text-sm text-brand-fg leading-relaxed">{trace.trace}</p>
             {/* Said plainly, once, and never in a tone that asks to be trusted. */}
-            <p className="text-[10px] text-brand-muted-fg mt-2">{QUANT_TRACE_DISCLOSURE}</p>
+            <p className="text-[10px] text-brand-muted-fg mt-2">
+              {note ? `${note} ` : ""}
+              {QUANT_TRACE_DISCLOSURE}
+            </p>
           </>
         ) : (
           <p className="text-sm text-brand-muted-fg italic">

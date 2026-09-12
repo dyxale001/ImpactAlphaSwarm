@@ -29,6 +29,36 @@ export function formatPrice(value: number | null | undefined, currency: string):
   return code ? `${plain} ${code}` : plain;
 }
 
+// Rand cents, the unit the JSE quotes some lines in. The backend divides by a hundred
+// rather than fetching a rate, and the note should say that rather than quote "R0.01".
+const SUBUNIT_CURRENCIES = new Set(["ZAC", "ZA CENT", "ZACP"]);
+
+// One sentence saying what currency the window is in and how it got there, or null when
+// there is nothing to say (a rand listing shown in rand). Shown under the chart's
+// listing line and under the trace, so the reader is told once in each place rather
+// than left to work out why a dollar share is priced in the thousands.
+export function conversionNote(
+  listingCurrency: string,
+  displayCurrency: string,
+  fxRate: number | null,
+  converted: boolean,
+): string | null {
+  const listing = (listingCurrency || "").toUpperCase();
+  const display = (displayCurrency || "").toUpperCase();
+  if (!listing) return null;
+  if (!converted) {
+    if (display === "ZAR" || display === "") return null;
+    return `Shown in ${listing}, the currency it trades in; today's rand rate was not available.`;
+  }
+  if (SUBUNIT_CURRENCIES.has(listing)) {
+    return "Quoted in rand cents on the exchange; shown here in rand.";
+  }
+  if (fxRate === null || fxRate === undefined || Number.isNaN(fxRate)) {
+    return `Shown in rand, converted from ${listing}, the currency it trades in.`;
+  }
+  return `Shown in rand, converted from ${listing} at today's rate of R${formatNumber(fxRate, 2)} per ${listing}.`;
+}
+
 // Dot decimals and comma thousands, the way the rest of the app prints prices, done by
 // hand so the answer does not depend on the machine's locale data.
 export function formatNumber(value: number, digits: number): string {

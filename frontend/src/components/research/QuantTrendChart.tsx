@@ -13,12 +13,14 @@ import type { QuantHistoryPoint, QuantWindowFacts } from "../../services/api/ana
 import {
   QUANT_CHART_EMPTY,
   QUANT_CHART_NOTE,
+  QUANT_CHART_NOTE_RAND,
   QUANT_CHART_UNAVAILABLE,
   QUANT_HORIZONS,
   QUANT_HORIZON_LABELS,
   type QuantHorizon,
 } from "../../data/quantExplainers";
 import {
+  conversionNote,
   formatAxisDate,
   formatChange,
   formatDrawdown,
@@ -59,7 +61,13 @@ const MIN_POINTS_TO_PLOT = 5;
 interface Props {
   points: QuantHistoryPoint[];
   facts: QuantWindowFacts | null;
+  /** The currency the share trades in, e.g. "USD". */
   currency: string;
+  /** The currency the closes are in: rand whenever the rate was available. */
+  displayCurrency: string;
+  /** Rand per unit of the listing currency the closes were converted at, or null. */
+  fxRate: number | null;
+  converted: boolean;
   exchangeName: string;
   horizon: QuantHorizon;
   /** False when the deployment has not switched the feature on. */
@@ -72,6 +80,9 @@ export function QuantTrendChart({
   points,
   facts,
   currency,
+  displayCurrency,
+  fxRate,
+  converted,
   exchangeName,
   horizon,
   available,
@@ -110,6 +121,9 @@ export function QuantTrendChart({
         <WindowStrip
           facts={facts}
           currency={currency}
+          displayCurrency={displayCurrency}
+          fxRate={fxRate}
+          converted={converted}
           exchangeName={exchangeName}
           horizon={horizon}
         />
@@ -140,7 +154,7 @@ export function QuantTrendChart({
                   tickLine={false}
                 />
                 <Tooltip
-                  content={<WindowTooltip currency={currency} />}
+                  content={<WindowTooltip currency={displayCurrency} />}
                   cursor={{ stroke: NEUTRAL_LINE }}
                 />
                 <Line
@@ -201,7 +215,7 @@ export function QuantTrendChart({
         >
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-4 h-0.5 rounded" style={{ background: LINE_COLOR }} />
-            Closing price{currency ? ` (${currency})` : ""}
+            Closing price{displayCurrency === "ZAR" ? " in rand" : displayCurrency ? ` (${displayCurrency})` : ""}
           </span>
           {hasRsi && (
             <span className="flex items-center gap-1.5">
@@ -213,7 +227,9 @@ export function QuantTrendChart({
           )}
         </div>
       </div>
-      <p className="text-[11px] text-brand-muted-fg mt-2">{QUANT_CHART_NOTE}</p>
+      <p className="text-[11px] text-brand-muted-fg mt-2">
+        {displayCurrency === "ZAR" ? QUANT_CHART_NOTE_RAND : QUANT_CHART_NOTE}
+      </p>
     </div>
   );
 }
@@ -225,17 +241,30 @@ export function QuantTrendChart({
 function WindowStrip({
   facts,
   currency,
+  displayCurrency,
+  fxRate,
+  converted,
   exchangeName,
   horizon,
 }: {
   facts: QuantWindowFacts;
   currency: string;
+  displayCurrency: string;
+  fxRate: number | null;
+  converted: boolean;
   exchangeName: string;
   horizon: QuantHorizon;
 }) {
-  const listing = [exchangeName ? `Listed on ${exchangeName}` : null, currency ? `priced in ${currency}` : null]
+  // What it is and where, then how the numbers got into rand. Two sentences on one
+  // line, so "trades in USD" and the rate it was converted at are read together.
+  const note = conversionNote(currency, displayCurrency, fxRate, converted);
+  const listing = [
+    exchangeName ? `Listed on ${exchangeName}` : null,
+    currency ? `trades in ${currency === "ZAR" ? "rand" : currency}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
+  const line = [listing ? `${listing}.` : null, note].filter(Boolean).join(" ");
 
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -244,26 +273,26 @@ function WindowStrip({
           {formatChange(facts.change_pct)}
         </span>
         <span className="text-xs text-white/70">
-          over {QUANT_HORIZON_LABELS[horizon]}, {formatPrice(facts.first_close, currency)} to{" "}
-          {formatPrice(facts.last_close, currency)}
+          over {QUANT_HORIZON_LABELS[horizon]}, {formatPrice(facts.first_close, displayCurrency)} to{" "}
+          {formatPrice(facts.last_close, displayCurrency)}
         </span>
       </div>
       <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/70">
         <div>
           <dt className="inline">High </dt>
-          <dd className="inline text-white font-medium">{formatPrice(facts.high, currency)}</dd>
+          <dd className="inline text-white font-medium">{formatPrice(facts.high, displayCurrency)}</dd>
         </div>
         <div>
           <dt className="inline">Low </dt>
-          <dd className="inline text-white font-medium">{formatPrice(facts.low, currency)}</dd>
+          <dd className="inline text-white font-medium">{formatPrice(facts.low, displayCurrency)}</dd>
         </div>
         <div title="The worst fall from any peak to a later low inside this window.">
           <dt className="inline">Largest fall </dt>
           <dd className="inline text-white font-medium">{formatDrawdown(facts.max_drawdown_pct)}</dd>
         </div>
       </dl>
-      {listing && (
-        <p className="basis-full text-[11px] text-white/60">{listing}</p>
+      {line && (
+        <p className="basis-full text-[11px] text-white/60">{line}</p>
       )}
     </div>
   );
