@@ -94,8 +94,8 @@ descriptions, the unified ranking tables, the daily sentiment history and its
 generated day summaries, the dashboard layout, the funds catalogue and its
 fact-sheet archive (024-026), and the Quant tab's reasoning traces (027).
 Migrations behind a feature flag (019-023, the funds migrations 024-026, and 027)
-are only needed once that flag is
-switched on; the backend never touches their tables before then.
+are only needed once that flag is switched on; the backend never touches their
+tables before then.
 
 Open the Supabase **SQL editor** and run each file in order. They are additive and
 idempotent, so re-running one is safe.
