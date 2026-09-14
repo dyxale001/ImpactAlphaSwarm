@@ -151,7 +151,7 @@ export const WIDGETS: WidgetDef[] = [
     id: "watchlist",
     title: "Your watchlist",
     blurb:
-      "Search any ticker to add it, and every asset you track with a fortnight of price history on each.",
+      "Search any ticker to add it, and every stock you track with a fortnight of price history on each.",
     icon: Eye,
     group: "Watchlist",
     sizes: ALL,
@@ -171,7 +171,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "sentiment-trend",
     title: "Sentiment trend",
-    blurb: "Seven days of news and social sentiment for the asset you focus on.",
+    blurb: "Seven days of news and social sentiment for the stock you focus on.",
     icon: LineChart,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -182,7 +182,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "news-influential",
     title: "Influential news",
-    blurb: "The articles driving your focused asset's most recent coverage.",
+    blurb: "The articles driving your focused stock's most recent coverage.",
     icon: Newspaper,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -193,7 +193,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "social-buzz",
     title: "Social buzz",
-    blurb: "What people are posting about your focused asset, and which way it leans.",
+    blurb: "What people are posting about your focused stock, and which way it leans.",
     icon: MessageCircle,
     group: "Sentiment",
     sizes: MEDIUM_UP,
@@ -220,7 +220,7 @@ export const WIDGETS: WidgetDef[] = [
     id: "quant-window",
     title: "Price window",
     blurb:
-      "Closing price and RSI for your focused asset over a month, six months, three years or five, in rand.",
+      "Closing price and RSI for your focused stock over a month, six months, three years or five, in rand.",
     icon: Activity,
     group: "Quant",
     sizes: MEDIUM_UP,
@@ -232,7 +232,7 @@ export const WIDGETS: WidgetDef[] = [
     id: "quant-reading",
     title: "Quant reading",
     blurb:
-      "Where your focused asset's momentum, risk-adjusted return and stability sit against the rest of your latest run, with RSI and beta explained.",
+      "Where your focused stock's momentum, risk-adjusted return and stability sit against the rest of your latest run, with RSI and beta explained.",
     icon: Gauge,
     group: "Quant",
     sizes: MEDIUM_UP,
@@ -245,7 +245,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "whale-cluster",
     title: "Insider cluster buying",
-    blurb: "Whether several insiders have been buying your focused asset at once.",
+    blurb: "Whether several insiders have been buying your focused stock at once.",
     icon: Users,
     group: "Whales",
     sizes: MEDIUM_UP,
@@ -256,7 +256,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "institutional-owners",
     title: "Who owns it",
-    blurb: "Institutional and insider ownership of your focused asset.",
+    blurb: "Institutional and insider ownership of your focused stock.",
     icon: Building2,
     group: "Whales",
     sizes: MEDIUM_UP,

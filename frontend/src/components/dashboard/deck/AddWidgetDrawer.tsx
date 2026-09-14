@@ -131,13 +131,13 @@ export default function AddWidgetDrawer({
                         {widget.needsTicker ? (
                           <span className="mt-1.5 inline-flex flex-wrap gap-1">
                             <span className="inline-block rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] text-white">
-                              Picks its own asset
+                              Picks its own stock
                             </span>
                             {/* Already on the board, and offered again on
                                 purpose: another copy can watch another asset. */}
                             {placed?.has(widget.id) ? (
                               <span className="inline-block rounded-full border border-brand-border/60 px-1.5 py-0.5 text-[10px] text-brand-muted-fg">
-                                Add another for a different asset
+                                Add another for a different stock
                               </span>
                             ) : null}
                           </span>

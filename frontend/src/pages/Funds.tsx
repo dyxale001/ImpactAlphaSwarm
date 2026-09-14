@@ -137,7 +137,7 @@ export default function FundsPage() {
             {FUNDS_PAGE_LEAD}
           </p>
           {/* Which market, which currency, and whether the rand figure is a
-              conversion — the question a reader of an asset page could not
+              conversion — the question a reader of a stock page could not
               answer. */}
           <p className="mt-3 max-w-2xl text-xs leading-relaxed text-brand-bg/60">
             {meta.meta?.header.strip ?? FUNDS_HEADER_STRIP}

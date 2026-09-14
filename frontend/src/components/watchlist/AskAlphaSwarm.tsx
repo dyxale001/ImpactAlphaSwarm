@@ -12,9 +12,9 @@ interface Props {
 }
 
 const SUGGESTED_QUESTIONS = [
-  'Show me technology assets in my universe',
+  'Show me technology stocks in my universe',
   'What is on my watchlist?',
-  'Why does AlphaSwarm rank this asset the way it does?',
+  'Why does AlphaSwarm rank this stock the way it does?',
   'What does beta mean?',
   'How does AlphaSwarm calculate Signal Score?',
 ]
@@ -42,7 +42,7 @@ export default function AskAlphaSwarm({ query, setQuery, result, loading, error,
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Ask AlphaSwarm about assets, your watchlist, or how it works…"
+            placeholder="Ask AlphaSwarm about stocks, your watchlist, or how it works…"
             aria-label="Ask AlphaSwarm"
             className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-4 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
           />

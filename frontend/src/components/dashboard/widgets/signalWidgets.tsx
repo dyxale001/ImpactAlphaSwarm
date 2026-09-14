@@ -26,13 +26,13 @@ const SHORTLIST_SIZE = 5;
 function NoRunYet() {
   return (
     <WidgetEmpty
-      message="No completed analysis run yet. Once one finishes, the assets it ranked show up here."
+      message="No completed analysis run yet. Once one finishes, the stocks it ranked show up here."
       action={
         <Link
           to="/assets"
           className="text-xs font-semibold text-brand-primary hover:underline"
         >
-          Go to assets
+          Go to stocks
         </Link>
       }
     />
@@ -253,7 +253,7 @@ export function AlsoScoredWidget() {
         >
           {showAll
             ? "Show less"
-            : `Show all ${alsoScored.length} scored assets`}
+            : `Show all ${alsoScored.length} scored stocks`}
         </button>
       ) : null}
     </div>

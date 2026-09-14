@@ -27,7 +27,7 @@ export default function WatchlistSearch({
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search any ticker or company name…"
-          aria-label="Search assets"
+          aria-label="Search stocks"
           className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
         />
         {search && (
@@ -47,7 +47,7 @@ export default function WatchlistSearch({
         <div className="absolute z-50 mt-2 w-full rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg overflow-hidden">
           {searchResults.length === 0 ? (
             <p className="px-4 py-3 text-sm text-brand-muted-fg italic">
-              No assets found for "{search}". Try the exact ticker symbol (e.g. AAPL, NVDA).
+              No stocks found for "{search}". Try the exact ticker symbol (e.g. AAPL, NVDA).
             </p>
           ) : (
             searchResults.map(result => (

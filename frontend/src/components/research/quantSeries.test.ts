@@ -159,8 +159,8 @@ describe("percentileReading (D-122)", () => {
   });
 
   it("names the extremes as nearly everyone", () => {
-    expect(percentileReading("stability", 96)).toMatch(/nearly every other asset/);
-    expect(percentileReading("stability", 3)).toMatch(/nearly every other asset/);
+    expect(percentileReading("stability", 96)).toMatch(/nearly every other stock/);
+    expect(percentileReading("stability", 3)).toMatch(/nearly every other stock/);
   });
 
   it("never uses advice words", () => {

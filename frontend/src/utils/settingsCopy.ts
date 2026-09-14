@@ -82,7 +82,7 @@ export const EXPERTISE_CARD_TITLE = "Expertise level";
 export const EXPERTISE_CARD_LEAD = "How much detail the app explains things with.";
 export const EXPERTISE_SAVE_ACTION = "Save expertise";
 export const RUN_CONSEQUENCE =
-  "Applies on your next analysis run, or refresh from the Assets page.";
+  "Applies on your next analysis run, or refresh from the Stocks page.";
 export const DASHBOARD_CARD_TITLE = "Dashboard layout";
 export const DASHBOARD_CARD_LEAD =
   "What your dashboard currently holds. Rearranging is done on the dashboard itself.";

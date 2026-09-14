@@ -24,19 +24,19 @@ export const SUB_DIMENSIONS: Record<
     label: "Momentum",
     subtitle: "How strongly the price has been trending recently",
     detail:
-      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other asset in the same run. It describes what the price has already done. It does not predict what it will do next.",
+      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other stock in the same run. It describes what the price has already done. It does not predict what it will do next.",
   },
   risk_adjusted_return: {
     label: "Risk-adjusted return",
     subtitle: "How much return the price earned for the ups and downs along the way",
     detail:
-      "Based on the Sharpe ratio: the asset's return over the analysis window relative to how bumpy the ride was, ranked against the other assets in the same run. A high rank means the past return came with relatively little turbulence. It says nothing about future returns.",
+      "Based on the Sharpe ratio: the stock's return over the analysis window relative to how bumpy the ride was, ranked against the other stocks in the same run. A high rank means the past return came with relatively little turbulence. It says nothing about future returns.",
   },
   stability: {
     label: "Stability",
     subtitle: "How steady the price has been day to day",
     detail:
-      "Ranks the asset's price volatility against the other assets in the same run, with steadier prices ranking higher. Stability describes past behaviour. It is not a measure of safety.",
+      "Ranks the stock's price volatility against the other stocks in the same run, with steadier prices ranking higher. Stability describes past behaviour. It is not a measure of safety.",
   },
 };
 
@@ -44,7 +44,7 @@ export const SUB_DIMENSIONS: Record<
 // unanchored percentile is exactly the kind of number that fuels analysis
 // paralysis.
 export const PERCENTILE_CAPTION =
-  "Percentiles compare this asset with the other assets analysed in the same run, a position among peers, not a rating.";
+  "Percentiles compare this stock with the other stocks analysed in the same run, a position among peers, not a rating.";
 
 // Context metrics are shown as definitional bands only. Both are non-monotonic
 // (neither direction is simply "better"), which is why they are never ranked.
@@ -130,10 +130,10 @@ export const MODEL_SCORE_DISCLOSURE =
   "This is the model's own synthesis of the measurements above. It is an input to how your feed is ordered, an editorial judgement, not a measurement.";
 
 export const INSUFFICIENT_UNIVERSE_NOTE =
-  "This run analysed too few assets for a fair peer comparison, so percentile ranks aren't shown. The measurements below still apply.";
+  "This run analysed too few stocks for a fair peer comparison, so percentile ranks aren't shown. The measurements below still apply.";
 
 export const NO_DATA_NOTE =
-  "Not enough price history was available for this asset in this run, so the quantitative measurements couldn't be computed.";
+  "Not enough price history was available for this stock in this run, so the quantitative measurements couldn't be computed.";
 
 // ── D-122: the direction of "good", stated ─────────────────────────────────
 //
@@ -169,12 +169,12 @@ const SUB_DIMENSION_QUALITY: Record<SubDimensionKey, { high: string; low: string
 export function percentileReading(key: SubDimensionKey, pctile: number): string {
   const tenths = Math.round(pctile / 10);
   const quality = SUB_DIMENSION_QUALITY[key];
-  if (tenths >= 9) return `${quality.high} than nearly every other asset in this run`;
-  if (tenths <= 1) return `${quality.low} than nearly every other asset in this run`;
-  if (tenths >= 4 && tenths <= 6) return `about the middle of this run's assets`;
+  if (tenths >= 9) return `${quality.high} than nearly every other stock in this run`;
+  if (tenths <= 1) return `${quality.low} than nearly every other stock in this run`;
+  if (tenths >= 4 && tenths <= 6) return `about the middle of this run's stocks`;
   const noun = tenths >= 7 ? quality.high : quality.low;
   const count = tenths >= 7 ? tenths : 10 - tenths;
-  return `${noun} than about ${count} in 10 assets in this run`;
+  return `${noun} than about ${count} in 10 stocks in this run`;
 }
 
 // One line under each band chip saying what the label means for a reader who has not
@@ -215,7 +215,7 @@ export const QUANT_HORIZON_LABELS: Record<QuantHorizon, string> = {
 // is the same arithmetic the run's own reading uses, drawn at every day instead of the
 // last one. Neither is a signal to act on.
 export const QUANT_CHART_NOTE =
-  "Closing prices in the asset's own listing currency, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
+  "Closing prices in the stock's own listing currency, with the RSI reading for each day beneath. Past movement, described; nothing here predicts what comes next.";
 
 // The same note once the window is in rand, which it is whenever the day's rate could be
 // fetched. Converting every close at one rate keeps the share's own moves and the
@@ -227,8 +227,8 @@ export const QUANT_CHART_UNAVAILABLE =
   "The historical view is not switched on for this deployment. The measurements below still describe the most recent analysis.";
 
 export const QUANT_CHART_EMPTY =
-  "No price history could be fetched for this asset over this window.";
+  "No price history could be fetched for this stock over this window.";
 
 // The Quant tab's own reasoning trace: what it was written from and what it will not do.
 export const QUANT_TRACE_DISCLOSURE =
-  "Written from the window's own figures and this asset's stored measurements only. It describes past price behaviour; it does not predict, rate or advise.";
+  "Written from the window's own figures and this stock's stored measurements only. It describes past price behaviour; it does not predict, rate or advise.";

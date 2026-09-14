@@ -195,7 +195,7 @@ const addToWatchlist = async (result: AssetSearchResult) => {
   // here instead, with a message the UI can show directly.
   if (!result.asset_id) {
     setError(
-      `${result.ticker} couldn't be added because it isn't available in AlphaSwarm's asset data.`
+      `${result.ticker} couldn't be added because it isn't available in AlphaSwarm's stock data.`
     )
     return
   }

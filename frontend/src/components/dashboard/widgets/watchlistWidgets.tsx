@@ -103,7 +103,7 @@ export function WatchlistWidget({
       {loading ? (
         <WidgetLoading rows={3} />
       ) : watchedAssets.length === 0 ? (
-        <WidgetEmpty message="Nothing tracked yet. Search above to add your first asset." />
+        <WidgetEmpty message="Nothing tracked yet. Search above to add your first stock." />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -133,7 +133,7 @@ export function WatchlistWidget({
             <select
               value={sortBy}
               onChange={(e) => updateSettings({ sort: e.target.value })}
-              aria-label="Sort watched assets"
+              aria-label="Sort watched stocks"
               className="ml-auto rounded-full border border-brand-primary/30 bg-brand-primary/5 px-2.5 py-1 text-[11px] font-semibold text-brand-primary transition-colors hover:border-brand-primary/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (

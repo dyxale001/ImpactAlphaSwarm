@@ -16,8 +16,8 @@ interface Props {
 // reinterpret the distinction.
 const SOURCE_LABELS: Record<string, string> = {
   ai_recommendation: "AlphaSwarm's analysis",
-  assets: 'AlphaSwarm asset data',
-  asset_search: 'AlphaSwarm asset data',
+  stocks: 'AlphaSwarm stock data',
+  asset_search: 'AlphaSwarm stock data',
   analysis_explanation: "AlphaSwarm's analysis",
   user_data: 'Your AlphaSwarm data',
   methodology_glossary: 'AlphaSwarm methodology',

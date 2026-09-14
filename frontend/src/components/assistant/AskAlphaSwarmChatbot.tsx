@@ -119,7 +119,7 @@ export default function AskAlphaSwarmChatbot() {
                 <Sparkles className="w-6 h-6 text-brand-primary" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
-                  Ask about an asset, your watchlist, or how AlphaSwarm's analysis works.
+                  Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
                 </p>
               </div>
             ) : (

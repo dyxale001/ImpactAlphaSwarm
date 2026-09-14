@@ -41,7 +41,7 @@ const AGENTS = [
   {
     Icon: BarChart3,
     name: 'Quant Analyst',
-    desc: 'Crunches about a year of price history (momentum, volatility, risk-adjusted return) and ranks each asset against its peers in the run.',
+    desc: 'Crunches about a year of price history (momentum, volatility, risk-adjusted return) and ranks each stock against its peers in the run.',
   },
   {
     Icon: Sparkles,
@@ -66,7 +66,7 @@ const FAQS = [
   },
   {
     q: 'How does the AI decide what ranks first?',
-    a: "Two independent engines (one quantitative, one sentiment) measure each asset separately. Four disclosed factors then decide the order: signal strength, agreement between the engines, depth of evidence, and fit with your risk profile. They're multiplied, so weakness in any one genuinely drags a pick down, and there is no single hidden score.",
+    a: "Two independent engines (one quantitative, one sentiment) measure each stock separately. Four disclosed factors then decide the order: signal strength, agreement between the engines, depth of evidence, and fit with your risk profile. They're multiplied, so weakness in any one genuinely drags a pick down, and there is no single hidden score.",
   },
   {
     q: 'Do I need investing experience?',
@@ -543,7 +543,7 @@ export default function Landing() {
                 One Committee. Zero Emotions.
               </h2>
               <p className="text-base leading-relaxed text-neutral-100/72">
-                Independent engines measure every asset, an orchestrator weighs their findings against your profile,
+                Independent engines measure every stock, an orchestrator weighs their findings against your profile,
                 and the result arrives as a ranked, fully explained list.
               </p>
             </div>
@@ -706,10 +706,10 @@ export default function Landing() {
             <StopHeader
               eyebrow="Stop 03 · Watchlist"
               title="A Library, Not a Second Analysis Run"
-              body="Track any asset. Watched assets are included in your next analysis run. Until then it's live prices and 14-day charts, deliberately free of AI scores."
+              body="Track any stock. Watched stocks are included in your next analysis run. Until then it's live prices and 14-day charts, deliberately free of AI scores."
             />
             <ul className="flex flex-col gap-2.5">
-              {['Live prices & 14-day sparklines', 'No scores, just the asset', 'Watched assets join your next analysis run'].map((item) => (
+              {['Live prices & 14-day sparklines', 'No scores, just the stock', 'Watched stocks join your next analysis run'].map((item) => (
                 <li key={item} className="flex items-center gap-2.5 text-sm text-forest-700">
                   <CheckCircle2 size={18} className="shrink-0 text-forest-700" strokeWidth={2} />
                   {item}

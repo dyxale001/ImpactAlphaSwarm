@@ -47,7 +47,7 @@ export default function AppLayout() {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { name: "Assets", path: "/assets", icon: CandlestickChart },
+    { name: "Stocks", path: "/assets", icon: CandlestickChart },
     { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
@@ -61,7 +61,7 @@ export default function AppLayout() {
   const visibleNavItems = navItems.filter(
     (i) =>
       i.name === "Dashboard" ||
-      i.name === "Assets" ||
+      i.name === "Stocks" ||
       i.name === "Watchlist" ||
       i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||

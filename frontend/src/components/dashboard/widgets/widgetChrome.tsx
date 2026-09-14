@@ -83,7 +83,7 @@ export function PinPrompt({
     <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-brand-accent px-4 py-7 text-center">
       <Target className="h-4 w-4 text-brand-muted-fg" />
       <p className="text-xs text-brand-muted-fg leading-relaxed max-w-xs">
-        Choose an asset to see {what} for it. This sets the asset for this
+        Choose a stock to see {what} for it. This sets the stock for this
         widget only, so the rest of your dashboard stays where it is.
       </p>
 
@@ -111,7 +111,7 @@ export function PinPrompt({
       ) : (
         <p className="text-[11px] text-brand-muted-fg">
           {isRunInProgress
-            ? "An analysis run is in progress. The assets it scores appear here as soon as it lands."
+            ? "An analysis run is in progress. The stocks it scores appear here as soon as it lands."
             : "No completed analysis run yet. Once one finishes, everything it scores can be chosen here."}
         </p>
       )}
