@@ -14,6 +14,7 @@ import {
   CandlestickChart,
   ChevronDown,
   CircleAlert,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useAuthStore } from "../store/authStore";
@@ -46,6 +47,8 @@ import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
 import { MarketClock } from "../components/research/MarketClock";
 import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
+import { useAskChatbotStore } from "../store/askChatbotStore";
+import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
 
 /** Assets that got an LLM-written trace, and so are shown as full cards. Mirrors
  *  REASONING_TRACE_TOP_N on the backend; everything below this rank carries the
@@ -96,6 +99,8 @@ export default function AssetsPage() {
   // The top pick's preview tabs were removed alongside the cards': they restated
   // numbers already shown, and the "Hype Risk Assessment" tab described the
   // penalty that convergence replaced. The reasoning trace is what remains.
+  const openAskChatbot = useAskChatbotStore((s) => s.openWithPrompt);
+
   const topPickReasoning =
     topPick?.reasoning ||
     (topPick?.convergenceState
@@ -560,13 +565,41 @@ export default function AssetsPage() {
                 {topPickReasoning}
               </p>
             </div>
-            <div className="flex items-center justify-start">
+            <div className="flex items-center justify-between gap-3">
               <Link
                 to={`/asset/${topPick?.ticker}`}
                 className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
               >
                 Full analysis <ArrowRight className="w-3 h-3" />
               </Link>
+              {/* The same two controls every other ranked stock carries
+                  (RecommendationCard, ScoredAssetRow), so rank 1 is not the
+                  one stock you cannot ask about or watch from this page. The
+                  ask button takes a dark-ground variant of the card's
+                  styling; the watchlist chip is the shared component. */}
+              {topPick?.ticker ? (
+                <div className="flex items-center gap-1.5">
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAskChatbot(`Tell me about ${topPick.ticker}`);
+                      }}
+                      aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-brand-bg/70 hover:text-brand-accent hover:bg-white/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                    >
+                      <MessageCircleQuestion className="w-4 h-4" />
+                    </button>
+                    <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
+                      <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
+                        Ask AlphaSwarm about this
+                      </div>
+                    </div>
+                  </div>
+                  <AddToWatchlistButton ticker={topPick.ticker} />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
