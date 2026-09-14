@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.api as api  # noqa: E402
 from src.utils.llm_client import EmptyCompletionError  # noqa: E402
+import pytest  # noqa: E402
 
 
 # ── Stubs ────────────────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ _RICH_ASSET = {
 
 # ── 1. Normal completion within budget ─────────────────────────────────────
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_context_synthesis_completes_successfully_within_budget(monkeypatch):
     """A normal (non-truncated) Groq reply is returned as-is."""
     _patch_narration_client(monkeypatch, _StubOkClient("NVDA's bullish technicals conflict with weaker sentiment."))

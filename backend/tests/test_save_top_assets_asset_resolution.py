@@ -225,6 +225,7 @@ def test_stale_rows_are_cleared_even_when_one_ticker_fails(monkeypatch):
     )
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_normal_run_with_only_valid_assets_is_unaffected(monkeypatch):
     fake = FakeTables()
     monkeypatch.setattr(sc, "supabase", fake)

@@ -28,6 +28,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -96,6 +98,7 @@ class TestThePipelineDoesNotKnowAboutFunds:
 
 
 class TestTheApiOnlyReachesFundsBehindTheFlag:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_every_funds_import_in_the_api_sits_under_the_flag(self):
         source = (BACKEND_ROOT / "src" / "api.py").read_text(encoding="utf-8")
         tree = ast.parse(source, filename="api.py")

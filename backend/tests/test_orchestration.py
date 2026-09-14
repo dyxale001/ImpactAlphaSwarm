@@ -217,6 +217,7 @@ class TestScope:
         )
         assert TickerScoper().scope(["Technology"], []) == ["SEEDED"]
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_live_pool_is_used_when_discovery_is_on(self, monkeypatch):
         monkeypatch.setattr(lo, "DISCOVERY_ENABLED", True)
         monkeypatch.setattr(lo, "DISCOVERY_SHADOW_MODE", False)

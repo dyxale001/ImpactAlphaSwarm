@@ -157,6 +157,7 @@ class TestSections:
 
 
 class TestTheBuilder:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_full_sheet_produces_the_whole_paragraph(self):
         text = ExplanationBuilder().build(context(match=match_result(), profile=profile(purpose="income")))
         assert "What it is:" in text

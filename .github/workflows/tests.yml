@@ -1,0 +1,129 @@
+# Test tiers.
+#
+#   smoke -- every push to any branch. One happy-path test per backend test
+#            file and one small file per frontend feature area: a thin slice
+#            through every feature, in seconds (pytest -m smoke; npm run test:smoke).
+#   core  -- every pull request. The money-path maths, ranking, personalisation
+#            and LLM guards (backend: pytest -m core; frontend: npm run test:core).
+#            Runs in well under a minute, so it can gate a merge.
+#   full  -- every push to main, and nightly. Everything that runs offline,
+#            including the characterisation tests that pin the September
+#            refactor and the edge-case depth behind each module.
+#   live  -- the Ask AlphaSwarm request tests, which read the real `assets`
+#            table through backend/.env. Not run here: no secrets in CI.
+#            Run locally with `pytest -m live`.
+#
+# Which tests are core, and why, is documented in TESTING.md under "Tiers".
+# To make `core` block merges, mark the two core jobs as required status checks
+# in the branch protection rules for main (repository settings).
+name: tests
+
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC nightly, after the analysis run
+  workflow_dispatch:
+
+jobs:
+  backend-smoke:
+    name: backend / smoke
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: backend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -m smoke -p no:warnings
+
+  frontend-smoke:
+    name: frontend / smoke
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: frontend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test:smoke
+
+  backend-core:
+    name: backend / core
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: backend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -m core -p no:warnings
+
+  frontend-core:
+    name: frontend / core
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: frontend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test:core
+
+  backend-full:
+    name: backend / full
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: backend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -m "not live" -p no:warnings   # the live tier needs Supabase secrets; see TESTING.md
+
+  frontend-full:
+    name: frontend / full
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: frontend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test:full

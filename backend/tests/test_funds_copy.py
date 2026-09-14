@@ -107,6 +107,7 @@ class TestTheScanIsPrecise:
 class TestTheShippedCopy:
     """INVARIANT: nothing this module can put on screen breaks the line."""
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_no_shipped_string_contains_a_forbidden_term(self):
         offenders = {}
         for text in all_strings():

@@ -28,6 +28,9 @@ from src.utils.ss_scoring import (  # noqa: E402
 	SentimentModel,
 )
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 class RecordingGcpModel(SentimentModel):
 	"""Stands in for the metered API, counting units and round trips.
@@ -100,6 +103,7 @@ def test_declared_sentiment_never_costs_a_unit():
 	assert gcp.scored == ["an untagged take"]
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_prefetched_scores_match_calling_the_model_directly():
 	"""The batch is a change of timing, not of arithmetic."""
 	mentions = [_mention(f"post number {i}", engagement=i) for i in range(4)]

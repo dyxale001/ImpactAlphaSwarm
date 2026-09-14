@@ -157,6 +157,7 @@ class TestStoreContract:
         assert t.trace["artifacts"]["trace_path"] == location
         assert t.trace["artifacts"]["saved_at"].endswith("Z")
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_saved_trace_reads_back_identically(self, store):
         t = a_tracer(store)
         t.log_step("phase_1", {"n": 3})

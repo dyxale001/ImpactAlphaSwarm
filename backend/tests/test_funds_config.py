@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.funds import config  # noqa: E402
+import pytest  # noqa: E402
 
 
 class TestFlagReader:
@@ -93,6 +94,7 @@ class TestEnvironmentIsActuallyRead:
     pass every test above and still be unflippable in production.
     """
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_flags_flip_when_the_environment_says_true(self, monkeypatch):
         monkeypatch.setenv("FUNDS_ENABLED", "true")
         monkeypatch.setenv("FUND_TRACES_ENABLED", "TRUE")

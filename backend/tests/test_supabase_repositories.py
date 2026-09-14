@@ -159,6 +159,7 @@ class TestRepositoryBase:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestUserRepository:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_preferences_are_returned_for_a_known_user(self):
         client = FakeClient({"user_analysis": [
             {"investment_universe": ["Technology"], "risk_tolerance": "Moderate",

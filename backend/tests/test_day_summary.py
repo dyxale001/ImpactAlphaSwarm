@@ -31,6 +31,7 @@ from src.utils.day_summary import (  # noqa: E402
 	band_for,
 )
 from src.utils.ss_config import SentimentConfig  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -229,6 +230,7 @@ def test_an_open_day_inside_the_cooldown_is_not_regenerated():
 	assert gen.calls == []
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_an_open_day_regenerates_once_both_conditions_are_met():
 	gen = FakeGenerator()
 	svc = service(

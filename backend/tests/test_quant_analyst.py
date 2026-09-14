@@ -44,6 +44,8 @@ from src.agents.quant_analyst import (
     score_universe,
 )
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # helpers
@@ -445,6 +447,7 @@ class TestMeanOfPresent:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestScoreUniverse:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_full_universe_is_normalised_cross_sectionally(self):
         scored = score_universe(universe(qa.QUANT_MIN_UNIVERSE))
         assert all(row["quant_normalisation"] == "cross_sectional" for row in scored.values())

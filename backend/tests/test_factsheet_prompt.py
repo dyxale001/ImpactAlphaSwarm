@@ -136,6 +136,7 @@ class TestThePromptNamesTheBoxesTheFormShows:
 
 
 class TestItAsksForTheWholeForm:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_every_snapshot_field_is_asked_for(self, prompt):
         """INVARIANT: the schema cannot grow a column the prompt never mentions.
 

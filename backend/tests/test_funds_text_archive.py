@@ -92,6 +92,7 @@ class TestWhereTheTextGoes:
 
 
 class TestUploading:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_the_text_is_stored_as_utf8_text(self):
         one = repo()
         path = one.upload_mdd_text("ZAE1", "2026-07-31", "Portfolio Value R362 million")

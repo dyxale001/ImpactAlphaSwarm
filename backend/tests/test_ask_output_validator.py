@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.utils.ask_output_validator import validate_ask_output  # noqa: E402
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 GOOGL = {
     "ticker": "GOOGL", "name": "Alphabet Inc.", "current_price": 5345.0709,
     "currency": "ZAR", "beta": 1.13896, "rsi": 37.9358, "sharpe_ratio": -2.6492,
@@ -27,6 +30,7 @@ def test_rounded_price_passes():
     assert result.valid, result.violations
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_exact_price_passes():
     result = validate_ask_output("GOOGL's price is R5,345.07.", data=GOOGL)
     assert result.valid, result.violations

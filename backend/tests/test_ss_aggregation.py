@@ -23,6 +23,8 @@ import pytest
 from src.utils.ss_aggregation import SentimentAggregator
 from src.utils.ss_config import SentimentConfig
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 # ─────────────────────────────────────────────────────────────────────────────
 # The behaviour under test moved out of module-level functions and into
 # ``SentimentAggregator`` when the scout was rebuilt as classes (cf1505e). Every
@@ -120,6 +122,7 @@ class TestRecencyWeightedAverage:
     def test_equal_weights_give_a_plain_mean(self):
         assert _recency_weighted_avg([(1.0, 1.0), (-1.0, 1.0)]) == pytest.approx(0.0)
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_heavier_items_pull_the_average(self):
         assert _recency_weighted_avg([(1.0, 3.0), (-1.0, 1.0)]) == pytest.approx(0.5)
 

@@ -131,6 +131,7 @@ class TestWindow:
 		assert end == TODAY + datetime.timedelta(days=1)
 		assert start == TODAY - datetime.timedelta(days=HORIZONS["6M"] + WARMUP_DAYS)
 
+	@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 	def test_the_plotted_series_is_trimmed_to_the_horizon(self):
 		out = service().window("test", "1M")
 		window_start = (TODAY - datetime.timedelta(days=HORIZONS["1M"])).isoformat()

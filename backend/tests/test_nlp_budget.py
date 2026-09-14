@@ -19,6 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.agents.nlp_budget import BudgetLedger, BudgetStore, FileBudgetStore  # noqa: E402
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 class FakeSharedStore(BudgetStore):
 	"""One row, shared by every ledger pointed at it, locked like the real one."""
@@ -48,6 +51,7 @@ def _ledger(store, cap=100, chunk=25, fallback=None):
 	return BudgetLedger(cap=cap, primary=store, fallback=fallback or UnreachableStore(), chunk=chunk)
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_spending_stops_at_the_cap():
 	store = FakeSharedStore()
 	ledger = _ledger(store, cap=10, chunk=5)

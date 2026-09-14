@@ -32,6 +32,7 @@ from src.utils.ns_daily import (  # noqa: E402
 )
 from src.utils.ss_config import SentimentConfig  # noqa: E402
 from src.utils.ss_scoring import MentionScorer  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -243,6 +244,7 @@ def test_nothing_is_written_while_the_flag_is_off():
 	assert repo.rows == []
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_record_writes_a_row_per_ticker_day():
 	repo = FakeRepo()
 	history = NewsHistory(cfg(), repository=repo)

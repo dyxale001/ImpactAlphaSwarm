@@ -150,6 +150,7 @@ class TestASevenStepScale:
     def test_each_step_converts(self, printed, expected):
         assert normalize(printed) == expected
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_the_ends_stay_the_ends(self):
         """A fund at the top of seven steps must not land mid-scale on five.
 

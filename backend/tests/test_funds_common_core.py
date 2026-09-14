@@ -41,6 +41,7 @@ from src.funds.validators import (  # noqa: E402
     RETURN_EXTREMES_BASES,
     snapshot_validators,
 )
+import pytest  # noqa: E402
 
 MIGRATION = BACKEND_ROOT / "migrations" / "025_fund_snapshot_common_core.sql"
 TODAY = date(2026, 9, 7)
@@ -117,6 +118,7 @@ class TestNav:
     own documents printed one.
     """
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_dated_price_is_accepted(self):
         assert errors(nav_cpu=923, nav_date="2026-07-31") == []
 
