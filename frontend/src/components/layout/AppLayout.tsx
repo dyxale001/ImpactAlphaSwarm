@@ -152,8 +152,12 @@ export default function AppLayout() {
         </nav>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">
+      {/* Main Content Area. `relative` makes this scroll region the containing
+          block for any absolutely positioned descendant that lacks a positioned
+          parent (sr-only labels are the usual case), so such a box scrolls with
+          the page instead of anchoring to the document and giving the window a
+          second scrollbar beside this one. */}
+      <main className="relative flex-1 overflow-y-auto pt-14 lg:pt-0">
         <Outlet />{" "}
       </main>
 

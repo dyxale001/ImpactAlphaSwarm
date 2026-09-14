@@ -71,8 +71,14 @@ export default function FundFilters({
   const selectClass =
     "max-w-full rounded-full border border-brand-border/60 bg-brand-surface px-3.5 py-2 text-xs font-semibold text-brand-secondary transition-colors hover:border-brand-border";
 
+  // `relative` is not decoration. The two sr-only labels below are
+  // position:absolute, and an absolute box with no positioned ancestor sits at
+  // its static position in the *document* rather than inside the app shell's
+  // scrolling <main>. When this row lay below the fold, those labels reached
+  // past the shell and the browser grew a second, page-level scrollbar next to
+  // main's own. Positioning the row keeps them inside it.
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="relative flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 flex-1 basis-48">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-brand-muted-fg" />
         <input
