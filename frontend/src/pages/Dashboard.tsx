@@ -128,7 +128,7 @@ export default function DashboardPage() {
               Your dashboard is empty
             </p>
             <p className="max-w-sm text-xs leading-relaxed text-brand-muted-fg">
-              Add the pieces you want to see. Your watchlist, the assets your
+              Add the pieces you want to see. Your watchlist, the stocks your
               latest run ranked, sentiment, price history, insider activity and
               your learning progress are all available.
             </p>

@@ -27,11 +27,11 @@ export const CONVERGENCE_HEADLINE: Record<ConvergenceState, string> = {
 
 export const CONVERGENCE_DETAIL: Record<ConvergenceState, string> = {
   agree_strongly:
-    "The price data and the news/social tone point in the same direction. Agreement between two independent signals is what moves an asset up this list. It is not a prediction.",
+    "The price data and the news/social tone point in the same direction. Agreement between two independent signals is what moves a stock up this list. It is not a prediction.",
   lean_together:
     "The price data and the news/social tone broadly agree, with some difference between them.",
   mixed:
-    "The price data and the news/social tone only partly agree, so this asset sits lower than its individual readings alone would suggest.",
+    "The price data and the news/social tone only partly agree, so this stock sits lower than its individual readings alone would suggest.",
   conflict:
     "The price data and the news/social tone contradict each other, for example strong online enthusiasm alongside weak price measurements. Worth looking closer before drawing conclusions.",
 };
@@ -75,19 +75,19 @@ export const TERM_COPY: Record<
     label: "Agreement",
     question: "Do the two signals agree?",
     detail:
-      "Whether the price data and the news/social tone point the same way. Two independent signals agreeing carries more weight than either alone, so disagreement moves an asset down the list, and is shown to you rather than hidden.",
+      "Whether the price data and the news/social tone point the same way. Two independent signals agreeing carries more weight than either alone, so disagreement moves a stock down the list, and is shown to you rather than hidden.",
   },
   data_sufficiency: {
     label: "Evidence depth",
     question: "Is there enough to go on?",
     detail:
-      "How much material this reading is based on: trusted news articles, social posts and days of price history. A thin reading is ranked lower on purpose, not because the asset is worse, but because we know less about it.",
+      "How much material this reading is based on: trusted news articles, social posts and days of price history. A thin reading is ranked lower on purpose, not because the stock is worse, but because we know less about it.",
   },
   profile_fit: {
     label: "Fit with your profile",
     question: "Does it match what you told us?",
     detail:
-      "How the asset's market volatility compares with the risk preference you set during onboarding. This only ever moves an asset DOWN when it is more volatile than you asked for; it never promotes anything. It reflects your own stated preference, not a view on the asset.",
+      "How the stock's market volatility compares with the risk preference you set during onboarding. This only ever moves a stock DOWN when it is more volatile than you asked for; it never promotes anything. It reflects your own stated preference, not a view on the stock.",
   },
 };
 
@@ -107,7 +107,7 @@ export const DIRECTION_COPY: Record<string, string> = {
  *  displayed as though it were "we measured it and it was average". */
 export const QUANT_STATE_NOTE: Record<string, string> = {
   insufficient_universe:
-    "Too few comparable assets in this run to rank the price data.",
-  no_data: "No usable price history was available for this asset.",
+    "Too few comparable stocks in this run to rank the price data.",
+  no_data: "No usable price history was available for this stock.",
   unmeasured: "No price measurement was recorded for this run.",
 };

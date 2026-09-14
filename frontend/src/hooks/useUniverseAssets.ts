@@ -82,7 +82,7 @@ export function useUniverseAssets() {
       } catch (e) {
         if (cancelled) return;
         console.error("Error loading universe assets:", e);
-        setError("Unable to load assets right now.");
+        setError("Unable to load stocks right now.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

@@ -21,7 +21,7 @@ export default function HoldingsList({ holdings }: { holdings: any[] }) {
       <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">Your Holdings</h2>
       <div className="space-y-2">
         <div className="grid grid-cols-12 gap-3 text-[10px] uppercase tracking-widest text-brand-muted-fg px-3 pb-2 border-b border-brand-border/60">
-          <span className="col-span-3">Asset</span>
+          <span className="col-span-3">Stock</span>
           <span className="col-span-2 text-right">Shares</span>
           <span className="col-span-2 text-right">Avg Cost</span>
           <span className="col-span-2 text-right">Price</span>

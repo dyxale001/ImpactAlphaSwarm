@@ -13,7 +13,7 @@ const KEY = "alphaswarm:last-hub-page";
 
 export const HUB_PAGE_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/assets": "Assets",
+  "/assets": "Stocks",
 };
 
 export function rememberHubPage(path: keyof typeof HUB_PAGE_LABELS): void {

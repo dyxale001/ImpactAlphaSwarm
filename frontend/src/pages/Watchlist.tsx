@@ -92,14 +92,14 @@ export default function WatchlistPage() {
         <div className="relative flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
-              Asset Library
+              Stock Library
             </p>
             <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
               <Eye className="w-7 h-7 shrink-0 text-brand-accent" />
               Watchlist
             </h1>
             <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
-              Track any asset. Watched assets are included in your next analysis
+              Track any stock. Watched stocks are included in your next analysis
               run.
             </p>
           </div>
@@ -293,10 +293,10 @@ export default function WatchlistPage() {
             <div className="glass-card p-10 text-center flex flex-col items-center gap-2">
               <Eye className="w-7 h-7 text-brand-muted-fg" />
               <p className="text-sm font-medium text-brand-fg">
-                No assets tracked yet
+                No stocks tracked yet
               </p>
               <p className="text-xs text-brand-muted-fg">
-                Search or browse above to add assets to your library.
+                Search or browse above to add stocks to your library.
               </p>
             </div>
           )}
@@ -307,7 +307,7 @@ export default function WatchlistPage() {
             watchedAssets.length > 0 && (
               <div className="glass-card p-8 text-center">
                 <p className="text-sm text-brand-muted-fg">
-                  No assets in{" "}
+                  No stocks in{" "}
                   <span className="text-brand-fg font-semibold">
                     {sectorFilter}
                   </span>

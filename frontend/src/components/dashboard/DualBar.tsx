@@ -97,7 +97,7 @@ export default function DualBar({
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 {hasPercentile
-                  ? "Where this asset's price measurements (momentum, risk-adjusted return, stability) sit relative to the other assets analysed in the same run. A factual position among today's candidates, not a rating, and not a forecast."
+                  ? "Where this stock's price measurements (momentum, risk-adjusted return, stability) sit relative to the other stocks analysed in the same run. A factual position among today's candidates, not a rating, and not a forecast."
                   : "A data-driven reading from technical indicators. Shown for runs recorded before the disclosed per-metric breakdown was available."}
               </div>
             </div>

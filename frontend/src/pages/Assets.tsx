@@ -337,14 +337,14 @@ export default function AssetsPage() {
             </p>
             <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
               <CandlestickChart className="w-7 h-7 shrink-0 text-brand-accent" />
-              Assets
+              Stocks
             </h1>
             <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
-              Everything your AI Investment Committee ranked in the latest run.
+              Every US stock your AI Investment Committee ranked in the latest run.
               {recommendations.length > 0 ? (
                 <span className="font-medium text-brand-bg">
                   {" "}
-                  {recommendations.length} assets scored.
+                  {recommendations.length} stocks scored.
                 </span>
               ) : null}
             </p>
@@ -456,7 +456,7 @@ export default function AssetsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search assets..."
+            placeholder="Search stocks..."
             className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
           />
         </div>
@@ -613,7 +613,7 @@ export default function AssetsPage() {
           <p className="text-sm text-brand-muted-fg mb-4">
             Ranked in the same run but outside the shortlist above. The
             committee writes its full reasoning for the top {SHORTLIST_SIZE};
-            these carry the summary it recorded for every asset it scored.
+            these carry the summary it recorded for every stock it scored.
           </p>
 
           <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 overflow-hidden">
@@ -634,7 +634,7 @@ export default function AssetsPage() {
                 </>
               ) : (
                 <>
-                  Show all {alsoScored.length} assets{" "}
+                  Show all {alsoScored.length} stocks{" "}
                   <ChevronDown className="w-3.5 h-3.5" />
                 </>
               )}

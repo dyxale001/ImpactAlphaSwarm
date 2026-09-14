@@ -30,8 +30,8 @@ export default function RankingMethodology() {
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-primary" />
           <span>
             We deliberately do <span className="font-semibold text-brand-fg">not</span>{" "}
-            give an asset one overall grade. A single number reads as a verdict on
-            the asset's quality, and that judgement is not one this app makes.
+            give a stock one overall grade. A single number reads as a verdict on
+            the stock's quality, and that judgement is not one this app makes.
             Instead the four measurements below are shown to you, and their
             combination decides only the <em>order</em> of the list.
           </span>
@@ -58,7 +58,7 @@ export default function RankingMethodology() {
         </p>
         <p className="text-sm leading-relaxed text-brand-muted-fg">
           The four are multiplied together, so a weak reading on any one of them
-          pulls an asset down rather than being averaged away. Price data and
+          pulls a stock down rather than being averaged away. Price data and
           news/social tone are weighted equally when measuring strength and
           agreement.
         </p>
@@ -66,7 +66,7 @@ export default function RankingMethodology() {
           The headline you see on a card, for example “
           {CONVERGENCE_HEADLINE.agree_strongly}” or “
           {CONVERGENCE_HEADLINE.conflict}”, is the agreement reading in words.
-          When the two signals contradict each other the asset moves{" "}
+          When the two signals contradict each other the stock moves{" "}
           <span className="font-semibold text-brand-fg">down</span> the list, and
           we say so rather than quietly adjusting the number.
         </p>

@@ -15,7 +15,7 @@ export default function ConfidenceRing({
   function tooltipText(label: string) {
     switch (label) {
       case "Confidence Score":
-        return "A unified measure of the AI's conviction in this asset. It blends quantitative data with market sentiment, specifically applying penalties to risky assets where social hype outpaces actual financial strength.";
+        return "A unified measure of the AI's conviction in this stock. It blends quantitative data with market sentiment, specifically applying penalties to risky stocks where social hype outpaces actual financial strength.";
       case "Sentiment Score":
         return "A real-time measure of market mood and social momentum. High scores indicate strong bullish chatter across social channels and news, while low scores suggest bearish or quiet sentiment.";
       // The "Quantitative Score" / "Quant Score" cases were removed: no caller ever

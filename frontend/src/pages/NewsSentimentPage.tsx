@@ -138,7 +138,7 @@ export default function NewsSentimentPage() {
       />
 
       {!recommendation || !hasAnyArticles ? (
-        <EmptyStateCard message="No news articles were used in the latest analysis for this asset." />
+        <EmptyStateCard message="No news articles were used in the latest analysis for this stock." />
       ) : (
         <>
           <SummaryStrip

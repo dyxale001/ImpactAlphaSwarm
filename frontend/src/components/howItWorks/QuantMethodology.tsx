@@ -29,9 +29,9 @@ export default function QuantMethodology() {
       />
 
       <div className="pt-1">
-        <MethodologyStep n={1} icon={Calculator} title="Measure each asset">
+        <MethodologyStep n={1} icon={Calculator} title="Measure each stock">
           <p>
-            For every asset we pull roughly a year of daily prices and compute a
+            For every stock we pull roughly a year of daily prices and compute a
             standard set of measurements using published formulas:
           </p>
           <ul className="mt-1 space-y-1.5">
@@ -57,20 +57,20 @@ export default function QuantMethodology() {
             A raw number like a Sharpe ratio of 1.2 means little on its own, so we
             report{" "}
             <span className="font-semibold text-brand-fg">
-              where it sits among the other assets analysed in the same run
+              where it sits among the other stocks analysed in the same run
             </span>, for example “78th percentile”. That is a factual count, not a
             judgement.
           </p>
           <p>
             Only measurements where “more” unambiguously means more of one thing
             are ranked this way: momentum, risk-adjusted return, and stability. If
-            a run has too few comparable assets for a ranking to mean anything, we
+            a run has too few comparable stocks for a ranking to mean anything, we
             show the facts and say the ranking was not possible rather than
             inventing a position.
           </p>
           <p>
             A percentile still needs its direction stated, because it differs per
-            row. Beside every reading the asset page says which way is which:
+            row. Beside every reading the stock page says which way is which:
           </p>
           <ul className="mt-1 space-y-1.5">
             {SUB_DIMENSION_ORDER.map((key) => (
@@ -82,7 +82,7 @@ export default function QuantMethodology() {
           </ul>
           <p>
             The Quant tab also draws the closing price and the daily RSI over{" "}
-            {QUANT_HORIZONS.join(", ")} windows, in the asset's own listing currency.
+            {QUANT_HORIZONS.join(", ")} windows, in the stock's own listing currency.
             The line describes what the price did; it is not a chart to trade from.
           </p>
         </MethodologyStep>

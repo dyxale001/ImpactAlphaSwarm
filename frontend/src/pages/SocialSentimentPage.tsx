@@ -92,7 +92,7 @@ export default function SocialSentimentPage() {
       />
 
       {posts.length === 0 ? (
-        <EmptyStateCard message="No social posts have been collected for this asset yet." />
+        <EmptyStateCard message="No social posts have been collected for this stock yet." />
       ) : (
         <>
           <SummaryStrip

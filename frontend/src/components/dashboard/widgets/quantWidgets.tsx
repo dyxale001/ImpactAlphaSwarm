@@ -179,7 +179,7 @@ function QuantReadingCompact({
         message={
           normalisation === "insufficient_universe"
             ? INSUFFICIENT_UNIVERSE_NOTE
-            : "This run recorded no quant reading for the asset."
+            : "This run recorded no quant reading for the stock."
         }
       />
     );

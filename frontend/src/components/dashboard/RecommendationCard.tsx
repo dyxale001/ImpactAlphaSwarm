@@ -116,9 +116,9 @@ export default function RecommendationCard({
             </p>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
-                A unified measure of the AI's conviction in this asset. It blends
+                A unified measure of the AI's conviction in this stock. It blends
                 quantitative data with market sentiment, specifically applying
-                penalties to risky assets where social hype outpaces actual
+                penalties to risky stocks where social hype outpaces actual
                 financial strength.
               </div>
             </div>

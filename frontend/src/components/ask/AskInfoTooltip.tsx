@@ -37,7 +37,7 @@ export default function AskInfoTooltip() {
           <p className="text-[11px] text-brand-muted-fg leading-relaxed">
             Ask AlphaSwarm does not rely on the AI's memory alone. Depending on your
             question, information may come from AlphaSwarm's stored analysis and
-            asset data, its methodology/glossary, approved authoritative educational
+            stock data, its methodology/glossary, approved authoritative educational
             sources, or verified live-data sources where available.
           </p>
           <p className="text-[11px] text-brand-muted-fg leading-relaxed mt-1.5">

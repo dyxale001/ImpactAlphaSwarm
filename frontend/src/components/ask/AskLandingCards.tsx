@@ -16,9 +16,9 @@ const CATEGORIES: Category[] = [
   },
   {
     icon: ListTree,
-    title: 'Explore my assets',
-    description: 'Ask about rankings, prices, and comparisons across the assets AlphaSwarm already has data on.',
-    example: 'Compare the assets in my results',
+    title: 'Explore my stocks',
+    description: 'Ask about rankings, prices, and comparisons across the stocks AlphaSwarm already has data on.',
+    example: 'Compare the stocks in my results',
   },
   {
     icon: GraduationCap,

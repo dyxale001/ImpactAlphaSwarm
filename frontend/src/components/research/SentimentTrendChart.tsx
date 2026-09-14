@@ -389,11 +389,11 @@ export function SentimentTrendChart({
         </p>
         <p className="text-xs text-brand-muted-fg mt-1">
           {isSeeding
-            ? `Reading the last ${days} days of ${unitPlural} for this asset. This takes a few seconds.`
+            ? `Reading the last ${days} days of ${unitPlural} for this stock. This takes a few seconds.`
             : daysWithData === 0
               ? isNews
-                ? "No news articles collected for this asset yet."
-                : "No social posts collected for this asset yet."
+                ? "No news articles collected for this stock yet."
+                : "No social posts collected for this stock yet."
               : `${daysWithData} of ${days} days collected so far. The trend appears once there are a few days to compare.`}
         </p>
       </div>
