@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import { readLastHubPage } from "../../utils/lastHubPage";
+import { useAuthStore } from "../../store/authStore";
+import { useSignOut } from "../../hooks/useSignOut";
 import {
   LayoutDashboard,
   CandlestickChart,
@@ -16,6 +18,7 @@ import {
   Sparkles,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
 
@@ -23,6 +26,17 @@ export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const location = useLocation();
+  const { profile, user } = useAuthStore();
+  const signOut = useSignOut();
+
+  // The profile row can lag the session by a fetch, so fall back to the auth
+  // user's own email rather than showing an empty block.
+  const email = profile?.email || user?.email || "";
+  const fullName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ");
+  const displayName = fullName || email;
+  const initial = (displayName.trim()[0] ?? "?").toUpperCase();
 
   // Any navigation closes the menu, including programmatic redirects.
   useEffect(() => {
@@ -124,6 +138,21 @@ export default function AppLayout() {
                 {item.name}
               </NavLink>
             ))}
+
+            {/* Last item, set off by a rule: leaving is always there but is not
+                a place to go like the entries above it. */}
+            <div className="my-1 border-t border-brand-border/50" />
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                void signOut();
+              }}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-full text-sm font-medium text-brand-muted-fg hover:text-brand-fg hover:bg-brand-bg/50 transition-colors"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              Sign out
+            </button>
           </nav>
         )}
       </header>
@@ -150,6 +179,35 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Profile block. The nav above is flex-1, so this sits at the foot of
+            the sidebar, where most apps keep who you are and the way out. */}
+        <div className="mx-4 mt-4 border-t border-brand-border/50 pt-4">
+          <div className="flex items-center gap-3 px-2">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-brand-bg"
+            >
+              {initial}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-brand-fg">
+                {displayName}
+              </p>
+              {fullName && email ? (
+                <p className="truncate text-xs text-brand-muted-fg">{email}</p>
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="mt-3 flex w-full items-center gap-3 px-4 py-2.5 rounded-full text-sm font-medium text-brand-muted-fg hover:text-brand-fg hover:bg-brand-bg/50 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area. `relative` makes this scroll region the containing
