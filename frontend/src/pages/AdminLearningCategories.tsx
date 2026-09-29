@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import { Edit3, Trash2 } from "lucide-react";
 import AdminTabs from "../components/admin/AdminTabs";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
 import {
   type LearningCategoryFormValues,
   useAdminLearningCategories,
@@ -26,8 +24,6 @@ export default function AdminLearningCategories() {
     deleteCategory,
     emptyFormValues,
   } = useAdminLearningCategories();
-  const { setSession } = useAuthStore();
-  const navigate = useNavigate();
 
   const [editingCategory, setEditingCategory] = useState<EditingCategoryState>({
     id: null,
@@ -40,16 +36,7 @@ export default function AdminLearningCategories() {
   const isEditing = Boolean(editingCategory.id);
   const categoriesCount = useMemo(() => categories.length, [categories.length]);
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      // ignore sign out errors
-    }
-
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const resetForm = () => {
     setEditingCategory({ id: null, values: emptyFormValues });

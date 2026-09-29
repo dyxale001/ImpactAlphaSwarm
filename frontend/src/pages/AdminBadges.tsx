@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import { Edit3, ImageOff, Trash2 } from "lucide-react";
 import AdminTabs from "../components/admin/AdminTabs";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
 import AdminBadgesSkeleton from "../components/admin/AdminBadgesSkeleton";
 import BadgeFormModal from "../components/admin/BadgeFormModal";
 import {
@@ -28,8 +26,6 @@ export default function AdminBadges() {
     deleteBadge,
     emptyFormValues,
   } = useAdminBadges();
-  const { setSession } = useAuthStore();
-  const navigate = useNavigate();
 
   const [editingBadge, setEditingBadge] = useState<EditingBadgeState>({
     id: null,
@@ -66,16 +62,7 @@ export default function AdminBadges() {
     };
   }, [selectedIconPreviewUrl]);
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore sign out errors
-    }
-
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const resetForm = () => {
     setEditingBadge({ id: null, values: emptyFormValues });

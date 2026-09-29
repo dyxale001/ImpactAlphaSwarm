@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import { BookOpen, Edit3, ListOrdered, Plus, Trash2, X } from "lucide-react";
 import AdminTabs from "../components/admin/AdminTabs";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
 import AdminLearningQuestionsSkeleton from "../components/admin/AdminLearningQuestionsSkeleton";
 import {
   type AdminLearningAnswer,
@@ -44,8 +42,6 @@ export default function AdminLearningQuestions() {
     emptyQuestionFormValues,
     emptyAnswerFormValues,
   } = useAdminLearningQuestions();
-  const { setSession } = useAuthStore();
-  const navigate = useNavigate();
 
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
@@ -102,16 +98,7 @@ export default function AdminLearningQuestions() {
     return () => window.clearTimeout(timeout);
   }, [successMessage]);
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore sign out errors
-    }
-
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const resetQuestionForm = () => {
     setQuestionForm({ id: null, values: emptyQuestionFormValues });

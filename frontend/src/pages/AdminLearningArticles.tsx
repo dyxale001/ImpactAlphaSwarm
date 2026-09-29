@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import { Edit3, Trash2, X } from "lucide-react";
 import AdminTabs from "../components/admin/AdminTabs";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
 import {
   type LearningArticleFormValues,
   useAdminLearningArticles,
@@ -28,8 +26,6 @@ export default function AdminLearningArticles() {
     deleteArticle,
     emptyFormValues,
   } = useAdminLearningArticles();
-  const { setSession } = useAuthStore();
-  const navigate = useNavigate();
 
   const [editingArticle, setEditingArticle] = useState<EditingArticleState>({
     id: null,
@@ -52,16 +48,7 @@ export default function AdminLearningArticles() {
     return articles.filter((article) => article.category_id === categoryFilter);
   }, [articles, categoryFilter]);
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      // ignore sign out errors
-    }
-
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const resetForm = () => {
     setEditingArticle({ id: null, values: emptyFormValues });
