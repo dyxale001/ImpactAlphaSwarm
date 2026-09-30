@@ -124,6 +124,30 @@ export async function getInstitutionalHolders(ticker: string) {
   return res.json() as Promise<InstitutionalOwnershipResponse>;
 }
 
+export interface InstitutionalTraceResponse {
+  ticker: string;
+  /** False while the feature is switched off for this deployment. */
+  enabled: boolean;
+  /** Two paragraphs separated by a blank line, or null when there is nothing to show. */
+  trace: string | null;
+  /** "model" when the language model wrote it, "template" when the deterministic fallback did. */
+  source: "model" | "template" | null;
+  model: string | null;
+  generated_at: string | null;
+  /** The filing date the trace describes. */
+  as_of: string | null;
+}
+
+// The Big investors tab's written reading of the 13F data. Written once per filing and
+// stored, so this is usually a cached read and occasionally a few seconds.
+export async function getInstitutionalTrace(ticker: string) {
+  const res = await fetch(
+    `${BASE}/api/institutions/${encodeURIComponent(ticker)}/trace`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<InstitutionalTraceResponse>;
+}
+
 export interface FundPosition {
   ticker: string;
   universe: string | null;

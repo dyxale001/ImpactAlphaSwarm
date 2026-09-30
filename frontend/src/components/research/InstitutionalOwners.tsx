@@ -1,5 +1,6 @@
 import { Building2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { useInstitutionalData } from "../../hooks/useInstitutionalData";
+import { InstitutionalTracePanel } from "./InstitutionalTracePanel";
 
 // Institutional (13F) ownership for a ticker — the "big funds" behind a stock.
 // Purely informational, kept out of the Unified Confidence Score.
@@ -41,11 +42,37 @@ function StatTile({
   label,
   value,
   hint,
+  onForest = false,
 }: {
   label: string;
   value: string;
   hint: string;
+  // The forest panel the asset page's Sentiment tab puts its headline figures on:
+  // lime figure, white labels at the same 55% the trend chart's axis text uses.
+  onForest?: boolean;
 }) {
+  if (onForest) {
+    return (
+      <div className="hero-card px-4 py-3">
+        <div
+          className="text-[10px] uppercase tracking-widest font-semibold mb-1"
+          style={{ color: "rgba(255,255,255,0.55)" }}
+        >
+          {label}
+        </div>
+        <div className="text-lg font-mono font-semibold text-lime-500">
+          {value}
+        </div>
+        <div
+          className="text-[10px] mt-1 leading-snug"
+          style={{ color: "rgba(255,255,255,0.55)" }}
+        >
+          {hint}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3">
       <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
@@ -61,13 +88,33 @@ function StatTile({
   );
 }
 
-export default function InstitutionalOwners({ ticker }: { ticker: string }) {
+export default function InstitutionalOwners({
+  ticker,
+  limit,
+  variant = "page",
+}: {
+  ticker: string;
+  // Caps the holder list at the largest few. Optional so the standalone Whale
+  // Watching page keeps its full list; the asset page's Big investors tab sets it.
+  limit?: number;
+  // "asset" matches the asset page's other tabs: a muted eyebrow with only the icon in
+  // green, body-weight description, the summary figures on the forest panel the
+  // Sentiment tab uses, and holder rows outlined in the lime the Reasoning Trace panel
+  // uses. "page" is the standalone Whale Watching look, unchanged.
+  variant?: "page" | "asset";
+}) {
+  const onAsset = variant === "asset";
+  const eyebrowTone = onAsset ? "text-brand-muted-fg" : "text-brand-primary";
   const { data, isLoading, error } = useInstitutionalData(ticker);
 
-  const holders = data?.holders ?? [];
-  const asOf = holders[0]?.date_reported ?? data?.fetched_at ?? null;
+  const allHolders = data?.holders ?? [];
+  // The date comes from the full list, so capping it cannot change the as-of date.
+  // The added and trimmed counts below use the capped list, so they describe the rows
+  // actually on screen.
+  const holders = limit ? allHolders.slice(0, limit) : allHolders;
+  const asOf = allHolders[0]?.date_reported ?? data?.fetched_at ?? null;
   const hasData =
-    !!data && (holders.length > 0 || data.institutions_pct != null);
+    !!data && (allHolders.length > 0 || data.institutions_pct != null);
 
   // Direction of travel from the latest 13F: how many holders grew vs trimmed
   // their stake. yfinance only lists current holders, so fully-exited positions
@@ -76,14 +123,22 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
   const reducedCount = holders.filter((h) => (h.pct_change ?? 0) < 0).length;
 
   return (
-    <section className="soft-card w-full p-5 space-y-4">
+    <section
+      className={`soft-card w-full p-5 space-y-4 ${
+        onAsset ? "hover:border-brand-primary/30 transition-all" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
-            <Building2 className="w-3 h-3" />
+          <p
+            className={`text-[10px] uppercase tracking-widest ${eyebrowTone} font-semibold mb-1 flex items-center gap-1.5`}
+          >
+            <Building2 className="w-3 h-3 text-brand-primary" />
             Institutional Owners
           </p>
-          <p className="text-sm text-brand-muted-fg">
+          <p
+            className={`text-sm ${onAsset ? "text-brand-fg/90" : "text-brand-muted-fg"}`}
+          >
             The big investment funds that own shares in this company. They report their holdings
             to the SEC every quarter (a "13F" filing).
           </p>
@@ -115,24 +170,40 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
               label="Held by institutions"
               value={fmtPct(data!.institutions_pct)}
               hint="Share of the company owned by funds, banks & pensions"
+              onForest={onAsset}
             />
             <StatTile
               label="Institutions"
               value={data!.institutions_count?.toLocaleString("en-US") ?? "—"}
               hint="Number of funds holding the stock"
+              onForest={onAsset}
             />
             <StatTile
               label="Insiders hold"
               value={fmtPct(data!.insiders_pct)}
               hint="Owned by the company's own execs & directors"
+              onForest={onAsset}
             />
           </div>
+
+          {/* The written reading of the figures above and the holders below. Asset
+              page only; the standalone page stays as it was. */}
+          {onAsset && (
+            <InstitutionalTracePanel
+              ticker={ticker}
+              institutionsPct={data!.institutions_pct}
+              institutionsCount={data!.institutions_count}
+              insidersPct={data!.insiders_pct}
+            />
+          )}
 
           {/* Top holders */}
           {holders.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold">
+                <p
+                  className={`text-[10px] uppercase tracking-widest ${eyebrowTone} font-semibold`}
+                >
                   Top holders
                 </p>
                 {(addedCount > 0 || reducedCount > 0) && (
@@ -152,7 +223,9 @@ export default function InstitutionalOwners({ ticker }: { ticker: string }) {
               {holders.map((h, i) => (
                 <div
                   key={`${h.holder}-${i}`}
-                  className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
+                  className={`flex items-center gap-3 rounded-2xl border ${
+                    onAsset ? "border-brand-accent" : "border-brand-border/60"
+                  } bg-brand-bg/55 px-4 py-3`}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-brand-fg truncate">

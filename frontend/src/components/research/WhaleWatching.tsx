@@ -27,7 +27,18 @@ import {
 // Formatting lives in ./whaleFormat so this panel and the cross-company
 // activity feed render the same rows identically.
 
-export default function WhaleWatching({ ticker }: { ticker: string }) {
+export default function WhaleWatching({
+  ticker,
+  emptyMessage,
+  showTradeDate = false,
+}: {
+  ticker: string;
+  // Both optional so the standalone Whale Watching page renders exactly as before.
+  // The asset page's Insider trading tab sets them.
+  emptyMessage?: string;
+  // Adds the date the trade happened ahead of the date it was filed.
+  showTradeDate?: boolean;
+}) {
   const { transactions, source, fetchedAt, isLoading, error } =
     useWhaleData(ticker);
   const [expanded, setExpanded] = useState(false);
@@ -86,8 +97,8 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
         <p className="text-sm text-brand-muted-fg italic py-2">{error}</p>
       ) : transactions.length === 0 ? (
         <p className="text-sm text-brand-muted-fg italic py-2">
-          No recent insider dealings on record for {ticker}. Insider data covers
-          US-listed companies.
+          {emptyMessage ??
+            `No recent insider dealings on record for ${ticker}. Insider data covers US-listed companies.`}
         </p>
       ) : (
         <div className="space-y-3">
@@ -144,8 +155,11 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
                       </span>
                     )}
                     <span>
-                      {formatShares(t.shares)} shares · filed{" "}
-                      {formatDate(t.filing_date)}
+                      {formatShares(t.shares)} shares ·{" "}
+                      {showTradeDate && t.transaction_date
+                        ? `traded ${formatDate(t.transaction_date)} · `
+                        : ""}
+                      filed {formatDate(t.filing_date)}
                     </span>
                   </p>
                 </div>

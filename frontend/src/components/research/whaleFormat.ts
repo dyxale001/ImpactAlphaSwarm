@@ -126,3 +126,16 @@ export function formatName(raw: string): string {
     })
     .join(" ");
 }
+
+// How long ago the filing was, worked out here rather than written into the trace. A
+// trace that said "three months ago" would be wrong a month later and need rewriting;
+// the date in the trace never goes stale, and this label costs no model call.
+export function filingAge(asOf: string | null, now: Date = new Date()): string | null {
+  if (!asOf) return null;
+  const then = new Date(asOf);
+  if (Number.isNaN(then.getTime())) return null;
+  const months = Math.round((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+  if (months < 1) return "less than a month ago";
+  if (months === 1) return "about a month ago";
+  return `about ${months} months ago`;
+}
