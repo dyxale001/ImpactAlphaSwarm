@@ -154,7 +154,7 @@ GOOD = (
     " 0.3 percent, which is normal for a company this size."
     " Capital Research cut its own position by 24.8 percent, a large change, while Vanguard"
     " grew its stake by 1.6 percent. These are holdings reported on 30 June 2026."
-    " Use it alongside your own research, never on its own."
+    " So this means it is worth checking the Sentiment tab before you make up your own mind."
 )
 
 
@@ -177,7 +177,7 @@ def test_guard_holds_decimals_to_their_last_digit_but_lets_whole_numbers_round()
 def test_guard_rejects_advice():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
     for phrase in ("You should buy it.", "It is a good investment.", "Funds are selling.", "The outlook is strong."):
-        assert guard.check(GOOD + " " + phrase, evidence()) is not None, phrase
+        assert guard.check(phrase + " " + GOOD, evidence()) is not None, phrase
 
 
 def test_guard_ignores_forbidden_words_and_numbers_inside_a_holders_name():
@@ -191,23 +191,23 @@ def test_guard_ignores_forbidden_words_and_numbers_inside_a_holders_name():
 def test_guard_rejects_a_figure_spelled_out_but_allows_thousands_of_holders():
     # Seen live: "Eight thousand one hundred eighty-three" slipped past the digit check.
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
-    assert guard.check(GOOD + " Eight thousand one hundred funds own it.", evidence()) is not None
-    assert guard.check(GOOD + " Thousands of holders is normal.", evidence()) is None
+    assert guard.check("Eight thousand one hundred funds own it. " + GOOD, evidence()) is not None
+    assert guard.check("Thousands of holders is normal. " + GOOD, evidence()) is None
 
 
 def test_guard_refuses_a_style_guessed_for_an_unclassified_holder():
     # Seen live: "FMR, LLC is not described as an index fund, so it is an active manager".
     ev = InstitutionalEvidence.from_payload("AAPL", payload(), top_n=6)
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
-    guessed = GOOD + " FMR, LLC is an active manager that chose the stock."
+    guessed = "FMR, LLC is an active manager that chose the stock. " + GOOD
     assert "FMR, LLC" in (guard.check(guessed, ev) or "")
-    quoted = GOOD + " FMR, LLC grew its own position by 3 percent."
+    quoted = "FMR, LLC grew its own position by 3 percent. " + GOOD
     assert guard.check(quoted, ev) is None
 
 
 def test_guard_allows_the_word_holding():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
-    assert guard.check(GOOD + " Holding a stock is not an endorsement.", evidence()) is None
+    assert guard.check("Holding a stock is not an endorsement. " + GOOD, evidence()) is None
 
 
 # ── template and prompt ──────────────────────────────────────────────────────
@@ -321,13 +321,20 @@ def test_generator_strips_dashes():
     assert "—" not in out
 
 
-def test_guard_requires_the_closing_sentence_and_still_refuses_buy_or_sell():
+def test_guard_requires_a_so_this_means_closing_that_does_not_advise():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
-    without = GOOD.replace(" Use it alongside your own research, never on its own.", "")
-    assert "closing sentence" in guard.check(without, evidence())
-    # Not in the prompt at all, and refused wherever the model writes them.
-    assert guard.check(GOOD + " Now is the time to buy.", evidence()) is not None
-    assert guard.check(GOOD + " It is never a reason to buy or sell.", evidence()) is not None
+    without = GOOD.replace(" So this means it is worth checking the Sentiment tab before you make up your own mind.", "")
+    assert 'does not start "So this means"' in guard.check(without, evidence())
+    # The closing may say what to look into, never what to do with the shares.
+    for advice in (
+        "So this means you could hold on to it.",
+        "So this means now is the time to buy.",
+        "So this means you should look at the news.",
+        "So this means it may be worth keeping the shares.",
+    ):
+        assert guard.check(GOOD.replace("So this means it is worth checking the Sentiment tab before you make up your own mind.", advice), evidence()) is not None, advice
+    # "Hold" is only refused in the closing: index funds hold every company in an index.
+    assert guard.check("Index funds hold every company in an index. " + GOOD, evidence()) is None
 
 
 def test_prompt_only_talks_about_stock_pickers_when_one_is_listed():
@@ -354,7 +361,7 @@ def test_prompt_never_mentions_buying_or_selling():
 
 def test_template_explains_in_plain_words_and_ends_with_the_closing_line():
     text = InstitutionalTraceTemplate().render(evidence())
-    assert text.endswith("Use it alongside your own research, never on its own.")
+    assert "So this means it is worth checking the news on the Sentiment tab" in text
     assert text.startswith("Big investment firms own most of AAPL")
     assert "measured against its own earlier holding, not against the whole company" in text
     # No figures from the screen are read back.
@@ -367,7 +374,7 @@ def test_generator_asks_once_more_when_the_guard_rejects_a_draft():
         model = "fake-model"
 
         def __init__(self):
-            self.replies = [GOOD + " Index funds buy it.", GOOD]
+            self.replies = ["Index funds buy it. " + GOOD, GOOD]
             self.calls = 0
 
         def complete(self, prompt):
@@ -382,14 +389,14 @@ def test_generator_asks_once_more_when_the_guard_rejects_a_draft():
 
 def test_generator_reads_a_space_as_a_thousands_separator():
     # Seen live: "7 761" read as 7 and 761 failed the guard on a figure it was given.
-    reply = GOOD + " The number of institutions is 4 504."
+    reply = "The number of institutions is 4 504. " + GOOD
     out = generator(reply).generate(evidence())
     assert out is not None
     assert "4,504" in out
 
 
 def test_generator_refuses_a_reply_that_fails_the_guard():
-    assert generator(GOOD + " You should buy.").generate(evidence()) is None
+    assert generator("You should buy. " + GOOD).generate(evidence()) is None
 
 
 def test_generator_returns_none_when_the_model_keeps_failing():
@@ -496,3 +503,35 @@ def test_watcher_reports_disabled_without_fetching():
     assert out["enabled"] is False
     assert out["trace"] is None
     assert out["ticker"] == "AAPL"
+
+
+def test_next_step_fits_the_situation_and_never_advises():
+    plain = PlainMeaning()
+    cut = plain.next_step(evidence())
+    assert cut.startswith("it is worth checking the news on the Sentiment tab to see why a stock picker cut back")
+
+    added = plain.next_step(evidence(holders=[holder("Capital Research Global Investors", 0.02, 0.1)]))
+    assert added.startswith("a stock picker adding is worth noting")
+
+    index_only = plain.next_step(evidence(holders=payload()["holders"][:3]))
+    assert "say more about the company's size than how it is doing" in index_only
+
+    crowded = evidence(institutions_pct=0.95)
+    # Said once, in what the ownership means, not again in the closing.
+    assert "price can swing" in plain.institutions(crowded)
+    assert "price can swing" not in plain.next_step(crowded)
+
+    import re
+
+    for step in (cut, added, index_only, plain.next_step(crowded)):
+        assert not re.search(r"\b(buy|sell|hold|should|must)\b", step, re.IGNORECASE), step
+
+
+def test_ownership_is_given_in_words_so_the_model_never_picks_its_own():
+    from src.utils.ww_trace import ownership_in_words
+
+    assert ownership_in_words(41.0) == "a large share"
+    assert ownership_in_words(86.3) == "nearly all"
+    assert ownership_in_words(66.3) == "most"
+    small = PlainMeaning.institutions(evidence(institutions_pct=0.41, holders=[holder("Vanguard Group Inc", 0.07, 0.03, value=0.07 * 9e8)]))
+    assert small.startswith("they own a large share of it")

@@ -53,10 +53,14 @@ logger = logging.getLogger("alpha-api")
 #: rewritten once rather than left describing the old facts in the old way.
 TRACE_VERSION = 3
 
-#: The sentence the paragraph must end with, word for word. It is how the summary says
-#: it is not advice, without the prompt ever naming buying or selling.
-NEVER_ALONE = "Use it alongside your own research, never on its own."
-_NEVER_ALONE = re.compile(r"use it alongside your own research, never on its own", re.IGNORECASE)
+#: How the last sentence must open. It tells the reader what they can do with this when
+#: making their own decision (PlainMeaning.next_step), never what to do with the shares.
+CLOSING_OPENER = "So this means"
+_SENTENCES = re.compile(r"(?<=[.!?])\s+")
+#: Refused in the closing sentence on top of FORBIDDEN_PATTERNS. "Hold" is allowed
+#: elsewhere (index funds hold every company in an index) but in the sentence about what
+#: the reader can do it reads as "keep the shares".
+_CLOSING_FORBIDDEN = re.compile(r"\b(hold|holds|keep|keeping|get out|stay away)\b", re.IGNORECASE)
 
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 _MONTHS = (
@@ -479,8 +483,12 @@ class InstitutionalTraceGuard:
             return f"too short ({len(text)} chars)"
         if len(text) > self.config.institutions_trace_max_chars:
             return f"over the {self.config.institutions_trace_max_chars} char limit ({len(text)} chars)"
-        if not _NEVER_ALONE.search(text):
-            return "missing the closing sentence about using it alongside your own research"
+        closing = _SENTENCES.split(text.strip())[-1]
+        if not closing.lower().startswith(CLOSING_OPENER.lower()):
+            return f'last sentence does not start "{CLOSING_OPENER}"'
+        advice = _CLOSING_FORBIDDEN.search(closing)
+        if advice:
+            return f"closing sentence uses '{advice.group(0)}'"
         guessed = self.guessed_style(text, evidence)
         if guessed:
             return f"gives a style to unclassified holder '{guessed}'"
@@ -571,7 +579,7 @@ Cover, in whatever order reads best:
 - What it means that big investment firms own this much of the company, and what the insiders' share means.
 - What kind of owners the biggest ones are, and why that matters.
 - What the example change means, if one is given above.
-- End with exactly this sentence, word for word: "{NEVER_ALONE}"
+- End with one sentence that starts "{CLOSING_OPENER}" and tells the reader how they can use this when making their own decision: {self.plain.next_step(evidence)} It is about what to look into, never about what to do with the shares.
 
 Rules you must follow:
 - Explain, do not report. Do not repeat the figures from the screen. Use at most one number in the whole paragraph, and prefer words like "most", "a tiny slice" or "about a quarter".
@@ -610,20 +618,23 @@ class PlainMeaning:
         if pct is None:
             return ""
         low, high = LARGE_INSTITUTIONAL_BAND
+        # The amount in words, decided here. Left to itself the model called 41 percent
+        # "a small part".
+        amount = ownership_in_words(pct)
         if not evidence.is_large:
             return (
-                "they own part of this smaller company, but smaller companies vary so much"
-                " that there is no normal level to compare it with, so on its own it says little."
+                f"they own {amount} of it, but smaller companies vary so much that there is no"
+                " normal level to compare it with, so on its own it says little."
             )
         if pct < low:
             return (
-                "they own less of it than is usual for a company this big, so ordinary"
-                " investors and others hold more of it than is typical."
+                f"they own {amount} of it, but less than is usual for a company this big, so"
+                " ordinary investors and others own more of it than is typical."
             )
         if pct > high:
             return (
-                "they own even more of it than usual, so if many of them cut their holdings at"
-                " once the price could move sharply."
+                f"they own {amount} of it, even more than usual, so the price can swing a lot"
+                " when these big firms change their holdings at the same time."
             )
         return (
             "they own most of it, which is normal for a big, well known company: it sits in"
@@ -662,6 +673,26 @@ class PlainMeaning:
         return " ".join(parts)
 
     @staticmethod
+    def next_step(evidence: InstitutionalEvidence) -> str:
+        """What the reader can do with this when making their own decision.
+
+        Chosen from the situation, never left to the model, and always something to look
+        into rather than something to do with the shares: the other tabs on this page are
+        the concrete places to look. Written to follow "So this means".
+        """
+        example = evidence.example_holder
+        picker_moved = example is not None and example.style == HolderStyleClassifier.ACTIVE
+        if picker_moved and example.pct_change < 0:
+            step = "it is worth checking the news on the Sentiment tab to see why a stock picker cut back before you decide"
+        elif picker_moved:
+            step = "a stock picker adding is worth noting, so see whether the Sentiment and Quant tabs tell the same story before you decide"
+        else:
+            step = "these owners say more about the company's size than how it is doing, so the Sentiment and Quant tabs tell you more about the business"
+        # The crowded-ownership risk is not repeated here: the institutions meaning
+        # already says the price can swing, and saying it twice cost the most words.
+        return step + "."
+
+    @staticmethod
     def example(evidence: InstitutionalEvidence) -> str:
         h = evidence.example_holder
         if h is None:
@@ -670,6 +701,14 @@ class PlainMeaning:
             f"{h.name} {change_in_words(h.pct_change)}, measured against its own earlier"
             " holding, not against the whole company."
         )
+
+
+def ownership_in_words(pct: float) -> str:
+    """How much of a company big investment firms own, as a beginner would say it."""
+    for ceiling, words in ((10, "a small share"), (25, "some"), (50, "a large share"), (75, "most")):
+        if pct < ceiling:
+            return words
+    return "nearly all"
 
 
 def change_in_words(pct_change: float) -> str:
@@ -722,7 +761,7 @@ class InstitutionalTraceTemplate:
         example = plain.example(evidence)
         if example:
             sentences.append(example)
-        sentences.append(NEVER_ALONE)
+        sentences.append(f"{CLOSING_OPENER} {plain.next_step(evidence)}")
         return " ".join(sentences)
 
 

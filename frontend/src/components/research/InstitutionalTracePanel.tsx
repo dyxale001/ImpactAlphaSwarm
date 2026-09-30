@@ -11,9 +11,9 @@ import { filingAge, formatDate } from "./whaleFormat";
 // rather than refetched, so the header cannot disagree with them. Only the prose is
 // fetched here.
 //
-// The paragraph is generated from the filing and checked before it is stored, and the
-// guard refuses any that does not end with "Use it alongside your own research, never on
-// its own."
+// The paragraph is generated from the filing and checked before it is stored. It ends
+// with a "So this means" sentence saying what the reader can look into next, never what
+// to do with the shares.
 
 interface Props {
   ticker: string;
