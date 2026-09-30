@@ -51,7 +51,7 @@ logger = logging.getLogger("alpha-api")
 
 #: Bumped whenever the prompt or the facts change shape, so every stored trace is
 #: rewritten once rather than left describing the old facts in the old way.
-TRACE_VERSION = 2
+TRACE_VERSION = 3
 
 #: The sentence the paragraph must end with, word for word. It is how the summary says
 #: it is not advice, without the prompt ever naming buying or selling.
@@ -545,119 +545,156 @@ class InstitutionalTraceGuard:
 class InstitutionalTracePromptBuilder:
     """Turns one ticker's evidence into the prompt. Pure, no I/O.
 
-    The same shape and length as the Quant and Sentiment summaries: one line saying what
-    the paragraph is about, the facts, "four or five sentences, no more than 110 words",
-    a short "cover" list and the rules. Three points only: whether the headline figures
-    are normal, index funds against active managers, and what a percentage change means.
+    The reader can already see every figure on the tab, so the paragraph's job is to say
+    what they mean, not to read them back. The meanings are worked out here in plain
+    words (``PlainMeaning``) and the model only puts them into sentences: every time it
+    was left to judge a figure or a holder itself, it guessed.
+
+    Same length as the Quant and Sentiment summaries: four or five sentences, no more
+    than 110 words.
     """
 
+    def __init__(self, plain: "PlainMeaning | None" = None):
+        self.plain = plain or PlainMeaning()
+
     def build(self, evidence: InstitutionalEvidence) -> str:
-        cover = [
-            "- What the headline figures mean, using the verdicts above, with the insider"
-            " figure in one clause. Say what is normal first, then only what differs.",
-        ]
-        style = self._style_instruction(evidence)
-        if style:
-            cover.append(f"- {style}")
-        cover.append(
-            "- What a holder's percentage change means, using the example: the change is measured"
-            " against the fund's own previous stake, not against the whole company."
-            if evidence.example_holder is not None
-            else "- That a holder's percentage change is measured against the fund's own previous"
-            " stake, not against the whole company."
-        )
-        cover.append(f'- End with exactly this sentence, word for word: "{NEVER_ALONE}"')
-        cover_block = "\n".join(cover)
+        meanings = self.plain.lines(evidence)
+        meaning_block = "\n".join(f"- {line}" for line in meanings)
+        return f"""You are writing a short explanation for a beginner using a retail investing app in South Africa. They are looking at the "Big investors" tab for {evidence.ticker}, which shows the big investment firms that own the stock. They can already see every number on the screen. Your job is not to repeat those numbers. It is to tell them, in everyday words, what the numbers mean for them.
 
-        return f"""You are writing one short paragraph for a retail investing app, explaining what {evidence.ticker}'s big investors looked like in the quarterly 13F filings reported as of {spell_date(evidence.as_of)}. The reader is a beginner.
-
-{self._facts_block(evidence)}
+What the numbers mean, already worked out for you:
+{meaning_block}
 
 Write four or five sentences, no more than 110 words in total, as one paragraph with no headings, no bullet points and no title.
 
 Cover, in whatever order reads best:
-{cover_block}
+- What it means that big investment firms own this much of the company, and what the insiders' share means.
+- What kind of owners the biggest ones are, and why that matters.
+- What the example change means, if one is given above.
+- End with exactly this sentence, word for word: "{NEVER_ALONE}"
 
 Rules you must follow:
-- Use ONLY the figures above. You know nothing else about {evidence.ticker} or these funds. Refer to the company only as {evidence.ticker}.
-- Keep each verdict's meaning. Where a verdict says a figure is hard to judge, do not call it typical or normal.
-- Call a holder an index fund or an active manager only if it is listed as one above.
-- This is not financial advice. Never tell the reader what to do, judge whether the stock is worth owning, or say what the price will do. Do not use the words should, must, recommend, undervalued, overvalued, opportunity, outlook, bullish, bearish, cheap, expensive or good investment.
-- Write numbers in digits exactly as given, with a comma for thousands, for example 4,504.
-- Write British English in a plain, level voice, with no filler openers like "Overall".
+- Explain, do not report. Do not repeat the figures from the screen. Use at most one number in the whole paragraph, and prefer words like "most", "a tiny slice" or "about a quarter".
+- Write for someone who has never invested: short sentences and everyday words. Say "big investment firms" rather than "institutions", and "holding" rather than "position" or "stake". If you mention an index fund, say in the same sentence what it is.
+- Use ONLY what is given above. You know nothing else about {evidence.ticker} or these firms. Refer to the company only as {evidence.ticker}.
+- Keep each meaning exactly as given. Never call something normal, usual, small or large unless the meaning above says so.
+- Call a firm an index fund or a stock picker only if it is described as one above.
+- This is not financial advice. Never tell the reader what to do, judge whether the stock is worth owning, or say what the price will do. Do not use the words should, must, expect, recommend, undervalued, overvalued, opportunity, outlook, bullish, bearish, cheap, expensive or good investment.
+- Write British English in a plain, friendly, level voice, with no filler openers like "Overall".
 - Never use a dash of any kind as punctuation. Use a comma, a full stop or a rewrite.
 - Plain prose only, no markdown.
 
 Write only the paragraph itself."""
 
-    @staticmethod
-    def _style_instruction(evidence: InstitutionalEvidence) -> str:
-        """The one instruction about index and active holders that fits this list.
 
-        Index holders are grouped, not named: the tab's list already names them, and
-        naming four funds costs a sentence of the 110 words. Chosen here rather than left
-        to the model, which otherwise pasted a conditional into its answer.
-        """
+class PlainMeaning:
+    """What each figure on the tab means, in words a beginner can use.
+
+    Shared by the prompt and the template, so the model's paragraph and the fallback
+    explain the same things the same way. Numbers are turned into words ("about a
+    quarter", "a tiny slice") because the reader already has the digits.
+    """
+
+    def lines(self, evidence: InstitutionalEvidence) -> list[str]:
+        labelled = [
+            ("Big investment firms", self.institutions(evidence)),
+            ("The company's own bosses and directors", self.insiders(evidence)),
+            ("The biggest owners", self.holders(evidence)),
+            ("The example change", self.example(evidence)),
+        ]
+        return [f"{label}: {text}" for label, text in labelled if text]
+
+    @staticmethod
+    def institutions(evidence: InstitutionalEvidence) -> str:
+        pct = evidence.institutions_pct
+        if pct is None:
+            return ""
+        low, high = LARGE_INSTITUTIONAL_BAND
+        if not evidence.is_large:
+            return (
+                "they own part of this smaller company, but smaller companies vary so much"
+                " that there is no normal level to compare it with, so on its own it says little."
+            )
+        if pct < low:
+            return (
+                "they own less of it than is usual for a company this big, so ordinary"
+                " investors and others hold more of it than is typical."
+            )
+        if pct > high:
+            return (
+                "they own even more of it than usual, so if many of them cut their holdings at"
+                " once the price could move sharply."
+            )
+        return (
+            "they own most of it, which is normal for a big, well known company: it sits in"
+            " the market indexes that pension and index funds follow, so it shows the"
+            " company is mainstream, not that experts are backing it."
+        )
+
+    @staticmethod
+    def insiders(evidence: InstitutionalEvidence) -> str:
+        pct = evidence.insiders_pct
+        if pct is None:
+            return ""
+        if evidence.is_large:
+            if pct < LARGE_INSIDER_CEILING:
+                return "they own only a tiny slice, which is normal when a company is this big."
+            return (
+                "they still own a noticeable slice, which is unusual at this size and often"
+                " means a founder or family is still involved."
+            )
+        return "they own a meaningful slice, which is common in smaller, founder led companies."
+
+    @staticmethod
+    def holders(evidence: InstitutionalEvidence) -> str:
         index = [h for h in evidence.holders if h.style == HolderStyleClassifier.INDEX]
         active = [h.name for h in evidence.holders if h.style == HolderStyleClassifier.ACTIVE]
-        top = len(evidence.holders)
-        grouped = (
-            f"{len(index)} of the top {top} holders run mostly index funds, so they own the stock"
-            " because it is in an index"
-        )
-        if index and active:
-            who = "is an active manager that" if len(active) == 1 else "are active managers that"
-            return (
-                f"Say that {grouped} and their small changes usually reflect money flowing into"
-                f" those funds, while {_join(active)} {who} chose the stock, so those moves carry"
-                " information. Do not name the index funds."
-            )
+        parts: list[str] = []
         if index:
-            return (
-                f"Say that {grouped}, so their changes do not reflect a stock picker's decision."
-                " Do not name the index funds."
+            share = "most" if len(index) * 2 > len(evidence.holders) else "some"
+            parts.append(
+                f"{share} are index funds, which automatically hold every company in a market"
+                " index, so they own it because of its size, not because anyone picked it."
             )
         if active:
-            who = "is an active manager that" if len(active) == 1 else "are active managers that"
-            return f"Say that {_join(active)} {who} chose the stock, so those moves carry information."
-        return ""
+            who = "is a stock picker" if len(active) == 1 else "are stock pickers"
+            parts.append(f"{_join(active)} {who}, so its moves show a real decision.")
+        return " ".join(parts)
 
     @staticmethod
-    def _facts_block(evidence: InstitutionalEvidence) -> str:
-        size = SIZE_PHRASES.get(evidence.size_band or "", "a company of unknown size")
-        lines = [f"The figures for {evidence.ticker}, {size}:"]
-        if evidence.institutions_pct is not None:
-            lines.append(
-                f"- Held by institutions: {trim(evidence.institutions_pct)} percent,"
-                f" {evidence.institutional_verdict()}."
-            )
-        if evidence.institutions_count is not None:
-            lines.append(f"- Institutions holding it: {evidence.institutions_count:,}.")
-        if evidence.insiders_pct is not None:
-            lines.append(
-                f"- Held by its own executives and directors: {trim(evidence.insiders_pct)} percent,"
-                f" {evidence.insider_verdict()}."
-            )
+    def example(evidence: InstitutionalEvidence) -> str:
+        h = evidence.example_holder
+        if h is None:
+            return ""
+        return (
+            f"{h.name} {change_in_words(h.pct_change)}, measured against its own earlier"
+            " holding, not against the whole company."
+        )
 
-        # Labelled holders and the example only. Unlabelled holders are left out: listed,
-        # each was an invitation to narrate it, which is where a style got guessed.
-        index = [h.name for h in evidence.holders if h.style == HolderStyleClassifier.INDEX]
-        active = [h.name for h in evidence.holders if h.style == HolderStyleClassifier.ACTIVE]
-        if index or active:
-            lines += ["", f"The top {len(evidence.holders)} holders include:"]
-            if index:
-                lines.append(f"- Mostly index funds: {_join(index).rstrip('.')}.")
-            if active:
-                lines.append(f"- Active managers, who choose which stocks to own: {_join(active).rstrip('.')}.")
 
-        example = evidence.example_holder
-        if example is not None:
-            verb = "grew" if example.pct_change > 0 else "cut"
-            lines.append(
-                f"- The example: {example.name} {verb} its own position by"
-                f" {trim(abs(example.pct_change))} percent in this filing, {example.change_size}."
-            )
-        return "\n".join(lines)
+def change_in_words(pct_change: float) -> str:
+    """A holder's percentage change as a beginner would say it."""
+    if pct_change >= 100:
+        return "more than doubled its holding"
+    size = abs(pct_change)
+    if pct_change < 0 and size >= 85:
+        return "cut almost all of its holding"
+    for ceiling, words in (
+        (5, "a little"),
+        (15, "a modest amount"),
+        (20, "about a sixth"),
+        (30, "about a quarter"),
+        (40, "about a third"),
+        (55, "about half"),
+        (70, "about two thirds"),
+        (85, "about three quarters"),
+    ):
+        if size < ceiling:
+            break
+    else:
+        words = "a lot"
+    verb = "added to" if pct_change > 0 else "cut"
+    return f"{verb} its holding by {words}"
 
 
 # ── the template ─────────────────────────────────────────────────────────────
@@ -667,39 +704,24 @@ class InstitutionalTraceTemplate:
     cannot be used, and proof the trace can be written without saying anything more."""
 
     def render(self, evidence: InstitutionalEvidence) -> str:
+        plain = PlainMeaning()
         sentences: list[str] = []
-        figures = []
-        if evidence.institutions_pct is not None:
-            figures.append(
-                f"Institutions hold {trim(evidence.institutions_pct)} percent of {evidence.ticker},"
-                f" {evidence.institutional_verdict()}"
-            )
-        if evidence.insiders_pct is not None:
-            figures.append(
-                f"insiders hold {trim(evidence.insiders_pct)} percent, {evidence.insider_verdict()}"
-            )
-        if figures:
-            text = ", and ".join(figures)
-            sentences.append(text[0].upper() + text[1:] + ".")
-
-        index = [h for h in evidence.holders if h.style == HolderStyleClassifier.INDEX]
-        active = [h.name for h in evidence.holders if h.style == HolderStyleClassifier.ACTIVE]
-        if index:
+        owners = plain.institutions(evidence)
+        if owners:
             sentences.append(
-                f"{len(index)} of the top {len(evidence.holders)} holders run mostly index funds,"
-                " which own the stock because it is in an index."
+                owners.replace("they own", f"Big investment firms own", 1).replace(
+                    "of it", f"of {evidence.ticker}", 1
+                )
             )
-        if active:
-            who = "is an active manager that" if len(active) == 1 else "are active managers that"
-            sentences.append(f"{_join(active)} {who} chose the stock, so its moves carry information.")
-
-        example = evidence.example_holder
-        if example is not None:
-            verb = "grew" if example.pct_change > 0 else "cut"
-            sentences.append(
-                f"{example.name} {verb} its own position by {trim(abs(example.pct_change))} percent,"
-                f" {example.change_size}, measured against its own previous stake, not against the whole company."
-            )
+        insiders = plain.insiders(evidence)
+        if insiders:
+            sentences.append(insiders.replace("they", "The company's own bosses", 1))
+        holders = plain.holders(evidence)
+        if holders:
+            sentences.append(f"Of the biggest owners, {holders}")
+        example = plain.example(evidence)
+        if example:
+            sentences.append(example)
         sentences.append(NEVER_ALONE)
         return " ".join(sentences)
 
@@ -718,6 +740,8 @@ class InstitutionalTraceGenerator:
     TEMPERATURE = 0.3
     RETRIES = 2
     BACKOFF_SECONDS = (1.0, 2.0)
+    #: Drafts the guard may reject before the template stands in.
+    GUARD_ATTEMPTS = 2
 
     def __init__(
         self,
@@ -758,15 +782,24 @@ class InstitutionalTraceGenerator:
         client = self.client
         if client is None or not evidence.has_evidence:
             return None
-        text = self._complete(client, self.builder.build(evidence), evidence.ticker)
-        if text is None:
-            return None
-        trace = self.tidy(text)
-        reason = self.guard.check(trace, evidence)
-        if reason:
-            logger.info("Institutions trace for %s rejected: %s", evidence.ticker, reason)
-            return None
-        return trace
+        prompt = self.builder.build(evidence)
+        # A rejected paragraph is asked for once more before the template stands in.
+        # Seen live: about one reply in six slips a banned word ("buy", "expect") into an
+        # otherwise good paragraph, and a second draw almost always comes back clean. It
+        # is one extra call at most, once per filing.
+        for attempt in range(self.GUARD_ATTEMPTS):
+            text = self._complete(client, prompt, evidence.ticker)
+            if text is None:
+                return None
+            trace = self.tidy(text)
+            reason = self.guard.check(trace, evidence)
+            if not reason:
+                return trace
+            logger.info(
+                "Institutions trace for %s rejected (attempt %d): %s",
+                evidence.ticker, attempt + 1, reason,
+            )
+        return None
 
     @staticmethod
     def tidy(text: str) -> str:

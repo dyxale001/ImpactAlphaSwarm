@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.utils.ww_config import WhaleConfig  # noqa: E402
 from src.utils.ww_trace import (  # noqa: E402
+    PlainMeaning,
+    change_in_words,
     HolderStyleClassifier,
     InstitutionalEvidence,
     InstitutionalTraceGenerator,
@@ -216,7 +218,7 @@ def test_template_passes_its_own_guard_for_a_mega_cap():
     assert InstitutionalTraceGuard(cfg()).check(text, ev) is None
     # One paragraph, like the Sentiment tab's summary it is modelled on.
     assert "\n" not in text
-    assert "Capital Research Global Investors is an active manager" in text
+    assert "Capital Research Global Investors is a stock picker" in text
 
 
 def test_template_passes_its_own_guard_for_a_small_company_with_no_holders_classified():
@@ -226,14 +228,14 @@ def test_template_passes_its_own_guard_for_a_small_company_with_no_holders_class
     assert InstitutionalTraceGuard(cfg()).check(text, ev) is None
 
 
-def test_prompt_hands_over_the_verdicts_and_labels():
+def test_prompt_hands_over_meanings_not_figures():
     prompt = InstitutionalTracePromptBuilder().build(evidence())
-    assert "30 June 2026" in prompt
-    assert "86.3 percent, inside the 70 to 90 percent" in prompt
-    assert "0.3 percent, normal" in prompt
-    assert "Active managers, who choose which stocks to own: Capital Research Global Investors." in prompt
-    # A name that already ends in a full stop is not given a second one.
-    assert "Invesco Ltd.." not in prompt
+    # The reader already sees the figures, so the prompt hands over what they mean.
+    assert "they own most of it, which is normal for a big, well known company" in prompt
+    assert "they own only a tiny slice" in prompt
+    assert "cut its holding by about a quarter" in prompt
+    assert "86.3" not in prompt and "4,504" not in prompt and "24.8" not in prompt
+    assert "Do not repeat the figures from the screen" in prompt
     # The live model named the company from the ticker alone; it is told not to.
     assert "Refer to the company only as AAPL" in prompt
     assert spell_date("2026-06-30") == "30 June 2026"
@@ -246,20 +248,25 @@ def test_prompt_matches_the_quant_and_sentiment_length():
     assert len(prompt.split()) < 600
 
 
-def test_prompt_picks_the_one_style_instruction_that_fits():
-    build = InstitutionalTracePromptBuilder().build
-    mixed = build(evidence())
-    # Index funds are grouped by count, not named; the active manager is named.
-    assert "4 of the top 5 holders run mostly index funds" in mixed
-    assert "Do not name the index funds" in mixed
-    assert "while Capital Research Global Investors is an active manager" in mixed
+def test_prompt_matches_the_quant_and_sentiment_length():
+    prompt = InstitutionalTracePromptBuilder().build(evidence())
+    assert "four or five sentences, no more than 110 words" in prompt
+    # The Quant prompt runs to about 600 words; this one must not outgrow it.
+    assert len(prompt.split()) < 600
 
-    index_only = build(evidence(holders=payload()["holders"][:3]))
-    assert "3 of the top 3 holders run mostly index funds" in index_only
-    assert "do not reflect a stock picker's decision" in index_only
 
-    none = build(evidence(holders=[holder("FMR, LLC", 0.02, 0.01)]))
-    assert "index funds" not in none.split("Cover, in whatever order reads best:")[1].split("Rules")[0]
+def test_holders_are_explained_by_kind_not_listed():
+    plain = PlainMeaning()
+    mixed = plain.holders(evidence())
+    assert mixed.startswith("most are index funds, which automatically hold every company")
+    assert "Capital Research Global Investors is a stock picker" in mixed
+    # Index funds are explained as a group; none is named.
+    assert "Vanguard" not in mixed and "Blackrock" not in mixed
+
+    one_index = plain.holders(evidence(holders=payload()["holders"][:1] + [holder("FMR, LLC", 0.02, 0.01)] * 2))
+    assert one_index.startswith("some are index funds")
+
+    assert plain.holders(evidence(holders=[holder("FMR, LLC", 0.02, 0.01)])) == ""
 
 
 def test_prompt_leaves_out_an_unclassified_holder_that_is_not_the_example():
@@ -272,13 +279,18 @@ def test_prompt_leaves_out_an_unclassified_holder_that_is_not_the_example():
 
 def test_the_example_is_chosen_in_code_active_first():
     assert evidence().example_holder.name == "Capital Research Global Investors"
-    prompt = InstitutionalTracePromptBuilder().build(evidence())
-    assert "The example: Capital Research Global Investors cut its own position by 24.8 percent" in prompt
-    assert "a large change" in prompt
-
     unlabelled = [holder("FMR, LLC", 0.05, -0.12), holder("Vanguard Group Inc", 0.07, 0.03)]
-    # No active manager: the index holder, never the unlabelled one.
+    # No stock picker: the index holder, never the unlabelled one.
     assert evidence(holders=unlabelled).example_holder.name == "Vanguard Group Inc"
+
+
+def test_changes_are_put_in_words_a_beginner_uses():
+    assert change_in_words(-24.8) == "cut its holding by about a quarter"
+    assert change_in_words(1.6) == "added to its holding by a little"
+    assert change_in_words(7.2) == "added to its holding by a modest amount"
+    assert change_in_words(-50.0) == "cut its holding by about half"
+    assert change_in_words(140.0) == "more than doubled its holding"
+    assert change_in_words(-92.0) == "cut almost all of its holding"
 
 
 # ── the generator ────────────────────────────────────────────────────────────
@@ -318,9 +330,9 @@ def test_guard_requires_the_closing_sentence_and_still_refuses_buy_or_sell():
     assert guard.check(GOOD + " It is never a reason to buy or sell.", evidence()) is not None
 
 
-def test_prompt_only_talks_about_active_managers_when_one_is_listed():
+def test_prompt_only_talks_about_stock_pickers_when_one_is_listed():
     with_active = InstitutionalTracePromptBuilder().build(evidence())
-    assert "is an active manager that chose the stock" in with_active
+    assert "is a stock picker, so its moves show a real decision" in with_active
 
     unlabelled = [
         holder("Vanguard Group Inc", 0.07, 0.03),
@@ -328,7 +340,7 @@ def test_prompt_only_talks_about_active_managers_when_one_is_listed():
         holder("Renaissance Technologies LLC", 0.03, 0.4),
     ]
     without = InstitutionalTracePromptBuilder().build(evidence(holders=unlabelled))
-    assert "active manager that chose" not in without
+    assert "stock picker, so" not in without
     # Unlabelled holders are left out altogether, so there is nothing to guess about.
     assert "Renaissance" not in without and "FMR" not in without
 
@@ -340,13 +352,32 @@ def test_prompt_never_mentions_buying_or_selling():
     assert re.findall(r"\b(buy|sell|bought|sold)\w*", prompt, re.IGNORECASE) == []
 
 
-def test_template_covers_the_three_points_and_ends_with_the_closing_line():
+def test_template_explains_in_plain_words_and_ends_with_the_closing_line():
     text = InstitutionalTraceTemplate().render(evidence())
     assert text.endswith("Use it alongside your own research, never on its own.")
-    assert "4 of the top 5 holders run mostly index funds" in text
-    assert "measured against its own previous stake, not against the whole company" in text
-    # Quant and Sentiment length: well under the 1,000 character ceiling.
-    assert len(text.split()) <= 120
+    assert text.startswith("Big investment firms own most of AAPL")
+    assert "measured against its own earlier holding, not against the whole company" in text
+    # No figures from the screen are read back.
+    assert not any(ch.isdigit() for ch in text)
+    assert len(text) <= 1000
+
+
+def test_generator_asks_once_more_when_the_guard_rejects_a_draft():
+    class TwoDrafts:
+        model = "fake-model"
+
+        def __init__(self):
+            self.replies = [GOOD + " Index funds buy it.", GOOD]
+            self.calls = 0
+
+        def complete(self, prompt):
+            self.calls += 1
+            return self.replies.pop(0)
+
+    client = TwoDrafts()
+    g = InstitutionalTraceGenerator(cfg(institutions_trace_min_chars=40), client=client)
+    assert g.generate(evidence()) == GOOD
+    assert client.calls == 2
 
 
 def test_generator_reads_a_space_as_a_thousands_separator():
