@@ -264,7 +264,7 @@ def test_holders_are_explained_by_kind_not_listed():
     assert "Vanguard" not in mixed and "Blackrock" not in mixed
 
     one_index = plain.holders(evidence(holders=payload()["holders"][:1] + [holder("FMR, LLC", 0.02, 0.01)] * 2))
-    assert one_index.startswith("some are index funds")
+    assert one_index.startswith("one is an index fund")
 
     assert plain.holders(evidence(holders=[holder("FMR, LLC", 0.02, 0.01)])) == ""
 
@@ -535,3 +535,67 @@ def test_ownership_is_given_in_words_so_the_model_never_picks_its_own():
     assert ownership_in_words(66.3) == "most"
     small = PlainMeaning.institutions(evidence(institutions_pct=0.41, holders=[holder("Vanguard Group Inc", 0.07, 0.03, value=0.07 * 9e8)]))
     assert small.startswith("they own a large share of it")
+
+
+def test_index_fund_count_is_worded_for_every_case():
+    from src.utils.ww_trace import index_funds_in_words
+
+    # CSCO: every one of the top five is an index fund.
+    assert index_funds_in_words(5, 5).startswith("all of them are index funds, which automatically hold")
+    assert index_funds_in_words(4, 5).startswith("most are index funds, which automatically hold")
+    assert index_funds_in_words(3, 5).startswith("most are index funds")
+    assert index_funds_in_words(2, 5).startswith("some are index funds")
+    assert index_funds_in_words(2, 4).startswith("some are index funds")
+    # Singular, with the verbs to match.
+    one = index_funds_in_words(1, 5)
+    assert one.startswith("one is an index fund, which automatically holds")
+    assert "so it owns it" in one
+    assert index_funds_in_words(1, 1).startswith("it is an index fund, which automatically holds")
+
+
+def test_several_stock_pickers_take_the_plural():
+    pickers = payload()["holders"][:1] + [
+        holder("Capital Research Global Investors", 0.02, -0.1),
+        holder("Wellington Management Group LLP", 0.015, 0.05),
+    ]
+    text = PlainMeaning.holders(evidence(holders=pickers))
+    assert "are stock pickers, so their moves show a real decision" in text
+
+
+def test_csco_like_list_says_all_not_most():
+    all_index = [
+        holder("Blackrock Inc.", 0.091, -0.0175),
+        holder("Vanguard Capital Management LLC", 0.0621, 0.0041),
+        holder("State Street Corporation", 0.05, 0.0184),
+        holder("Invesco Ltd.", 0.035, -0.0107),
+        holder("Vanguard Portfolio Management LLC", 0.0303, 0.0124),
+    ]
+    prompt = InstitutionalTracePromptBuilder().build(evidence(holders=all_index))
+    assert "The biggest owners: all of them are index funds" in prompt
+    assert "most are index funds" not in prompt
+
+
+def test_unknown_size_is_not_called_smaller():
+    # No holder values, so the size cannot be inferred.
+    no_values = [{"holder": "Vanguard Group Inc", "pct_held": None, "value": None, "pct_change": 0.01, "date_reported": "2026-06-30"}]
+    ev = evidence(holders=no_values, insiders_pct=0.12)
+    assert ev.size_band is None
+    owners, insiders = PlainMeaning.institutions(ev), PlainMeaning.insiders(ev)
+    assert "without the company's size" in owners
+    assert "smaller" not in owners and "smaller" not in insiders and "founder" not in insiders
+
+
+def test_insider_amount_follows_the_figure_for_smaller_companies():
+    small = [holder("Vanguard Group Inc", 0.08, 0.01, value=0.08 * 900e6)]
+    low = PlainMeaning.insiders(evidence(holders=small, insiders_pct=0.005))
+    assert low == "they own only a tiny slice."
+    founder = PlainMeaning.insiders(evidence(holders=small, insiders_pct=0.18))
+    assert founder == "they own a meaningful slice, which is common in smaller, founder led companies."
+
+
+def test_template_reads_well_with_a_single_holder():
+    one = [holder("Vanguard Group Inc", 0.08, 0.02)]
+    text = InstitutionalTraceTemplate().render(evidence(holders=one))
+    assert "The biggest owner is an index fund, which automatically holds" in text
+    assert "Of the biggest owners, it is" not in text
+    assert InstitutionalTraceGuard(cfg()).check(text, evidence(holders=one)) is None

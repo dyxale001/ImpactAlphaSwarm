@@ -621,6 +621,13 @@ class PlainMeaning:
         # The amount in words, decided here. Left to itself the model called 41 percent
         # "a small part".
         amount = ownership_in_words(pct)
+        if evidence.size_band is None:
+            # Size is inferred from the holders' values; without them it is unknown, and
+            # calling the company "smaller" would be a guess.
+            return (
+                f"they own {amount} of it, but without the company's size there is no normal"
+                " level to compare it with, so on its own it says little."
+            )
         if not evidence.is_large:
             return (
                 f"they own {amount} of it, but smaller companies vary so much that there is no"
@@ -654,7 +661,11 @@ class PlainMeaning:
                 "they still own a noticeable slice, which is unusual at this size and often"
                 " means a founder or family is still involved."
             )
-        return "they own a meaningful slice, which is common in smaller, founder led companies."
+        slice_ = insider_slice_in_words(pct)
+        if pct >= SMALL_INSIDER_COMMON and evidence.size_band is not None:
+            return f"they own {slice_}, which is common in smaller, founder led companies."
+        # Below the founder-stake level, or size unknown: say how much, claim nothing.
+        return f"they own {slice_}."
 
     @staticmethod
     def holders(evidence: InstitutionalEvidence) -> str:
@@ -662,14 +673,12 @@ class PlainMeaning:
         active = [h.name for h in evidence.holders if h.style == HolderStyleClassifier.ACTIVE]
         parts: list[str] = []
         if index:
-            share = "most" if len(index) * 2 > len(evidence.holders) else "some"
-            parts.append(
-                f"{share} are index funds, which automatically hold every company in a market"
-                " index, so they own it because of its size, not because anyone picked it."
-            )
+            parts.append(index_funds_in_words(len(index), len(evidence.holders)))
         if active:
-            who = "is a stock picker" if len(active) == 1 else "are stock pickers"
-            parts.append(f"{_join(active)} {who}, so its moves show a real decision.")
+            if len(active) == 1:
+                parts.append(f"{active[0]} is a stock picker, so its moves show a real decision.")
+            else:
+                parts.append(f"{_join(active)} are stock pickers, so their moves show a real decision.")
         return " ".join(parts)
 
     @staticmethod
@@ -701,6 +710,41 @@ class PlainMeaning:
             f"{h.name} {change_in_words(h.pct_change)}, measured against its own earlier"
             " holding, not against the whole company."
         )
+
+
+def index_funds_in_words(index_count: int, holder_count: int) -> str:
+    """How many of the top holders are index funds, and what that means, with the
+    grammar matching the count.
+
+    Every count is handled, not just the common one. CSCO's top five are all index funds
+    (Vanguard files as two firms), and the first version, knowing only "most" and "some",
+    told the reader "most".
+    """
+    why_plural = (
+        "which automatically hold every company in a market index, so they own it because"
+        " of its size, not because anyone picked it."
+    )
+    why_single = (
+        "which automatically holds every company in a market index, so it owns it because"
+        " of its size, not because anyone picked it."
+    )
+    if index_count == holder_count == 1:
+        return f"it is an index fund, {why_single}"
+    if index_count == holder_count:
+        return f"all of them are index funds, {why_plural}"
+    if index_count == 1:
+        return f"one is an index fund, {why_single}"
+    if index_count * 2 > holder_count:
+        return f"most are index funds, {why_plural}"
+    return f"some are index funds, {why_plural}"
+
+
+def insider_slice_in_words(pct: float) -> str:
+    """How much the company's own bosses and directors own, as a beginner would say it."""
+    for ceiling, words in ((1, "only a tiny slice"), (5, "a small slice"), (20, "a meaningful slice")):
+        if pct < ceiling:
+            return words
+    return "a large slice"
 
 
 def ownership_in_words(pct: float) -> str:
@@ -757,7 +801,10 @@ class InstitutionalTraceTemplate:
             sentences.append(insiders.replace("they", "The company's own bosses", 1))
         holders = plain.holders(evidence)
         if holders:
-            sentences.append(f"Of the biggest owners, {holders}")
+            if holders.startswith("it is "):
+                sentences.append("The biggest owner is " + holders[len("it is "):])
+            else:
+                sentences.append(f"Of the biggest owners, {holders}")
         example = plain.example(evidence)
         if example:
             sentences.append(example)
