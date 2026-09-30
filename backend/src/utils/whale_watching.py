@@ -16,6 +16,7 @@ from .descriptions import (
 )
 from .ww_config import WhaleConfig
 from .ww_sources import FinnhubInsiderSource, YFinanceInstitutionalSource
+from .ww_trace import InstitutionalTraceService
 from .ww_store import (
     AssetRepository,
     FundsCache,
@@ -33,6 +34,7 @@ __all__ = [
     "FundHoldingsBuilder",
     "FundsCache",
     "InsiderCache",
+    "InstitutionalTraceService",
     "InstitutionsCache",
     "ReadThroughCache",
     "WhaleConfig",
@@ -147,6 +149,7 @@ class WhaleWatcher:
         institutional_source: Optional[YFinanceInstitutionalSource] = None,
         holdings: Optional[FundHoldingsBuilder] = None,
         describer: Optional[FundDescriber] = None,
+        institutions_trace: Optional[InstitutionalTraceService] = None,
     ):
         self.config = config or WhaleConfig.from_env()
         self.describer = describer or FundDescriber()
@@ -157,6 +160,7 @@ class WhaleWatcher:
         self.insider_source = insider_source or FinnhubInsiderSource(self.config)
         self.institutional_source = institutional_source or YFinanceInstitutionalSource(self.config)
         self.holdings = holdings or FundHoldingsBuilder(self.institutions_cache)
+        self.institutions_trace = institutions_trace or InstitutionalTraceService(self.config)
 
     async def insider(self, ticker: str) -> dict:
         symbol = ticker.upper()
@@ -181,6 +185,26 @@ class WhaleWatcher:
         return await self.institutions_cache.serve(
             symbol, lambda: self.institutional_source.fetch(symbol)
         )
+
+    async def institutional_trace(self, ticker: str) -> dict:
+        """The Big investors tab's reasoning trace for a ticker.
+
+        Written from the same cached payload the tab shows, so the two cannot disagree.
+        ``enabled`` is False when the feature is off, so the panel can stay hidden
+        rather than showing an error. The generation is a blocking model call, run off
+        the event loop.
+        """
+        symbol = ticker.upper()
+        empty = {"ticker": symbol, "trace": None, "source": None, "model": None,
+                 "generated_at": None, "as_of": None}
+        if not self.institutions_trace.enabled:
+            return {**empty, "enabled": False}
+        payload = await self.institutional(symbol)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, self.institutions_trace.trace_for, symbol, payload
+        )
+        return {**empty, **(result or {}), "enabled": True}
 
     async def funds(self) -> dict:
         return await self.funds_cache.serve_all(self._rebuild_funds)

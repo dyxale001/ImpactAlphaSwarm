@@ -293,6 +293,17 @@ async def institutional_ownership(ticker: str):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/api/institutions/{ticker}/trace")
+async def institutional_trace(ticker: str):
+    """The Big investors tab's reasoning trace. Written once per filing and stored on
+    the institutional cache row (migrations/028); ``enabled`` is False while
+    WHALE_INSTITUTIONS_TRACE_ENABLED is off."""
+    try:
+        return await whales.institutional_trace(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/api/funds")
 async def top_funds():
     """Institutional data inverted to per-fund holdings across all tracked assets

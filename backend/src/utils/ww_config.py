@@ -20,6 +20,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _env_float(name: str, default: float) -> float:
     try:
         return float(os.getenv(name, str(default)))
@@ -43,6 +50,14 @@ class WhaleConfig:
     institutional_max_holders: int = 15
     http_timeout: float = 10.0
 
+    # The Big investors tab's reasoning trace (migrations/028). Off until the
+    # migration has been run, so a deployment without the columns never tries to
+    # write them. The trace covers the same top holders the tab lists.
+    institutions_trace_enabled: bool = False
+    institutions_trace_holders: int = 5
+    institutions_trace_min_chars: int = 200
+    institutions_trace_max_chars: int = 1000
+
     @property
     def insider_ttl(self) -> datetime.timedelta:
         return datetime.timedelta(hours=self.insider_ttl_hours)
@@ -64,4 +79,8 @@ class WhaleConfig:
             insider_max_transactions=_env_int("WHALE_INSIDER_MAX_TRANSACTIONS", 25),
             institutional_max_holders=_env_int("WHALE_INSTITUTIONAL_MAX_HOLDERS", 15),
             http_timeout=_env_float("WHALE_HTTP_TIMEOUT", 10.0),
+            institutions_trace_enabled=_env_bool("WHALE_INSTITUTIONS_TRACE_ENABLED", False),
+            institutions_trace_holders=max(1, _env_int("WHALE_INSTITUTIONS_TRACE_HOLDERS", 5)),
+            institutions_trace_min_chars=max(1, _env_int("WHALE_INSTITUTIONS_TRACE_MIN_CHARS", 200)),
+            institutions_trace_max_chars=max(300, _env_int("WHALE_INSTITUTIONS_TRACE_MAX_CHARS", 1000)),
         )
