@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { getDaySummary, type DaySummaryResponse } from "../services/api/analysis";
+import { getDayDrivers, type DaySummaryResponse } from "../services/api/analysis";
 
-// Fetches the written summary for one day of the trend chart.
+// Fetches the generated paragraph for one day of the trend chart, "What's driving the
+// sentiment". Kept generic over the request it makes, since the retired day summary
+// was served the same way and any future day paragraph will be too.
 //
 // Generation is lazy on the server: the first request for a day pays for a short
 // completion, every request after that is an indexed read. This hook adds the other
@@ -11,7 +13,12 @@ import { getDaySummary, type DaySummaryResponse } from "../services/api/analysis
 //
 // Cached in a ref rather than state on purpose. Writing to it must not schedule a
 // render, since the render it would schedule is the one that just read from it.
-export function useDaySummary(ticker: string | undefined, day: string | null) {
+function useDayParagraph(
+  ticker: string | undefined,
+  day: string | null,
+  fetchParagraph: (ticker: string, day: string) => Promise<DaySummaryResponse>,
+  errorMessage: string,
+) {
   const [summary, setSummary] = useState<DaySummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +46,7 @@ export function useDaySummary(ticker: string | undefined, day: string | null) {
     setIsLoading(true);
     setError(null);
 
-    getDaySummary(ticker, day)
+    fetchParagraph(ticker, day)
       .then((res) => {
         if (cancelled) return;
         // A null summary is cached like any other answer. It means the day has nothing
@@ -50,8 +57,8 @@ export function useDaySummary(ticker: string | undefined, day: string | null) {
       })
       .catch((e) => {
         if (cancelled) return;
-        console.error("Error fetching day summary:", e);
-        setError("Unable to load this day's summary.");
+        console.error("Error fetching day paragraph:", e);
+        setError(errorMessage);
         setSummary(null);
       })
       .finally(() => {
@@ -61,7 +68,16 @@ export function useDaySummary(ticker: string | undefined, day: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [ticker, day]);
+  }, [ticker, day, fetchParagraph, errorMessage]);
 
   return { summary, isLoading, error };
+}
+
+export function useDayDrivers(ticker: string | undefined, day: string | null) {
+  return useDayParagraph(
+    ticker,
+    day,
+    getDayDrivers,
+    "Unable to load what drove this day's sentiment.",
+  );
 }

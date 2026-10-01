@@ -234,9 +234,9 @@ export interface SentimentHistoryPoint {
   top_posts: SocialPost[];
   /**
    * Always null. A column on social_sentiment_daily that nothing writes.
-   * The generated day summary lives in its own table and is fetched separately,
-   * by getDaySummary below, because it covers news and social together and this
-   * row knows only about social.
+   * The day's generated paragraph lives in its own table and is fetched
+   * separately, by getDayDrivers below, because it reads the day's news as well
+   * and this row knows only about social.
    */
   summary: string | null;
 
@@ -302,15 +302,22 @@ export interface DaySummaryResponse {
    */
   is_final: boolean;
   generated_at: string | null;
+  /**
+   * Drivers paragraph only: the day the paragraph was written about. The same as `day`
+   * when that day had news; on a day without any, the latest earlier day that had
+   * some, whose paragraph is shown instead. Absent on summaries.
+   */
+  source_day?: string | null;
 }
 
-// The written summary for one day of the trend chart. Served from a stored row, and
-// generated on the spot only the first time a day is asked for, so this is usually a
-// single indexed read and occasionally a couple of seconds. Informational, so no auth
-// token is needed.
-export async function getDaySummary(ticker: string, day: string) {
+// "What's driving the sentiment": the news-only paragraph under the day summary,
+// written from every article stored for the day and none of the posts. Same shape,
+// storage and spend rules as the retired day summary: `summary` holds the paragraph, null when
+// there is nothing to show (a day with no articles among the reasons), and is_final
+// says whether the day is settled. Informational, so no auth token is needed.
+export async function getDayDrivers(ticker: string, day: string) {
   const res = await fetch(
-    `${BASE}/api/assets/${encodeURIComponent(ticker)}/sentiment-summary?day=${encodeURIComponent(day)}`,
+    `${BASE}/api/assets/${encodeURIComponent(ticker)}/sentiment-drivers?day=${encodeURIComponent(day)}`,
   );
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<DaySummaryResponse>;

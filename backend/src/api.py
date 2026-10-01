@@ -70,6 +70,7 @@ _social_backfiller_instance = None
 _news_history_instance = None
 _social_ticker_instance = None
 _day_summaries_instance = None
+_day_drivers_instance = None
 
 
 def _social_history():
@@ -139,6 +140,22 @@ def _day_summaries():
             history=_social_history(), news_history=_news_history()
         )
     return _day_summaries_instance
+
+
+def _day_drivers():
+    """The "What's driving the sentiment" paragraphs, built once on first use.
+
+    Lazy for the same reason as the summaries: it holds a Groq client (key 6), which a
+    deployment with the feature off should never construct.
+    """
+    global _day_drivers_instance
+    if _day_drivers_instance is None:
+        from src.utils.day_drivers import DayDriversService
+
+        _day_drivers_instance = DayDriversService(
+            history=_social_history(), news_history=_news_history()
+        )
+    return _day_drivers_instance
 
 
 _allowed = os.getenv("API_CORS_ORIGINS", "http://localhost:5173")
@@ -1077,12 +1094,11 @@ def _ask_blocklist_hit(query: str) -> bool:
 _ASK_INTENT_MAX_TOKENS = 200
 _ASK_NARRATION_MAX_TOKENS = 450
 
-# Ask AlphaSwarm has its own Groq account (key 6), so a user typing a question
-# never queues behind a run's trace pool (keys 1 to 3) or the page summaries
-# (keys 4 and 5). Falls back to GROQ_API_KEY, the account it used before, so a
-# deployment without key 6 behaves exactly as it did.
-_ASK_KEY_ENV = "GROQ_API_KEY6"
-_ASK_FALLBACK_KEY_ENV = "GROQ_API_KEY"
+# Ask AlphaSwarm draws on key 1, GROQ_API_KEY, the account it used before it was
+# briefly given key 6. Key 6 is now reserved for the sentiment tab's "What's driving
+# the sentiment" paragraph (src/utils/day_drivers.py) and nothing else.
+_ASK_KEY_ENV = "GROQ_API_KEY"
+_ASK_FALLBACK_KEY_ENV = None
 
 _ask_intent_client = None
 _ask_narration_client = None
@@ -4531,6 +4547,45 @@ async def get_sentiment_summary(ticker: str, day: str):
     return {"ticker": symbol, **point}
 
 
+@app.get("/api/assets/{ticker}/sentiment-drivers")
+async def get_sentiment_drivers(ticker: str, day: str):
+    """The "What's driving the sentiment" paragraph for one day of one ticker's chart.
+
+    The news-only companion to /sentiment-summary, written from every article stored for
+    the day and none of the posts. Same response shape, same storage and spend rules: a
+    settled day is generated once and never again, today only when the cooldown has run
+    out and a new article has arrived. ``summary`` is null for every uninteresting
+    reason, and the box renders its quiet fallback.
+
+    A day with no articles answers with the paragraph of the latest earlier day in
+    the window that had some, and ``source_day`` names that day. ``summary`` is null
+    only when no day up to and including this one had any news.
+    """
+    symbol = ticker.upper()
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="day must be YYYY-MM-DD")
+
+    loop = asyncio.get_running_loop()
+    try:
+        point = await loop.run_in_executor(None, _day_drivers().summary_for, symbol, day)
+    except Exception as exc:
+        logger.warning("Day drivers failed for %s %s: %s", symbol, day, exc)
+        point = None
+
+    if point is None:
+        return {
+            "ticker": symbol,
+            "day": day,
+            "summary": None,
+            "source_day": None,
+            "is_final": False,
+            "generated_at": None,
+        }
+    return {"ticker": symbol, **point}
+
+
 @app.post("/api/social/tick")
 async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
     """Top up today's social row for recently ranked tickers, during market hours.
@@ -4579,14 +4634,21 @@ async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
 
 @app.post("/api/sentiment/summaries")
 async def sentiment_summaries(x_daily_run_secret: Optional[str] = Header(None)):
-    """Fill in and settle day summaries for tickers people have actually opened.
+    """Fill in and settle the "What's driving the sentiment" paragraphs for tickers people
+    have actually opened.
+
+    The path keeps its old name because the Cloud Scheduler job already points at it. It
+    used to settle the day summaries; those were retired from the page in favour of the
+    drivers paragraph, so this no longer generates any, and key 4 stops spending on them.
+    The summary code and its GET endpoint are left in place, unused, so the decision is
+    easy to reverse.
 
     Its own Cloud Scheduler job at 00:30 UTC, after the 22:00 nightly and the 23:00
     backfill have both written the day that just closed. Half past midnight rather than
     half eleven so the day being settled is genuinely over: run an hour earlier and
     yesterday would sit marked "so far today" until the following night.
 
-    Only tickers that already have a stored summary, which is the entire cost control. A
+    Only tickers that already have a stored paragraph, which is the entire cost control. A
     name with no row is a name nobody has opened, and generating a week of prose against
     the chance that somebody might is how a lazy feature turns into a nightly bill.
     """
@@ -4609,10 +4671,10 @@ async def sentiment_summaries(x_daily_run_secret: Optional[str] = Header(None)):
         return {"ok": False, "error": str(exc), "generated": 0}
 
     try:
-        summary = await loop.run_in_executor(None, _day_summaries().top_up, tickers, None)
-        return {"ok": True, **summary}
+        drivers = await loop.run_in_executor(None, _day_drivers().top_up, tickers, None)
+        return {"ok": True, **drivers}
     except Exception as exc:
-        logger.warning("Summary top-up failed: %s", exc)
+        logger.warning("Drivers top-up failed: %s", exc)
         return {"ok": False, "error": str(exc), "generated": 0}
 
 

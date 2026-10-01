@@ -624,6 +624,11 @@ class DaySummaryGenerator:
 	KEY_ENV = "GROQ_API_KEY4"
 	FALLBACK_KEY_ENV = "GROQ_API_KEY"
 
+	#: The call site's name in every log line, and the prompt it sends. Class level so a
+	#: sibling paragraph (day_drivers) can reuse the retry and guard logic with its own.
+	PURPOSE = "day_summary"
+	BUILDER = DaySummaryPromptBuilder
+
 	MAX_TOKENS = 1200
 	TEMPERATURE = 0.4
 
@@ -644,7 +649,7 @@ class DaySummaryGenerator:
 
 	def __init__(self, config: SentimentConfig | None = None, client: Any | None = None):
 		self.config = config or SentimentConfig.from_env()
-		self.builder = DaySummaryPromptBuilder(self.config)
+		self.builder = self.BUILDER(self.config)
 		self._client = client
 		self._client_built = client is not None
 
@@ -654,7 +659,7 @@ class DaySummaryGenerator:
 		if not self._client_built:
 			self._client_built = True
 			self._client = GroqClient.create(
-				purpose="day_summary",
+				purpose=self.PURPOSE,
 				max_tokens=self.MAX_TOKENS,
 				temperature=self.TEMPERATURE,
 				key_env=self.KEY_ENV,
@@ -675,7 +680,7 @@ class DaySummaryGenerator:
 				"Day summary skipped for %s %s: Groq unconfigured", evidence.ticker, evidence.day
 			)
 			return None
-		if not evidence.has_evidence:
+		if not self.describable(evidence):
 			return None
 
 		prompt = self.builder.build(evidence, partial=partial)
@@ -688,6 +693,16 @@ class DaySummaryGenerator:
 		# style rules unevenly.
 		summary = HOUSE_STYLE.apply(text)
 		return self._validate(summary, evidence)
+
+	@property
+	def max_chars(self) -> int:
+		"""The ceiling on a stored paragraph. Overridable for a longer sibling paragraph."""
+		return self.config.day_summary_max_chars
+
+	@staticmethod
+	def describable(evidence: DayEvidence) -> bool:
+		"""Whether this day has anything for this paragraph to be written from."""
+		return evidence.has_evidence
 
 	def _complete(self, client, prompt: str, evidence: DayEvidence) -> str | None:
 		for attempt in range(self.RETRIES + 1):
@@ -731,13 +746,13 @@ class DaySummaryGenerator:
 				len(summary),
 			)
 			return None
-		if len(summary) > self.config.day_summary_max_chars:
+		if len(summary) > self.max_chars:
 			logger.info(
 				"Day summary for %s %s ran to %d chars, over the %d limit; discarded",
 				evidence.ticker,
 				evidence.day,
 				len(summary),
-				self.config.day_summary_max_chars,
+				self.max_chars,
 			)
 			return None
 		return summary
@@ -798,7 +813,14 @@ class DaySummaryService:
 			logger.warning("Day summary lookup failed for %s %s: %s", ticker, day, e)
 			return None
 
-	def _summary_for(self, sym: str, day: str) -> dict[str, Any] | None:
+	def _summary_for(
+		self,
+		sym: str,
+		day: str,
+		history: tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]] | None = None,
+	) -> dict[str, Any] | None:
+		"""``history`` is the pair ``_read_history`` returns, for a caller that has read it
+		already (day_drivers reads the news to choose which day to serve)."""
 		window = window_days(self.config.social_display_days)
 		if not window or day < window[0].isoformat() or day > window[-1].isoformat():
 			return None
@@ -809,9 +831,9 @@ class DaySummaryService:
 		if stored and stored.get("is_final"):
 			return self._point(stored)
 
-		social, news = self._read_history(sym)
+		social, news = history if history is not None else self._read_history(sym)
 		evidence = self._build_evidence(sym, day, social, news, window)
-		if not evidence.has_evidence:
+		if not self._describable(evidence):
 			return self._point(stored) if stored else None
 		if not self._needs_generation(stored, evidence, day):
 			return self._point(stored)
@@ -905,7 +927,7 @@ class DaySummaryService:
 			if existing and existing.get("is_final"):
 				continue
 			evidence = self._build_evidence(ticker, day, social, news, window)
-			if not evidence.has_evidence:
+			if not self._describable(evidence):
 				continue
 			if not self._needs_generation(existing, evidence, day):
 				continue
@@ -954,6 +976,11 @@ class DaySummaryService:
 			written = written.replace(tzinfo=datetime.timezone.utc)
 		age = utc_now() - written
 		return age >= datetime.timedelta(minutes=self.config.day_summary_today_cooldown_minutes)
+
+	@staticmethod
+	def _describable(evidence: DayEvidence) -> bool:
+		"""Whether a day has anything to write about. Posts or articles, for this one."""
+		return evidence.has_evidence
 
 	@staticmethod
 	def _evidence_moved(stored: dict[str, Any], evidence: DayEvidence) -> bool:
