@@ -104,8 +104,8 @@ export default function InstitutionalOwners({
   // uses. "page" is the standalone Whale Watching look, unchanged.
   variant?: "page" | "asset";
   // The AI summary between the tiles and the holder list. A feature rather than a look,
-  // so it is its own switch: the asset page turns it on, and the Whale Watching page
-  // takes the same design without it.
+  // so it is its own switch. Both pages turn it on and read the same summary, stored
+  // once per ticker.
   showSummary?: boolean;
 }) {
   const onAsset = variant === "asset";

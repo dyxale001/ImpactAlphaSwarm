@@ -46,8 +46,8 @@ export default function WhaleWatching({
   // on the forest panel, and rows outlined in the Reasoning Trace's lime.
   variant?: "page" | "asset";
   // The AI note above the dealings. A feature rather than a look, so it is its own
-  // switch: the asset page turns it on, and the Whale Watching page leaves it off so
-  // opening a company there never costs a model call.
+  // switch. Both pages turn it on: the note is stored once per ticker, so either page
+  // reads the same saved note, and a model call happens only when none fits the filings.
   showSummary?: boolean;
 }) {
   const onAsset = variant === "asset";
