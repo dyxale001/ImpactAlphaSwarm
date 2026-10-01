@@ -57,6 +57,8 @@ class WhaleConfig:
     institutions_trace_holders: int = 5
     institutions_trace_min_chars: int = 200
     institutions_trace_max_chars: int = 1000
+    # The Insider trading tab's summary (migrations/029), on the same guards and lane.
+    insider_trace_enabled: bool = False
 
     @property
     def insider_ttl(self) -> datetime.timedelta:
@@ -83,4 +85,5 @@ class WhaleConfig:
             institutions_trace_holders=max(1, _env_int("WHALE_INSTITUTIONS_TRACE_HOLDERS", 5)),
             institutions_trace_min_chars=max(1, _env_int("WHALE_INSTITUTIONS_TRACE_MIN_CHARS", 200)),
             institutions_trace_max_chars=max(300, _env_int("WHALE_INSTITUTIONS_TRACE_MAX_CHARS", 1000)),
+            insider_trace_enabled=_env_bool("WHALE_INSIDER_TRACE_ENABLED", False),
         )

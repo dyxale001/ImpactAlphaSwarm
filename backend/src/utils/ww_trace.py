@@ -477,23 +477,31 @@ class InstitutionalTraceGuard:
     def __init__(self, config: Optional[WhaleConfig] = None):
         self.config = config or WhaleConfig.from_env()
 
+    #: Refused anywhere in the paragraph, and in its closing sentence. Class attributes
+    #: so the insider guard can swap the lists without copying the checks.
+    FORBIDDEN: tuple = FORBIDDEN_PATTERNS
+    CLOSING_FORBIDDEN = _CLOSING_FORBIDDEN
+    #: Whether the last sentence must open "So this means". The insider note has none.
+    REQUIRE_CLOSING = True
+
     def check(self, text: str, evidence: InstitutionalEvidence) -> Optional[str]:
         """The reason a paragraph fails, or None when it passes."""
         if len(text) < self.config.institutions_trace_min_chars:
             return f"too short ({len(text)} chars)"
         if len(text) > self.config.institutions_trace_max_chars:
             return f"over the {self.config.institutions_trace_max_chars} char limit ({len(text)} chars)"
-        closing = _SENTENCES.split(text.strip())[-1]
-        if not closing.lower().startswith(CLOSING_OPENER.lower()):
-            return f'last sentence does not start "{CLOSING_OPENER}"'
-        advice = _CLOSING_FORBIDDEN.search(closing)
-        if advice:
-            return f"closing sentence uses '{advice.group(0)}'"
+        if self.REQUIRE_CLOSING:
+            closing = _SENTENCES.split(text.strip())[-1]
+            if not closing.lower().startswith(CLOSING_OPENER.lower()):
+                return f'last sentence does not start "{CLOSING_OPENER}"'
+            advice = self.CLOSING_FORBIDDEN.search(closing)
+            if advice:
+                return f"closing sentence uses '{advice.group(0)}'"
         guessed = self.guessed_style(text, evidence)
         if guessed:
             return f"gives a style to unclassified holder '{guessed}'"
         body = self.without_names(text, evidence)
-        for pattern in FORBIDDEN_PATTERNS:
+        for pattern in self.FORBIDDEN:
             hit = pattern.search(body)
             if hit:
                 return f"uses forbidden term '{hit.group(0)}'"
@@ -817,10 +825,16 @@ class InstitutionalTraceTemplate:
 class InstitutionalTraceGenerator:
     """Asks the model for the trace, and refuses anything the facts do not support."""
 
-    #: The lane the day summaries and the Quant trace use: generated while somebody is
-    #: reading a page, so kept off the lanes the run's trace pool and discovery are on.
-    KEY_ENV = "GROQ_API_KEY4"
-    FALLBACK_KEY_ENV = "GROQ_API_KEY"
+    #: Its own Groq account, shared by the Big investors and Insider trading summaries
+    #: (the insider generator subclasses this one) and by nothing else, so they never
+    #: compete with the run's trace pool (keys 1 to 3) or with the day summaries and the
+    #: Quant trace (key 4). Falls back to key 4, the lane these summaries used before,
+    #: so a deployment without key 5 behaves as it did rather than losing them.
+    KEY_ENV = "GROQ_API_KEY5"
+    FALLBACK_KEY_ENV = "GROQ_API_KEY4"
+    #: Names the call site in Groq's and our own log lines. Subclasses override it.
+    PURPOSE = "institutions_trace"
+    LABEL = "Institutions trace"
 
     MAX_TOKENS = 2400
     TEMPERATURE = 0.3
@@ -850,7 +864,7 @@ class InstitutionalTraceGenerator:
             from .llm_client import GroqClient
 
             self._client = GroqClient.create(
-                purpose="institutions_trace",
+                purpose=self.PURPOSE,
                 max_tokens=self.MAX_TOKENS,
                 temperature=self.TEMPERATURE,
                 key_env=self.KEY_ENV,
@@ -882,8 +896,8 @@ class InstitutionalTraceGenerator:
             if not reason:
                 return trace
             logger.info(
-                "Institutions trace for %s rejected (attempt %d): %s",
-                evidence.ticker, attempt + 1, reason,
+                "%s for %s rejected (attempt %d): %s",
+                self.LABEL, evidence.ticker, attempt + 1, reason,
             )
         return None
 
@@ -902,8 +916,8 @@ class InstitutionalTraceGenerator:
             except Exception as e:
                 if attempt >= self.RETRIES:
                     logger.warning(
-                        "Institutions trace generation failed for %s after %d attempts: %s",
-                        ticker, attempt + 1, e,
+                        "%s generation failed for %s after %d attempts: %s",
+                        self.LABEL, ticker, attempt + 1, e,
                     )
                     return None
                 time.sleep(self.BACKOFF_SECONDS[min(attempt, len(self.BACKOFF_SECONDS) - 1)])
@@ -1010,6 +1024,9 @@ class InstitutionalTraceService:
         if self._reusable(stored, fingerprint):
             return self._point(stored, evidence)
 
+        # Context that is only worth fetching when something is about to be written, and
+        # that stays out of the fingerprint (the insider summary's price move).
+        evidence = self.enrich(evidence)
         text = self.generator.generate(evidence)
         source = "model"
         if not text:
@@ -1025,8 +1042,12 @@ class InstitutionalTraceService:
             "trace_generated_at": self._now().isoformat(),
         }
         self.repository.write(sym, row)
-        logger.info("Generated %s institutions trace for %s", source, sym)
+        logger.info("Generated %s %s for %s", source, getattr(self.generator, "LABEL", "trace").lower(), sym)
         return self._point(row, evidence)
+
+    def enrich(self, evidence):
+        """Add context just before writing. Nothing to add here; subclasses override."""
+        return evidence
 
     def _reusable(self, stored: Optional[dict], fingerprint: str) -> bool:
         if not stored or not stored.get("trace") or stored.get("trace_fingerprint") != fingerprint:

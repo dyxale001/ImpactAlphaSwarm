@@ -283,6 +283,17 @@ async def whale_activity(ticker: str):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/api/whales/{ticker}/trace")
+async def insider_trace(ticker: str):
+    """The Insider trading tab's AI summary. Written once per set of filings and stored
+    on the insider cache row (migrations/029); ``enabled`` is False while
+    WHALE_INSIDER_TRACE_ENABLED is off."""
+    try:
+        return await whales.insider_trace(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/api/institutions/{ticker}")
 async def institutional_ownership(ticker: str):
     """Institutional ownership for a ticker, via yfinance. Read-through cache with
