@@ -139,3 +139,30 @@ export function filingAge(asOf: string | null, now: Date = new Date()): string |
   if (months === 1) return "about a month ago";
   return `about ${months} months ago`;
 }
+
+// The AI summary box's figures line for the Insider trading tab: how many dealings of
+// each kind the note was written from. Counted from the same SEC codes the backend uses
+// (P a purchase, S a sale, anything else routine pay admin), so the line and the note
+// cannot disagree. Every count is worded: none, one, several.
+export function dealingFigures(
+  transactions: { transaction_code?: string | null }[],
+): string {
+  let purchases = 0;
+  let sales = 0;
+  let routine = 0;
+  for (const t of transactions) {
+    const code = (t.transaction_code || "").trim().toUpperCase();
+    if (code === "P") purchases += 1;
+    else if (code === "S") sales += 1;
+    else routine += 1;
+  }
+  const count = (n: number, one: string, many: string) =>
+    n === 0 ? `no ${many}` : `${n} ${n === 1 ? one : many}`;
+  const parts = [
+    count(purchases, "open-market purchase", "open-market purchases"),
+    count(sales, "open-market sale", "open-market sales"),
+  ];
+  if (routine > 0) parts.push(count(routine, "routine entry", "routine entries"));
+  const text = parts.join(" · ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}

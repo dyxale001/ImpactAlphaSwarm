@@ -844,7 +844,12 @@ export default function AssetDetailsPage() {
           the same way the Quant tab gates its price history. */}
       {recommendation && tab === "investors" && (
         <div className="space-y-3">
-          <InstitutionalOwners ticker={asset.ticker} limit={5} variant="asset" />
+          <InstitutionalOwners
+            ticker={asset.ticker}
+            limit={5}
+            variant="asset"
+            showSummary
+          />
           <WhaleCaveat />
         </div>
       )}
@@ -856,6 +861,7 @@ export default function AssetDetailsPage() {
             emptyMessage="No insider trades reported for this stock recently"
             showTradeDate
             variant="asset"
+            showSummary
           />
           <WhaleCaveat />
         </div>

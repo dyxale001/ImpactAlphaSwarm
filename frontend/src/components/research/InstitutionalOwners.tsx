@@ -92,6 +92,7 @@ export default function InstitutionalOwners({
   ticker,
   limit,
   variant = "page",
+  showSummary = false,
 }: {
   ticker: string;
   // Caps the holder list at the largest few. Optional so the standalone Whale
@@ -102,6 +103,10 @@ export default function InstitutionalOwners({
   // Sentiment tab uses, and holder rows outlined in the lime the Reasoning Trace panel
   // uses. "page" is the standalone Whale Watching look, unchanged.
   variant?: "page" | "asset";
+  // The AI summary between the tiles and the holder list. A feature rather than a look,
+  // so it is its own switch: the asset page turns it on, and the Whale Watching page
+  // takes the same design without it.
+  showSummary?: boolean;
 }) {
   const onAsset = variant === "asset";
   const eyebrowTone = onAsset ? "text-brand-muted-fg" : "text-brand-primary";
@@ -186,9 +191,8 @@ export default function InstitutionalOwners({
             />
           </div>
 
-          {/* The written reading of the figures above and the holders below. Asset
-              page only; the standalone page stays as it was. */}
-          {onAsset && (
+          {/* The written reading of the figures above and the holders below. */}
+          {showSummary && (
             <InstitutionalTracePanel
               ticker={ticker}
               institutionsPct={data!.institutions_pct}

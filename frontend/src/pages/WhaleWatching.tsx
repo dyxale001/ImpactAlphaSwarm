@@ -223,9 +223,9 @@ export default function WhaleWatchingPage() {
           </div>
 
           {tickerTab === "insiders" ? (
-            <WhaleWatching ticker={ticker} />
+            <WhaleWatching ticker={ticker} variant="asset" />
           ) : (
-            <InstitutionalOwners ticker={ticker} />
+            <InstitutionalOwners ticker={ticker} variant="asset" />
           )}
         </div>
       ) : section === "funds" ? (

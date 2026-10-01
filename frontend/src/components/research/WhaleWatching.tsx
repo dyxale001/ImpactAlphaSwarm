@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Waves,
   ArrowUpRight,
@@ -8,6 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { useWhaleData } from "../../hooks/useWhaleData";
+import { InsiderTracePanel } from "./InsiderTracePanel";
 import {
   CLUSTER_MIN_BUYERS,
   CLUSTER_WINDOW_DAYS,
@@ -32,6 +33,7 @@ export default function WhaleWatching({
   emptyMessage,
   showTradeDate = false,
   variant = "page",
+  showSummary = false,
 }: {
   ticker: string;
   // All optional so the standalone Whale Watching page renders exactly as before.
@@ -43,8 +45,22 @@ export default function WhaleWatching({
   // eyebrow with only the icon in green, body-weight description, the cluster callout
   // on the forest panel, and rows outlined in the Reasoning Trace's lime.
   variant?: "page" | "asset";
+  // The AI note above the dealings. A feature rather than a look, so it is its own
+  // switch: the asset page turns it on, and the Whale Watching page leaves it off so
+  // opening a company there never costs a model call.
+  showSummary?: boolean;
 }) {
   const onAsset = variant === "asset";
+  // Between the facts in a dealing row. A thin vertical line on the asset page, where
+  // the rows are outlined cards; the standalone page keeps its dots.
+  const divider = onAsset ? (
+    <span
+      aria-hidden="true"
+      className="inline-block h-3 w-px bg-brand-border mx-2 align-middle"
+    />
+  ) : (
+    " · "
+  );
   const { transactions, source, fetchedAt, isLoading, error } =
     useWhaleData(ticker);
   const [expanded, setExpanded] = useState(false);
@@ -118,6 +134,10 @@ export default function WhaleWatching({
         </p>
       ) : (
         <div className="space-y-3">
+          {showSummary && (
+            <InsiderTracePanel ticker={ticker} transactions={transactions} />
+          )}
+
           {clusterCount >= CLUSTER_MIN_BUYERS && (
             <div
               className={
@@ -153,9 +173,16 @@ export default function WhaleWatching({
               >
                 <span
                   className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                    isBuy
-                      ? "bg-brand-primary/15 text-brand-primary"
-                      : "bg-semantic-danger/15 text-semantic-danger"
+                    onAsset
+                      ? // Neon lime with forest text for a buy, solid forest with white
+                        // text for a sell. Lime text on a light card is unreadable, so
+                        // the lime is the fill, as the brand does everywhere else.
+                        isBuy
+                        ? "bg-brand-accent text-brand-fg"
+                        : "bg-brand-primary text-white"
+                      : isBuy
+                        ? "bg-brand-primary/15 text-brand-primary"
+                        : "bg-semantic-danger/15 text-semantic-danger"
                   }`}
                 >
                   {isBuy ? (
@@ -171,7 +198,7 @@ export default function WhaleWatching({
                     {formatName(t.name)}
                     {t.role && (
                       <span className="font-normal text-brand-muted-fg">
-                        {" · "}
+                        {divider}
                         {t.role}
                       </span>
                     )}
@@ -182,12 +209,19 @@ export default function WhaleWatching({
                         {nature}
                       </span>
                     )}
-                    <span>
-                      {formatShares(t.shares)} shares ·{" "}
-                      {showTradeDate && t.transaction_date
-                        ? `traded ${formatDate(t.transaction_date)} · `
-                        : ""}
-                      filed {formatDate(t.filing_date)}
+                    <span className="inline-flex items-center flex-wrap">
+                      {[
+                        `${formatShares(t.shares)} shares`,
+                        ...(showTradeDate && t.transaction_date
+                          ? [`traded ${formatDate(t.transaction_date)}`]
+                          : []),
+                        `filed ${formatDate(t.filing_date)}`,
+                      ].map((part, index) => (
+                        <Fragment key={part}>
+                          {index > 0 && divider}
+                          {part}
+                        </Fragment>
+                      ))}
                     </span>
                   </p>
                 </div>
@@ -236,7 +270,15 @@ export default function WhaleWatching({
           <dl className="space-y-1.5">
             {presentNatures.map((n) => (
               <div key={n} className="flex items-baseline gap-2">
-                <dt className="shrink-0 rounded-full border border-brand-border/60 bg-brand-bg px-1.5 py-0.5 text-[10px] font-medium text-brand-muted-fg">
+                <dt
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    onAsset
+                      ? // Lime is the fill, with forest text: lime text on a light card
+                        // is unreadable.
+                        "bg-brand-accent text-brand-fg"
+                      : "border border-brand-border/60 bg-brand-bg text-brand-muted-fg"
+                  }`}
+                >
                   {n}
                 </dt>
                 <dd className="text-xs text-brand-muted-fg leading-snug">
