@@ -31,14 +31,20 @@ export default function WhaleWatching({
   ticker,
   emptyMessage,
   showTradeDate = false,
+  variant = "page",
 }: {
   ticker: string;
-  // Both optional so the standalone Whale Watching page renders exactly as before.
+  // All optional so the standalone Whale Watching page renders exactly as before.
   // The asset page's Insider trading tab sets them.
   emptyMessage?: string;
   // Adds the date the trade happened ahead of the date it was filed.
   showTradeDate?: boolean;
+  // "asset" matches the asset page's other tabs, as InstitutionalOwners does: a muted
+  // eyebrow with only the icon in green, body-weight description, the cluster callout
+  // on the forest panel, and rows outlined in the Reasoning Trace's lime.
+  variant?: "page" | "asset";
 }) {
+  const onAsset = variant === "asset";
   const { transactions, source, fetchedAt, isLoading, error } =
     useWhaleData(ticker);
   const [expanded, setExpanded] = useState(false);
@@ -66,17 +72,27 @@ export default function WhaleWatching({
   const clusterCount = clusterBuyerCount(transactions);
 
   return (
-    <section className="soft-card w-full p-5 space-y-4">
+    <section
+      className={`soft-card w-full p-5 space-y-4 ${
+        onAsset ? "hover:border-brand-primary/30 transition-all" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           {/* Panel eyebrows carry the brand green, matching the dashboard's
               "Top Pick Today" label. Metric labels and footnotes stay muted, so
               the green marks section starts rather than colouring everything. */}
-          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
-            <Waves className="w-3 h-3" />
+          <p
+            className={`text-[10px] uppercase tracking-widest ${
+              onAsset ? "text-brand-muted-fg" : "text-brand-primary"
+            } font-semibold mb-1 flex items-center gap-1.5`}
+          >
+            <Waves className="w-3 h-3 text-brand-primary" />
             Whale Watching
           </p>
-          <p className="text-sm text-brand-muted-fg">
+          <p
+            className={`text-sm ${onAsset ? "text-brand-fg/90" : "text-brand-muted-fg"}`}
+          >
             Recent insider dealings: Directors and Executives trading their own
             company's stock. Reference data for your own judgment.
           </p>
@@ -103,9 +119,19 @@ export default function WhaleWatching({
       ) : (
         <div className="space-y-3">
           {clusterCount >= CLUSTER_MIN_BUYERS && (
-            <div className="flex items-start gap-2 rounded-2xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3">
-              <Users className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
-              <p className="text-xs text-brand-fg leading-snug">
+            <div
+              className={
+                onAsset
+                  ? "hero-card flex items-start gap-2 px-4 py-3"
+                  : "flex items-start gap-2 rounded-2xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3"
+              }
+            >
+              <Users
+                className={`w-4 h-4 shrink-0 mt-0.5 ${onAsset ? "text-lime-500" : "text-brand-primary"}`}
+              />
+              <p
+                className={`text-xs leading-snug ${onAsset ? "text-white" : "text-brand-fg"}`}
+              >
                 <span className="font-semibold">Cluster buying:</span>{" "}
                 {clusterCount} different insiders bought on the open market in the
                 last {CLUSTER_WINDOW_DAYS} days. Several insiders buying at once
@@ -121,7 +147,9 @@ export default function WhaleWatching({
             return (
               <div
                 key={`${t.name}-${t.filing_date}-${i}`}
-                className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
+                className={`flex items-center gap-3 rounded-2xl border ${
+                  onAsset ? "border-brand-accent" : "border-brand-border/60"
+                } bg-brand-bg/55 px-4 py-3`}
               >
                 <span
                   className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${

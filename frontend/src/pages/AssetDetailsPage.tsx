@@ -855,6 +855,7 @@ export default function AssetDetailsPage() {
             ticker={asset.ticker}
             emptyMessage="No insider trades reported for this stock recently"
             showTradeDate
+            variant="asset"
           />
           <WhaleCaveat />
         </div>
