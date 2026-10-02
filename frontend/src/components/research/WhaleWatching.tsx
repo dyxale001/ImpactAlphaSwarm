@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Waves,
   ArrowUpRight,
@@ -8,6 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { useWhaleData } from "../../hooks/useWhaleData";
+import { InsiderTracePanel } from "./InsiderTracePanel";
 import {
   CLUSTER_MIN_BUYERS,
   CLUSTER_WINDOW_DAYS,
@@ -27,7 +28,39 @@ import {
 // Formatting lives in ./whaleFormat so this panel and the cross-company
 // activity feed render the same rows identically.
 
-export default function WhaleWatching({ ticker }: { ticker: string }) {
+export default function WhaleWatching({
+  ticker,
+  emptyMessage,
+  showTradeDate = false,
+  variant = "page",
+  showSummary = false,
+}: {
+  ticker: string;
+  // All optional so the standalone Whale Watching page renders exactly as before.
+  // The asset page's Insider trading tab sets them.
+  emptyMessage?: string;
+  // Adds the date the trade happened ahead of the date it was filed.
+  showTradeDate?: boolean;
+  // "asset" matches the asset page's other tabs, as InstitutionalOwners does: a muted
+  // eyebrow with only the icon in green, body-weight description, the cluster callout
+  // on the forest panel, and rows outlined in the Reasoning Trace's lime.
+  variant?: "page" | "asset";
+  // The AI note above the dealings. A feature rather than a look, so it is its own
+  // switch. Both pages turn it on: the note is stored once per ticker, so either page
+  // reads the same saved note, and a model call happens only when none fits the filings.
+  showSummary?: boolean;
+}) {
+  const onAsset = variant === "asset";
+  // Between the facts in a dealing row. A thin vertical line on the asset page, where
+  // the rows are outlined cards; the standalone page keeps its dots.
+  const divider = onAsset ? (
+    <span
+      aria-hidden="true"
+      className="inline-block h-3 w-px bg-brand-border mx-2 align-middle"
+    />
+  ) : (
+    " · "
+  );
   const { transactions, source, fetchedAt, isLoading, error } =
     useWhaleData(ticker);
   const [expanded, setExpanded] = useState(false);
@@ -55,17 +88,27 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
   const clusterCount = clusterBuyerCount(transactions);
 
   return (
-    <section className="soft-card w-full p-5 space-y-4">
+    <section
+      className={`soft-card w-full p-5 space-y-4 ${
+        onAsset ? "hover:border-brand-primary/30 transition-all" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           {/* Panel eyebrows carry the brand green, matching the dashboard's
               "Top Pick Today" label. Metric labels and footnotes stay muted, so
               the green marks section starts rather than colouring everything. */}
-          <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold mb-1 flex items-center gap-1.5">
-            <Waves className="w-3 h-3" />
+          <p
+            className={`text-[10px] uppercase tracking-widest ${
+              onAsset ? "text-brand-muted-fg" : "text-brand-primary"
+            } font-semibold mb-1 flex items-center gap-1.5`}
+          >
+            <Waves className="w-3 h-3 text-brand-primary" />
             Whale Watching
           </p>
-          <p className="text-sm text-brand-muted-fg">
+          <p
+            className={`text-sm ${onAsset ? "text-brand-fg/90" : "text-brand-muted-fg"}`}
+          >
             Recent insider dealings: Directors and Executives trading their own
             company's stock. Reference data for your own judgment.
           </p>
@@ -86,15 +129,29 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
         <p className="text-sm text-brand-muted-fg italic py-2">{error}</p>
       ) : transactions.length === 0 ? (
         <p className="text-sm text-brand-muted-fg italic py-2">
-          No recent insider dealings on record for {ticker}. Insider data covers
-          US-listed companies.
+          {emptyMessage ??
+            `No recent insider dealings on record for ${ticker}. Insider data covers US-listed companies.`}
         </p>
       ) : (
         <div className="space-y-3">
+          {showSummary && (
+            <InsiderTracePanel ticker={ticker} transactions={transactions} />
+          )}
+
           {clusterCount >= CLUSTER_MIN_BUYERS && (
-            <div className="flex items-start gap-2 rounded-2xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3">
-              <Users className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
-              <p className="text-xs text-brand-fg leading-snug">
+            <div
+              className={
+                onAsset
+                  ? "hero-card flex items-start gap-2 px-4 py-3"
+                  : "flex items-start gap-2 rounded-2xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3"
+              }
+            >
+              <Users
+                className={`w-4 h-4 shrink-0 mt-0.5 ${onAsset ? "text-lime-500" : "text-brand-primary"}`}
+              />
+              <p
+                className={`text-xs leading-snug ${onAsset ? "text-white" : "text-brand-fg"}`}
+              >
                 <span className="font-semibold">Cluster buying:</span>{" "}
                 {clusterCount} different insiders bought on the open market in the
                 last {CLUSTER_WINDOW_DAYS} days. Several insiders buying at once
@@ -110,13 +167,22 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
             return (
               <div
                 key={`${t.name}-${t.filing_date}-${i}`}
-                className="flex items-center gap-3 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
+                className={`flex items-center gap-3 rounded-2xl border ${
+                  onAsset ? "border-brand-accent" : "border-brand-border/60"
+                } bg-brand-bg/55 px-4 py-3`}
               >
                 <span
                   className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                    isBuy
-                      ? "bg-brand-primary/15 text-brand-primary"
-                      : "bg-semantic-danger/15 text-semantic-danger"
+                    onAsset
+                      ? // Neon lime with forest text for a buy, solid forest with white
+                        // text for a sell. Lime text on a light card is unreadable, so
+                        // the lime is the fill, as the brand does everywhere else.
+                        isBuy
+                        ? "bg-brand-accent text-brand-fg"
+                        : "bg-brand-primary text-white"
+                      : isBuy
+                        ? "bg-brand-primary/15 text-brand-primary"
+                        : "bg-semantic-danger/15 text-semantic-danger"
                   }`}
                 >
                   {isBuy ? (
@@ -132,7 +198,7 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
                     {formatName(t.name)}
                     {t.role && (
                       <span className="font-normal text-brand-muted-fg">
-                        {" · "}
+                        {divider}
                         {t.role}
                       </span>
                     )}
@@ -143,9 +209,19 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
                         {nature}
                       </span>
                     )}
-                    <span>
-                      {formatShares(t.shares)} shares · filed{" "}
-                      {formatDate(t.filing_date)}
+                    <span className="inline-flex items-center flex-wrap">
+                      {[
+                        `${formatShares(t.shares)} shares`,
+                        ...(showTradeDate && t.transaction_date
+                          ? [`traded ${formatDate(t.transaction_date)}`]
+                          : []),
+                        `filed ${formatDate(t.filing_date)}`,
+                      ].map((part, index) => (
+                        <Fragment key={part}>
+                          {index > 0 && divider}
+                          {part}
+                        </Fragment>
+                      ))}
                     </span>
                   </p>
                 </div>
@@ -194,7 +270,15 @@ export default function WhaleWatching({ ticker }: { ticker: string }) {
           <dl className="space-y-1.5">
             {presentNatures.map((n) => (
               <div key={n} className="flex items-baseline gap-2">
-                <dt className="shrink-0 rounded-full border border-brand-border/60 bg-brand-bg px-1.5 py-0.5 text-[10px] font-medium text-brand-muted-fg">
+                <dt
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    onAsset
+                      ? // Lime is the fill, with forest text: lime text on a light card
+                        // is unreadable.
+                        "bg-brand-accent text-brand-fg"
+                      : "border border-brand-border/60 bg-brand-bg text-brand-muted-fg"
+                  }`}
+                >
                   {n}
                 </dt>
                 <dd className="text-xs text-brand-muted-fg leading-snug">

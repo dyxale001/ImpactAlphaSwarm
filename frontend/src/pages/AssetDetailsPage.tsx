@@ -27,6 +27,8 @@ import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
 import { MarketClock } from "../components/research/MarketClock";
+import InstitutionalOwners from "../components/research/InstitutionalOwners";
+import WhaleWatching from "../components/research/WhaleWatching";
 import {
   newsDayIndex,
   newsDaysFromHistory,
@@ -194,7 +196,18 @@ function ExplainerLink({
   );
 }
 
-type AnalysisTab = "ranking" | "sentiment" | "quant";
+const ANALYSIS_TABS = [
+  "ranking",
+  "sentiment",
+  "quant",
+  "investors",
+  "insiders",
+] as const;
+type AnalysisTab = (typeof ANALYSIS_TABS)[number];
+
+function isAnalysisTab(value: string | null): value is AnalysisTab {
+  return (ANALYSIS_TABS as readonly string[]).includes(value ?? "");
+}
 
 // The page carried three unrelated arguments stacked vertically: why the asset placed
 // where it did, what the sentiment sources say, and what the price history measures.
@@ -213,6 +226,8 @@ function AnalysisTabs({
     { key: "ranking", label: rankingLabel },
     { key: "sentiment", label: "Sentiment" },
     { key: "quant", label: "Quant" },
+    { key: "investors", label: "Big investors" },
+    { key: "insiders", label: "Insider trading" },
   ];
 
   return (
@@ -240,6 +255,18 @@ function AnalysisTabs({
         </button>
       ))}
     </div>
+  );
+}
+
+// Sits under the whale tabs. Ownership and insider dealings are reference data kept
+// out of the score, and a famous fund's name next to a ticker reads as an endorsement
+// unless something says otherwise.
+function WhaleCaveat() {
+  return (
+    <p className="text-xs text-brand-muted-fg">
+      A big investor holding or trading a stock doesn't by itself mean it's a good
+      investment.
+    </p>
   );
 }
 
@@ -387,9 +414,7 @@ export default function AssetDetailsPage() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<AnalysisTab>(() => {
     const requested = searchParams.get("tab");
-    return requested === "sentiment" || requested === "quant"
-      ? requested
-      : "ranking";
+    return isAnalysisTab(requested) ? requested : "ranking";
   });
 
   // The Quant tab's window. Fetched only while that tab is showing: a reader who opened
@@ -813,6 +838,33 @@ export default function AssetDetailsPage() {
             </div>
           </div>
         </SectionCard>
+      )}
+
+      {/* Mounted only while the tab is showing, so the holders are fetched on demand,
+          the same way the Quant tab gates its price history. */}
+      {recommendation && tab === "investors" && (
+        <div className="space-y-3">
+          <InstitutionalOwners
+            ticker={asset.ticker}
+            limit={5}
+            variant="asset"
+            showSummary
+          />
+          <WhaleCaveat />
+        </div>
+      )}
+
+      {recommendation && tab === "insiders" && (
+        <div className="space-y-3">
+          <WhaleWatching
+            ticker={asset.ticker}
+            emptyMessage="No insider trades reported for this stock recently"
+            showTradeDate
+            variant="asset"
+            showSummary
+          />
+          <WhaleCaveat />
+        </div>
       )}
 
       {/* This page had no disclaimer of its own — the only not-advice statement on

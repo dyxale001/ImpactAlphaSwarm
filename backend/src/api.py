@@ -283,12 +283,34 @@ async def whale_activity(ticker: str):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/api/whales/{ticker}/trace")
+async def insider_trace(ticker: str):
+    """The Insider trading tab's AI summary. Written once per set of filings and stored
+    on the insider cache row (migrations/029); ``enabled`` is False while
+    WHALE_INSIDER_TRACE_ENABLED is off."""
+    try:
+        return await whales.insider_trace(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/api/institutions/{ticker}")
 async def institutional_ownership(ticker: str):
     """Institutional ownership for a ticker, via yfinance. Read-through cache with
     a 7-day TTL (13F data only changes quarterly)."""
     try:
         return await whales.institutional(ticker)
+    except ww.WhaleDataUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/api/institutions/{ticker}/trace")
+async def institutional_trace(ticker: str):
+    """The Big investors tab's reasoning trace. Written once per filing and stored on
+    the institutional cache row (migrations/028); ``enabled`` is False while
+    WHALE_INSTITUTIONS_TRACE_ENABLED is off."""
+    try:
+        return await whales.institutional_trace(ticker)
     except ww.WhaleDataUnavailable as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -1055,6 +1077,13 @@ def _ask_blocklist_hit(query: str) -> bool:
 _ASK_INTENT_MAX_TOKENS = 200
 _ASK_NARRATION_MAX_TOKENS = 450
 
+# Ask AlphaSwarm has its own Groq account (key 6), so a user typing a question
+# never queues behind a run's trace pool (keys 1 to 3) or the page summaries
+# (keys 4 and 5). Falls back to GROQ_API_KEY, the account it used before, so a
+# deployment without key 6 behaves exactly as it did.
+_ASK_KEY_ENV = "GROQ_API_KEY6"
+_ASK_FALLBACK_KEY_ENV = "GROQ_API_KEY"
+
 _ask_intent_client = None
 _ask_narration_client = None
 
@@ -1065,7 +1094,11 @@ def _get_ask_intent_client():
         from src.utils.llm_client import GroqClient
 
         _ask_intent_client = GroqClient.create(
-            purpose="ask_intent", max_tokens=_ASK_INTENT_MAX_TOKENS, temperature=0
+            purpose="ask_intent",
+            max_tokens=_ASK_INTENT_MAX_TOKENS,
+            temperature=0,
+            key_env=_ASK_KEY_ENV,
+            fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
     return _ask_intent_client
 
@@ -1076,7 +1109,11 @@ def _get_ask_narration_client():
         from src.utils.llm_client import GroqClient
 
         _ask_narration_client = GroqClient.create(
-            purpose="ask_narration", max_tokens=_ASK_NARRATION_MAX_TOKENS, temperature=0
+            purpose="ask_narration",
+            max_tokens=_ASK_NARRATION_MAX_TOKENS,
+            temperature=0,
+            key_env=_ASK_KEY_ENV,
+            fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
     return _ask_narration_client
 
