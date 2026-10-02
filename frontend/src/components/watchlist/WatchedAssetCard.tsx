@@ -17,6 +17,7 @@ const SECTOR_STYLE: Record<string, { text: string; dot: string }> = {
   'Finance':       { text: 'text-amber-400',  dot: 'bg-amber-400' },
   'AI & Robotics': { text: 'text-purple-400', dot: 'bg-purple-400' },
   'Healthcare':    { text: 'text-pink-400',   dot: 'bg-pink-400' },
+  'Media & Communications': { text: 'text-orange-400', dot: 'bg-orange-400' },
 }
 const DEFAULT_SECTOR = { text: 'text-brand-muted-fg', dot: 'bg-brand-border' }
 

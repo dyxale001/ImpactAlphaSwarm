@@ -68,6 +68,7 @@
   --color-sector-ai-robotics: #c084fc;
   --color-sector-ai-robotics-strong: #8b5cf6;
   --color-sector-healthcare: #f472b6;
+  --color-sector-media-communications: #fb923c;
 
   /* Semantic surface tokens */
   --bg-page: var(--color-neutral-100);

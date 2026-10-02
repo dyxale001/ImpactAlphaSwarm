@@ -22,6 +22,7 @@ const SECTOR_DOT: Record<string, string> = {
   Finance: "bg-amber-400",
   "AI & Robotics": "bg-purple-400",
   Healthcare: "bg-pink-400",
+  "Media & Communications": "bg-orange-400",
 };
 
 // ─── Page ──────────────────────────────────────────────────────────────────

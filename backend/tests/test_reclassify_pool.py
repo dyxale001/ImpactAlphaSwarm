@@ -49,6 +49,17 @@ class TestSeedCorrectionPlan:
         plan = SeedCorrectionPlan([SeedCorrection("NVDA", universe="AI & Robotics")], [row])
         assert plan.pending == [] and plan.missing == ["NVDA"]
 
+    def test_a_seed_to_release_is_pending(self):
+        plan = SeedCorrectionPlan([SeedCorrection("SPCX", release=True)], [seed("SPCX")])
+        assert [c.ticker for c in plan.pending] == ["SPCX"]
+        assert "release to discovery" in plan.describe([seed("SPCX")])[0]
+
+    def test_a_row_already_released_is_not_released_again(self):
+        # Once discovered it is no longer a seed, so a second run leaves it alone.
+        row = {"ticker": "SPCX", "universe": "Technology", "origin": "discovered"}
+        plan = SeedCorrectionPlan([SeedCorrection("SPCX", release=True)], [row])
+        assert plan.pending == []
+
     def test_a_correction_for_a_ticker_not_in_the_pool_is_reported(self):
         plan = SeedCorrectionPlan([SeedCorrection("ZZZZ", universe="Finance")], [])
         assert plan.missing == ["ZZZZ"]
@@ -61,7 +72,7 @@ class TestTheDecidedCorrections:
 
     def test_each_correction_does_exactly_one_thing(self):
         for c in rp.SEED_CORRECTIONS:
-            assert (c.universe is not None) != c.deactivate, c.ticker
+            assert [c.universe is not None, c.deactivate, c.release].count(True) == 1, c.ticker
 
     def test_each_correction_says_why(self):
         assert all(c.why for c in rp.SEED_CORRECTIONS)

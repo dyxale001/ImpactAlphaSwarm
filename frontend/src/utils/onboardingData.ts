@@ -1,7 +1,7 @@
 
 export const UNIVERSE_OPTIONS = [
-  "Technology", "Green Energy", "Finance", 
-  "AI & Robotics", "Healthcare"
+  "Technology", "Green Energy", "Finance",
+  "AI & Robotics", "Healthcare", "Media & Communications"
 ]
 
 // ─── Investor paths ────────────────────────────────────────────────────────
@@ -57,10 +57,13 @@ export const FAMILIAR_ASSETS: FamiliarAsset[] = [
   // Technology
   { ticker: 'AAPL',  name: 'Apple',          sector: 'Technology',    emoji: '🍎', description: 'iPhone, Mac, wearables' },
   { ticker: 'MSFT',  name: 'Microsoft',      sector: 'Technology',    emoji: '🪟', description: 'Windows, Office, Azure' },
-  { ticker: 'GOOGL', name: 'Google',         sector: 'Technology',    emoji: '🔍', description: 'Search, YouTube, ads' },
-  { ticker: 'META',  name: 'Meta',           sector: 'Technology',    emoji: '👓', description: 'Facebook, Instagram, VR' },
   { ticker: 'AMZN',  name: 'Amazon',         sector: 'Technology',    emoji: '📦', description: 'E-commerce & AWS cloud' },
-  { ticker: 'NFLX',  name: 'Netflix',        sector: 'Technology',    emoji: '🎬', description: 'Streaming & content' },
+  { ticker: 'ORCL',  name: 'Oracle',         sector: 'Technology',    emoji: '🗄️', description: 'Databases & cloud' },
+  // Media & Communications
+  { ticker: 'GOOGL', name: 'Google',         sector: 'Media & Communications', emoji: '🔍', description: 'Search, YouTube, ads' },
+  { ticker: 'META',  name: 'Meta',           sector: 'Media & Communications', emoji: '👓', description: 'Facebook, Instagram, VR' },
+  { ticker: 'NFLX',  name: 'Netflix',        sector: 'Media & Communications', emoji: '🎬', description: 'Streaming & content' },
+  { ticker: 'DIS',   name: 'Disney',         sector: 'Media & Communications', emoji: '🏰', description: 'Films, parks & Disney+' },
   // AI & Robotics
   { ticker: 'NVDA',  name: 'NVIDIA',         sector: 'AI & Robotics', emoji: '🤖', description: 'AI chips & data centres' },
   { ticker: 'TSLA',  name: 'Tesla',          sector: 'AI & Robotics', emoji: '⚡', description: 'EVs, FSD & robotics' },

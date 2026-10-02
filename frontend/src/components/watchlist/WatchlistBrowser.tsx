@@ -23,9 +23,10 @@ const SECTOR_STYLE: Record<string, { dot: string; text: string; activeBg: string
   'Finance':       { dot: 'bg-amber-400',  text: 'text-amber-400',  activeBg: 'bg-amber-400/10',  activeBorder: 'border-amber-400/50' },
   'AI & Robotics': { dot: 'bg-purple-400', text: 'text-purple-400', activeBg: 'bg-purple-400/10', activeBorder: 'border-purple-400/50' },
   'Healthcare':    { dot: 'bg-pink-400',   text: 'text-pink-400',   activeBg: 'bg-pink-400/10',   activeBorder: 'border-pink-400/50' },
+  'Media & Communications': { dot: 'bg-orange-400', text: 'text-orange-400', activeBg: 'bg-orange-400/10', activeBorder: 'border-orange-400/50' },
 }
 
-const UNIVERSE_ORDER = ['Technology', 'AI & Robotics', 'Finance', 'Green Energy', 'Healthcare']
+const UNIVERSE_ORDER = ['Technology', 'AI & Robotics', 'Media & Communications', 'Finance', 'Green Energy', 'Healthcare']
 
 export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, watchlistIdByAssetId }: Props) {
   const [assets, setAssets]         = useState<BrowseAsset[]>([])

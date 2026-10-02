@@ -1,4 +1,4 @@
-import { Check, Cpu, Zap, TrendingUp, Bot, Heart, BookOpen, BarChart2, Brain, Clock } from "lucide-react";
+import { Check, Cpu, Zap, TrendingUp, Bot, Heart, Tv, BookOpen, BarChart2, Brain, Clock } from "lucide-react";
 import SettingsCard, { Consequence } from "./SettingsCard";
 import { PrimaryButton, SecondaryButton } from "./SettingsButtons";
 import type { useUserSettings } from "../../hooks/useUserSettings";
@@ -20,10 +20,11 @@ type Settings = ReturnType<typeof useUserSettings>;
 
 const UNIVERSE_TILES = [
   { id: "Technology", Icon: Cpu, desc: "Software, hardware & semiconductors" },
-  { id: "Green Energy", Icon: Zap, desc: "Solar, wind & clean infrastructure" },
+  { id: "Green Energy", Icon: Zap, desc: "Solar, wind, water & clean infrastructure" },
   { id: "Finance", Icon: TrendingUp, desc: "Banks, fintech & asset management" },
   { id: "AI & Robotics", Icon: Bot, desc: "Machine learning & automation" },
   { id: "Healthcare", Icon: Heart, desc: "Biotech, pharma & medical devices" },
+  { id: "Media & Communications", Icon: Tv, desc: "Streaming, social media & telecoms" },
 ];
 
 const EXPERTISE_TILES = [

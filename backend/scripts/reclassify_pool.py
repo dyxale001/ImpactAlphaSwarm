@@ -40,10 +40,13 @@ from src.utils.supabase_client import (  # noqa: E402
 
 @dataclass(frozen=True)
 class SeedCorrection:
-    """One decided change to a curated row: a new universe, or taking it out."""
+    """One decided change to a curated row: a new universe, taking it out, or
+    releasing it to discovery, after which it is no longer curated and stays only
+    if it qualifies like any other name."""
     ticker: str
     universe: Optional[str] = None
     deactivate: bool = False
+    release: bool = False
     why: str = ""
 
 
@@ -58,6 +61,13 @@ SEED_CORRECTIONS = [
     SeedCorrection("ARKQ", deactivate=True, why="an ETF; the pool is single stocks"),
     SeedCorrection("BOTZ", deactivate=True, why="an ETF; the pool is single stocks"),
     SeedCorrection("ROBO", deactivate=True, why="an ETF; the pool is single stocks"),
+    # Media & Communications added 2026-10-02. Finnhub files both as Media, matching
+    # GICS Communication Services.
+    SeedCorrection("GOOGL", universe="Media & Communications", why="search, YouTube and ads"),
+    SeedCorrection("META", universe="Media & Communications", why="social media and ads"),
+    # Listed 2026-06-12, so it cannot pass discovery's 180 day seasoning gate until
+    # about 2026-12-09, and leaves runs until then. Accepted: it earns its place.
+    SeedCorrection("SPCX", release=True, why="no longer curated; discovery decides"),
 ]
 
 
@@ -75,14 +85,20 @@ class SeedCorrectionPlan:
                 continue
             moves = c.universe is not None and c.universe != row.get("universe")
             switches_off = c.deactivate and row.get("is_active") is not False
-            if moves or switches_off:
+            # Only seeds reach here, so a release is pending until the row is discovered.
+            if moves or switches_off or c.release:
                 self.pending.append(c)
 
     def describe(self, rows: list[dict]) -> list[str]:
         where = {r["ticker"]: r.get("universe") for r in rows if r.get("ticker")}
         lines = []
         for c in self.pending:
-            action = "switch off" if c.deactivate else f"{where.get(c.ticker)} -> {c.universe}"
+            if c.release:
+                action = "release to discovery"
+            elif c.deactivate:
+                action = "switch off"
+            else:
+                action = f"{where.get(c.ticker)} -> {c.universe}"
             lines.append(f"  {c.ticker:<6} {action}  ({c.why})")
         return lines
 
@@ -116,7 +132,8 @@ class ReclassifyCommand:
         try:
             self.reclassifier.apply(plan)
             for c in seed_plan.pending if seed_plan else []:
-                correct_seed(c.ticker, universe=c.universe, is_active=False if c.deactivate else None)
+                correct_seed(c.ticker, universe=c.universe,
+                             is_active=False if c.deactivate else None, release=c.release)
         except Exception as exc:
             print(f"\nFailed while applying: {exc}")
             return 2

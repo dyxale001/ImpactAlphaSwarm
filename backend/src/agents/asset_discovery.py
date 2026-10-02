@@ -77,7 +77,33 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger("asset-discovery")
 
 # ── Universes (must match the seed labels / onboardingData.ts exactly) ────────
-UNIVERSES = ["Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare"]
+UNIVERSES = [
+    "Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare",
+    "Media & Communications",
+]
+
+# What each universe covers, for the Groq prompts. A bare label is not enough: the
+# model reads "Green Energy" as solar and wind only, and would never offer or place
+# a water company there. Keep in step with the card copy in the frontend.
+UNIVERSE_SCOPES: dict[str, str] = {
+    "Technology": "software, hardware, semiconductors and networking equipment",
+    "Green Energy": (
+        "solar, wind, hydrogen and other clean power, and water: water utilities, "
+        "water treatment, and water infrastructure such as pipes, pumps and meters"
+    ),
+    "Finance": "banks, insurers, fintech, payments and asset management",
+    "AI & Robotics": "AI chips and infrastructure, AI software, robotics and automation",
+    "Healthcare": "biotech, pharma, medical devices and health services",
+    "Media & Communications": (
+        "search and social media, streaming, entertainment, video games, publishing, "
+        "and telecoms carriers, cable and satellite communications"
+    ),
+}
+
+
+def describe_universes(universes: list[str]) -> str:
+    """'Label' (scope); 'Label' (scope) ... for a prompt."""
+    return "; ".join(f"'{u}' ({UNIVERSE_SCOPES[u]})" for u in universes)
 
 # ── Config (all env-tunable; see DISCOVERY_AGENT_PLAN.md §9) ───────────────────
 DISCOVERY_LLM_FILLER = os.getenv("DISCOVERY_LLM_FILLER", "true").lower() == "true"
@@ -109,28 +135,53 @@ STOCKTWITS_STREAM_HEADERS = {
 }
 
 # Finnhub finnhubIndustry (substring, lowercased) → universe. First match wins.
-# Deliberately partial: Technology/Finance/Healthcare classify cleanly here;
+# Deliberately partial: Technology/Finance/Healthcare/Media & Communications
+# classify cleanly here;
 # Green Energy and (especially) AI & Robotics are not real industry categories,
 # so their residue falls through to the Groq classifier.
 INDUSTRY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("Green Energy", ("renewable", "solar", "wind", "hydrogen", "clean energy")),
+    ("Green Energy", ("renewable", "solar", "wind", "hydrogen", "clean energy", "water")),
     ("Healthcare", ("pharmaceutic", "biotech", "health", "life sciences", "medical", "drug")),
     ("Finance", ("bank", "insurance", "financial", "capital markets", "asset management")),
+    # Ahead of Technology on purpose: "telecommunications" contains "communications".
+    # Finnhub's bare "Communications" is networking equipment (CSCO, ANET, CIEN),
+    # which stays in Technology; its "Media" covers GOOGL and META, as GICS does.
+    ("Media & Communications", ("media", "telecommunication", "entertainment",
+                                "broadcasting", "publishing")),
     ("Technology", ("semiconductor", "software", "technology", "hardware", "electronic",
-                    "communications", "telecommunication", "internet", "media")),
+                    "communications", "internet")),
 ]
 
-# Names that are AI & Robotics whatever Finnhub calls them. Finnhub files NVDA under
+# Names whose universe is fixed whatever Finnhub calls them. Finnhub files NVDA under
 # Semiconductors and ISRG under health care, so the keyword map would put them in
 # Technology and Healthcare; pinning them skips both the map and the model.
+AI_ROBOTICS_PINS = (
+    "NVDA", "PLTR", "ARM", "TSLA", "ISRG", "SYM", "TER",
+    "PATH", "AI", "SOUN", "ROK", "CGNX",
+    # AI infrastructure the splitter keeps calling Technology, run to run.
+    "AMD", "AVGO", "ALAB", "MRVL", "APLD", "CRWV", "NBIS", "SMCI",
+)
+# Water belongs in Green Energy, but Finnhub files water utilities under Utilities and
+# the equipment makers under Machinery, so neither the map nor the model would put
+# them there unaided. Pure plays only; Ecolab and the like, where water is one
+# segment of many, are left to the classifier.
+WATER_PINS = (
+    "AWK", "WTRG", "AWR", "CWT", "HTO",          # water utilities
+    "XYL", "VLTO", "WTS", "ZWS", "PNR", "BMI",   # treatment, flow control, metering
+    "MWA", "WMS", "FELE", "ERII",                # pipes, pumps, recovery
+)
+# Media and telecoms names whose Finnhub industry sits outside the map's keywords
+# (Hotels, Restaurants & Leisure for live events, Software for games) or that should
+# never be left to a model's mood.
+MEDIA_PINS = (
+    "GOOGL", "GOOG", "META", "NFLX", "DIS", "WBD", "ROKU", "SPOT", "RDDT", "SNAP",
+    "PINS", "TTWO", "EA", "RBLX", "LYV", "TKO", "FOXA", "NYT",
+    "T", "VZ", "TMUS", "CMCSA", "CHTR", "ASTS",
+)
 PINNED_UNIVERSES: dict[str, str] = {
-    ticker: "AI & Robotics"
-    for ticker in (
-        "NVDA", "PLTR", "ARM", "TSLA", "ISRG", "SYM", "TER",
-        "PATH", "AI", "SOUN", "ROK", "CGNX",
-        # AI infrastructure the splitter keeps calling Technology, run to run.
-        "AMD", "AVGO", "ALAB", "MRVL", "APLD", "CRWV", "NBIS", "SMCI",
-    )
+    **{ticker: "AI & Robotics" for ticker in AI_ROBOTICS_PINS},
+    **{ticker: "Green Energy" for ticker in WATER_PINS},
+    **{ticker: "Media & Communications" for ticker in MEDIA_PINS},
 }
 
 
@@ -508,7 +559,9 @@ class LlmGapFillSource(CandidateSource):
             return None
         prompt = (
             f"List up to {DISCOVERY_LLM_CANDIDATES} large, liquid, US-listed (NYSE or NASDAQ) "
-            f"common-stock companies in the '{universe}' sector. Return ONLY a JSON array of "
+            f"common-stock companies in the '{universe}' sector, which here covers "
+            f"{UNIVERSE_SCOPES[universe]}; spread the list across all of those. "
+            "Return ONLY a JSON array of "
             f'ticker symbol strings, e.g. ["AAA","BBB"]. No prose.'
         )
         raw = _groq_text(llm, prompt)
@@ -532,6 +585,26 @@ class LlmGapFillSource(CandidateSource):
                 pool.add(ticker, self.name)
 
 
+class CuratedSource(CandidateSource):
+    """A fixed list offered to the funnel every night.
+
+    For themes that neither trend on StockTwits nor come back reliably from the gap
+    fill: water names almost never trend, and asked for Green Energy the model
+    offered one real water ticker among invented ones. Offering them is all this
+    does. Each still has to pass every gate and earn its place on score, and because
+    it is seen every night it never decays out while it keeps passing.
+    """
+
+    name = "curated"
+
+    def __init__(self, tickers: tuple[str, ...] | list[str] | None = None):
+        self.tickers = tuple(tickers) if tickers is not None else WATER_PINS
+
+    def contribute(self, pool: CandidatePool) -> None:
+        for ticker in self.tickers:
+            pool.add(ticker, self.name)
+
+
 class SourceFactory:
     """Builds the candidate sources that configuration says are switched on.
 
@@ -541,7 +614,7 @@ class SourceFactory:
 
     @staticmethod
     def from_config() -> list[CandidateSource]:
-        sources: list[CandidateSource] = [StockTwitsTrendingSource()]
+        sources: list[CandidateSource] = [StockTwitsTrendingSource(), CuratedSource()]
         if DISCOVERY_LLM_FILLER:
             sources.append(LlmGapFillSource())
         return sources
@@ -781,7 +854,8 @@ class LlmClassifier(Classifier):
             return {}
         prompt = (
             "Classify each stock ticker into exactly one of these sectors: "
-            f"{UNIVERSES + ['none']}. Use 'none' if it fits none well. "
+            f"{describe_universes(UNIVERSES)}; or 'none'. Use 'none' if it fits none well. "
+            "Answer with the sector name only, without the description. "
             f"Tickers: {tickers}. "
             'Return ONLY a JSON object mapping ticker -> sector, e.g. {"AAA":"Technology"}.'
         )
@@ -1174,11 +1248,13 @@ class ReclassificationPlan:
 class PoolReclassifier:
     """Applies tonight's classification rules to rows already in the pool.
 
-    The nightly pass only re-routes a name when it trends again, so the pins and
-    the AI & Robotics split would otherwise take weeks to reach the names already
-    sitting in Technology. This runs the same two steps over the stored rows once:
-    pins across every universe (ISRG sits in Healthcare), then the splitter over
-    Technology in batches small enough for one reasoning budget.
+    The nightly pass only re-routes a name when it trends again, so the pins, a new
+    universe and the AI & Robotics split would otherwise take weeks to reach the
+    names already sitting in Technology. This runs the same steps over the stored
+    rows once: pins across every universe (ISRG sits in Healthcare), the industry map
+    over Technology (which predates Media & Communications, and so holds Finnhub's
+    Media and Telecommunication names), then the splitter over what is still in
+    Technology, in batches small enough for one reasoning budget.
 
     Seeds are reported but never moved: the repository refuses to reclassify a
     curated row, and the plan says which ones it would have moved so a person can
@@ -1192,10 +1268,12 @@ class PoolReclassifier:
         finnhub: FinnhubClient | None = None,
         pinned: PinnedClassifier | None = None,
         splitter: AiRoboticsSplitter | None = None,
+        industry: IndustryClassifier | None = None,
     ):
         self.finnhub = finnhub or FinnhubClient()
         self.pinned = pinned or PinnedClassifier()
         self.splitter = splitter or AiRoboticsSplitter()
+        self.industry = industry or IndustryClassifier()
 
     def candidates(self, rows: list[dict]) -> list[Candidate]:
         """Rows as candidates. Only Technology rows need an industry (the splitter's
@@ -1218,6 +1296,15 @@ class PoolReclassifier:
         target: dict[str, str] = {}
 
         for ticker, universe in self.pinned.classify(cands).items():
+            if universe != current[ticker]:
+                target[ticker] = universe
+
+        # The map is the cheap, deterministic step, so it is trusted to move a row;
+        # an industry it cannot place (Retail, Aerospace) leaves the row where it is.
+        unpinned_tech = [
+            c for c in cands if c.universe == AiRoboticsSplitter.source and c.ticker not in target
+        ]
+        for ticker, universe in self.industry.classify(unpinned_tech).items():
             if universe != current[ticker]:
                 target[ticker] = universe
 

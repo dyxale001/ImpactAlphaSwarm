@@ -27,6 +27,13 @@ const SECTOR_DOT: Record<string, string> = {
   'Finance':       'bg-sector-finance',
   'AI & Robotics': 'bg-sector-ai-robotics',
   'Healthcare':    'bg-sector-healthcare',
+  'Media & Communications': 'bg-sector-media-communications',
+}
+
+// The asset cards' sector label is 8px caps in a narrow card, so long names shorten
+const SECTOR_SHORT: Record<string, string> = {
+  'AI & Robotics':          'AI',
+  'Media & Communications': 'Media',
 }
 
 const STEP_TITLES = ['Your Path', 'What You Know', 'Assessment', 'Profile']
@@ -275,7 +282,7 @@ export default function Onboarding() {
                       <div className="mb-2 flex items-center gap-[5px]">
                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTOR_DOT[asset.sector] ?? 'bg-sector-technology'}`} />
                         <span className="truncate text-[8px] font-bold uppercase tracking-[0.08em] text-muted">
-                          {asset.sector.replace(' & Robotics', '')}
+                          {SECTOR_SHORT[asset.sector] ?? asset.sector}
                         </span>
                       </div>
                       <p className="text-sm font-extrabold tracking-tight text-forest-900">{asset.ticker}</p>

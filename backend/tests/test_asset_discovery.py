@@ -208,9 +208,16 @@ class TestClassifyByIndustry:
         ("Insurance", "Finance"),
         ("Renewable Energy", "Green Energy"),
         ("Solar", "Green Energy"),
+        ("Media", "Media & Communications"),
+        ("Telecommunication", "Media & Communications"),
+        ("Telecommunications", "Media & Communications"),
     ])
     def test_known_industries_map_to_their_universe(self, industry, universe):
         assert classify_by_industry(industry) == universe
+
+    def test_networking_equipment_stays_in_technology(self):
+        # Finnhub's bare "Communications" is CSCO, ANET and CIEN, not media.
+        assert classify_by_industry("Communications") == "Technology"
 
     def test_the_match_is_case_insensitive_and_on_substrings(self):
         assert classify_by_industry("SEMICONDUCTOR EQUIPMENT") == "Technology"
@@ -433,6 +440,7 @@ class TestUniverses:
         # classified candidate lands in a universe nothing reads.
         assert ad.UNIVERSES == [
             "Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare",
+            "Media & Communications",
         ]
 
     def test_every_industry_keyword_maps_to_a_real_universe(self):
@@ -867,6 +875,22 @@ class TestPoolReclassifier:
         self.reclassifier(Recording()).plan([a_row("AAPL")])
         assert seen == {"AAPL": "Semiconductors"}  # FakeFinnhub's default profile
 
+    def test_the_industry_map_moves_a_technology_row_it_now_places_elsewhere(self):
+        finnhub = FakeFinnhub(profiles={"DJT": a_profile(finnhubIndustry="Media")})
+        plan = self.reclassifier(finnhub=finnhub, pins={}).plan([a_row("DJT")])
+        assert plan.moves == {"DJT": ("Technology", "Media & Communications")}
+
+    def test_an_industry_the_map_cannot_place_leaves_the_row_alone(self):
+        finnhub = FakeFinnhub(profiles={"MELI": a_profile(finnhubIndustry="Retail")})
+        plan = self.reclassifier(finnhub=finnhub, pins={}).plan([a_row("MELI")])
+        assert plan.moves == {}
+
+    def test_a_row_the_map_moved_is_not_also_sent_to_the_model(self):
+        finnhub = FakeFinnhub(profiles={"DJT": a_profile(finnhubIndustry="Media")})
+        splitter = FakeSplitter()
+        self.reclassifier(splitter, pins={}, finnhub=finnhub).plan([a_row("DJT"), a_row("AAPL")])
+        assert splitter.batches == [["AAPL"]]
+
     def test_moves_are_grouped_by_destination_for_writing(self):
         plan = ad.ReclassificationPlan(moves={
             "B": ("Technology", "AI & Robotics"),
@@ -885,6 +909,47 @@ class TestPinnedClassifier:
 
     def test_every_default_pin_is_a_real_universe(self):
         assert set(ad.PINNED_UNIVERSES.values()) <= set(ad.UNIVERSES)
+
+    def test_water_names_are_pinned_to_green_energy(self):
+        # Finnhub files AWK under Utilities and XYL under Machinery.
+        out = PinnedClassifier().classify([a_candidate("AWK"), a_candidate("XYL")])
+        assert out == {"AWK": "Green Energy", "XYL": "Green Energy"}
+
+    def test_no_ticker_is_pinned_to_two_universes(self):
+        groups = [set(ad.AI_ROBOTICS_PINS), set(ad.WATER_PINS), set(ad.MEDIA_PINS)]
+        assert sum(len(g) for g in groups) == len(set().union(*groups))
+
+    def test_media_names_are_pinned_out_of_technology(self):
+        out = PinnedClassifier().classify([a_candidate("NFLX"), a_candidate("TTWO")])
+        assert out == {"NFLX": "Media & Communications", "TTWO": "Media & Communications"}
+
+
+class TestUniverseScopes:
+    def test_every_universe_has_a_scope(self):
+        assert set(ad.UNIVERSE_SCOPES) == set(ad.UNIVERSES)
+
+    def test_green_energy_covers_water(self):
+        assert "water" in ad.UNIVERSE_SCOPES["Green Energy"]
+
+    def test_a_water_industry_maps_to_green_energy(self):
+        assert classify_by_industry("Water Utilities") == "Green Energy"
+
+    def test_the_classifier_prompt_carries_the_scopes(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        ad.LlmClassifier().of_tickers(["AAA"])
+        assert "water utilities" in llm.prompts[0]
+
+    def test_the_classifier_still_only_accepts_bare_labels(self, monkeypatch):
+        llm = FakeGroq('{"AAA":"Green Energy","BBB":"Green Energy (water)"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert ad.LlmClassifier().of_tickers(["AAA", "BBB"]) == {"AAA": "Green Energy"}
+
+    def test_the_gap_fill_prompt_carries_the_scope(self, monkeypatch):
+        llm = FakeGroq('["AWK"]')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert ad.LlmGapFillSource().tickers_for("Green Energy") == ["AWK"]
+        assert "water" in llm.prompts[0]
 
 
 class TestFollowMovedIncumbents:
@@ -970,9 +1035,33 @@ class TestGathering:
 
     def test_the_factory_respects_the_gap_fill_switch(self, monkeypatch):
         monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", False)
-        assert [s.name for s in SourceFactory.from_config()] == ["stocktwits_trending"]
+        assert [s.name for s in SourceFactory.from_config()] == ["stocktwits_trending", "curated"]
         monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", True)
         assert "llm" in [s.name for s in SourceFactory.from_config()]
+
+
+class TestCuratedSource:
+    def test_it_offers_the_water_names_by_default(self):
+        pool = CandidatePool()
+        ad.CuratedSource().contribute(pool)
+        assert set(pool.candidates) == set(ad.WATER_PINS)
+        assert pool.candidates["AWK"].sources == ["curated"]
+
+    def test_it_adds_no_trending_weight(self):
+        # Offered, not endorsed: the score has to come from news and liquidity.
+        pool = CandidatePool()
+        ad.CuratedSource(["AWK"]).contribute(pool)
+        assert pool.candidates["AWK"].watchlist_count == 0
+
+    def test_a_curated_name_that_also_trends_keeps_its_trending_count(self):
+        pool = CandidatePool()
+        pool.add("AWK", "stocktwits_trending", 300)
+        ad.CuratedSource(["AWK"]).contribute(pool)
+        assert pool.candidates["AWK"].watchlist_count == 300
+        assert pool.candidates["AWK"].sources == ["stocktwits_trending", "curated"]
+
+    def test_the_factory_includes_it(self):
+        assert "curated" in [s.name for s in SourceFactory.from_config()]
 
 
 class TestGroupByUniverse:

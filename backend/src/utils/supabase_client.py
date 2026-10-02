@@ -1036,16 +1036,19 @@ class DiscoveryRepository(Repository):
             raise
 
     def correct_seed(self, ticker: str, universe: Optional[str] = None,
-                     is_active: Optional[bool] = None) -> None:
-        """A person's correction to one CURATED row: a new universe, or switching it
-        off. The only write here that touches seeds, and it touches nothing else
-        (guarded on origin='seed'). Raises, so a failed correction is not mistaken
-        for a done one."""
+                     is_active: Optional[bool] = None, release: bool = False) -> None:
+        """A person's correction to one CURATED row: a new universe, switching it
+        off, or releasing it to discovery (it stops being a seed and from then on has
+        to qualify, score and decay like any discovered name). The only write here
+        that touches seeds, and it touches nothing else (guarded on origin='seed').
+        Raises, so a failed correction is not mistaken for a done one."""
         fields: Dict[str, Any] = {}
         if universe is not None:
             fields["universe"] = universe
         if is_active is not None:
             fields["is_active"] = is_active
+        if release:
+            fields["origin"] = "discovered"
         if not fields:
             return
         try:
@@ -1311,8 +1314,8 @@ def reclassify_assets(tickers: List[str], universe: str) -> None:
 
 
 def correct_seed(ticker: str, universe: Optional[str] = None,
-                 is_active: Optional[bool] = None) -> None:
-    _discovery.correct_seed(ticker, universe, is_active)
+                 is_active: Optional[bool] = None, release: bool = False) -> None:
+    _discovery.correct_seed(ticker, universe, is_active, release)
 
 
 def quarantine_assets(tickers: List[str], reason: str, until_iso: str) -> None:
