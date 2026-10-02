@@ -516,8 +516,8 @@ class TickerScoper:
     def rank_universe(self, rows: list[dict], now: datetime) -> list[str]:
         """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
 
-        Seeds are always eligible at the fixed baseline score; discovered rows must
-        be active and not currently quarantined. Ties break on ticker so the order
+        Seeds are eligible at the fixed baseline score unless a person has switched
+        them off; discovered rows must be active and not currently quarantined. Ties break on ticker so the order
         is deterministic run-to-run (keeps the cap and quant crowd stable)."""
         scored: list[tuple[float, str]] = []
         for row in rows:
@@ -525,6 +525,11 @@ class TickerScoper:
             if not ticker:
                 continue
             if row.get("origin") == "seed":
+                # Nothing automated ever switches a seed off (the repository refuses
+                # to), so an explicit False is a person taking a curated pick out of
+                # the pool. A missing flag keeps the seed eligible.
+                if row.get("is_active") is False:
+                    continue
                 score = self.seed_baseline
             else:
                 if not row.get("is_active"):

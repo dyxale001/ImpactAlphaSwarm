@@ -791,6 +791,91 @@ class TestDiscoveryLlm:
         assert ad._groq_text(ad.DiscoveryLlm("split", factory), "p") == ""
 
 
+class FakeSplitter(AiRoboticsSplitter):
+    """Moves the tickers it is told to, and records each batch it was handed."""
+
+    def __init__(self, moves=()):
+        self.moves = set(moves)
+        self.batches = []
+
+    def refine(self, candidates):
+        self.batches.append([c.ticker for c in candidates])
+        return {c.ticker: "AI & Robotics" for c in candidates if c.ticker in self.moves}
+
+
+def a_row(ticker, universe="Technology", origin="discovered", name=""):
+    return {"ticker": ticker, "universe": universe, "origin": origin, "name": name}
+
+
+class TestPoolReclassifier:
+    def reclassifier(self, splitter=None, pins=None, finnhub=None):
+        return ad.PoolReclassifier(
+            finnhub=finnhub or FakeFinnhub(),
+            pinned=PinnedClassifier(pins if pins is not None else {"NVDA": "AI & Robotics"}),
+            splitter=splitter or FakeSplitter(),
+        )
+
+    def test_a_split_technology_row_is_planned_to_move(self):
+        plan = self.reclassifier(FakeSplitter({"AMD"})).plan([a_row("AMD"), a_row("AAPL")])
+        assert plan.moves == {"AMD": ("Technology", "AI & Robotics")}
+
+    def test_a_pin_moves_a_row_out_of_any_universe(self):
+        pins = {"ISRG": "AI & Robotics"}
+        plan = self.reclassifier(pins=pins).plan([a_row("ISRG", universe="Healthcare")])
+        assert plan.moves == {"ISRG": ("Healthcare", "AI & Robotics")}
+
+    def test_a_row_already_where_its_pin_says_is_not_a_move(self):
+        plan = self.reclassifier().plan([a_row("NVDA", universe="AI & Robotics")])
+        assert plan.moves == {}
+
+    def test_a_pinned_name_is_not_also_sent_to_the_model(self):
+        splitter = FakeSplitter()
+        self.reclassifier(splitter).plan([a_row("NVDA"), a_row("AAPL")])
+        assert splitter.batches == [["AAPL"]]
+
+    def test_only_technology_rows_are_sent_to_the_model(self):
+        splitter = FakeSplitter()
+        self.reclassifier(splitter).plan([a_row("AAPL"), a_row("JPM", universe="Finance")])
+        assert splitter.batches == [["AAPL"]]
+
+    def test_technology_is_split_in_batches(self):
+        splitter = FakeSplitter()
+        rows = [a_row(f"T{i:02d}") for i in range(ad.PoolReclassifier.BATCH_SIZE + 3)]
+        self.reclassifier(splitter).plan(rows)
+        assert [len(b) for b in splitter.batches] == [ad.PoolReclassifier.BATCH_SIZE, 3]
+
+    def test_a_seed_is_held_rather_than_moved(self):
+        plan = self.reclassifier(FakeSplitter({"AMD"})).plan([a_row("AMD", origin="seed")])
+        assert plan.moves == {}
+        assert plan.seeds_held == {"AMD": ("Technology", "AI & Robotics")}
+
+    def test_only_technology_rows_cost_a_profile_call(self):
+        finnhub = FakeFinnhub()
+        self.reclassifier(finnhub=finnhub).plan(
+            [a_row("AAPL"), a_row("NVDA"), a_row("JPM", universe="Finance")]
+        )
+        assert finnhub.profile_calls == ["AAPL"]
+
+    def test_the_industry_reaches_the_model(self):
+        seen = {}
+
+        class Recording(FakeSplitter):
+            def refine(self, candidates):
+                seen.update({c.ticker: c.industry for c in candidates})
+                return {}
+
+        self.reclassifier(Recording()).plan([a_row("AAPL")])
+        assert seen == {"AAPL": "Semiconductors"}  # FakeFinnhub's default profile
+
+    def test_moves_are_grouped_by_destination_for_writing(self):
+        plan = ad.ReclassificationPlan(moves={
+            "B": ("Technology", "AI & Robotics"),
+            "A": ("Technology", "AI & Robotics"),
+            "C": ("Healthcare", "AI & Robotics"),
+        })
+        assert plan.by_target() == {"AI & Robotics": ["A", "B", "C"]}
+
+
 class TestPinnedClassifier:
     def test_pinned_names_are_placed_and_others_left_alone(self):
         out = PinnedClassifier({"NVDA": "AI & Robotics"}).classify(

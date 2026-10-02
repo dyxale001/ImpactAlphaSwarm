@@ -891,8 +891,10 @@ class DiscoveryRepository(Repository):
     hysteresis LOGIC lives in agents/asset_discovery.py; this only reads and
     writes. Two invariants are enforced here, not left to the caller:
       * Seed rows (origin='seed') are never rescored, retired, quarantined or
-        reclassified — every mutating write below is guarded on origin='discovered'
-        so a curated seed passed in by mistake is harmlessly ignored.
+        reclassified by discovery — every discovery write below is guarded on
+        origin='discovered' so a curated seed passed in by mistake is harmlessly
+        ignored. The one exception is ``correct_seed``, a person's edit to the
+        curated list, run only from scripts/reclassify_pool.py --include-seeds.
       * Rows are retired/quarantined, never deleted, so ai_recommendation history
         keeps resolving.
     """
@@ -1003,6 +1005,54 @@ class DiscoveryRepository(Repository):
             ).in_("ticker", tickers).eq("origin", "discovered").execute()
         except Exception as e:
             print(f"Error retiring assets {tickers}: {e}")
+
+    def classification_rows(self, universes: List[str]) -> List[Dict[str, Any]]:
+        """Pool rows with their names, for reclassifying what is already there."""
+        try:
+            if not universes:
+                return []
+            resp = (
+                self.table()
+                .select("ticker,name,universe,origin,is_active")
+                .in_("universe", universes)
+                .execute()
+            )
+            return resp.data or []
+        except Exception as e:
+            print(f"Error fetching classification rows: {e}")
+            return []
+
+    def reclassify(self, tickers: List[str], universe: str) -> None:
+        """Move DISCOVERED rows to another universe (seeds skipped). Score, activity
+        and quarantine are left as they are: only the label changes."""
+        if not tickers:
+            return
+        try:
+            self.table().update({"universe": universe}).in_("ticker", tickers).eq(
+                "origin", "discovered"
+            ).execute()
+        except Exception as e:
+            print(f"Error reclassifying assets {tickers}: {e}")
+            raise
+
+    def correct_seed(self, ticker: str, universe: Optional[str] = None,
+                     is_active: Optional[bool] = None) -> None:
+        """A person's correction to one CURATED row: a new universe, or switching it
+        off. The only write here that touches seeds, and it touches nothing else
+        (guarded on origin='seed'). Raises, so a failed correction is not mistaken
+        for a done one."""
+        fields: Dict[str, Any] = {}
+        if universe is not None:
+            fields["universe"] = universe
+        if is_active is not None:
+            fields["is_active"] = is_active
+        if not fields:
+            return
+        try:
+            self.table().update(fields).eq("ticker", ticker).eq("origin", "seed").execute()
+        except Exception as e:
+            print(f"Error correcting seed {ticker}: {e}")
+            raise
 
     def quarantine(self, tickers: List[str], reason: str, until_iso: str) -> None:
         """Bench DISCOVERED rows until ``until_iso`` (seeds skipped)."""
@@ -1250,6 +1300,19 @@ def update_discovery_scores(score_by_ticker: Dict[str, float]) -> None:
 
 def retire_assets(tickers: List[str], reason: str = "decayed_out") -> None:
     _discovery.retire(tickers, reason)
+
+
+def get_discovery_classification_rows(universes: List[str]) -> List[Dict[str, Any]]:
+    return _discovery.classification_rows(universes)
+
+
+def reclassify_assets(tickers: List[str], universe: str) -> None:
+    _discovery.reclassify(tickers, universe)
+
+
+def correct_seed(ticker: str, universe: Optional[str] = None,
+                 is_active: Optional[bool] = None) -> None:
+    _discovery.correct_seed(ticker, universe, is_active)
 
 
 def quarantine_assets(tickers: List[str], reason: str, until_iso: str) -> None:

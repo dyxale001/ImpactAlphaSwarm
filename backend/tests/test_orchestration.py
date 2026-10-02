@@ -110,10 +110,20 @@ class TestRankUniverse:
         rows = [discovered("BENCH", quarantined_until="2026-12-01T00:00:00Z"), seed("AAA")]
         assert TickerScoper().rank_universe(rows, NOW) == ["AAA"]
 
-    def test_a_retired_seed_is_still_eligible(self):
-        # The active/quarantine guards apply to discoveries only — a curated seed
-        # is the hand-picked floor of the universe.
-        assert TickerScoper().rank_universe([seed("AAA", is_active=False)], NOW) == ["AAA"]
+    def test_a_switched_off_seed_is_excluded(self):
+        # Discovery never deactivates a seed, so is_active=False on one is a person
+        # removing a curated pick, and the run must agree with the universe card,
+        # which already hides inactive rows.
+        assert TickerScoper().rank_universe([seed("AAA", is_active=False), seed("BBB")], NOW) == ["BBB"]
+
+    def test_a_seed_without_the_flag_is_still_eligible(self):
+        row = {"ticker": "AAA", "universe": "Technology", "origin": "seed"}
+        assert TickerScoper().rank_universe([row], NOW) == ["AAA"]
+
+    def test_a_quarantine_does_not_bench_a_seed(self):
+        # Quarantine is discovery's tool and stays discovery's only.
+        row = seed("AAA", quarantined_until="2026-12-01T00:00:00Z")
+        assert TickerScoper().rank_universe([row], NOW) == ["AAA"]
 
     def test_a_null_discovery_score_is_treated_as_zero(self):
         rows = [discovered("NULL", score=None), discovered("REAL", score=0.3)]

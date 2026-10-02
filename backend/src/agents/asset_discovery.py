@@ -128,6 +128,8 @@ PINNED_UNIVERSES: dict[str, str] = {
     for ticker in (
         "NVDA", "PLTR", "ARM", "TSLA", "ISRG", "SYM", "TER",
         "PATH", "AI", "SOUN", "ROK", "CGNX",
+        # AI infrastructure the splitter keeps calling Technology, run to run.
+        "AMD", "AVGO", "ALAB", "MRVL", "APLD", "CRWV", "NBIS", "SMCI",
     )
 }
 
@@ -1154,6 +1156,88 @@ class DiscoveryRun:
         else:
             summary["rejection_detail"] = rejections
         return summary
+
+
+@dataclass
+class ReclassificationPlan:
+    """What a reclassification pass would do to the existing pool."""
+    moves: dict[str, tuple[str, str]] = field(default_factory=dict)  # ticker -> (from, to)
+    seeds_held: dict[str, tuple[str, str]] = field(default_factory=dict)  # same, never written
+
+    def by_target(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for ticker, (_old, new) in sorted(self.moves.items()):
+            out.setdefault(new, []).append(ticker)
+        return out
+
+
+class PoolReclassifier:
+    """Applies tonight's classification rules to rows already in the pool.
+
+    The nightly pass only re-routes a name when it trends again, so the pins and
+    the AI & Robotics split would otherwise take weeks to reach the names already
+    sitting in Technology. This runs the same two steps over the stored rows once:
+    pins across every universe (ISRG sits in Healthcare), then the splitter over
+    Technology in batches small enough for one reasoning budget.
+
+    Seeds are reported but never moved: the repository refuses to reclassify a
+    curated row, and the plan says which ones it would have moved so a person can
+    decide.
+    """
+
+    BATCH_SIZE = 25
+
+    def __init__(
+        self,
+        finnhub: FinnhubClient | None = None,
+        pinned: PinnedClassifier | None = None,
+        splitter: AiRoboticsSplitter | None = None,
+    ):
+        self.finnhub = finnhub or FinnhubClient()
+        self.pinned = pinned or PinnedClassifier()
+        self.splitter = splitter or AiRoboticsSplitter()
+
+    def candidates(self, rows: list[dict]) -> list[Candidate]:
+        """Rows as candidates. Only Technology rows need an industry (the splitter's
+        prompt uses it), so only they cost a Finnhub call."""
+        out = []
+        for row in rows:
+            ticker = row.get("ticker")
+            if not ticker:
+                continue
+            cand = Candidate(ticker=ticker, name=row.get("name") or "", universe=row.get("universe"))
+            if cand.universe == AiRoboticsSplitter.source and ticker not in self.pinned.pins:
+                cand.industry = self.finnhub.profile(ticker).get("finnhubIndustry")
+            out.append(cand)
+        return out
+
+    def plan(self, rows: list[dict]) -> ReclassificationPlan:
+        cands = self.candidates(rows)
+        origin = {row["ticker"]: row.get("origin") for row in rows if row.get("ticker")}
+        current = {c.ticker: c.universe for c in cands}
+        target: dict[str, str] = {}
+
+        for ticker, universe in self.pinned.classify(cands).items():
+            if universe != current[ticker]:
+                target[ticker] = universe
+
+        tech = [c for c in cands if c.universe == AiRoboticsSplitter.source and c.ticker not in target]
+        for start in range(0, len(tech), self.BATCH_SIZE):
+            target.update(self.splitter.refine(tech[start : start + self.BATCH_SIZE]))
+
+        plan = ReclassificationPlan()
+        for ticker, universe in target.items():
+            if universe not in UNIVERSES or universe == current[ticker]:
+                continue
+            bucket = plan.seeds_held if origin.get(ticker) == "seed" else plan.moves
+            bucket[ticker] = (current[ticker], universe)
+        return plan
+
+    def apply(self, plan: ReclassificationPlan) -> None:
+        from ..utils.supabase_client import reclassify_assets
+
+        for universe, tickers in plan.by_target().items():
+            reclassify_assets(tickers, universe)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
