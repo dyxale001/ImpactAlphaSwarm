@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 import { useAdminUsers } from "../hooks/useAdminUsers";
 import { formatDbString } from "../utils/stringFormatters";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import AdminTabs from "../components/admin/AdminTabs";
 import { useAuthStore } from "../store/authStore";
-import { supabase } from "../lib/supabase";
 import AdminDashboardSkeleton from "../components/admin/AdminDashboardSkeleton";
 
 export default function AdminDashboard() {
@@ -31,8 +31,7 @@ export default function AdminDashboard() {
     setUserRole,
   } = useAdminUsers();
 
-  const { session, setSession } = useAuthStore();
-  const navigate = useNavigate();
+  const { session } = useAuthStore();
   const currentUserId = session?.user?.id;
 
   const [resettingPW, setResettingPW] = useState<Set<string>>(new Set());
@@ -63,13 +62,7 @@ export default function AdminDashboard() {
     clearBannerLater();
   };
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {}
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const handleResetPassword = async (userId: string, email: string) => {
     setResettingPW((prev) => new Set(prev).add(userId));

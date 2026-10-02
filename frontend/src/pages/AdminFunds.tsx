@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useSignOut } from "../hooks/useSignOut";
 import { AlertTriangle, Landmark, RotateCcw } from "lucide-react";
 import AddFundForm from "../components/admin/AddFundForm";
 import AdminTabs from "../components/admin/AdminTabs";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
 import {
   listAdminFunds,
   updateAdminFund,
@@ -38,18 +37,8 @@ export default function AdminFunds() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { setSession } = useAuthStore();
-  const navigate = useNavigate();
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore sign out errors
-    }
-    setSession(null);
-    navigate("/", { replace: true });
-  };
+  const handleSignOut = useSignOut();
 
   const load = useCallback(async () => {
     setIsLoading(true);

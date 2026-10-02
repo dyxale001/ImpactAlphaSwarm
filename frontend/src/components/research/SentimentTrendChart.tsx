@@ -80,6 +80,10 @@ const CLOSED_LABEL = "rgba(255,255,255,0.42)";
 // Below this the column is too narrow to write in without the text colliding with its
 // neighbours, so the label is dropped and the tooltip carries the name alone.
 const MIN_LABEL_COLUMN = 22;
+// Gap between the label and the top of the plot.
+const LABEL_INSET = 8;
+// A rough advance per character at 10px, only used to tell whether a name fits.
+const LABEL_CHAR_WIDTH = 5.6;
 
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
@@ -105,7 +109,8 @@ type PlottedPoint = SentimentHistoryPoint & {
 // The label is rotated up the column because that is the only direction with room: a
 // column is at most ~80px wide on a desktop and under 40px on a phone, while the plot
 // is ~200px tall, so "Independence Day (observed)" fits vertically and could never fit
-// across. It is drawn behind the bars and the line, which is what keeps it a watermark
+// across. It hangs from the top of the column, clear of the volume bars in the bottom
+// third. It is drawn behind the bars and the line, which is what keeps it a watermark
 // on the ground rather than a fourth thing competing with the data.
 function ClosedBand(props: any) {
   const { x, y, width, height, payload } = props;
@@ -114,7 +119,15 @@ function ClosedBand(props: any) {
   if (!closure || !height || height <= 0) return <g />;
 
   const centre = x + width / 2;
-  const base = y + height - 8;
+  // Hung from the top of the column, not stood on its floor. The volume bars own the
+  // bottom third of the plot (VOLUME_HEADROOM), and a label climbing from the floor ran
+  // straight through a busy weekend's bar.
+  const top = y + LABEL_INSET;
+  // The room above the tallest possible bar. A long holiday name that would not fit is
+  // squeezed to it rather than left to run down into the bars.
+  const room = height * (1 - 1 / VOLUME_HEADROOM) - LABEL_INSET * 2;
+  const squeeze =
+    closure.name.length * LABEL_CHAR_WIDTH > room ? Math.max(room, 0) : undefined;
 
   return (
     <g>
@@ -129,11 +142,14 @@ function ClosedBand(props: any) {
       {width >= MIN_LABEL_COLUMN ? (
         <text
           x={centre}
-          y={base}
-          // Rotated about its own anchor, so the text climbs the column from the
-          // bottom regardless of how tall the plot is at this width.
-          transform={`rotate(-90, ${centre}, ${base})`}
-          textAnchor="start"
+          y={top}
+          // Rotated about its own anchor and ended there, so the text still reads
+          // bottom to top but finishes at the top of the column, however tall the
+          // plot is at this width.
+          transform={`rotate(-90, ${centre}, ${top})`}
+          textAnchor="end"
+          textLength={squeeze}
+          lengthAdjust={squeeze ? "spacingAndGlyphs" : undefined}
           fontSize={10}
           fill={CLOSED_LABEL}
           // The column is the click target for selecting a day. Without this the
