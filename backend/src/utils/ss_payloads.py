@@ -47,22 +47,52 @@ class PayloadBuilder(ABC):
 
 
 class NewsPayloadBuilder(PayloadBuilder):
-	"""One entry per article: publisher, tier, date, headline, link."""
+	"""One entry per article: publisher, tier, date, headline, summary, link."""
 
 	HEADLINE_LIMIT = 160
+	#: Finnhub summaries run to about 150 characters typically and 600 at most. 300 keeps
+	#: the first sentence or two of the long ones, which is where the substance is, while
+	#: holding a stored day row's growth to a few hundred bytes per article.
+	SUMMARY_LIMIT = 300
 
 	def _item(self, item: dict[str, Any], influence: float) -> dict[str, Any]:
 		headline = (item.get("headline") or item["text"].split(". ", 1)[0]).strip()
+		summary = self.summary_of(item)
 		return {
 			"source": item["source"].split(":", 1)[-1],
 			"tier": item.get("tier"),
 			"date": (item.get("created_at") or "")[:10],  # YYYY-MM-DD
 			"headline": self.truncate(headline, self.HEADLINE_LIMIT),
+			"summary": self.truncate(summary, self.SUMMARY_LIMIT) if summary else None,
 			"url": item.get("url"),
 			"sentiment": self.label(item["sentiment_raw"]),
 			"sentiment_score": item["sentiment_contribution"],  # 0-100
 			"influence": influence,  # % of the news score
 		}
+
+	@staticmethod
+	def summary_of(item: dict[str, Any]) -> str | None:
+		"""The provider's own summary of the article, or None when it has none.
+
+		Recovered from ``text`` rather than carried as a field of its own. Both providers
+		build ``text`` as the headline, a full stop, then the summary (Finnhub's
+		``summary``, Marketaux's ``description``), and ``text`` already survives the
+		cache, scoring and the day rows, so reading it back here covers every article
+		without changing the mention model or the cache format. When ``text`` does not
+		start with the headline there is no telling where the summary begins, so none is
+		claimed rather than a guess.
+
+		The summary comes back without its final full stop, because the providers strip
+		trailing full stops when they build ``text``. It is not put back: many Finnhub
+		summaries are cut off mid word by Finnhub itself, and a full stop added to one of
+		those would be wrong.
+		"""
+		text = (item.get("text") or "").strip()
+		headline = (item.get("headline") or "").strip()
+		if not text or not headline or not text.startswith(headline):
+			return None
+		summary = text[len(headline):].lstrip(". ").strip()
+		return summary or None
 
 
 class SocialPayloadBuilder(PayloadBuilder):

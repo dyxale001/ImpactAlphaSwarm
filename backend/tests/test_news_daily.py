@@ -31,6 +31,7 @@ from src.utils.ns_daily import (  # noqa: E402
 	score_from_signed,
 )
 from src.utils.ss_config import SentimentConfig  # noqa: E402
+from src.utils.ss_payloads import NewsPayloadBuilder  # noqa: E402
 from src.utils.ss_scoring import MentionScorer  # noqa: E402
 
 UTC = datetime.timezone.utc
@@ -229,7 +230,57 @@ def test_top_articles_carry_the_shape_the_frontend_renders():
 	stored = rows[0]["top_articles"][0]
 	assert stored["headline"] == "Chips rally"
 	assert stored["date"] == "2026-08-28"
-	assert set(stored) >= {"source", "tier", "date", "headline", "url", "sentiment_score"}
+	assert set(stored) >= {
+		"source", "tier", "date", "headline", "summary", "url", "sentiment_score"
+	}
+
+
+def with_summary(day: str, headline: str, summary: str) -> dict:
+	"""An article as the providers build it: ``text`` is the headline, a full stop,
+	then the summary (Finnhub's ``summary``, Marketaux's ``description``)."""
+	return {**article(day, headline=headline), "text": f"{headline}. {summary}".strip(". ")}
+
+
+def test_a_stored_article_keeps_the_providers_summary():
+	"""It was fetched, scored, and then thrown away at this step. Kept now, so the
+	page and the day summary have something of what the article said, not only its
+	title."""
+	rows = NewsDayBuilder(cfg()).build(
+		"AAPL",
+		[with_summary("2026-08-28", "Chips rally", "Nvidia lifted the sector after results.")],
+	)
+
+	# Without its last full stop: the providers strip it when they build ``text``.
+	assert rows[0]["top_articles"][0]["summary"] == "Nvidia lifted the sector after results"
+
+
+def test_summary_is_recovered_after_a_headline_ending_in_a_question_mark():
+	item = with_summary("2026-08-28", "Does The Chart Agree?", "Applied Materials guided higher.")
+
+	assert NewsPayloadBuilder.summary_of(item) == "Applied Materials guided higher"
+
+
+def test_an_article_with_no_summary_stores_none_rather_than_its_headline():
+	"""A headline-only article must not have its headline repeated as a summary."""
+	item = article("2026-08-28", headline="Chips rally")
+
+	assert NewsPayloadBuilder.summary_of(item) is None
+
+
+def test_no_summary_is_guessed_when_the_text_does_not_start_with_the_headline():
+	item = {**article("2026-08-28", headline="Chips rally"), "text": "Something else. Entirely."}
+
+	assert NewsPayloadBuilder.summary_of(item) is None
+
+
+def test_a_long_summary_is_capped():
+	rows = NewsDayBuilder(cfg()).build(
+		"AAPL", [with_summary("2026-08-28", "Chips rally", "word " * 200)]
+	)
+	stored = rows[0]["top_articles"][0]["summary"]
+
+	assert len(stored) <= NewsPayloadBuilder.SUMMARY_LIMIT
+	assert stored.endswith("…")
 
 
 # ── the history object ───────────────────────────────────────────────────────
