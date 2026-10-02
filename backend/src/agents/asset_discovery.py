@@ -7,7 +7,8 @@ analyst agents look at — never how they score. See DISCOVERY_AGENT_PLAN.md.
 Pipeline (all wrapped so any stage failing degrades to the previous pool):
   1. Candidate generation  — StockTwits trending (+ optional Groq gap-filler)
   2. Validation funnel      — real US common stock, seasoned, big, liquid, covered
-  3. Universe classification — static industry map first, Groq for the residue
+  3. Universe classification — pins, static industry map, Groq for the residue,
+                               then a Groq pass splitting AI & Robotics out of Technology
   4. Scoring + hysteresis    — stable pools, capped churn, decay, quarantine
 
 Only Stage 4's persistence touches the DB, and only when ``dry_run`` is False;
@@ -30,8 +31,12 @@ test can drive the whole pass without a socket.
 	└── ResearchabilityGate      is anyone trustworthy writing about it?
 
 	Classifier (ABC)             stage 3 — which universe does it belong to?
+	├── PinnedClassifier         curated names, never up for debate
 	├── IndustryClassifier       the static map
 	└── LlmClassifier            the residue the map cannot place
+
+	Refiner (ABC)                stage 3, second look at what was placed
+	└── AiRoboticsSplitter       Technology names that are really AI & Robotics
 
 The funnel is a chain: a candidate is offered to each gate in turn and the first
 one to return a reason stops it, which is why the rejection log can name the exact
@@ -115,6 +120,17 @@ INDUSTRY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
                     "communications", "telecommunication", "internet", "media")),
 ]
 
+# Names that are AI & Robotics whatever Finnhub calls them. Finnhub files NVDA under
+# Semiconductors and ISRG under health care, so the keyword map would put them in
+# Technology and Healthcare; pinning them skips both the map and the model.
+PINNED_UNIVERSES: dict[str, str] = {
+    ticker: "AI & Robotics"
+    for ticker in (
+        "NVDA", "PLTR", "ARM", "TSLA", "ISRG", "SYM", "TER",
+        "PATH", "AI", "SOUN", "ROK", "CGNX",
+    )
+}
+
 
 @dataclass
 class Candidate:
@@ -136,26 +152,92 @@ class Candidate:
 # Groq helpers (thin; isolated for stubbing)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _get_groq():
-    # 3000 rather than 600: classifying a whole residue of tickers is the most
-    # demanding prompt here and spends most of its tokens reasoning, which left
-    # nothing for the answer under the old budget. Headroom is not billed, and a
-    # ceiling reached mid-thought produces an empty reply rather than a shorter one.
-    from ..utils.llm_client import GroqClient
+class DiscoveryLlm:
+    """Discovery's Groq access: one call on its own account, one retry on another.
 
-    # Discovery names its own account so its usage stays legible in the Groq
-    # dashboards, separate from the reasoning traces. It shares that account with a
-    # trace lane, which is safe on both counts that matter: the two never issue a
-    # call in the same minute (api.run_daily awaits this pass to completion before
-    # the batch, and discovery never runs on the interactive path), and this agent
-    # spends about six calls a night in total against the daily quota.
-    return GroqClient.create(
-        purpose="discovery",
-        max_tokens=3000,
-        temperature=0.2,
-        key_env="GROQ_API_KEY3",
-        fallback_key_env="GROQ_API_KEY",
-    )
+    Discovery names its own account (key 3) so its usage stays legible in the Groq
+    dashboards, separate from the reasoning traces. It shares that account with a
+    trace lane, which is safe because the two never issue a call in the same minute:
+    api.run_daily awaits this pass to completion before the batch, and discovery
+    never runs on the interactive path.
+
+    A failed call gets exactly one retry, on key 2. Key 2 is a trace lane and
+    nothing else, so it sits idle while discovery runs, and a retry there starts on
+    a fresh per-minute token allowance instead of stacking onto the one the first
+    attempt just spent. What the retry changes depends on how the first call failed:
+
+    * an empty or truncated reply (``EmptyCompletionError``) means the model spent
+      its budget reasoning, so the retry gets a bigger budget. Headroom is not
+      billed, and this only ever applies to the call that failed. Without key 2 it
+      retries on the same account, since a bigger budget is the actual fix;
+    * any other error (a 429, a timeout, an outage) is about the account or the
+      connection, so the retry keeps the budget and only changes account. Without
+      key 2 there is nowhere else to go, and the error stands.
+
+    Each call site passes a label (``gap_fill``, ``classify``, ``split``), which
+    becomes the client's purpose and so names the call in every log line.
+    """
+
+    KEY_ENV = "GROQ_API_KEY3"
+    FALLBACK_KEY_ENV = "GROQ_API_KEY"
+    RETRY_KEY_ENV = "GROQ_API_KEY2"
+    # 3000 rather than 600: classifying a whole residue of tickers spends most of its
+    # tokens reasoning, which left nothing for the answer under the old budget.
+    MAX_TOKENS = 3000
+    RETRY_MAX_TOKENS = 8000
+    TEMPERATURE = 0.2
+
+    def __init__(self, label: str, factory=None):
+        self.purpose = f"discovery.{label}"
+        self._factory = factory
+        self._primary = self._build(self.KEY_ENV, self.MAX_TOKENS, self.FALLBACK_KEY_ENV)
+
+    @classmethod
+    def create(cls, label: str, factory=None) -> Optional["DiscoveryLlm"]:
+        """The client for one call site, or None when Groq is unconfigured."""
+        llm = cls(label, factory)
+        return llm if llm._primary is not None else None
+
+    def _build(self, key_env: str, max_tokens: int, fallback_key_env: Optional[str] = None,
+               suffix: str = ""):
+        if self._factory is None:
+            from ..utils.llm_client import GroqClient
+
+            self._factory = GroqClient.create
+        return self._factory(
+            purpose=self.purpose + suffix,
+            max_tokens=max_tokens,
+            temperature=self.TEMPERATURE,
+            key_env=key_env,
+            fallback_key_env=fallback_key_env,
+        )
+
+    def complete(self, prompt: str) -> str:
+        """The reply text, or raise the retry's error when both attempts fail."""
+        from ..utils.llm_client import EmptyCompletionError
+
+        try:
+            return self._primary.complete(prompt)
+        except EmptyCompletionError as exc:
+            first_error: Exception = exc
+            retry = (
+                self._build(self.RETRY_KEY_ENV, self.RETRY_MAX_TOKENS, suffix=".retry")
+                or self._build(self.KEY_ENV, self.RETRY_MAX_TOKENS, self.FALLBACK_KEY_ENV,
+                               suffix=".retry")
+            )
+        except Exception as exc:
+            first_error = exc
+            retry = self._build(self.RETRY_KEY_ENV, self.MAX_TOKENS, suffix=".retry")
+
+        if retry is None:
+            raise first_error
+        logger.warning("%s failed, retrying once as %s: %s",
+                       self.purpose, f"{self.purpose}.retry", first_error)
+        return retry.complete(prompt)
+
+
+def _get_groq(label: str) -> Optional[DiscoveryLlm]:
+    return DiscoveryLlm.create(label)
 
 
 def _groq_text(llm, prompt: str) -> str:
@@ -164,7 +246,8 @@ def _groq_text(llm, prompt: str) -> str:
     except Exception as exc:
         # Warning, not info: at the default LOG_LEVEL an info line is invisible, which
         # is how a model retirement went unnoticed across a whole run.
-        logger.warning("Groq invoke failed for discovery: %s", exc)
+        logger.warning("Groq invoke failed for %s: %s",
+                       getattr(llm, "purpose", "discovery"), exc)
         return ""
 
 
@@ -418,7 +501,7 @@ class LlmGapFillSource(CandidateSource):
         decays a universe's incumbents on the strength of an empty result, so
         treating a failure as [] retires assets on the back of a model hiccup.
         """
-        llm = _get_groq()
+        llm = _get_groq("gap_fill")
         if llm is None:
             return None
         prompt = (
@@ -645,6 +728,17 @@ class Classifier(ABC):
         """Map ticker → universe. A ticker it cannot place is simply absent."""
 
 
+class PinnedClassifier(Classifier):
+    """Curated names whose universe is not up for debate. Runs first, so nothing
+    downstream (the keyword map or the model) can place them elsewhere."""
+
+    def __init__(self, pins: dict[str, str] | None = None):
+        self.pins = pins if pins is not None else PINNED_UNIVERSES
+
+    def classify(self, candidates: list[Candidate]) -> dict[str, str]:
+        return {c.ticker: self.pins[c.ticker] for c in candidates if c.ticker in self.pins}
+
+
 class IndustryClassifier(Classifier):
     """The static industry→universe map. Free, deterministic, and right for the
     three universes that are real industry categories."""
@@ -680,7 +774,7 @@ class LlmClassifier(Classifier):
         dropped rather than guessed."""
         if not tickers:
             return {}
-        llm = _get_groq()
+        llm = _get_groq("classify")
         if llm is None:
             return {}
         prompt = (
@@ -701,18 +795,89 @@ class LlmClassifier(Classifier):
         return out
 
 
+class Refiner(ABC):
+    """Second opinion on candidates that are already placed."""
+
+    @abstractmethod
+    def refine(self, candidates: list[Candidate]) -> dict[str, str]:
+        """Map ticker → new universe. A ticker it leaves out keeps its universe."""
+
+
+class AiRoboticsSplitter(Refiner):
+    """Asks Groq which Technology names are really AI & Robotics.
+
+    Finnhub has no AI industry, so the keyword map files every AI chip and AI
+    platform under Technology and the residue classifier never gets to see them.
+    That is what left AI & Robotics empty while Technology overflowed. Only an
+    explicit "AI & Robotics" answer moves a ticker; a failed or vague reply leaves
+    it in Technology, where it was.
+    """
+
+    source = "Technology"
+    target = "AI & Robotics"
+
+    def refine(self, candidates: list[Candidate]) -> dict[str, str]:
+        tech = [c for c in candidates if c.universe == self.source]
+        if not tech:
+            return {}
+        llm = _get_groq("split")
+        if llm is None:
+            return {}
+        listing = "; ".join(
+            f"{c.ticker} ({c.name or c.ticker}, {c.industry or 'unknown industry'})" for c in tech
+        )
+        # These are investment themes, not industry codes, so the question is how the
+        # market trades the stock today. Asked about "core business" instead, the model
+        # kept every name in Technology, AMD and SMCI included.
+        prompt = (
+            f"For each US stock below, answer '{self.target}' or '{self.source}', judged by "
+            "how investors trade the stock today. "
+            f"'{self.target}': the stock is widely held as an AI or robotics play, because "
+            "most of its growth now comes from AI accelerator chips, AI servers, AI data "
+            "centres and compute, AI software platforms, or robots and automation "
+            "(e.g. NVIDIA, AMD, Broadcom, Super Micro, CoreWeave, Vertiv, Palantir, "
+            "Symbotic, Intuitive Surgical). "
+            f"'{self.source}': diversified tech giants (e.g. Apple, Microsoft, Alphabet, Meta, "
+            "Amazon) and companies whose business is mainly general software, consumer "
+            "devices, storage, networking, telecoms or general purpose chips, even if "
+            "they mention AI. "
+            f"Stocks: {listing}. "
+            'Return ONLY a JSON object mapping ticker -> label, e.g. {"AAA":"Technology"}.'
+        )
+        parsed = _parse_json_object(_groq_text(llm, prompt))
+        tech_tickers = {c.ticker for c in tech}
+        out: dict[str, str] = {}
+        for ticker, label in parsed.items():
+            tk = str(ticker).upper()
+            if tk in tech_tickers and label == self.target:
+                out[tk] = self.target
+        return out
+
+
 class ClassificationChain:
     """Cheap classifier first; whatever it cannot place falls through to the next.
 
     Ordering is the whole design: the static map costs nothing and is never wrong,
-    so the LLM is only ever asked about the residue.
+    so the LLM is only ever asked about the residue. Refiners then get a second
+    look at what was placed, for the one split the map cannot make by industry.
     """
 
-    def __init__(self, classifiers: list[Classifier] | None = None):
+    def __init__(
+        self,
+        classifiers: list[Classifier] | None = None,
+        refiners: list[Refiner] | None = None,
+    ):
         self.classifiers = classifiers if classifiers is not None else [
+            PinnedClassifier(),
             IndustryClassifier(),
             LlmClassifier(),
         ]
+        # The production splitter comes with the production classifiers only: a caller
+        # that hands in its own classifiers is composing a chain and gets no hidden
+        # Groq call on top of it.
+        self.refiners = refiners if refiners is not None else (
+            [AiRoboticsSplitter()] if classifiers is None else []
+        )
 
     def apply(self, survivors: list[Candidate]) -> None:
         """Set ``candidate.universe`` in place."""
@@ -728,6 +893,11 @@ class ClassificationChain:
                 if ticker in by_ticker:
                     by_ticker[ticker].universe = universe
             unplaced = [c for c in unplaced if c.universe is None]
+
+        for refiner in self.refiners:
+            for ticker, universe in refiner.refine(survivors).items():
+                if ticker in by_ticker and universe in UNIVERSES:
+                    by_ticker[ticker].universe = universe
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -861,6 +1031,39 @@ class DiscoveryRun:
                 )
         return by_universe
 
+    def follow_moved_incumbents(
+        self,
+        by_universe: dict[str, list[Candidate]],
+        incumbents_by_universe: dict[str, list[dict]],
+    ) -> list[str]:
+        """Re-home discovered incumbents that were classified into a new universe tonight.
+
+        Hysteresis plans each universe on its own, so without this a ticker moving from
+        Technology to AI & Robotics would be a brand new name in AI & Robotics (queued
+        behind the nightly entrant cap) and a quiet incumbent in Technology (decayed
+        towards retirement). Moving its row first makes it a refreshed incumbent where
+        it now belongs. Returns the tickers moved, in a stable order.
+        """
+        home = {
+            row["ticker"]: universe
+            for universe, rows in incumbents_by_universe.items()
+            for row in rows
+            if row.get("ticker")
+        }
+        moved: list[str] = []
+        for universe, cands in by_universe.items():
+            for cand in cands:
+                old = home.get(cand.ticker)
+                if old is None or old == universe:
+                    continue
+                rows = incumbents_by_universe[old]
+                row = next(r for r in rows if r.get("ticker") == cand.ticker)
+                rows.remove(row)
+                incumbents_by_universe[universe].append({**row, "universe": universe})
+                home[cand.ticker] = universe
+                moved.append(cand.ticker)
+        return sorted(moved)
+
     def execute(self, dry_run: bool = False) -> dict[str, Any]:
         """Run the nightly discovery pass. Returns a summary dict. When ``dry_run``
         is True, computes everything (reading the current pool) but writes nothing —
@@ -886,6 +1089,7 @@ class DiscoveryRun:
         for row in pool_rows:
             if row.get("origin") == "discovered" and row.get("universe") in incumbents_by_universe:
                 incumbents_by_universe[row["universe"]].append(row)
+        summary["reclassified"] = self.follow_moved_incumbents(by_universe, incumbents_by_universe)
 
         for universe in UNIVERSES:
             cands = by_universe[universe]

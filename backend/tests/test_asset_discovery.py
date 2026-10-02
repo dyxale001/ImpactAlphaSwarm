@@ -448,6 +448,7 @@ class TestUniverses:
 # Each stage now names a collaborator, which is what lets these run offline.
 
 from src.agents.asset_discovery import (  # noqa: E402
+    AiRoboticsSplitter,
     CandidatePool,
     CandidateSource,
     ClassificationChain,
@@ -456,12 +457,15 @@ from src.agents.asset_discovery import (  # noqa: E402
     Gate,
     IndustryClassifier,
     LiquidityGate,
+    PinnedClassifier,
     ProfileGate,
+    Refiner,
     ResearchabilityGate,
     SourceFactory,
     SymbolDirectoryGate,
     ValidationFunnel,
 )
+from src.utils.llm_client import EmptyCompletionError  # noqa: E402
 
 
 class FakeFinnhub:
@@ -615,6 +619,221 @@ class TestClassificationChain:
         cands = [a_candidate("AAA", industry="Aerospace")]
         ClassificationChain(classifiers=[IndustryClassifier()]).apply(cands)
         assert cands[0].universe is None
+
+    def test_a_pinned_name_beats_the_industry_map(self):
+        # ISRG's industry contains "health", which the map would send to Healthcare.
+        cands = [a_candidate("ISRG", industry="Health Care Equipment")]
+        ClassificationChain(classifiers=[PinnedClassifier(), IndustryClassifier()]).apply(cands)
+        assert cands[0].universe == "AI & Robotics"
+
+    def test_a_refiner_can_move_a_placed_candidate(self):
+        class MovesAll(Refiner):
+            def refine(self, candidates):
+                return {c.ticker: "AI & Robotics" for c in candidates}
+
+        cands = [a_candidate("AAA", industry="Software")]
+        ClassificationChain(classifiers=[IndustryClassifier()], refiners=[MovesAll()]).apply(cands)
+        assert cands[0].universe == "AI & Robotics"
+
+    def test_a_refiner_cannot_invent_a_universe(self):
+        class Invents(Refiner):
+            def refine(self, candidates):
+                return {c.ticker: "Crypto" for c in candidates}
+
+        cands = [a_candidate("AAA", industry="Software")]
+        ClassificationChain(classifiers=[IndustryClassifier()], refiners=[Invents()]).apply(cands)
+        assert cands[0].universe == "Technology"
+
+    def test_a_custom_chain_gets_no_hidden_refiner(self):
+        assert ClassificationChain(classifiers=[IndustryClassifier()]).refiners == []
+
+    def test_the_production_chain_pins_first_and_splits_technology(self):
+        chain = ClassificationChain()
+        assert isinstance(chain.classifiers[0], PinnedClassifier)
+        assert [type(r) for r in chain.refiners] == [AiRoboticsSplitter]
+
+
+class FakeGroq:
+    def __init__(self, reply):
+        self.reply = reply
+        self.prompts = []
+
+    def complete(self, prompt):
+        self.prompts.append(prompt)
+        return self.reply
+
+
+class TestAiRoboticsSplitter:
+    def test_only_technology_names_are_asked_about(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        AiRoboticsSplitter().refine([
+            a_candidate("AAA", universe="Technology", name="Alpha", industry="Semiconductors"),
+            a_candidate("BBB", universe="Finance"),
+        ])
+        assert "AAA (Alpha, Semiconductors)" in llm.prompts[0]
+        assert "BBB" not in llm.prompts[0]
+
+    def test_no_technology_names_costs_no_call(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert AiRoboticsSplitter().refine([a_candidate("BBB", universe="Finance")]) == {}
+        assert llm.prompts == []
+
+    def test_only_an_explicit_ai_answer_moves_a_ticker(self, monkeypatch):
+        llm = FakeGroq('{"AAA":"AI & Robotics","BBB":"Technology","CCC":"robots"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        cands = [a_candidate(t, universe="Technology") for t in ("AAA", "BBB", "CCC")]
+        assert AiRoboticsSplitter().refine(cands) == {"AAA": "AI & Robotics"}
+
+    def test_a_ticker_it_was_not_asked_about_is_ignored(self, monkeypatch):
+        llm = FakeGroq('{"ZZZ":"AI & Robotics","aaa":"AI & Robotics"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        out = AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")])
+        assert out == {"AAA": "AI & Robotics"}
+
+    def test_a_failed_call_leaves_everything_in_technology(self, monkeypatch):
+        llm = FakeGroq("")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")]) == {}
+
+    def test_no_client_leaves_everything_in_technology(self, monkeypatch):
+        monkeypatch.setattr(ad, "_get_groq", lambda label: None)
+        assert AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")]) == {}
+
+
+class ScriptedClient:
+    """A GroqClient that replays one outcome: a reply string, or an exception."""
+
+    def __init__(self, outcome):
+        self.outcome = outcome
+        self.calls = 0
+
+    def complete(self, prompt):
+        self.calls += 1
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+
+class FakeFactory:
+    """Stands in for GroqClient.create: hands out a scripted client per key, and
+    records every client built, so a test can see which account and budget a retry
+    went to."""
+
+    def __init__(self, outcomes):
+        self.outcomes = outcomes  # key_env -> outcome; a missing key means unset
+        self.built = []
+
+    def __call__(self, *, purpose, max_tokens, temperature, key_env, fallback_key_env=None):
+        if key_env not in self.outcomes:
+            return None
+        self.built.append({"purpose": purpose, "max_tokens": max_tokens, "key_env": key_env})
+        return ScriptedClient(self.outcomes[key_env])
+
+
+class TestDiscoveryLlm:
+    def test_a_good_first_call_is_not_retried(self):
+        factory = FakeFactory({"GROQ_API_KEY3": "ok", "GROQ_API_KEY2": "unused"})
+        assert ad.DiscoveryLlm("split", factory).complete("p") == "ok"
+        assert [b["key_env"] for b in factory.built] == ["GROQ_API_KEY3"]
+
+    def test_the_label_names_the_call_and_its_retry(self):
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x"), "GROQ_API_KEY2": "ok"})
+        ad.DiscoveryLlm("classify", factory).complete("p")
+        assert [b["purpose"] for b in factory.built] == [
+            "discovery.classify", "discovery.classify.retry",
+        ]
+
+    def test_an_empty_reply_retries_on_key_2_with_a_bigger_budget(self):
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x"), "GROQ_API_KEY2": "ok"})
+        assert ad.DiscoveryLlm("split", factory).complete("p") == "ok"
+        retry = factory.built[1]
+        assert retry["key_env"] == "GROQ_API_KEY2"
+        assert retry["max_tokens"] == ad.DiscoveryLlm.RETRY_MAX_TOKENS > ad.DiscoveryLlm.MAX_TOKENS
+
+    def test_an_empty_reply_without_key_2_retries_on_the_same_account(self):
+        # A bigger budget is the actual fix for this failure, so it is still worth
+        # one more call on the account that has it.
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x")})
+        with pytest.raises(EmptyCompletionError):
+            ad.DiscoveryLlm("split", factory).complete("p")
+        assert [(b["key_env"], b["max_tokens"]) for b in factory.built] == [
+            ("GROQ_API_KEY3", 3000), ("GROQ_API_KEY3", 8000),
+        ]
+
+    def test_a_transport_error_retries_on_key_2_with_the_same_budget(self):
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("429"), "GROQ_API_KEY2": "ok"})
+        assert ad.DiscoveryLlm("gap_fill", factory).complete("p") == "ok"
+        assert (factory.built[1]["key_env"], factory.built[1]["max_tokens"]) == ("GROQ_API_KEY2", 3000)
+
+    def test_a_transport_error_without_key_2_is_not_retried(self):
+        # Retrying a 429 on the account that just refused it would only refuse again.
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("429")})
+        with pytest.raises(RuntimeError, match="429"):
+            ad.DiscoveryLlm("gap_fill", factory).complete("p")
+        assert len(factory.built) == 1
+
+    def test_there_is_only_ever_one_retry(self):
+        factory = FakeFactory({
+            "GROQ_API_KEY3": EmptyCompletionError("first"),
+            "GROQ_API_KEY2": EmptyCompletionError("second"),
+        })
+        with pytest.raises(EmptyCompletionError, match="second"):
+            ad.DiscoveryLlm("split", factory).complete("p")
+        assert len(factory.built) == 2
+
+    def test_no_primary_account_means_no_client(self):
+        assert ad.DiscoveryLlm.create("split", FakeFactory({"GROQ_API_KEY2": "ok"})) is None
+
+    def test_a_double_failure_reaches_the_caller_as_an_empty_reply(self):
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("a"), "GROQ_API_KEY2": RuntimeError("b")})
+        assert ad._groq_text(ad.DiscoveryLlm("split", factory), "p") == ""
+
+
+class TestPinnedClassifier:
+    def test_pinned_names_are_placed_and_others_left_alone(self):
+        out = PinnedClassifier({"NVDA": "AI & Robotics"}).classify(
+            [a_candidate("NVDA"), a_candidate("MSFT")]
+        )
+        assert out == {"NVDA": "AI & Robotics"}
+
+    def test_every_default_pin_is_a_real_universe(self):
+        assert set(ad.PINNED_UNIVERSES.values()) <= set(ad.UNIVERSES)
+
+
+class TestFollowMovedIncumbents:
+    def test_a_moved_incumbent_is_refreshed_in_its_new_universe(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["AI & Robotics"] = [a_candidate("AAA")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+        incumbents["Technology"] = [incumbent("AAA", origin="discovered", universe="Technology")]
+
+        moved = DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents)
+
+        assert moved == ["AAA"]
+        assert incumbents["Technology"] == []
+        assert [r["ticker"] for r in incumbents["AI & Robotics"]] == ["AAA"]
+        assert incumbents["AI & Robotics"][0]["universe"] == "AI & Robotics"
+        plan = ad.HysteresisPolicy().plan(incumbents["AI & Robotics"], {"AAA": 0.5}, NOW)
+        assert plan.refreshed == ["AAA"] and plan.new_entrants == []
+
+    def test_an_incumbent_that_stayed_put_is_untouched(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["Technology"] = [a_candidate("AAA")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+        incumbents["Technology"] = [incumbent("AAA", origin="discovered")]
+
+        assert DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents) == []
+        assert [r["ticker"] for r in incumbents["Technology"]] == ["AAA"]
+
+    def test_a_brand_new_name_is_not_a_move(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["AI & Robotics"] = [a_candidate("NEW")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+
+        assert DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents) == []
+        assert incumbents["AI & Robotics"] == []
 
 
 class TestCandidatePool:
