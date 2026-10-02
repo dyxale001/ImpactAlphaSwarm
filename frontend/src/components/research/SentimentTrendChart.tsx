@@ -45,7 +45,8 @@ const AXIS_TEXT = "rgba(255,255,255,0.55)";
 const GRID_LINE = "rgba(255,255,255,0.12)";
 const NEUTRAL_LINE = "rgba(255,255,255,0.28)";
 const AXIS_WIDTH = 34;
-const MARGIN = { top: 8, right: 4, left: 0, bottom: 0 };
+// The top margin is the strip the shut-day labels sit in, above the 100 line.
+const MARGIN = { top: 20, right: 4, left: 0, bottom: 0 };
 
 // Bars are scaled to a third of the plot height, which is what keeps volume
 // subordinate to the score line no matter how busy the busiest day was.
@@ -74,19 +75,71 @@ const WEEKEND_BAND = "rgba(255,255,255,0.055)";
 // itself. The extra lift is what makes it worth a second look.
 const HOLIDAY_BAND = "rgba(255,255,255,0.11)";
 
-// The name written up the shut column. Dim enough to stay ground rather than joining
-// the series in front of it, bright enough to read against both washes.
+// The name written over the shut column. Dim enough to stay ground rather than joining
+// the series below it, bright enough to read against the card.
 const CLOSED_LABEL = "rgba(255,255,255,0.42)";
-// Below this the column is too narrow to write in without the text colliding with its
-// neighbours, so the label is dropped and the tooltip carries the name alone.
-const MIN_LABEL_COLUMN = 22;
-// Gap between the label and the top of the plot.
-const LABEL_INSET = 8;
+// Gap between the label's baseline and the 100 line.
+const LABEL_GAP = 6;
 // A rough advance per character at 10px, only used to tell whether a name fits.
 const LABEL_CHAR_WIDTH = 5.6;
 
 // A ticker needs a few real days before a line says anything.
 const MIN_DAYS_TO_PLOT = 3;
+
+// The link drawn across open days with no reading. Dotted rather than dashed, because
+// the news line is already dashed and a dashed link would read as more news. Faint, so
+// it says "the trend carries on, nothing was measured here" and can never be taken
+// for a stretch of the line itself.
+const LINK_DASH = "0 5";
+const LINK_OPACITY = 0.45;
+
+// How a series is drawn across its empty days.
+//
+// A run of empty days made up only of shut-market days is not missing data: the band
+// behind it already says why. The line is carried straight across it, interpolated
+// for drawing only, so Friday to Monday reads as one trend. A run that includes an
+// open day is a real hole, and gets its own faint link between the two real readings
+// on either side. Nothing is drawn before the first reading or after the last: a link
+// needs a real point at both ends.
+//
+// Each link is a separate series so that two links meeting at one real point never
+// join into a single stroke over the solid line between them.
+type Bridged = { line: (number | null)[]; links: (number | null)[][] };
+
+function bridgeGaps(values: (number | null | undefined)[], closed: boolean[]): Bridged {
+  const line = values.map((v) => (typeof v === "number" ? v : null));
+  const links: (number | null)[][] = [];
+  let prev = -1;
+  for (let i = 0; i < line.length; i++) {
+    const to = line[i];
+    if (to === null) continue;
+    if (prev >= 0 && i - prev > 1) {
+      const from = line[prev] as number;
+      if (closed.slice(prev + 1, i).every(Boolean)) {
+        for (let k = prev + 1; k < i; k++) {
+          line[k] = from + ((to - from) * (k - prev)) / (i - prev);
+        }
+      } else {
+        const link: (number | null)[] = line.map(() => null);
+        link[prev] = from;
+        link[i] = to;
+        links.push(link);
+      }
+    }
+    prev = i;
+  }
+  return { line, links };
+}
+
+// Dots, and the hover dot, only on days with a real reading. The solid line passes
+// through shut days on interpolated values, and a dot there would claim a score.
+function realDot(field: "score" | "newsScore", style: Record<string, unknown>) {
+  return (props: any) => {
+    const key = `${field}-${props.index}`;
+    if (typeof props.payload?.[field] !== "number") return <g key={key} />;
+    return <circle key={key} cx={props.cx} cy={props.cy} {...style} />;
+  };
+}
 
 // What the chart actually plots: a history point plus the fields derived here. The
 // news pair is optional and present only when the caller passed newsDays, which is how
@@ -97,37 +150,42 @@ type PlottedPoint = SentimentHistoryPoint & {
   closure: MarketClosure | null;
   newsScore?: number | null;
   newsCount?: number;
+  /** Drawing only: the score, carried across shut days. Never shown as a value. */
+  scoreLine: number | null;
+  newsLine?: number | null;
+  /** Drawing only: one entry per link across open empty days. */
+  scoreLinks: (number | null)[];
+  newsLinks: (number | null)[];
 };
 
-// The wash behind a shut column, with the reason written up it.
+// The wash behind a shut column, with the reason written above it.
 //
 // A custom shape rather than two Bar series. Two Bars on one x-axis are laid out side
 // by side, so a separate holiday series would halve the width of both and neither
 // would fill its column -- the same trap the hidden `weekend` axis below exists to
 // avoid. One series that picks its own fill per column keeps the band full width.
 //
-// The label is rotated up the column because that is the only direction with room: a
-// column is at most ~80px wide on a desktop and under 40px on a phone, while the plot
-// is ~200px tall, so "Independence Day (observed)" fits vertically and could never fit
-// across. It hangs from the top of the column, clear of the volume bars in the bottom
-// third. It is drawn behind the bars and the line, which is what keeps it a watermark
-// on the ground rather than a fourth thing competing with the data.
+// The label reads across, centred over its column in the strip above the 100 line, so
+// it never crosses the line, the bars or the grid. A column is at most ~80px wide on a
+// desktop and under 40px on a phone, so the name falls back to a shorter form when it
+// would run into the next column: "Saturday" becomes "Sat", a holiday becomes
+// "Holiday". If even that does not fit, the label is dropped and the tooltip carries
+// the name alone.
+function closedLabel(closure: MarketClosure, width: number): string | null {
+  const short = closure.kind === "weekend" ? closure.name.slice(0, 3) : "Holiday";
+  for (const candidate of [closure.name, short]) {
+    if (candidate.length * LABEL_CHAR_WIDTH <= width - 4) return candidate;
+  }
+  return null;
+}
+
 function ClosedBand(props: any) {
   const { x, y, width, height, payload } = props;
   const closure: MarketClosure | null = payload?.closure ?? null;
   // Recharts wants an element back, never null.
   if (!closure || !height || height <= 0) return <g />;
 
-  const centre = x + width / 2;
-  // Hung from the top of the column, not stood on its floor. The volume bars own the
-  // bottom third of the plot (VOLUME_HEADROOM), and a label climbing from the floor ran
-  // straight through a busy weekend's bar.
-  const top = y + LABEL_INSET;
-  // The room above the tallest possible bar. A long holiday name that would not fit is
-  // squeezed to it rather than left to run down into the bars.
-  const room = height * (1 - 1 / VOLUME_HEADROOM) - LABEL_INSET * 2;
-  const squeeze =
-    closure.name.length * LABEL_CHAR_WIDTH > room ? Math.max(room, 0) : undefined;
+  const label = closedLabel(closure, width);
 
   return (
     <g>
@@ -139,24 +197,19 @@ function ClosedBand(props: any) {
         stroke="none"
         fill={closure.kind === "holiday" ? HOLIDAY_BAND : WEEKEND_BAND}
       />
-      {width >= MIN_LABEL_COLUMN ? (
+      {label ? (
         <text
-          x={centre}
-          y={top}
-          // Rotated about its own anchor and ended there, so the text still reads
-          // bottom to top but finishes at the top of the column, however tall the
-          // plot is at this width.
-          transform={`rotate(-90, ${centre}, ${top})`}
-          textAnchor="end"
-          textLength={squeeze}
-          lengthAdjust={squeeze ? "spacingAndGlyphs" : undefined}
+          x={x + width / 2}
+          // The band's top is the 100 line, so this sits just above it in the margin.
+          y={y - LABEL_GAP}
+          textAnchor="middle"
           fontSize={10}
           fill={CLOSED_LABEL}
           // The column is the click target for selecting a day. Without this the
           // label swallows the clicks that land on the letters.
           pointerEvents="none"
         >
-          {closure.name}
+          {label}
         </text>
       ) : null}
     </g>
@@ -420,12 +473,28 @@ export function SentimentTrendChart({
   const volumeCeiling = busiestDay * VOLUME_HEADROOM;
   // The band is a full height value on the volume scale, so it reaches the top of the
   // plot whatever the busiest day was. Weekdays carry 0, which draws nothing.
-  const plotted: PlottedPoint[] = points.map((point) => {
-    const closure = marketClosure(point.date);
+  const closures = points.map((point) => marketClosure(point.date));
+  const isClosed = closures.map(Boolean);
+  const social = bridgeGaps(
+    points.map((p) => p.score),
+    isClosed,
+  );
+  const news = newsDays
+    ? bridgeGaps(
+        points.map((p) => newsDays.get(p.date)?.score ?? null),
+        isClosed,
+      )
+    : { line: [], links: [] };
+
+  const plotted: PlottedPoint[] = points.map((point, i) => {
+    const closure = closures[i];
     const base = {
       ...point,
       closure,
       closedBand: closure ? volumeCeiling : 0,
+      scoreLine: social.line[i],
+      scoreLinks: social.links.map((link) => link[i]),
+      newsLinks: news.links.map((link) => link[i]),
     };
     // Left off entirely rather than set to null when there is no news series, so the
     // tooltip can tell "this chart has no news" from "this day had no articles".
@@ -434,6 +503,7 @@ export function SentimentTrendChart({
     return {
       ...base,
       newsScore: day?.score ?? null,
+      newsLine: news.line[i],
       // The day's real total, not the length of the articles it carries: a stored day
       // keeps only its most influential few.
       newsCount: day?.count ?? 0,
@@ -566,28 +636,72 @@ export function SentimentTrendChart({
               />
               {/* News before social, so the established lime line stays on top where
                   the two cross. Drawn at all only when the caller supplied news. */}
+              {/* The faint links across open empty days, under the lines they join.
+                  Straight, since they stand for no reading at all, and inert: no dots,
+                  no hover dot. */}
+              {newsDays &&
+                news.links.map((_, k) => (
+                  <Line
+                    key={`news-link-${k}`}
+                    yAxisId="score"
+                    type="linear"
+                    dataKey={(p: PlottedPoint) => p.newsLinks[k]}
+                    stroke={NEWS_LINE_COLOR}
+                    strokeOpacity={LINK_OPACITY}
+                    strokeWidth={2}
+                    strokeDasharray={LINK_DASH}
+                    strokeLinecap="round"
+                    dot={false}
+                    activeDot={false}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ))}
+              {social.links.map((_, k) => (
+                <Line
+                  key={`social-link-${k}`}
+                  yAxisId="score"
+                  type="linear"
+                  dataKey={(p: PlottedPoint) => p.scoreLinks[k]}
+                  stroke={isNews ? NEWS_LINE_COLOR : LINE_COLOR}
+                  strokeOpacity={LINK_OPACITY}
+                  strokeWidth={2}
+                  strokeDasharray={LINK_DASH}
+                  strokeLinecap="round"
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                  isAnimationActive={false}
+                />
+              ))}
               {newsDays && (
                 <Line
                   yAxisId="score"
                   type="monotone"
-                  dataKey="newsScore"
+                  // The drawn series, carried across shut days. The real score stays
+                  // in newsScore, which is what the dots and the tooltip read.
+                  dataKey="newsLine"
                   stroke={NEWS_LINE_COLOR}
                   strokeWidth={2}
                   strokeDasharray={NEWS_LINE_DASH}
                   // Dotted, unlike the social line. Coverage is sparse for most
-                  // tickers, so a day flanked by two days without articles is a
-                  // segment of zero length: with dot={false} it would draw nothing at
-                  // all and the day would look like no news rather than one article.
-                  // The dot is what makes gapping viable on a series this patchy.
-                  dot={{ r: 2, fill: NEWS_LINE_COLOR, strokeWidth: 0 }}
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: "#10221e" }}
+                  // tickers, so the dots mark which days actually carried articles
+                  // rather than leaving the reader to infer it from the curve.
+                  dot={realDot("newsScore", { r: 2, fill: NEWS_LINE_COLOR })}
+                  activeDot={realDot("newsScore", {
+                    r: 4,
+                    fill: NEWS_LINE_COLOR,
+                    strokeWidth: 2,
+                    stroke: "#10221e",
+                  })}
                   connectNulls={false}
                 />
               )}
               <Line
                 yAxisId="score"
                 type="monotone"
-                dataKey="score"
+                // As above: drawn through shut days, read from `score`.
+                dataKey="scoreLine"
                 // On the news page this one line IS the news series, so it takes the
                 // news line's look: forest-100 rather than lime, dashed, and dotted
                 // because coverage is patchy enough that a lone day between two blanks
@@ -595,10 +709,15 @@ export function SentimentTrendChart({
                 stroke={isNews ? NEWS_LINE_COLOR : LINE_COLOR}
                 strokeWidth={isNews ? 2 : 2.5}
                 strokeDasharray={isNews ? NEWS_LINE_DASH : undefined}
-                dot={isNews ? { r: 2, fill: NEWS_LINE_COLOR, strokeWidth: 0 } : false}
-                activeDot={{ r: 4, strokeWidth: 2, stroke: "#10221e" }}
-                // Quiet days are gaps in the record, not a sentiment of zero, so the
-                // line breaks rather than bridging them.
+                dot={isNews ? realDot("score", { r: 2, fill: NEWS_LINE_COLOR }) : false}
+                activeDot={realDot("score", {
+                  r: 4,
+                  fill: isNews ? NEWS_LINE_COLOR : LINE_COLOR,
+                  strokeWidth: 2,
+                  stroke: "#10221e",
+                })}
+                // Open quiet days are gaps in the record, not a sentiment of zero, so
+                // the solid line breaks there and the faint link above spans it.
                 connectNulls={false}
               />
             </ComposedChart>
@@ -660,26 +779,23 @@ export function SentimentTrendChart({
             />
             Neutral 50
           </span>
-          {/* The gap is the one thing here that has no swatch, and it is the thing
-              most easily misread: a break means nobody posted, not a score of zero. */}
+          {/* The link is the thing most easily misread: it joins two readings across
+              open days nobody posted, and is not a score for those days. The swatch
+              is the same faint dots the chart draws. */}
           <span className="flex items-center gap-1.5">
             <span className="inline-flex items-center gap-[3px]">
-              <span
-                className="inline-block w-1.5 rounded-full"
-                style={{ height: 2.5, background: isNews ? NEWS_LINE_COLOR : LINE_COLOR }}
-              />
-              <span
-                className="inline-block w-1.5 rounded-full"
-                style={{
-                  height: 2.5,
-                  background: isNews ? NEWS_LINE_COLOR : LINE_COLOR,
-                  opacity: 0.35,
-                }}
-              />
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="inline-block w-[3px] h-[3px] rounded-full"
+                  style={{
+                    background: isNews ? NEWS_LINE_COLOR : LINE_COLOR,
+                    opacity: LINK_OPACITY,
+                  }}
+                />
+              ))}
             </span>
-            {newsDays
-              ? "Gap means no posts or news"
-              : `Gap means no ${unitPlural}`}
+            Dotted: no data between readings
           </span>
           {/* Without this the two quietest columns of every week look like collapsing
               interest rather than a shut market. The swatch is bordered because the
