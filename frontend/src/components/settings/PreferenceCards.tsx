@@ -1,5 +1,6 @@
 import { Check, Cpu, Zap, TrendingUp, Bot, Heart, Tv, BookOpen, BarChart2, Brain, Clock } from "lucide-react";
 import SettingsCard, { Consequence } from "./SettingsCard";
+import RunPlanPreview from "./RunPlanPreview";
 import { PrimaryButton, SecondaryButton } from "./SettingsButtons";
 import type { useUserSettings } from "../../hooks/useUserSettings";
 import {
@@ -145,6 +146,7 @@ export function SectorsCard({ settings }: { settings: Settings }) {
         ))}
       </div>
       {none && <p className="text-[11px] text-semantic-warning">{SECTORS_NONE_WARNING}</p>}
+      <RunPlanPreview sectors={formData.investment_universe} />
     </SettingsCard>
   );
 }

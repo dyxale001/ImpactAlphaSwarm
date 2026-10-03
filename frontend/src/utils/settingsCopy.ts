@@ -78,6 +78,13 @@ export const SECTORS_CARD_TITLE = "Target sectors";
 export const SECTORS_CARD_LEAD = "The parts of the market your analysis run looks at. Pick at least one.";
 export const SECTORS_NONE_WARNING = "Pick at least one sector.";
 export const SECTORS_SAVE_ACTION = "Save sectors";
+export const RUN_PLAN_TIME_LABEL = "Estimated run time";
+export const RUN_PLAN_COUNT_LABEL = "Companies analysed";
+export const RUN_PLAN_SPLIT_LABEL = "How the places are shared";
+export const RUN_PLAN_TIME_NOTE =
+  "Based on recent runs. Busy market days can take a little longer.";
+export const RUN_PLAN_WATCHLIST_NOTE =
+  "Companies on your watchlist are always included and go first, so they can use some of these places.";
 export const EXPERTISE_CARD_TITLE = "Expertise level";
 export const EXPERTISE_CARD_LEAD = "How much detail the app explains things with.";
 export const EXPERTISE_SAVE_ACTION = "Save expertise";
@@ -168,6 +175,11 @@ export function allSettingsStrings(): string[] {
     SECTORS_CARD_LEAD,
     SECTORS_NONE_WARNING,
     SECTORS_SAVE_ACTION,
+    RUN_PLAN_TIME_LABEL,
+    RUN_PLAN_COUNT_LABEL,
+    RUN_PLAN_SPLIT_LABEL,
+    RUN_PLAN_TIME_NOTE,
+    RUN_PLAN_WATCHLIST_NOTE,
     EXPERTISE_CARD_TITLE,
     EXPERTISE_CARD_LEAD,
     EXPERTISE_SAVE_ACTION,
