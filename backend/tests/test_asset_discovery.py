@@ -1026,6 +1026,38 @@ class TestExecuteScoresSeeds:
         assert written["seed"] == []
         assert "AAPL" in summary["seed_scores"]
 
+    def test_a_trending_seed_does_not_take_a_new_name_place(self, monkeypatch):
+        import src.utils.supabase_client as sc
+
+        upserts = []
+
+        class Fixed(CandidateSource):
+            name = "fixed"
+
+            def contribute(self, pool):
+                pool.add("JPM", self.name, 500)  # a seed, trending hard
+                pool.add("NEWB", self.name, 10)  # a genuinely new name
+
+        pins = {"JPM": "Finance", "NEWB": "Finance"}
+        monkeypatch.setattr(sc, "get_discovery_pool_rows",
+                            lambda u: [a_seed_row("JPM", universe="Finance")])
+        monkeypatch.setattr(sc, "upsert_discovered_asset", lambda **kw: upserts.append(kw["ticker"]))
+        for name in ("update_discovery_scores", "update_seed_scores"):
+            monkeypatch.setattr(sc, name, lambda *a, **k: None)
+        monkeypatch.setattr(sc, "retire_assets", lambda t: None)
+        monkeypatch.setattr(sc, "record_discovery_run", lambda **kw: None)
+        run = DiscoveryRun(
+            sources=[Fixed()],
+            funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
+            classifier=ClassificationChain(classifiers=[PinnedClassifier(pins)], refiners=[]),
+            seed_scorer=self.a_seed_scorer(),
+        )
+        summary = run.execute()
+        finance = summary["universes"]["Finance"]
+        assert finance["new_entrants"] == ["NEWB"]
+        assert finance["seeds_seen"] == 1
+        assert upserts == ["NEWB"]
+
     def test_a_seed_scoring_failure_does_not_fail_the_pass(self, monkeypatch):
         class Broken(ad.SeedScorer):
             def score_all(self, *a, **k):

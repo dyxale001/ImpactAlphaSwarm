@@ -1251,6 +1251,14 @@ class DiscoveryRun:
 
         pool_rows = get_discovery_pool_rows(UNIVERSES)
         max_watchlist_by_universe: dict[str, int] = {}
+        # Seeds have their own scoring step below and are never written as discovered
+        # rows (the upsert skips them). Left in hysteresis, a trending seed took one of
+        # the nightly new-name places and was then skipped: on 2026-10-03 Finance and
+        # Healthcare admitted no new name at all, every place gone to JPM, LLY and the
+        # like. Every seed is excluded, switched off or not.
+        seed_tickers = {
+            r["ticker"] for r in pool_rows if r.get("origin") == "seed" and r.get("ticker")
+        }
         incumbents_by_universe: dict[str, list[dict]] = {u: [] for u in UNIVERSES}
         for row in pool_rows:
             if row.get("origin") == "discovered" and row.get("universe") in incumbents_by_universe:
@@ -1279,7 +1287,9 @@ class DiscoveryRun:
             max_watchlist_by_universe[universe] = max_watchlist
             for cand in cands:
                 cand.score = self.scorer.score(cand, max_watchlist)
-            fresh_scores = {c.ticker: c.score for c in cands}
+            # A trending seed still sets the busiest-name ceiling above, so discovered
+            # scores are unchanged; it just does not compete for a new-name place.
+            fresh_scores = {c.ticker: c.score for c in cands if c.ticker not in seed_tickers}
             cand_by_ticker = {c.ticker: c for c in cands}
 
             plan = self.hysteresis.plan(incumbents_by_universe[universe], fresh_scores, now)
@@ -1305,6 +1315,7 @@ class DiscoveryRun:
 
             summary["universes"][universe] = {
                 "candidates": len(cands),
+                "seeds_seen": sum(1 for c in cands if c.ticker in seed_tickers),
                 "new_entrants": plan.new_entrants,
                 "refreshed": len(plan.refreshed),
                 "decayed": len(plan.score_updates) if surveyed else 0,
