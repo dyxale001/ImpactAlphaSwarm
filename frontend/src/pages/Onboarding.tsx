@@ -9,6 +9,7 @@ import { FUNDS_ENABLED } from '../utils/fundsFlags'
 import InvestorProfileCard from '../components/InvestorProfileCard'
 import { describeGoals } from '../utils/goals'
 import { useAuthStore } from '../store/authStore'
+import { sectorColour } from '../utils/sectorColours'
 
 // ─── Display maps ──────────────────────────────────────────────────────────
 
@@ -20,15 +21,6 @@ const PATH_ICONS: Record<string, React.ElementType> = {
   value_hunter:   Search,
 }
 
-// Sector accent dot per universe option
-const SECTOR_DOT: Record<string, string> = {
-  'Technology':    'bg-sector-technology',
-  'Green Energy':  'bg-sector-green-energy',
-  'Finance':       'bg-sector-finance',
-  'AI & Robotics': 'bg-sector-ai-robotics',
-  'Healthcare':    'bg-sector-healthcare',
-  'Media & Communications': 'bg-sector-media-communications',
-}
 
 // The asset cards' sector label is 8px caps in a narrow card, so long names shorten
 const SECTOR_SHORT: Record<string, string> = {
@@ -280,7 +272,7 @@ export default function Onboarding() {
                       }`}
                     >
                       <div className="mb-2 flex items-center gap-[5px]">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTOR_DOT[asset.sector] ?? 'bg-sector-technology'}`} />
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${sectorColour(asset.sector).fill}`} />
                         <span className="truncate text-[8px] font-bold uppercase tracking-[0.08em] text-muted">
                           {SECTOR_SHORT[asset.sector] ?? asset.sector}
                         </span>
@@ -406,7 +398,9 @@ export default function Onboarding() {
                             : 'border-forest-900/14 bg-white text-muted'
                         }`}
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${SECTOR_DOT[item] ?? 'bg-sector-technology'}`} />
+                        {/* The selected chip is dark forest, the same as the darker sector
+                            colours, so the dot gets a light ring to stay visible on it. */}
+                        <span className={`h-1.5 w-1.5 rounded-full ${sectorColour(item).fill} ${selected ? 'ring-1 ring-white/80' : ''}`} />
                         {item}
                       </button>
                     )

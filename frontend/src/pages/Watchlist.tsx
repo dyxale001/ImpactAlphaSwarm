@@ -15,15 +15,8 @@ import WatchedAssetCard from "../components/watchlist/WatchedAssetCard";
 import TopPickRow from "../components/watchlist/TopPickRow";
 import WatchlistSkeleton from "../components/watchlist/WatchlistSkeleton";
 import RadarMotif from "../components/watchlist/RadarMotif";
+import { SECTOR_COLOURS } from "../utils/sectorColours";
 
-const SECTOR_DOT: Record<string, string> = {
-  Technology: "bg-blue-400",
-  "Green Energy": "bg-green-400",
-  Finance: "bg-amber-400",
-  "AI & Robotics": "bg-purple-400",
-  Healthcare: "bg-pink-400",
-  "Media & Communications": "bg-orange-400",
-};
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function WatchlistPage() {
@@ -224,9 +217,9 @@ export default function WatchlistPage() {
                           : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
                       }`}
                     >
-                      {sector !== "All" && SECTOR_DOT[sector] && (
+                      {sector !== "All" && SECTOR_COLOURS[sector] && (
                         <span
-                          className={`w-1.5 h-1.5 rounded-full ${SECTOR_DOT[sector]}`}
+                          className={`w-1.5 h-1.5 rounded-full ${SECTOR_COLOURS[sector].fill}`}
                         />
                       )}
                       {sector}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { sectorColour } from '../../utils/sectorColours'
 
 interface BrowseAsset {
   id: string
@@ -17,14 +18,6 @@ interface Props {
   watchlistIdByAssetId: Record<string, string>
 }
 
-const SECTOR_STYLE: Record<string, { dot: string; text: string; activeBg: string; activeBorder: string }> = {
-  'Technology':    { dot: 'bg-blue-400',   text: 'text-blue-400',   activeBg: 'bg-blue-400/10',   activeBorder: 'border-blue-400/50' },
-  'Green Energy':  { dot: 'bg-green-400',  text: 'text-green-400',  activeBg: 'bg-green-400/10',  activeBorder: 'border-green-400/50' },
-  'Finance':       { dot: 'bg-amber-400',  text: 'text-amber-400',  activeBg: 'bg-amber-400/10',  activeBorder: 'border-amber-400/50' },
-  'AI & Robotics': { dot: 'bg-purple-400', text: 'text-purple-400', activeBg: 'bg-purple-400/10', activeBorder: 'border-purple-400/50' },
-  'Healthcare':    { dot: 'bg-pink-400',   text: 'text-pink-400',   activeBg: 'bg-pink-400/10',   activeBorder: 'border-pink-400/50' },
-  'Media & Communications': { dot: 'bg-orange-400', text: 'text-orange-400', activeBg: 'bg-orange-400/10', activeBorder: 'border-orange-400/50' },
-}
 
 const UNIVERSE_ORDER = ['Technology', 'AI & Robotics', 'Media & Communications', 'Finance', 'Green Energy', 'Healthcare']
 
@@ -50,7 +43,7 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
   }, {})
 
   const sectorAssets = grouped[activeSector] || []
-  const sc = SECTOR_STYLE[activeSector] ?? { dot: 'bg-brand-border', text: 'text-brand-muted-fg', activeBg: '', activeBorder: 'border-brand-border' }
+  const sc = sectorColour(activeSector)
 
   const handleClick = (asset: BrowseAsset) => {
     const isWatched = watchedAssetIds.includes(asset.id)
@@ -88,7 +81,7 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
           {/* Sector tab row */}
           <div className="flex gap-1.5 px-5 pt-4 pb-3 overflow-x-auto">
             {Object.keys(grouped).map(sector => {
-              const s = SECTOR_STYLE[sector]
+              const s = sectorColour(sector)
               const active = activeSector === sector
               const count = grouped[sector].filter(a => watchedAssetIds.includes(a.id)).length
               return (
@@ -96,15 +89,15 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
                   key={sector}
                   onClick={() => setActiveSector(sector)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ${
-                    active && s
-                      ? `${s.activeBg} ${s.activeBorder} ${s.text}`
+                    active
+                      ? `${s.tint} ${s.border} text-brand-fg`
                       : 'border-brand-border/40 text-brand-muted-fg hover:border-brand-border/70 hover:text-brand-fg'
                   }`}
                 >
-                  {s && <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />}
+                  <span className={`w-1.5 h-1.5 rounded-full ${s.fill}`} />
                   {sector}
                   {count > 0 && (
-                    <span className={`text-[9px] font-bold ${active && s ? s.text : 'text-brand-muted-fg'}`}>
+                    <span className={`text-[9px] font-bold ${active ? 'text-brand-fg' : 'text-brand-muted-fg'}`}>
                       {count}
                     </span>
                   )}
@@ -131,7 +124,7 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
                     title={isWatched ? `Remove ${asset.ticker}` : `Add ${asset.ticker}`}
                     className={`relative flex flex-col items-start p-2.5 rounded-xl border transition-all duration-150 text-left active:scale-95 focus:outline-none ${
                       isWatched
-                        ? `${sc.activeBorder} ${sc.activeBg}`
+                        ? `${sc.border} ${sc.tint}`
                         : 'border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/50'
                     }`}
                   >
@@ -145,7 +138,7 @@ export default function WatchlistBrowser({ watchedAssetIds, onAdd, onRemove, wat
                       }
                     </span>
 
-                    <p className={`text-sm font-black font-mono leading-none tracking-tight pr-5 ${isWatched ? sc.text : 'text-brand-fg'}`}>
+                    <p className={`text-sm font-black font-mono leading-none tracking-tight pr-5 text-brand-fg`}>
                       {asset.ticker}
                     </p>
                     <p className="text-[9px] text-brand-muted-fg mt-1 leading-tight line-clamp-2 pr-1">

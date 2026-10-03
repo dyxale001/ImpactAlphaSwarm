@@ -10,16 +10,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, X } from 'lucide-react'
 import { type WatchlistAsset } from '../../hooks/useWatchlistData'
 
-// ─── Sector styles ─────────────────────────────────────────────────────────
-const SECTOR_STYLE: Record<string, { text: string; dot: string }> = {
-  'Technology':    { text: 'text-blue-400',   dot: 'bg-blue-400' },
-  'Green Energy':  { text: 'text-green-400',  dot: 'bg-green-400' },
-  'Finance':       { text: 'text-amber-400',  dot: 'bg-amber-400' },
-  'AI & Robotics': { text: 'text-purple-400', dot: 'bg-purple-400' },
-  'Healthcare':    { text: 'text-pink-400',   dot: 'bg-pink-400' },
-  'Media & Communications': { text: 'text-orange-400', dot: 'bg-orange-400' },
-}
-const DEFAULT_SECTOR = { text: 'text-brand-muted-fg', dot: 'bg-brand-border' }
+import { sectorColour } from '../../utils/sectorColours'
 
 // ─── Sparkline with real yfinance data ─────────────────────────────────────
 function Sparkline({ ticker }: { ticker: string }) {
@@ -72,7 +63,7 @@ interface Props {
 }
 
 export default function WatchedAssetCard({ asset, onRemove, isRemoving }: Props) {
-  const sc = SECTOR_STYLE[asset.universe] ?? DEFAULT_SECTOR
+  const sc = sectorColour(asset.universe)
 
   return (
     <div
@@ -93,8 +84,8 @@ export default function WatchedAssetCard({ asset, onRemove, isRemoving }: Props)
 
         <div className="flex items-center gap-1.5 shrink-0">
           {asset.universe && (
-            <div className={`flex items-center gap-1 chip bg-brand-border/20 ${sc.text} text-[10px] min-w-0`}>
-              <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${sc.dot}`} />
+            <div className="flex items-center gap-1 chip bg-brand-border/20 text-brand-fg text-[10px] min-w-0">
+              <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${sc.fill}`} />
               <span className="truncate max-w-[7rem]">{asset.universe}</span>
             </div>
           )}

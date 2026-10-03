@@ -61,14 +61,17 @@
   --color-gain: #22c55e;
   --color-loss: #ef4444;
 
-  /* Sector accent dots (asset pickers, sector chips) */
-  --color-sector-technology: #60a5fa;
-  --color-sector-green-energy: #4ade80;
-  --color-sector-finance: #fbbf24;
-  --color-sector-ai-robotics: #c084fc;
-  --color-sector-ai-robotics-strong: #8b5cf6;
-  --color-sector-healthcare: #f472b6;
-  --color-sector-media-communications: #fb923c;
+  /* Sector colours (Settings run split, watchlist, onboarding), one per sector and
+     all from the forest and lime ramps. Forest steps 900, 600, 400 and 200 and the
+     two limes are spaced so any two sectors stay apart side by side. Mapped to
+     classes in utils/sectorColours.ts. The pale ones are fills only, never text. */
+  --color-sector-technology: var(--color-forest-900);
+  --color-sector-green-energy: var(--color-lime-500);
+  --color-sector-finance: var(--color-forest-400);
+  --color-sector-ai-robotics: var(--color-lime-700);
+  --color-sector-ai-robotics-strong: var(--color-forest-700);
+  --color-sector-healthcare: var(--color-forest-200);
+  --color-sector-media-communications: var(--color-forest-600);
 
   /* Semantic surface tokens */
   --bg-page: var(--color-neutral-100);
