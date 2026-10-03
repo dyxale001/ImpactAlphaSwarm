@@ -900,6 +900,142 @@ class TestPoolReclassifier:
         assert plan.by_target() == {"AI & Robotics": ["A", "B", "C"]}
 
 
+class CountingFinnhub(FakeFinnhub):
+    def __init__(self, news=None):
+        super().__init__(news=news)
+        self.news_calls = []
+
+    def trusted_news_count(self, ticker, now=None):
+        self.news_calls.append(ticker)
+        return super().trusted_news_count(ticker, now)
+
+
+def a_seed_row(ticker, universe="Technology", is_active=True):
+    return {"ticker": ticker, "universe": universe, "origin": "seed", "is_active": is_active}
+
+
+class TestSeedScorer:
+    def scorer(self, finnhub=None, liquidity=None, sleeps=None):
+        return ad.SeedScorer(
+            finnhub=finnhub or CountingFinnhub(),
+            liquidity=liquidity or FakeLiquidity(),
+            pause=1.0,
+            sleep=(sleeps.append if sleeps is not None else (lambda s: None)),
+        )
+
+    def test_a_seed_is_scored_by_the_discovered_formula(self):
+        finnhub = CountingFinnhub(news={"AAPL": 10})
+        seeds = self.scorer(finnhub, FakeLiquidity({"AAPL": 5e8})).score_all(
+            [a_seed_row("AAPL")], CandidatePool(), {}, {}, NOW
+        )
+        # No trending, full news (0.3) and full liquidity (0.2).
+        assert {t: c.score for t, c in seeds.items()} == {"AAPL": 0.5}
+        assert seeds["AAPL"].dollar_volume == 5e8  # kept for the tie-break
+
+    def test_a_seed_the_funnel_measured_costs_no_call(self):
+        finnhub = CountingFinnhub()
+        measured = {"AAPL": a_candidate("AAPL", watchlist_count=50, news_count=10, dollar_volume=5e8)}
+        scores = self.scorer(finnhub).score_all(
+            [a_seed_row("AAPL")], CandidatePool(), measured, {"Technology": 100}, NOW
+        )
+        assert finnhub.news_calls == []
+        assert scores["AAPL"].score == round(0.5 * 0.5 + 0.3 + 0.2, 6)
+
+    def test_reusing_a_measured_seed_leaves_the_funnels_candidate_alone(self):
+        funnel_cand = a_candidate("AAPL", watchlist_count=50, news_count=10, dollar_volume=5e8)
+        funnel_cand.score = 0.9
+        self.scorer().score_all(
+            [a_seed_row("AAPL")], CandidatePool(), {"AAPL": funnel_cand}, {"Technology": 100}, NOW
+        )
+        assert funnel_cand.score == 0.9
+
+    def test_an_unmeasured_seed_keeps_its_trending_count(self):
+        pool = CandidatePool()
+        pool.add("AAPL", "stocktwits_trending", 100)  # trended, then failed a gate
+        scores = self.scorer(CountingFinnhub(news={"AAPL": 0}), FakeLiquidity({"AAPL": None})).score_all(
+            [a_seed_row("AAPL")], pool, {}, {"Technology": 200}, NOW
+        )
+        assert scores["AAPL"].score == 0.25  # 0.5 * 100/200
+
+    def test_a_seed_busier_than_its_universe_sets_the_ceiling(self):
+        measured = {"AAPL": a_candidate("AAPL", watchlist_count=300, news_count=0)}
+        scores = self.scorer().score_all(
+            [a_seed_row("AAPL")], CandidatePool(), measured, {"Technology": 100}, NOW
+        )
+        assert scores["AAPL"].score == 0.5  # trend term capped at 1.0, never above
+
+    def test_an_etf_seed_is_scored_rather_than_gated_out(self):
+        # The gates would reject ICLN as not common stock; seeds never meet them.
+        scores = self.scorer().score_all(
+            [a_seed_row("ICLN", universe="Green Energy")], CandidatePool(), {}, {}, NOW
+        )
+        assert "ICLN" in scores
+
+    def test_fetches_are_spaced_but_the_first_is_not_delayed(self):
+        sleeps = []
+        rows = [a_seed_row(t) for t in ("AAA", "BBB", "CCC")]
+        measured = {"BBB": a_candidate("BBB")}
+        self.scorer(sleeps=sleeps).score_all(rows, CandidatePool(), measured, {}, NOW)
+        assert sleeps == [1.0]  # AAA fetched, BBB reused, CCC fetched after a pause
+
+    def test_only_active_seeds_in_a_known_universe_are_scored(self):
+        rows = [
+            a_seed_row("AAPL"),
+            a_seed_row("ARKQ", universe="AI & Robotics", is_active=False),
+            a_seed_row("OLD", universe="Real Estate"),
+            {"ticker": "DISC", "universe": "Technology", "origin": "discovered", "is_active": True},
+        ]
+        assert [r["ticker"] for r in ad.SeedScorer.active_seeds(rows)] == ["AAPL"]
+
+
+class TestExecuteScoresSeeds:
+    """The nightly pass end to end, with the database and network faked."""
+
+    def run(self, monkeypatch, pool_rows, seed_scorer, dry_run=False):
+        import src.utils.supabase_client as sc
+
+        written = {"seed": [], "discovered": []}
+        monkeypatch.setattr(sc, "get_discovery_pool_rows", lambda u: pool_rows)
+        monkeypatch.setattr(sc, "upsert_discovered_asset", lambda **kw: {"status": "ok"})
+        monkeypatch.setattr(sc, "update_discovery_scores", lambda s: written["discovered"].append(s))
+        monkeypatch.setattr(sc, "retire_assets", lambda t: None)
+        monkeypatch.setattr(sc, "record_discovery_run", lambda **kw: None)
+        monkeypatch.setattr(
+            sc, "update_seed_scores", lambda s, v=None: written["seed"].append((s, v))
+        )
+        run = DiscoveryRun(
+            sources=[],
+            funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
+            classifier=ClassificationChain(classifiers=[]),
+            seed_scorer=seed_scorer,
+        )
+        return run.execute(dry_run=dry_run), written
+
+    def a_seed_scorer(self):
+        return ad.SeedScorer(finnhub=FakeFinnhub(), liquidity=FakeLiquidity(), sleep=lambda s: None)
+
+    def test_seed_scores_are_written_through_the_seed_only_write(self, monkeypatch):
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer())
+        assert summary["seeds_scored"] == 1
+        scores, volumes = written["seed"][0]
+        assert list(scores) == ["AAPL"] and volumes == {"AAPL": 5e8}
+        assert written["discovered"] == []
+
+    def test_a_dry_run_writes_no_seed_scores_but_reports_them(self, monkeypatch):
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(), dry_run=True)
+        assert written["seed"] == []
+        assert "AAPL" in summary["seed_scores"]
+
+    def test_a_seed_scoring_failure_does_not_fail_the_pass(self, monkeypatch):
+        class Broken(ad.SeedScorer):
+            def score_all(self, *a, **k):
+                raise RuntimeError("finnhub down")
+
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], Broken())
+        assert summary["seeds_scored"] == 0 and written["seed"] == []
+        assert "total_candidates" in summary  # the rest of the pass completed
+
+
 class TestPinnedClassifier:
     def test_pinned_names_are_placed_and_others_left_alone(self):
         out = PinnedClassifier({"NVDA": "AI & Robotics"}).classify(

@@ -110,6 +110,52 @@ class TestRankUniverse:
         rows = [discovered("BENCH", quarantined_until="2026-12-01T00:00:00Z"), seed("AAA")]
         assert TickerScoper().rank_universe(rows, NOW) == ["AAA"]
 
+    def test_a_scored_seed_ranks_by_its_own_score(self):
+        # AAPL scored 0.5 tonight, so it beats a discovered name at 0.37.
+        rows = [seed("AAPL", discovery_score=0.5), discovered("DISC", score=0.37)]
+        assert TickerScoper().rank_universe(rows, NOW) == ["AAPL", "DISC"]
+
+    def test_a_weak_scored_seed_falls_below_stronger_discovered_names(self):
+        rows = [seed("TAN", discovery_score=0.01), discovered("DISC", score=0.2)]
+        assert TickerScoper().rank_universe(rows, NOW) == ["DISC", "TAN"]
+
+    def test_an_unscored_seed_falls_back_to_the_baseline(self):
+        rows = [seed("NEW"), discovered("DISC", score=0.2)]
+        scoper = TickerScoper(seed_baseline=0.3)
+        assert scoper.rank_universe(rows, NOW) == ["NEW", "DISC"]
+
+    def test_a_seed_scored_zero_is_zero_not_the_baseline(self):
+        rows = [seed("ZERO", discovery_score=0.0), discovered("DISC", score=0.1)]
+        assert TickerScoper(seed_baseline=0.3).rank_universe(rows, NOW) == ["DISC", "ZERO"]
+
+    def test_equal_scores_break_on_trading_volume_not_the_alphabet(self):
+        # MSFT and CIEN both cap out at 0.50; MSFT trades far more, so it ranks first.
+        rows = [
+            seed("CIEN", discovery_score=0.5, avg_dollar_volume=4e8),
+            seed("MSFT", discovery_score=0.5, avg_dollar_volume=1.2e10),
+        ]
+        assert TickerScoper().rank_universe(rows, NOW) == ["MSFT", "CIEN"]
+
+    def test_volume_only_breaks_ties_and_never_beats_a_higher_score(self):
+        rows = [
+            seed("MSFT", discovery_score=0.5, avg_dollar_volume=1.2e10),
+            discovered("HOT", score=0.8, avg_dollar_volume=1e8),
+        ]
+        assert TickerScoper().rank_universe(rows, NOW) == ["HOT", "MSFT"]
+
+    def test_an_unmeasured_volume_sorts_after_a_measured_one(self):
+        rows = [discovered("AAA", score=0.5), discovered("ZZZ", score=0.5, avg_dollar_volume=1e6)]
+        assert TickerScoper().rank_universe(rows, NOW) == ["ZZZ", "AAA"]
+
+    def test_equal_score_and_volume_still_break_on_ticker(self):
+        rows = [discovered("BBB", score=0.5), discovered("AAA", score=0.5)]
+        assert TickerScoper().rank_universe(rows, NOW) == ["AAA", "BBB"]
+
+    def test_the_tie_break_decides_who_makes_the_cap(self):
+        rows = [seed(f"S{i:02d}", discovery_score=0.5, avg_dollar_volume=float(i)) for i in range(20)]
+        top = TickerScoper(pool_size=15).rank_universe(rows, NOW)
+        assert top[0] == "S19" and "S00" not in top
+
     def test_a_switched_off_seed_is_excluded(self):
         # Discovery never deactivates a seed, so is_active=False on one is a person
         # removing a curated pick, and the run must agree with the universe card,

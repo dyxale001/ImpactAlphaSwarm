@@ -445,8 +445,8 @@ MAX_SCOPED_TICKERS = int(os.getenv("MAX_SCOPED_TICKERS", "30"))
 DISCOVERY_ENABLED = os.getenv("DISCOVERY_ENABLED", "false").lower() == "true"
 DISCOVERY_SHADOW_MODE = os.getenv("DISCOVERY_SHADOW_MODE", "true").lower() == "true"
 DISCOVERY_POOL_SIZE = int(os.getenv("DISCOVERY_POOL_SIZE", "15"))
-# Fixed score seeds carry in the union ranking; discovered names (score > this)
-# outrank seeds, so seeds fill only the shortfall to DISCOVERY_POOL_SIZE.
+# Score a seed carries in the union ranking until discovery has scored it once;
+# after that a seed ranks by its own nightly score, like a discovered name.
 DISCOVERY_SEED_BASELINE_SCORE = float(os.getenv("DISCOVERY_SEED_BASELINE_SCORE", "0.0"))
 
 # Unified ranking v2 switches (see UNIFIED_SCORING_PLAN.md / D-087). Off by
@@ -516,10 +516,16 @@ class TickerScoper:
     def rank_universe(self, rows: list[dict], now: datetime) -> list[str]:
         """Rank one universe's candidate rows into its top-``DISCOVERY_POOL_SIZE``.
 
-        Seeds are eligible at the fixed baseline score unless a person has switched
-        them off; discovered rows must be active and not currently quarantined. Ties break on ticker so the order
-        is deterministic run-to-run (keeps the cap and quant crowd stable)."""
-        scored: list[tuple[float, str]] = []
+        Seeds are eligible unless a person has switched them off, at the score
+        discovery gave them last night, or at the fixed baseline if they have never
+        been scored; discovered rows must be active and not currently quarantined.
+
+        Equal scores are common: a name that is not trending tops out at 0.50, and
+        every mega cap reaches it. Those ties break on average dollar volume, so MSFT
+        is not dropped for sorting after CIEN, and only then on ticker, which keeps
+        the order deterministic run to run (the cap and quant crowd stay stable). A
+        row with no measured volume sorts after those that have one."""
+        scored: list[tuple[float, float, str]] = []
         for row in rows:
             ticker = row.get("ticker")
             if not ticker:
@@ -530,7 +536,10 @@ class TickerScoper:
                 # the pool. A missing flag keeps the seed eligible.
                 if row.get("is_active") is False:
                     continue
-                score = self.seed_baseline
+                # Discovery scores seeds nightly by the same formula as discovered
+                # names. The baseline only covers a seed it has never scored.
+                raw = row.get("discovery_score")
+                score = float(raw) if raw is not None else self.seed_baseline
             else:
                 if not row.get("is_active"):
                     continue
@@ -538,9 +547,10 @@ class TickerScoper:
                     continue
                 raw = row.get("discovery_score")
                 score = float(raw) if raw is not None else 0.0
-            scored.append((score, ticker))
-        scored.sort(key=lambda pair: (-pair[0], pair[1]))
-        return [ticker for _, ticker in scored[:self.pool_size]]
+            volume = row.get("avg_dollar_volume")
+            scored.append((score, float(volume) if volume is not None else 0.0, ticker))
+        scored.sort(key=lambda entry: (-entry[0], -entry[1], entry[2]))
+        return [ticker for _, _, ticker in scored[:self.pool_size]]
 
     def select_from_pool(
         self,

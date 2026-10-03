@@ -881,7 +881,9 @@ class NewsCacheRepository(Repository):
 
 # Columns the ranked read (scope_tickers) needs; selection/quarantine policy is
 # applied by the caller so it stays in one testable place.
-DISCOVERY_POOL_COLUMNS = "ticker,universe,origin,is_active,discovery_score,quarantined_until"
+DISCOVERY_POOL_COLUMNS = (
+    "ticker,universe,origin,is_active,discovery_score,quarantined_until,avg_dollar_volume"
+)
 
 
 class DiscoveryRepository(Repository):
@@ -893,8 +895,10 @@ class DiscoveryRepository(Repository):
       * Seed rows (origin='seed') are never rescored, retired, quarantined or
         reclassified by discovery — every discovery write below is guarded on
         origin='discovered' so a curated seed passed in by mistake is harmlessly
-        ignored. The one exception is ``correct_seed``, a person's edit to the
-        curated list, run only from scripts/reclassify_pool.py --include-seeds.
+        ignored. Two writes are the exception: ``correct_seed``, a person's edit to
+        the curated list, run only from scripts/reclassify_pool.py --include-seeds;
+        and ``update_seed_scores``, which records a seed's nightly score and nothing
+        else.
       * Rows are retired/quarantined, never deleted, so ai_recommendation history
         keeps resolving.
     """
@@ -929,6 +933,7 @@ class DiscoveryRepository(Repository):
         sources: List[str],
         market_cap_usd: Optional[float] = None,
         ipo_date: Optional[str] = None,
+        avg_dollar_volume: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Insert or refresh a DISCOVERED asset row (idempotent on ticker).
 
@@ -961,6 +966,8 @@ class DiscoveryRepository(Repository):
                 fields["market_cap_usd"] = market_cap_usd
             if ipo_date is not None:
                 fields["ipo_date"] = ipo_date
+            if avg_dollar_volume is not None:
+                fields["avg_dollar_volume"] = avg_dollar_volume
 
             if existing:
                 if existing[0].get("origin") == "seed":
@@ -993,6 +1000,28 @@ class DiscoveryRepository(Repository):
                 ).eq("origin", "discovered").execute()
             except Exception as e:
                 print(f"Error updating discovery score for {ticker}: {e}")
+
+    def update_seed_scores(
+        self,
+        score_by_ticker: Dict[str, float],
+        volume_by_ticker: Optional[Dict[str, Optional[float]]] = None,
+    ) -> None:
+        """Persist tonight's score for CURATED rows, with the trading volume that
+        breaks ties between equal scores. Writes those two and nothing else, guarded
+        on origin='seed': a seed is ranked by them, but never decayed, retired,
+        quarantined or moved the way a discovered row is. An unmeasured volume
+        leaves the stored one in place rather than blanking it."""
+        volumes = volume_by_ticker or {}
+        for ticker, score in score_by_ticker.items():
+            fields: Dict[str, Any] = {"discovery_score": score}
+            if volumes.get(ticker) is not None:
+                fields["avg_dollar_volume"] = volumes[ticker]
+            try:
+                self.table().update(fields).eq(
+                    "ticker", ticker
+                ).eq("origin", "seed").execute()
+            except Exception as e:
+                print(f"Error updating seed score for {ticker}: {e}")
 
     def retire(self, tickers: List[str], reason: str = "decayed_out") -> None:
         """Soft-retire DISCOVERED rows (is_active=false) — the decay floor. Never
@@ -1291,14 +1320,23 @@ def upsert_discovered_asset(
     sources: List[str],
     market_cap_usd: Optional[float] = None,
     ipo_date: Optional[str] = None,
+    avg_dollar_volume: Optional[float] = None,
 ) -> Dict[str, Any]:
     return _discovery.upsert_discovered(
-        ticker, name, universe, discovery_score, sources, market_cap_usd, ipo_date
+        ticker, name, universe, discovery_score, sources, market_cap_usd, ipo_date,
+        avg_dollar_volume,
     )
 
 
 def update_discovery_scores(score_by_ticker: Dict[str, float]) -> None:
     _discovery.update_scores(score_by_ticker)
+
+
+def update_seed_scores(
+    score_by_ticker: Dict[str, float],
+    volume_by_ticker: Optional[Dict[str, Optional[float]]] = None,
+) -> None:
+    _discovery.update_seed_scores(score_by_ticker, volume_by_ticker)
 
 
 def retire_assets(tickers: List[str], reason: str = "decayed_out") -> None:

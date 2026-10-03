@@ -9,7 +9,8 @@ Pipeline (all wrapped so any stage failing degrades to the previous pool):
   2. Validation funnel      — real US common stock, seasoned, big, liquid, covered
   3. Universe classification — pins, static industry map, Groq for the residue,
                                then a Groq pass splitting AI & Robotics out of Technology
-  4. Scoring + hysteresis    — stable pools, capped churn, decay, quarantine
+  4. Scoring + hysteresis    — stable pools, capped churn, decay, quarantine;
+                               curated seeds are scored by the same formula, never decayed
 
 Only Stage 4's persistence touches the DB, and only when ``dry_run`` is False;
 everything upstream is pure computation over injected data, so the ``--dry-run``
@@ -57,8 +58,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -1061,6 +1063,88 @@ class HysteresisPolicy:
         return plan
 
 
+class SeedScorer:
+    """Gives every active curated seed tonight's score, by the formula discovered
+    names get.
+
+    Seeds used to be ranked at a fixed baseline, so "not scored by discovery" read
+    as "a weak candidate": AAPL, MSFT and AMZN sat below the 15th discovered
+    Technology name and never reached a run. Scoring them on the same trending,
+    news and liquidity terms lets a strong seed rise and a weak one fall on merit.
+
+    Seeds skip the gates. Those decide whether a new name gets in, and a curated
+    name is already in; an ETF seed would fail the common-stock gate and lose its
+    score for a reason that says nothing about its strength. A seed the funnel
+    already measured tonight reuses those facts. Any other costs one Finnhub news
+    call and one yfinance call, spaced so this pass alone stays under Finnhub's
+    per-minute limit, because a refused call reads as zero news, not as an error.
+
+    Scoring is all this does. It never decays, retires, quarantines or moves a seed.
+    """
+
+    PAUSE_SECONDS = 1.0
+
+    def __init__(
+        self,
+        finnhub: FinnhubClient | None = None,
+        liquidity: LiquiditySource | None = None,
+        scorer: DiscoveryScorer | None = None,
+        pause: float | None = None,
+        sleep=None,
+    ):
+        self.finnhub = finnhub or FinnhubClient()
+        self.liquidity = liquidity or LiquiditySource()
+        self.scorer = scorer or DiscoveryScorer()
+        self.pause = self.PAUSE_SECONDS if pause is None else pause
+        self._sleep = sleep or time.sleep
+
+    @staticmethod
+    def active_seeds(pool_rows: list[dict]) -> list[dict]:
+        """Seeds in a known universe that a person has not switched off."""
+        return [
+            r for r in pool_rows
+            if r.get("origin") == "seed" and r.get("ticker")
+            and r.get("universe") in UNIVERSES and r.get("is_active") is not False
+        ]
+
+    def score_all(
+        self,
+        seed_rows: list[dict],
+        pool: CandidatePool,
+        measured: dict[str, Candidate],
+        max_watchlist_by_universe: dict[str, int],
+        now: datetime,
+    ) -> dict[str, Candidate]:
+        """ticker -> the seed as measured tonight, ``score`` set. ``measured`` holds
+        the candidates whose news and liquidity the funnel already fetched (its
+        survivors). The candidate is returned whole because its ``dollar_volume`` is
+        stored too: it breaks ties between equal scores in the run's ranking."""
+        scored: dict[str, Candidate] = {}
+        fetched = 0
+        for row in sorted(seed_rows, key=lambda r: r["ticker"]):
+            ticker = row["ticker"]
+            cand = measured.get(ticker)
+            if cand is not None:
+                cand = replace(cand)  # a copy: the funnel's candidate keeps its own score
+            else:
+                if fetched and self.pause:
+                    self._sleep(self.pause)
+                cand = Candidate(
+                    ticker=ticker,
+                    watchlist_count=pool.candidates[ticker].watchlist_count
+                    if ticker in pool.candidates else 0,
+                    news_count=self.finnhub.trusted_news_count(ticker, now),
+                    dollar_volume=self.liquidity.avg_dollar_volume(ticker),
+                )
+                fetched += 1
+            # The trending term is relative to the busiest name in the seed's own
+            # universe tonight; a seed busier than every candidate there sets the max.
+            ceiling = max(max_watchlist_by_universe.get(row["universe"], 0), cand.watchlist_count)
+            cand.score = self.scorer.score(cand, ceiling)
+            scored[ticker] = cand
+        return scored
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Orchestration
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1080,12 +1164,16 @@ class DiscoveryRun:
         classifier: ClassificationChain | None = None,
         scorer: DiscoveryScorer | None = None,
         hysteresis: HysteresisPolicy | None = None,
+        seed_scorer: SeedScorer | None = None,
     ):
         self.sources = sources if sources is not None else SourceFactory.from_config()
         self.funnel = funnel or ValidationFunnel()
         self.classifier = classifier or ClassificationChain()
         self.scorer = scorer or DiscoveryScorer()
         self.hysteresis = hysteresis or HysteresisPolicy()
+        self.seed_scorer = seed_scorer or SeedScorer(
+            finnhub=self.funnel.finnhub, scorer=self.scorer
+        )
 
     def gather(self) -> CandidatePool:
         """Stage 1: merge every source into a deduped pool, recording provenance."""
@@ -1158,9 +1246,11 @@ class DiscoveryRun:
             update_discovery_scores,
             retire_assets,
             record_discovery_run,
+            update_seed_scores,
         )
 
         pool_rows = get_discovery_pool_rows(UNIVERSES)
+        max_watchlist_by_universe: dict[str, int] = {}
         incumbents_by_universe: dict[str, list[dict]] = {u: [] for u in UNIVERSES}
         for row in pool_rows:
             if row.get("origin") == "discovered" and row.get("universe") in incumbents_by_universe:
@@ -1186,6 +1276,7 @@ class DiscoveryRun:
                 )
 
             max_watchlist = max((c.watchlist_count for c in cands), default=0)
+            max_watchlist_by_universe[universe] = max_watchlist
             for cand in cands:
                 cand.score = self.scorer.score(cand, max_watchlist)
             fresh_scores = {c.ticker: c.score for c in cands}
@@ -1205,6 +1296,7 @@ class DiscoveryRun:
                         sources=c.sources,
                         market_cap_usd=c.market_cap_usd,
                         ipo_date=c.ipo_date,
+                        avg_dollar_volume=c.dollar_volume,
                     )
                 if plan.score_updates and surveyed:
                     update_discovery_scores(plan.score_updates)
@@ -1220,6 +1312,27 @@ class DiscoveryRun:
                 "deferred": len(plan.deferred),
                 **({} if surveyed else {"unsurveyed": "gap_fill_failed"}),
             }
+
+        # Last, and fenced off: a failure here leaves seeds on last night's score (or
+        # the baseline) and must not cost the discovered pool its update.
+        try:
+            seeds = self.seed_scorer.score_all(
+                SeedScorer.active_seeds(pool_rows),
+                pool,
+                {c.ticker: c for c in survivors},
+                max_watchlist_by_universe,
+                now,
+            )
+            seed_scores = {t: c.score for t, c in seeds.items()}
+            if not dry_run:
+                update_seed_scores(seed_scores, {t: c.dollar_volume for t, c in seeds.items()})
+            summary["seeds_scored"] = len(seed_scores)
+            if dry_run:
+                summary["seed_scores"] = seed_scores
+                summary["seed_volumes"] = {t: c.dollar_volume for t, c in seeds.items()}
+        except Exception as exc:
+            logger.warning("Discovery: seed scoring failed, seeds keep their last score: %s", exc)
+            summary["seeds_scored"] = 0
 
         summary["total_candidates"] = len(pool.candidates)
         summary["validated"] = len(survivors)
