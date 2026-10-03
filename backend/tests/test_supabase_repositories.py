@@ -39,6 +39,7 @@ from src.utils.supabase_client import (  # noqa: E402
     Repository,
     SentimentHistoryRepository,
     UserRepository,
+    WatchlistRepository,
 )
 
 
@@ -206,6 +207,62 @@ class TestUserRepository:
 # ═════════════════════════════════════════════════════════════════════════════
 # Assets
 # ═════════════════════════════════════════════════════════════════════════════
+
+class TestWatchlistRepository:
+    """The nightly batch reads each user's watchlist through this. Before it existed
+    the batch passed none, and 76 of 86 watchlist entries were missing from their
+    owners' latest runs on 2026-10-03."""
+
+    def client(self, watchlist, assets):
+        return FakeClient(rows={"user_watchlist_assets": watchlist, "assets": assets})
+
+    def test_linked_rows_resolve_to_their_assets_ticker(self):
+        client = self.client(
+            [{"asset_id": "a1", "ticker": "aapl"}, {"asset_id": "a2", "ticker": None}],
+            [{"id": "a1", "ticker": "AAPL"}, {"id": "a2", "ticker": "MSFT"}],
+        )
+        assert WatchlistRepository(client).tickers("u1") == ["AAPL", "MSFT"]
+
+    def test_the_order_saved_is_kept(self):
+        client = self.client(
+            [{"asset_id": "a2"}, {"asset_id": "a1"}],
+            [{"id": "a1", "ticker": "AAPL"}, {"id": "a2", "ticker": "MSFT"}],
+        )
+        assert WatchlistRepository(client).tickers("u1") == ["MSFT", "AAPL"]
+
+    def test_an_old_unlinked_row_is_kept_when_its_ticker_is_a_known_asset(self):
+        client = self.client(
+            [{"asset_id": None, "ticker": "nvda"}],
+            [{"id": "a9", "ticker": "NVDA"}],
+        )
+        assert WatchlistRepository(client).tickers("u1") == ["NVDA"]
+
+    def test_an_unlinked_row_with_no_asset_is_dropped(self):
+        # The run could not save results for it, so passing it would only cost a fetch.
+        client = self.client([{"asset_id": None, "ticker": "ZZZZ"}], [{"id": "a1", "ticker": "AAPL"}])
+        assert WatchlistRepository(client).tickers("u1") == []
+
+    def test_a_ticker_watched_twice_is_passed_once(self):
+        client = self.client(
+            [{"asset_id": "a1"}, {"asset_id": None, "ticker": "AAPL"}],
+            [{"id": "a1", "ticker": "AAPL"}],
+        )
+        assert WatchlistRepository(client).tickers("u1") == ["AAPL"]
+
+    def test_an_empty_watchlist_costs_no_asset_read(self):
+        client = self.client([], [])
+        assert WatchlistRepository(client).tickers("u1") == []
+        assert client.tables_touched() == ["user_watchlist_assets"]
+
+    def test_a_read_failure_degrades_to_an_empty_watchlist(self):
+        assert WatchlistRepository(FakeClient(raises=True)).tickers("u1") == []
+
+    def test_it_reads_only_that_users_rows(self):
+        client = self.client([], [])
+        WatchlistRepository(client).tickers("u1")
+        query = client.executed[0]
+        assert ("eq", ("user_id", "u1"), {}) in query.calls
+
 
 class TestAssetRepository:
     def test_tickers_are_returned_for_the_given_universes(self):

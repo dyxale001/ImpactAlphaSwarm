@@ -560,26 +560,24 @@ async def refresh_asset_cache(ticker: str):
     }
 
 
-# Yahoo exchange codes for venues that quote in US dollars. Read off live search
-# responses rather than remembered: NASDAQ answers as both NMS and NGM, NYSE as
-# NYQ, its ETF venue as PCX, and the US over-the-counter market as PNK, OQB and
-# OQX. NCM and ASE are the remaining NASDAQ and NYSE American tiers.
+# Yahoo exchange codes for the venues a watchlist may draw from: the NYSE and
+# Nasdaq, and nothing else. Read off live search responses rather than remembered:
+# Nasdaq answers as NMS, NGM and NCM (its three tiers), the NYSE as NYQ, and NYSE
+# American as ASE.
 #
-# Everything else is a foreign listing, and the reason to exclude those is not
-# tidiness. Adding one to a watchlist puts its ticker into the next analysis run,
-# where the quantitative phase would price a rand-cent JSE quote as dollars and
-# the sentiment phase would find no coverage for it. A JSE fund belongs in the
-# funds catalogue, which reads published fact sheets instead of guessing.
+# Narrowed on 2026-10-03 at the product owner's request. Previously the list also
+# held NYSE Arca (PCX, mostly ETFs), Cboe (BTS) and the US over-the-counter market
+# (PNK, OQB, OQX), kept so a name like Naspers (NPSNY) was reachable. Those are
+# out now: a watchlist is for stocks listed on the two main US exchanges, the
+# same venues the discovery agent draws from.
 #
-# US over-the-counter venues are IN deliberately. They are how a name like
-# Naspers is reachable at all, they are quoted in dollars, and a user searching
-# for one and adding it is a deliberate act. That is different from the discovery
-# agent, which excludes over-the-counter names when choosing what to analyse
-# unprompted.
-US_EXCHANGE_CODES = frozenset({"NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "BTS", "PNK", "OQB", "OQX"})
+# Foreign listings were always excluded, and not for tidiness. Adding one puts its
+# ticker into the next analysis run, where the quantitative phase would price a
+# rand-cent JSE quote as dollars and the sentiment phase would find no coverage.
+US_EXCHANGE_CODES = frozenset({"NMS", "NGM", "NCM", "NYQ", "ASE"})
 
-# Instruments we can price and analyse. Crypto, futures and indices are dropped.
-SEARCHABLE_QUOTE_TYPES = frozenset({"EQUITY", "ETF"})
+# Stocks only. ETFs went out with NYSE Arca; crypto, futures and indices never came in.
+SEARCHABLE_QUOTE_TYPES = frozenset({"EQUITY"})
 
 # How many results the search returns.
 SEARCH_RESULT_LIMIT = 6
@@ -4766,7 +4764,11 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
     except Exception as e:
         logger.exception("Whale data refresh failed (serving existing caches): %s", e)
 
-    from src.utils.supabase_client import get_active_user_ids, get_user_preferences
+    from src.utils.supabase_client import (
+        get_active_user_ids,
+        get_user_preferences,
+        get_user_watchlist_tickers,
+    )
     from src.orchestration.langgraph_orchestrator import run_daily_batch
 
     user_ids = get_active_user_ids(DAILY_ACTIVE_DAYS)
@@ -4798,6 +4800,10 @@ async def run_daily(x_daily_run_secret: Optional[str] = Header(None)):
                 "universes": prefs["universes"],
                 "risk_tolerance": prefs["risk_tolerance"],
                 "expertise_level": prefs["expertise_level"],
+                # The interactive run gets the watchlist from the browser; without
+                # this the nightly ran every user with none, and each morning their
+                # followed companies were missing unless they made a sector's top 15.
+                "watchlist": get_user_watchlist_tickers(user_id),
             }
         )
 

@@ -314,6 +314,62 @@ class Repository(ABC):
         return datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
 
+class WatchlistRepository(Repository):
+    """The companies each user has chosen to follow."""
+
+    table_name = "user_watchlist_assets"
+
+    def tickers(self, user_id: str) -> List[str]:
+        """A user's watchlist as tickers the run can analyse and save, oldest first.
+
+        The nightly batch used to pass no watchlist at all, so a followed company
+        was analysed only if it happened to make its sector's top 15, and each
+        night's run replaced the user's results without it. The interactive run
+        already sends the watchlist from the browser; this is the nightly's copy.
+
+        Rows normally link an ``assets`` row, and its ticker is used. Older rows
+        saved before that link was enforced carry only a ticker; those are kept
+        only when an ``assets`` row with that ticker exists, because the run can
+        only save results for a ticker it can resolve to an asset. A read failure
+        returns [] so one bad call costs the watchlist a night, not the user's run.
+        """
+        try:
+            rows = (
+                self.table()
+                .select("asset_id,ticker,created_at")
+                .eq("user_id", user_id)
+                .order("created_at")
+                .execute()
+                .data
+                or []
+            )
+            asset_ids = [r["asset_id"] for r in rows if r.get("asset_id")]
+            by_id: Dict[str, str] = {}
+            if asset_ids:
+                linked = self.table("assets").select("id,ticker").in_("id", asset_ids).execute().data or []
+                by_id = {a["id"]: a["ticker"] for a in linked if a.get("ticker")}
+            bare = sorted({
+                str(r["ticker"]).upper() for r in rows if not r.get("asset_id") and r.get("ticker")
+            })
+            known: set = set()
+            if bare:
+                found = self.table("assets").select("ticker").in_("ticker", bare).execute().data or []
+                known = {a["ticker"] for a in found if a.get("ticker")}
+
+            out: List[str] = []
+            for r in rows:
+                ticker = by_id.get(r.get("asset_id") or "")
+                if ticker is None and not r.get("asset_id") and r.get("ticker"):
+                    candidate = str(r["ticker"]).upper()
+                    ticker = candidate if candidate in known else None
+                if ticker and ticker not in out:
+                    out.append(ticker)
+            return out
+        except Exception as e:
+            print(f"Error fetching watchlist for {user_id}: {e}")
+            return []
+
+
 class UserRepository(Repository):
     """Who the users are and what they asked for."""
 
@@ -1193,6 +1249,7 @@ _marketaux_news = NewsCacheRepository("marketaux_news_cache")
 _finnhub_news = NewsCacheRepository("finnhub_news_cache")
 _discovery = DiscoveryRepository()
 _sentiment_history = SentimentHistoryRepository()
+_watchlists = WatchlistRepository()
 
 
 def fetch_fx_rate_to_zar(currency: str) -> float | None:
@@ -1205,6 +1262,10 @@ def fetch_price_at_run_in_zar(ticker: str) -> float | None:
 
 def get_user_preferences(user_id: str) -> Optional[Dict[str, Any]]:
     return _users.preferences(user_id)
+
+
+def get_user_watchlist_tickers(user_id: str) -> List[str]:
+    return _watchlists.tickers(user_id)
 
 
 def get_active_user_ids(within_days: int = 7) -> List[str]:
