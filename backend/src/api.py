@@ -208,6 +208,19 @@ if FUNDS_ENABLED:
         logger.warning("FUNDS_ENABLED is set but the funds admin did not mount")
 
 
+# Macro / current-affairs news (D-223), behind its own flag. Needs migration 031 and
+# the Jev key (TYPESAFE_API_KEY_OPENROUTER) in the environment before it is switched on.
+from src.macro.config import MACRO_NEWS_ENABLED  # noqa: E402
+
+if MACRO_NEWS_ENABLED:
+    from src.macro.routes import mount_macro_news  # noqa: E402
+
+    if mount_macro_news(app):
+        logger.info("Macro news mounted at /api/macro")
+    else:
+        logger.warning("MACRO_NEWS_ENABLED is set but macro news did not mount")
+
+
 # --- Orphaned-run guard -------------------------------------------------------
 # An interactive analysis runs as a fire-and-forget background task after the API
 # has already returned its run_id. If the container is replaced (deploy, scale-
