@@ -13,6 +13,9 @@ interface ImportMetaEnv {
    *  the page needs the API the backend flag mounts, so setting one without the
    *  other gives either a hidden feature or a page that cannot load. */
   readonly VITE_FUNDS_ENABLED?: string
+  /** "true" shows the Market News page and its nav entry. Pairs with the
+   *  backend's MACRO_NEWS_ENABLED, which mounts the /api/macro it reads. */
+  readonly VITE_MACRO_NEWS_ENABLED?: string
 }
 
 interface ImportMeta {

@@ -15,12 +15,14 @@ import {
   Settings,
   Waves,
   Landmark,
+  Newspaper,
   Sparkles,
   Menu,
   X,
   LogOut,
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
+import { MACRO_NEWS_ENABLED } from "../../utils/macroNewsFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,6 +64,7 @@ export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Stocks", path: "/assets", icon: CandlestickChart },
+    { name: "Market News", path: "/news", icon: Newspaper },
     { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
@@ -84,7 +87,8 @@ export default function AppLayout() {
       // Behind the flag: the entry has to be in both the list above and this
       // allow-list to appear, and the page it links to needs the backend flag
       // as well, so nothing half-appears.
-      (FUNDS_ENABLED && i.name === "Funds")
+      (FUNDS_ENABLED && i.name === "Funds") ||
+      (MACRO_NEWS_ENABLED && i.name === "Market News")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
