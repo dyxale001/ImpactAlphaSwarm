@@ -30,6 +30,8 @@ export interface QuestionOption {
 export interface QuestionSpec {
   id: string;
   question: string;
+  /** A plain-words line under the question, for terms a beginner may not know. */
+  hint?: string;
   options: readonly QuestionOption[];
 }
 
@@ -63,6 +65,9 @@ export default function QuestionBlock({
         <p id={`q-${question.id}`} className="text-sm font-semibold leading-snug text-brand-fg">
           {text}
         </p>
+        {question.hint && (
+          <p className="col-start-2 text-xs leading-snug text-brand-muted-fg">{question.hint}</p>
+        )}
         <div className="col-start-2 mt-1 flex flex-col gap-1.5" role="radiogroup">
           {question.options.map((opt) => {
             const selected = value === opt.value;
@@ -97,7 +102,10 @@ export default function QuestionBlock({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-white p-6 shadow-sm">
-      <p className="text-[15px] font-semibold leading-normal text-forest-900">{question.question}</p>
+      <div className="flex flex-col gap-1">
+        <p className="text-[15px] font-semibold leading-normal text-forest-900">{question.question}</p>
+        {question.hint && <p className="text-xs leading-snug text-muted">{question.hint}</p>}
+      </div>
       <div className="flex flex-col gap-2">
         {question.options.map((opt) => {
           const selected = value === opt.value;

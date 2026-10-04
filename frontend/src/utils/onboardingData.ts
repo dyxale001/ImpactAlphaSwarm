@@ -1,7 +1,7 @@
 
 export const UNIVERSE_OPTIONS = [
-  "Technology", "Green Energy", "Finance", 
-  "AI & Robotics", "Healthcare"
+  "Technology", "Green Energy", "Finance",
+  "AI & Robotics", "Healthcare", "Media & Communications"
 ]
 
 // ─── Investor paths ────────────────────────────────────────────────────────
@@ -18,29 +18,29 @@ export const INVESTOR_PATHS: InvestorPath[] = [
     id: 'steady_builder',
     label: 'Steady Builder',
     icon: '🌳',
-    tagline: 'Long-term, low drama',
-    desc: 'Consistent compounding over years, not overnight wins. Blue chips, dividends, patience.',
+    tagline: 'Slow and steady',
+    desc: 'Grow your money gradually over many years. Large, well known companies that share their profits with you.',
   },
   {
     id: 'growth_seeker',
     label: 'Growth Seeker',
     icon: '🚀',
-    tagline: 'High conviction, high upside',
-    desc: 'Back disruptive companies early and stomach volatility for outsized returns.',
+    tagline: 'Bold bets, big upside',
+    desc: 'Back young companies early and accept big price swings for the chance of much bigger gains.',
   },
   {
     id: 'trend_rider',
     label: 'Trend Rider',
     icon: '📈',
-    tagline: 'Momentum-driven, stay current',
-    desc: "Follow strong signals, rotate into what's moving, act on market momentum.",
+    tagline: "Follow what's moving",
+    desc: 'Go with the shares that are rising and move your money quickly when the market changes.',
   },
   {
     id: 'value_hunter',
     label: 'Value Hunter',
     icon: '💎',
-    tagline: 'Contrarian, patient, fundamental',
-    desc: "Spot undervalued companies the market has overlooked and hold until they're recognised.",
+    tagline: 'Patient bargain hunter',
+    desc: 'Find good companies whose shares look too cheap, then wait for everyone else to notice.',
   },
 ]
 
@@ -57,10 +57,13 @@ export const FAMILIAR_ASSETS: FamiliarAsset[] = [
   // Technology
   { ticker: 'AAPL',  name: 'Apple',          sector: 'Technology',    emoji: '🍎', description: 'iPhone, Mac, wearables' },
   { ticker: 'MSFT',  name: 'Microsoft',      sector: 'Technology',    emoji: '🪟', description: 'Windows, Office, Azure' },
-  { ticker: 'GOOGL', name: 'Google',         sector: 'Technology',    emoji: '🔍', description: 'Search, YouTube, ads' },
-  { ticker: 'META',  name: 'Meta',           sector: 'Technology',    emoji: '👓', description: 'Facebook, Instagram, VR' },
   { ticker: 'AMZN',  name: 'Amazon',         sector: 'Technology',    emoji: '📦', description: 'E-commerce & AWS cloud' },
-  { ticker: 'NFLX',  name: 'Netflix',        sector: 'Technology',    emoji: '🎬', description: 'Streaming & content' },
+  { ticker: 'ORCL',  name: 'Oracle',         sector: 'Technology',    emoji: '🗄️', description: 'Databases & cloud' },
+  // Media & Communications
+  { ticker: 'GOOGL', name: 'Google',         sector: 'Media & Communications', emoji: '🔍', description: 'Search, YouTube, ads' },
+  { ticker: 'META',  name: 'Meta',           sector: 'Media & Communications', emoji: '👓', description: 'Facebook, Instagram, VR' },
+  { ticker: 'NFLX',  name: 'Netflix',        sector: 'Media & Communications', emoji: '🎬', description: 'Streaming & content' },
+  { ticker: 'DIS',   name: 'Disney',         sector: 'Media & Communications', emoji: '🏰', description: 'Films, parks & Disney+' },
   // AI & Robotics
   { ticker: 'NVDA',  name: 'NVIDIA',         sector: 'AI & Robotics', emoji: '🤖', description: 'AI chips & data centres' },
   { ticker: 'TSLA',  name: 'Tesla',          sector: 'AI & Robotics', emoji: '⚡', description: 'EVs, FSD & robotics' },
@@ -103,7 +106,7 @@ export const SURVEY_QUESTIONS = [
     question: "1. In general, how would your best friend describe you as a risk taker?",
     options: [
       { value: "4", label: "A real gambler" },
-      { value: "3", label: "Willing to take risks after completing adequate research" },
+      { value: "3", label: "Willing to take risks, but only after doing my research" },
       { value: "2", label: "Cautious" },
       { value: "1", label: "A real risk avoider" }
     ]
@@ -113,33 +116,33 @@ export const SURVEY_QUESTIONS = [
     question: "2. You are on a TV game show and can choose one of the following. Which would you take?",
     options: [
       { value: "1", label: "R10,000 in cash" },
-      { value: "2", label: "A 50% chance at winning R50,000" },
-      { value: "3", label: "A 25% chance at winning R100,000" },
-      { value: "4", label: "A 5% chance at winning R1,000,000" }
+      { value: "2", label: "A 1 in 2 chance of winning R50,000" },
+      { value: "3", label: "A 1 in 4 chance of winning R100,000" },
+      { value: "4", label: "A 1 in 20 chance of winning R1,000,000" }
     ]
   },
   {
     id: "q_vacation_loss",
-    question: "3. You have just finished saving for a 'once-in-a-lifetime' vacation. Three weeks before you plan to leave, you lose your job. You would:",
+    question: "3. You have just finished saving for a once in a lifetime holiday. Three weeks before you leave, you lose your job. What would you do?",
     options: [
-      { value: "1", label: "Cancel the vacation" },
-      { value: "2", label: "Take a much more modest vacation" },
-      { value: "3", label: "Go as scheduled, reasoning that you need the time to prepare for a job search" },
-      { value: "4", label: "Extend your vacation, because this might be your last chance to go first-class" }
+      { value: "1", label: "Cancel the holiday" },
+      { value: "2", label: "Take a much cheaper holiday" },
+      { value: "3", label: "Go as planned, because you need the break before looking for a new job" },
+      { value: "4", label: "Make the holiday longer, because this might be your last chance to travel in style" }
     ]
   },
   {
     id: "q_unexpected_windfall",
-    question: "4. If you unexpectedly received R200,000 to invest, what would you do?",
+    question: "4. If you were suddenly given R200,000 to invest, what would you do with it?",
     options: [
-      { value: "1", label: "Deposit it in a bank account, money market account, or an insured CD" },
-      { value: "2", label: "Invest it in safe high quality bonds or bond mutual funds" },
-      { value: "3", label: "Invest it in stocks or stock mutual funds" }
+      { value: "1", label: "Put it in a savings account or fixed deposit at the bank" },
+      { value: "2", label: "Buy bonds, which means lending your money to the government or a big company for a steady, fixed return" },
+      { value: "3", label: "Buy shares in companies, or a fund that holds shares in many companies" }
     ]
   },
   {
     id: "q_experience_comfort",
-    question: "5. In terms of experience, how comfortable are you investing in stocks or stock mutual funds?",
+    question: "5. Based on your experience so far, how comfortable are you investing in shares, either directly or through a fund?",
     options: [
       { value: "1", label: "Not at all comfortable" },
       { value: "2", label: "Somewhat comfortable" },
@@ -158,36 +161,37 @@ export const SURVEY_QUESTIONS = [
   },
   {
     id: "q_bond_rotation",
-    question: "7. Some experts are predicting prices of hard assets to increase in value; bond prices may fall, however, government bonds are relatively safe. Most of your assets are now in high-interest government bonds. What would you do?",
+    question: "7. Most of your savings are in government bonds. These are a safe investment that pays you steady interest. Some experts now think bonds will lose value and that things like gold, property and oil will go up. What would you do?",
     options: [
-      { value: "1", label: "Hold the bonds" },
-      { value: "2", label: "Sell the bonds, put half the proceeds into money market accounts, and half into hard assets" },
-      { value: "3", label: "Sell the bonds and put the total proceeds into hard assets" },
-      { value: "4", label: "Sell the bonds, put all the money into hard assets, and borrow money to buy more" }
+      { value: "1", label: "Keep the bonds" },
+      { value: "2", label: "Sell the bonds. Keep half the money in a savings account and put half into gold, property or similar" },
+      { value: "3", label: "Sell the bonds and put all the money into gold, property or similar" },
+      { value: "4", label: "Sell the bonds, put it all into gold, property or similar, and borrow money to buy even more" }
     ]
   },
   {
     id: "q_worst_best_case",
-    question: "8. Given the best- and worst-case returns of the four investment choices below, which would you prefer?",
+    question: "8. Here are four investments. Each one shows the most you could make and the most you could lose. Which would you choose?",
     options: [
-      { value: "1", label: "R2,000 gain best case; R0 gain/loss worst case" },
-      { value: "2", label: "R8,000 gain best case; R2,000 loss worst case" },
-      { value: "3", label: "R26,000 gain best case; R8,000 loss worst case" },
-      { value: "4", label: "R48,000 gain best case; R24,000 loss worst case" }
+      { value: "1", label: "Could make up to R2,000, at worst you get your money back" },
+      { value: "2", label: "Could make up to R8,000, could lose up to R2,000" },
+      { value: "3", label: "Could make up to R26,000, could lose up to R8,000" },
+      { value: "4", label: "Could make up to R48,000, could lose up to R24,000" }
     ]
   },
   {
     id: "q_portfolio_allocation",
-    question: "9. If you had to invest R200,000, which of the following investment choices would you find most appealing?",
+    question: "9. If you had R200,000 to invest, how would you most like to split it?",
+    hint: "Safe means a savings account. Middle means large, well known companies. Risky means small or new companies.",
     options: [
-      { value: "1", label: "60% low-risk / 30% medium-risk / 10% high-risk" },
-      { value: "2", label: "30% low-risk / 40% medium-risk / 30% high-risk" },
-      { value: "3", label: "10% low-risk / 40% medium-risk / 50% high-risk" }
+      { value: "1", label: "Mostly safe: R120,000 safe, R60,000 middle, R20,000 risky" },
+      { value: "2", label: "Balanced: R60,000 safe, R80,000 middle, R60,000 risky" },
+      { value: "3", label: "Mostly risky: R20,000 safe, R80,000 middle, R100,000 risky" }
     ]
   },
   {
     id: "q_geologist_mine",
-    question: "10. Your friend is funding an exploratory gold mine. The venture could pay back 50-100x, but if it's a bust, it's completely worthless. Chance of success is only 20%. How much would you invest?",
+    question: "10. A friend is raising money to search for gold. If they find it, you could get back 50 to 100 times what you put in. If they don't, you lose everything. There is only a 1 in 5 chance they find gold. How much would you put in?",
     options: [
       { value: "1", label: "Nothing" },
       { value: "2", label: "One month's salary" },
@@ -198,14 +202,16 @@ export const SURVEY_QUESTIONS = [
   // --- FINANCIAL LITERACY ---
   {
     id: "q_financial_knowledge_self",
-    question: "11. On a scale from one to five, how would you rate your overall understanding of personal-finance and money-management?",
+    question: "11. How well do you understand money matters like budgeting, saving and investing?",
     options: [
-      { value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }, { value: "5", label: "5" }
+      { value: "1", label: "1 (not at all)" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }, { value: "5", label: "5 (very well)" }
     ]
   },
+  // Questions 12 to 14 test knowledge, so their wording avoids jargon without
+  // explaining the idea being tested (compounding, inflation, diversification).
   {
     id: "q_financial_math",
-    question: "12. Suppose you had R1,000 in a savings account with a 2% yearly interest rate. After 5 years, if you left the money to grow, how much would you have?",
+    question: "12. You put R1,000 in a savings account that pays 2% interest a year. You leave it there for 5 years without touching it. How much will be in the account?",
     options: [
       { value: "3", label: "More than R1,020" },
       { value: "2", label: "Exactly R1,020" },
@@ -214,7 +220,7 @@ export const SURVEY_QUESTIONS = [
   },
   {
     id: "q_inflation",
-    question: "13. Imagine interest was 1% per year and inflation was 2% per year. After 1 year, how much would you be able to buy with the money in this account?",
+    question: "13. Your savings account pays 1% interest a year, and prices in the shops go up by 2% a year. After one year, what could you buy with that money?",
     options: [
       { value: "1", label: "More than today" },
       { value: "2", label: "Exactly the same" },
@@ -223,7 +229,7 @@ export const SURVEY_QUESTIONS = [
   },
   {
     id: "q_diversification",
-    question: "14. True or false: \"Buying a single company's stock usually provides a safer return than a stock mutual fund\"",
+    question: "14. True or false: buying shares in one company is usually safer than buying a fund that spreads your money across many companies.",
     options: [
       { value: "1", label: "True" },
       { value: "3", label: "False" }
@@ -231,7 +237,7 @@ export const SURVEY_QUESTIONS = [
   },
   {
     id: "q_investment_participation",
-    question: "15. You have a chance to make an investment returning either R500,000 or R1,000,000 (50% chance of each). What is the largest amount of money you would be willing to pay to participate?",
+    question: "15. You can pay to enter a coin toss. Heads, you get R1,000,000. Tails, you get R500,000. What is the most you would pay to enter?",
     options: [
       { value: "9", label: "R707,711" }, { value: "8", label: "R666,667" }, { value: "7", label: "R632,246" }, 
       { value: "5", label: "R585,566" }, { value: "3", label: "R559,978" }, { value: "1", label: "R544,499" }
@@ -263,7 +269,7 @@ export const SURVEY_QUESTIONS = [
     question: "18. What is your marital status?",
     options: [
       { value: "single", label: "Never married" },
-      { value: "partner", label: "Not married but living with significant other" },
+      { value: "partner", label: "Not married but living with a partner" },
       { value: "married", label: "Married" },
       { value: "divorced", label: "Separated or Divorced" },
       { value: "widowed", label: "Widowed" }
@@ -281,7 +287,7 @@ export const SURVEY_QUESTIONS = [
   },
   {
     id: "demo_income",
-    question: "20. What is your household's approximate annual gross income before taxes?",
+    question: "20. Roughly how much does your household earn in a year, before tax?",
     options: [
       { value: "tier_1", label: "Less than R250,000" }, // Low capacity
       { value: "tier_2", label: "R250,000 - R499,999" },
@@ -332,7 +338,7 @@ export const GOAL_QUESTIONS = [
     id: "goal_account_type",
     question: "Which kind of account are you investing through?",
     options: [
-      { value: "tfsa", label: "A tax-free savings account" },
+      { value: "tfsa", label: "A tax-free savings account (TFSA)" },
       { value: "discretionary", label: "An ordinary investment account" },
       { value: "unsure", label: "I am not sure yet" }
     ]
@@ -341,7 +347,7 @@ export const GOAL_QUESTIONS = [
     id: "goal_contribution",
     question: "How do you plan to put money in?",
     options: [
-      { value: "lump_sum", label: "A lump sum" },
+      { value: "lump_sum", label: "One amount up front" },
       { value: "monthly", label: "A monthly amount" },
       { value: "both", label: "Both" }
     ]

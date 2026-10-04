@@ -208,9 +208,16 @@ class TestClassifyByIndustry:
         ("Insurance", "Finance"),
         ("Renewable Energy", "Green Energy"),
         ("Solar", "Green Energy"),
+        ("Media", "Media & Communications"),
+        ("Telecommunication", "Media & Communications"),
+        ("Telecommunications", "Media & Communications"),
     ])
     def test_known_industries_map_to_their_universe(self, industry, universe):
         assert classify_by_industry(industry) == universe
+
+    def test_networking_equipment_stays_in_technology(self):
+        # Finnhub's bare "Communications" is CSCO, ANET and CIEN, not media.
+        assert classify_by_industry("Communications") == "Technology"
 
     def test_the_match_is_case_insensitive_and_on_substrings(self):
         assert classify_by_industry("SEMICONDUCTOR EQUIPMENT") == "Technology"
@@ -433,6 +440,7 @@ class TestUniverses:
         # classified candidate lands in a universe nothing reads.
         assert ad.UNIVERSES == [
             "Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare",
+            "Media & Communications",
         ]
 
     def test_every_industry_keyword_maps_to_a_real_universe(self):
@@ -448,6 +456,7 @@ class TestUniverses:
 # Each stage now names a collaborator, which is what lets these run offline.
 
 from src.agents.asset_discovery import (  # noqa: E402
+    AiRoboticsSplitter,
     CandidatePool,
     CandidateSource,
     ClassificationChain,
@@ -456,12 +465,15 @@ from src.agents.asset_discovery import (  # noqa: E402
     Gate,
     IndustryClassifier,
     LiquidityGate,
+    PinnedClassifier,
     ProfileGate,
+    Refiner,
     ResearchabilityGate,
     SourceFactory,
     SymbolDirectoryGate,
     ValidationFunnel,
 )
+from src.utils.llm_client import EmptyCompletionError  # noqa: E402
 
 
 class FakeFinnhub:
@@ -616,6 +628,531 @@ class TestClassificationChain:
         ClassificationChain(classifiers=[IndustryClassifier()]).apply(cands)
         assert cands[0].universe is None
 
+    def test_a_pinned_name_beats_the_industry_map(self):
+        # ISRG's industry contains "health", which the map would send to Healthcare.
+        cands = [a_candidate("ISRG", industry="Health Care Equipment")]
+        ClassificationChain(classifiers=[PinnedClassifier(), IndustryClassifier()]).apply(cands)
+        assert cands[0].universe == "AI & Robotics"
+
+    def test_a_refiner_can_move_a_placed_candidate(self):
+        class MovesAll(Refiner):
+            def refine(self, candidates):
+                return {c.ticker: "AI & Robotics" for c in candidates}
+
+        cands = [a_candidate("AAA", industry="Software")]
+        ClassificationChain(classifiers=[IndustryClassifier()], refiners=[MovesAll()]).apply(cands)
+        assert cands[0].universe == "AI & Robotics"
+
+    def test_a_refiner_cannot_invent_a_universe(self):
+        class Invents(Refiner):
+            def refine(self, candidates):
+                return {c.ticker: "Crypto" for c in candidates}
+
+        cands = [a_candidate("AAA", industry="Software")]
+        ClassificationChain(classifiers=[IndustryClassifier()], refiners=[Invents()]).apply(cands)
+        assert cands[0].universe == "Technology"
+
+    def test_a_custom_chain_gets_no_hidden_refiner(self):
+        assert ClassificationChain(classifiers=[IndustryClassifier()]).refiners == []
+
+    def test_the_production_chain_pins_first_and_splits_technology(self):
+        chain = ClassificationChain()
+        assert isinstance(chain.classifiers[0], PinnedClassifier)
+        assert [type(r) for r in chain.refiners] == [AiRoboticsSplitter]
+
+
+class FakeGroq:
+    def __init__(self, reply):
+        self.reply = reply
+        self.prompts = []
+
+    def complete(self, prompt):
+        self.prompts.append(prompt)
+        return self.reply
+
+
+class TestAiRoboticsSplitter:
+    def test_only_technology_names_are_asked_about(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        AiRoboticsSplitter().refine([
+            a_candidate("AAA", universe="Technology", name="Alpha", industry="Semiconductors"),
+            a_candidate("BBB", universe="Finance"),
+        ])
+        assert "AAA (Alpha, Semiconductors)" in llm.prompts[0]
+        assert "BBB" not in llm.prompts[0]
+
+    def test_no_technology_names_costs_no_call(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert AiRoboticsSplitter().refine([a_candidate("BBB", universe="Finance")]) == {}
+        assert llm.prompts == []
+
+    def test_only_an_explicit_ai_answer_moves_a_ticker(self, monkeypatch):
+        llm = FakeGroq('{"AAA":"AI & Robotics","BBB":"Technology","CCC":"robots"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        cands = [a_candidate(t, universe="Technology") for t in ("AAA", "BBB", "CCC")]
+        assert AiRoboticsSplitter().refine(cands) == {"AAA": "AI & Robotics"}
+
+    def test_a_ticker_it_was_not_asked_about_is_ignored(self, monkeypatch):
+        llm = FakeGroq('{"ZZZ":"AI & Robotics","aaa":"AI & Robotics"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        out = AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")])
+        assert out == {"AAA": "AI & Robotics"}
+
+    def test_a_failed_call_leaves_everything_in_technology(self, monkeypatch):
+        llm = FakeGroq("")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")]) == {}
+
+    def test_no_client_leaves_everything_in_technology(self, monkeypatch):
+        monkeypatch.setattr(ad, "_get_groq", lambda label: None)
+        assert AiRoboticsSplitter().refine([a_candidate("AAA", universe="Technology")]) == {}
+
+
+class ScriptedClient:
+    """A GroqClient that replays one outcome: a reply string, or an exception."""
+
+    def __init__(self, outcome):
+        self.outcome = outcome
+        self.calls = 0
+
+    def complete(self, prompt):
+        self.calls += 1
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+
+class FakeFactory:
+    """Stands in for GroqClient.create: hands out a scripted client per key, and
+    records every client built, so a test can see which account and budget a retry
+    went to."""
+
+    def __init__(self, outcomes):
+        self.outcomes = outcomes  # key_env -> outcome; a missing key means unset
+        self.built = []
+
+    def __call__(self, *, purpose, max_tokens, temperature, key_env, fallback_key_env=None):
+        if key_env not in self.outcomes:
+            return None
+        self.built.append({"purpose": purpose, "max_tokens": max_tokens, "key_env": key_env})
+        return ScriptedClient(self.outcomes[key_env])
+
+
+class TestDiscoveryLlm:
+    def test_a_good_first_call_is_not_retried(self):
+        factory = FakeFactory({"GROQ_API_KEY3": "ok", "GROQ_API_KEY2": "unused"})
+        assert ad.DiscoveryLlm("split", factory).complete("p") == "ok"
+        assert [b["key_env"] for b in factory.built] == ["GROQ_API_KEY3"]
+
+    def test_the_label_names_the_call_and_its_retry(self):
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x"), "GROQ_API_KEY2": "ok"})
+        ad.DiscoveryLlm("classify", factory).complete("p")
+        assert [b["purpose"] for b in factory.built] == [
+            "discovery.classify", "discovery.classify.retry",
+        ]
+
+    def test_an_empty_reply_retries_on_key_2_with_a_bigger_budget(self):
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x"), "GROQ_API_KEY2": "ok"})
+        assert ad.DiscoveryLlm("split", factory).complete("p") == "ok"
+        retry = factory.built[1]
+        assert retry["key_env"] == "GROQ_API_KEY2"
+        assert retry["max_tokens"] == ad.DiscoveryLlm.RETRY_MAX_TOKENS > ad.DiscoveryLlm.MAX_TOKENS
+
+    def test_an_empty_reply_without_key_2_retries_on_the_same_account(self):
+        # A bigger budget is the actual fix for this failure, so it is still worth
+        # one more call on the account that has it.
+        factory = FakeFactory({"GROQ_API_KEY3": EmptyCompletionError("x")})
+        with pytest.raises(EmptyCompletionError):
+            ad.DiscoveryLlm("split", factory).complete("p")
+        assert [(b["key_env"], b["max_tokens"]) for b in factory.built] == [
+            ("GROQ_API_KEY3", 3000), ("GROQ_API_KEY3", 8000),
+        ]
+
+    def test_a_transport_error_retries_on_key_2_with_the_same_budget(self):
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("429"), "GROQ_API_KEY2": "ok"})
+        assert ad.DiscoveryLlm("gap_fill", factory).complete("p") == "ok"
+        assert (factory.built[1]["key_env"], factory.built[1]["max_tokens"]) == ("GROQ_API_KEY2", 3000)
+
+    def test_a_transport_error_without_key_2_is_not_retried(self):
+        # Retrying a 429 on the account that just refused it would only refuse again.
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("429")})
+        with pytest.raises(RuntimeError, match="429"):
+            ad.DiscoveryLlm("gap_fill", factory).complete("p")
+        assert len(factory.built) == 1
+
+    def test_there_is_only_ever_one_retry(self):
+        factory = FakeFactory({
+            "GROQ_API_KEY3": EmptyCompletionError("first"),
+            "GROQ_API_KEY2": EmptyCompletionError("second"),
+        })
+        with pytest.raises(EmptyCompletionError, match="second"):
+            ad.DiscoveryLlm("split", factory).complete("p")
+        assert len(factory.built) == 2
+
+    def test_no_primary_account_means_no_client(self):
+        assert ad.DiscoveryLlm.create("split", FakeFactory({"GROQ_API_KEY2": "ok"})) is None
+
+    def test_a_double_failure_reaches_the_caller_as_an_empty_reply(self):
+        factory = FakeFactory({"GROQ_API_KEY3": RuntimeError("a"), "GROQ_API_KEY2": RuntimeError("b")})
+        assert ad._groq_text(ad.DiscoveryLlm("split", factory), "p") == ""
+
+
+class FakeSplitter(AiRoboticsSplitter):
+    """Moves the tickers it is told to, and records each batch it was handed."""
+
+    def __init__(self, moves=()):
+        self.moves = set(moves)
+        self.batches = []
+
+    def refine(self, candidates):
+        self.batches.append([c.ticker for c in candidates])
+        return {c.ticker: "AI & Robotics" for c in candidates if c.ticker in self.moves}
+
+
+def a_row(ticker, universe="Technology", origin="discovered", name=""):
+    return {"ticker": ticker, "universe": universe, "origin": origin, "name": name}
+
+
+class TestPoolReclassifier:
+    def reclassifier(self, splitter=None, pins=None, finnhub=None):
+        return ad.PoolReclassifier(
+            finnhub=finnhub or FakeFinnhub(),
+            pinned=PinnedClassifier(pins if pins is not None else {"NVDA": "AI & Robotics"}),
+            splitter=splitter or FakeSplitter(),
+        )
+
+    def test_a_split_technology_row_is_planned_to_move(self):
+        plan = self.reclassifier(FakeSplitter({"AMD"})).plan([a_row("AMD"), a_row("AAPL")])
+        assert plan.moves == {"AMD": ("Technology", "AI & Robotics")}
+
+    def test_a_pin_moves_a_row_out_of_any_universe(self):
+        pins = {"ISRG": "AI & Robotics"}
+        plan = self.reclassifier(pins=pins).plan([a_row("ISRG", universe="Healthcare")])
+        assert plan.moves == {"ISRG": ("Healthcare", "AI & Robotics")}
+
+    def test_a_row_already_where_its_pin_says_is_not_a_move(self):
+        plan = self.reclassifier().plan([a_row("NVDA", universe="AI & Robotics")])
+        assert plan.moves == {}
+
+    def test_a_pinned_name_is_not_also_sent_to_the_model(self):
+        splitter = FakeSplitter()
+        self.reclassifier(splitter).plan([a_row("NVDA"), a_row("AAPL")])
+        assert splitter.batches == [["AAPL"]]
+
+    def test_only_technology_rows_are_sent_to_the_model(self):
+        splitter = FakeSplitter()
+        self.reclassifier(splitter).plan([a_row("AAPL"), a_row("JPM", universe="Finance")])
+        assert splitter.batches == [["AAPL"]]
+
+    def test_technology_is_split_in_batches(self):
+        splitter = FakeSplitter()
+        rows = [a_row(f"T{i:02d}") for i in range(ad.PoolReclassifier.BATCH_SIZE + 3)]
+        self.reclassifier(splitter).plan(rows)
+        assert [len(b) for b in splitter.batches] == [ad.PoolReclassifier.BATCH_SIZE, 3]
+
+    def test_a_seed_is_held_rather_than_moved(self):
+        plan = self.reclassifier(FakeSplitter({"AMD"})).plan([a_row("AMD", origin="seed")])
+        assert plan.moves == {}
+        assert plan.seeds_held == {"AMD": ("Technology", "AI & Robotics")}
+
+    def test_only_technology_rows_cost_a_profile_call(self):
+        finnhub = FakeFinnhub()
+        self.reclassifier(finnhub=finnhub).plan(
+            [a_row("AAPL"), a_row("NVDA"), a_row("JPM", universe="Finance")]
+        )
+        assert finnhub.profile_calls == ["AAPL"]
+
+    def test_the_industry_reaches_the_model(self):
+        seen = {}
+
+        class Recording(FakeSplitter):
+            def refine(self, candidates):
+                seen.update({c.ticker: c.industry for c in candidates})
+                return {}
+
+        self.reclassifier(Recording()).plan([a_row("AAPL")])
+        assert seen == {"AAPL": "Semiconductors"}  # FakeFinnhub's default profile
+
+    def test_the_industry_map_moves_a_technology_row_it_now_places_elsewhere(self):
+        finnhub = FakeFinnhub(profiles={"DJT": a_profile(finnhubIndustry="Media")})
+        plan = self.reclassifier(finnhub=finnhub, pins={}).plan([a_row("DJT")])
+        assert plan.moves == {"DJT": ("Technology", "Media & Communications")}
+
+    def test_an_industry_the_map_cannot_place_leaves_the_row_alone(self):
+        finnhub = FakeFinnhub(profiles={"MELI": a_profile(finnhubIndustry="Retail")})
+        plan = self.reclassifier(finnhub=finnhub, pins={}).plan([a_row("MELI")])
+        assert plan.moves == {}
+
+    def test_a_row_the_map_moved_is_not_also_sent_to_the_model(self):
+        finnhub = FakeFinnhub(profiles={"DJT": a_profile(finnhubIndustry="Media")})
+        splitter = FakeSplitter()
+        self.reclassifier(splitter, pins={}, finnhub=finnhub).plan([a_row("DJT"), a_row("AAPL")])
+        assert splitter.batches == [["AAPL"]]
+
+    def test_moves_are_grouped_by_destination_for_writing(self):
+        plan = ad.ReclassificationPlan(moves={
+            "B": ("Technology", "AI & Robotics"),
+            "A": ("Technology", "AI & Robotics"),
+            "C": ("Healthcare", "AI & Robotics"),
+        })
+        assert plan.by_target() == {"AI & Robotics": ["A", "B", "C"]}
+
+
+class CountingFinnhub(FakeFinnhub):
+    def __init__(self, news=None):
+        super().__init__(news=news)
+        self.news_calls = []
+
+    def trusted_news_count(self, ticker, now=None):
+        self.news_calls.append(ticker)
+        return super().trusted_news_count(ticker, now)
+
+
+def a_seed_row(ticker, universe="Technology", is_active=True):
+    return {"ticker": ticker, "universe": universe, "origin": "seed", "is_active": is_active}
+
+
+class TestSeedScorer:
+    def scorer(self, finnhub=None, liquidity=None, sleeps=None):
+        return ad.SeedScorer(
+            finnhub=finnhub or CountingFinnhub(),
+            liquidity=liquidity or FakeLiquidity(),
+            pause=1.0,
+            sleep=(sleeps.append if sleeps is not None else (lambda s: None)),
+        )
+
+    def test_a_seed_is_scored_by_the_discovered_formula(self):
+        finnhub = CountingFinnhub(news={"AAPL": 10})
+        seeds = self.scorer(finnhub, FakeLiquidity({"AAPL": 5e8})).score_all(
+            [a_seed_row("AAPL")], CandidatePool(), {}, {}, NOW
+        )
+        # No trending, full news (0.3) and full liquidity (0.2).
+        assert {t: c.score for t, c in seeds.items()} == {"AAPL": 0.5}
+        assert seeds["AAPL"].dollar_volume == 5e8  # kept for the tie-break
+
+    def test_a_seed_the_funnel_measured_costs_no_call(self):
+        finnhub = CountingFinnhub()
+        measured = {"AAPL": a_candidate("AAPL", watchlist_count=50, news_count=10, dollar_volume=5e8)}
+        scores = self.scorer(finnhub).score_all(
+            [a_seed_row("AAPL")], CandidatePool(), measured, {"Technology": 100}, NOW
+        )
+        assert finnhub.news_calls == []
+        assert scores["AAPL"].score == round(0.5 * 0.5 + 0.3 + 0.2, 6)
+
+    def test_reusing_a_measured_seed_leaves_the_funnels_candidate_alone(self):
+        funnel_cand = a_candidate("AAPL", watchlist_count=50, news_count=10, dollar_volume=5e8)
+        funnel_cand.score = 0.9
+        self.scorer().score_all(
+            [a_seed_row("AAPL")], CandidatePool(), {"AAPL": funnel_cand}, {"Technology": 100}, NOW
+        )
+        assert funnel_cand.score == 0.9
+
+    def test_an_unmeasured_seed_keeps_its_trending_count(self):
+        pool = CandidatePool()
+        pool.add("AAPL", "stocktwits_trending", 100)  # trended, then failed a gate
+        scores = self.scorer(CountingFinnhub(news={"AAPL": 0}), FakeLiquidity({"AAPL": None})).score_all(
+            [a_seed_row("AAPL")], pool, {}, {"Technology": 200}, NOW
+        )
+        assert scores["AAPL"].score == 0.25  # 0.5 * 100/200
+
+    def test_a_seed_busier_than_its_universe_sets_the_ceiling(self):
+        measured = {"AAPL": a_candidate("AAPL", watchlist_count=300, news_count=0)}
+        scores = self.scorer().score_all(
+            [a_seed_row("AAPL")], CandidatePool(), measured, {"Technology": 100}, NOW
+        )
+        assert scores["AAPL"].score == 0.5  # trend term capped at 1.0, never above
+
+    def test_an_etf_seed_is_scored_rather_than_gated_out(self):
+        # The gates would reject ICLN as not common stock; seeds never meet them.
+        scores = self.scorer().score_all(
+            [a_seed_row("ICLN", universe="Green Energy")], CandidatePool(), {}, {}, NOW
+        )
+        assert "ICLN" in scores
+
+    def test_fetches_are_spaced_but_the_first_is_not_delayed(self):
+        sleeps = []
+        rows = [a_seed_row(t) for t in ("AAA", "BBB", "CCC")]
+        measured = {"BBB": a_candidate("BBB")}
+        self.scorer(sleeps=sleeps).score_all(rows, CandidatePool(), measured, {}, NOW)
+        assert sleeps == [1.0]  # AAA fetched, BBB reused, CCC fetched after a pause
+
+    def test_only_active_seeds_in_a_known_universe_are_scored(self):
+        rows = [
+            a_seed_row("AAPL"),
+            a_seed_row("ARKQ", universe="AI & Robotics", is_active=False),
+            a_seed_row("OLD", universe="Real Estate"),
+            {"ticker": "DISC", "universe": "Technology", "origin": "discovered", "is_active": True},
+        ]
+        assert [r["ticker"] for r in ad.SeedScorer.active_seeds(rows)] == ["AAPL"]
+
+
+class TestExecuteScoresSeeds:
+    """The nightly pass end to end, with the database and network faked."""
+
+    def run(self, monkeypatch, pool_rows, seed_scorer, dry_run=False):
+        import src.utils.supabase_client as sc
+
+        written = {"seed": [], "discovered": []}
+        monkeypatch.setattr(sc, "get_discovery_pool_rows", lambda u: pool_rows)
+        monkeypatch.setattr(sc, "upsert_discovered_asset", lambda **kw: {"status": "ok"})
+        monkeypatch.setattr(sc, "update_discovery_scores", lambda s: written["discovered"].append(s))
+        monkeypatch.setattr(sc, "retire_assets", lambda t: None)
+        monkeypatch.setattr(sc, "record_discovery_run", lambda **kw: None)
+        monkeypatch.setattr(
+            sc, "update_seed_scores", lambda s, v=None: written["seed"].append((s, v))
+        )
+        run = DiscoveryRun(
+            sources=[],
+            funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
+            classifier=ClassificationChain(classifiers=[]),
+            seed_scorer=seed_scorer,
+        )
+        return run.execute(dry_run=dry_run), written
+
+    def a_seed_scorer(self):
+        return ad.SeedScorer(finnhub=FakeFinnhub(), liquidity=FakeLiquidity(), sleep=lambda s: None)
+
+    def test_seed_scores_are_written_through_the_seed_only_write(self, monkeypatch):
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer())
+        assert summary["seeds_scored"] == 1
+        scores, volumes = written["seed"][0]
+        assert list(scores) == ["AAPL"] and volumes == {"AAPL": 5e8}
+        assert written["discovered"] == []
+
+    def test_a_dry_run_writes_no_seed_scores_but_reports_them(self, monkeypatch):
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(), dry_run=True)
+        assert written["seed"] == []
+        assert "AAPL" in summary["seed_scores"]
+
+    def test_a_trending_seed_does_not_take_a_new_name_place(self, monkeypatch):
+        import src.utils.supabase_client as sc
+
+        upserts = []
+
+        class Fixed(CandidateSource):
+            name = "fixed"
+
+            def contribute(self, pool):
+                pool.add("JPM", self.name, 500)  # a seed, trending hard
+                pool.add("NEWB", self.name, 10)  # a genuinely new name
+
+        pins = {"JPM": "Finance", "NEWB": "Finance"}
+        monkeypatch.setattr(sc, "get_discovery_pool_rows",
+                            lambda u: [a_seed_row("JPM", universe="Finance")])
+        monkeypatch.setattr(sc, "upsert_discovered_asset", lambda **kw: upserts.append(kw["ticker"]))
+        for name in ("update_discovery_scores", "update_seed_scores"):
+            monkeypatch.setattr(sc, name, lambda *a, **k: None)
+        monkeypatch.setattr(sc, "retire_assets", lambda t: None)
+        monkeypatch.setattr(sc, "record_discovery_run", lambda **kw: None)
+        run = DiscoveryRun(
+            sources=[Fixed()],
+            funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
+            classifier=ClassificationChain(classifiers=[PinnedClassifier(pins)], refiners=[]),
+            seed_scorer=self.a_seed_scorer(),
+        )
+        summary = run.execute()
+        finance = summary["universes"]["Finance"]
+        assert finance["new_entrants"] == ["NEWB"]
+        assert finance["seeds_seen"] == 1
+        assert upserts == ["NEWB"]
+
+    def test_a_seed_scoring_failure_does_not_fail_the_pass(self, monkeypatch):
+        class Broken(ad.SeedScorer):
+            def score_all(self, *a, **k):
+                raise RuntimeError("finnhub down")
+
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], Broken())
+        assert summary["seeds_scored"] == 0 and written["seed"] == []
+        assert "total_candidates" in summary  # the rest of the pass completed
+
+
+class TestPinnedClassifier:
+    def test_pinned_names_are_placed_and_others_left_alone(self):
+        out = PinnedClassifier({"NVDA": "AI & Robotics"}).classify(
+            [a_candidate("NVDA"), a_candidate("MSFT")]
+        )
+        assert out == {"NVDA": "AI & Robotics"}
+
+    def test_every_default_pin_is_a_real_universe(self):
+        assert set(ad.PINNED_UNIVERSES.values()) <= set(ad.UNIVERSES)
+
+    def test_water_names_are_pinned_to_green_energy(self):
+        # Finnhub files AWK under Utilities and XYL under Machinery.
+        out = PinnedClassifier().classify([a_candidate("AWK"), a_candidate("XYL")])
+        assert out == {"AWK": "Green Energy", "XYL": "Green Energy"}
+
+    def test_no_ticker_is_pinned_to_two_universes(self):
+        groups = [set(ad.AI_ROBOTICS_PINS), set(ad.WATER_PINS), set(ad.MEDIA_PINS)]
+        assert sum(len(g) for g in groups) == len(set().union(*groups))
+
+    def test_media_names_are_pinned_out_of_technology(self):
+        out = PinnedClassifier().classify([a_candidate("NFLX"), a_candidate("TTWO")])
+        assert out == {"NFLX": "Media & Communications", "TTWO": "Media & Communications"}
+
+
+class TestUniverseScopes:
+    def test_every_universe_has_a_scope(self):
+        assert set(ad.UNIVERSE_SCOPES) == set(ad.UNIVERSES)
+
+    def test_green_energy_covers_water(self):
+        assert "water" in ad.UNIVERSE_SCOPES["Green Energy"]
+
+    def test_a_water_industry_maps_to_green_energy(self):
+        assert classify_by_industry("Water Utilities") == "Green Energy"
+
+    def test_the_classifier_prompt_carries_the_scopes(self, monkeypatch):
+        llm = FakeGroq("{}")
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        ad.LlmClassifier().of_tickers(["AAA"])
+        assert "water utilities" in llm.prompts[0]
+
+    def test_the_classifier_still_only_accepts_bare_labels(self, monkeypatch):
+        llm = FakeGroq('{"AAA":"Green Energy","BBB":"Green Energy (water)"}')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert ad.LlmClassifier().of_tickers(["AAA", "BBB"]) == {"AAA": "Green Energy"}
+
+    def test_the_gap_fill_prompt_carries_the_scope(self, monkeypatch):
+        llm = FakeGroq('["AWK"]')
+        monkeypatch.setattr(ad, "_get_groq", lambda label: llm)
+        assert ad.LlmGapFillSource().tickers_for("Green Energy") == ["AWK"]
+        assert "water" in llm.prompts[0]
+
+
+class TestFollowMovedIncumbents:
+    def test_a_moved_incumbent_is_refreshed_in_its_new_universe(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["AI & Robotics"] = [a_candidate("AAA")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+        incumbents["Technology"] = [incumbent("AAA", origin="discovered", universe="Technology")]
+
+        moved = DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents)
+
+        assert moved == ["AAA"]
+        assert incumbents["Technology"] == []
+        assert [r["ticker"] for r in incumbents["AI & Robotics"]] == ["AAA"]
+        assert incumbents["AI & Robotics"][0]["universe"] == "AI & Robotics"
+        plan = ad.HysteresisPolicy().plan(incumbents["AI & Robotics"], {"AAA": 0.5}, NOW)
+        assert plan.refreshed == ["AAA"] and plan.new_entrants == []
+
+    def test_an_incumbent_that_stayed_put_is_untouched(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["Technology"] = [a_candidate("AAA")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+        incumbents["Technology"] = [incumbent("AAA", origin="discovered")]
+
+        assert DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents) == []
+        assert [r["ticker"] for r in incumbents["Technology"]] == ["AAA"]
+
+    def test_a_brand_new_name_is_not_a_move(self):
+        by_universe = {u: [] for u in ad.UNIVERSES}
+        by_universe["AI & Robotics"] = [a_candidate("NEW")]
+        incumbents = {u: [] for u in ad.UNIVERSES}
+
+        assert DiscoveryRun(sources=[]).follow_moved_incumbents(by_universe, incumbents) == []
+        assert incumbents["AI & Robotics"] == []
+
 
 class TestCandidatePool:
     def test_the_same_ticker_from_two_sources_is_one_candidate(self):
@@ -666,9 +1203,33 @@ class TestGathering:
 
     def test_the_factory_respects_the_gap_fill_switch(self, monkeypatch):
         monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", False)
-        assert [s.name for s in SourceFactory.from_config()] == ["stocktwits_trending"]
+        assert [s.name for s in SourceFactory.from_config()] == ["stocktwits_trending", "curated"]
         monkeypatch.setattr(ad, "DISCOVERY_LLM_FILLER", True)
         assert "llm" in [s.name for s in SourceFactory.from_config()]
+
+
+class TestCuratedSource:
+    def test_it_offers_the_water_names_by_default(self):
+        pool = CandidatePool()
+        ad.CuratedSource().contribute(pool)
+        assert set(pool.candidates) == set(ad.WATER_PINS)
+        assert pool.candidates["AWK"].sources == ["curated"]
+
+    def test_it_adds_no_trending_weight(self):
+        # Offered, not endorsed: the score has to come from news and liquidity.
+        pool = CandidatePool()
+        ad.CuratedSource(["AWK"]).contribute(pool)
+        assert pool.candidates["AWK"].watchlist_count == 0
+
+    def test_a_curated_name_that_also_trends_keeps_its_trending_count(self):
+        pool = CandidatePool()
+        pool.add("AWK", "stocktwits_trending", 300)
+        ad.CuratedSource(["AWK"]).contribute(pool)
+        assert pool.candidates["AWK"].watchlist_count == 300
+        assert pool.candidates["AWK"].sources == ["stocktwits_trending", "curated"]
+
+    def test_the_factory_includes_it(self):
+        assert "curated" in [s.name for s in SourceFactory.from_config()]
 
 
 class TestGroupByUniverse:

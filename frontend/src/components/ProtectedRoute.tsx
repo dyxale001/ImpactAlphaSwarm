@@ -40,5 +40,11 @@ export default function ProtectedRoute() {
     return <Navigate to="/onboarding" replace />
   }
 
+  // Onboarding writes the one analysis row a user can have, so a finished user
+  // can only fail there. Their answers are revised in Settings instead.
+  if (analysis && location.pathname === '/onboarding') {
+    return <Navigate to="/dashboard" replace />
+  }
+
   return <Outlet />
 }

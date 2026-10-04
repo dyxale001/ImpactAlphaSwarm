@@ -31,7 +31,7 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   // 4. Expertise check
   const literacyScore = 
     parseInt(surveyAnswers['q_financial_knowledge_self'] || "0") + 
-    (parseInt(surveyAnswers['q_financial_math'] || "0") > 1 ? 1 : 0) +
+    (parseInt(surveyAnswers['q_financial_math'] || "0") === 3 ? 1 : 0) +
     (parseInt(surveyAnswers['q_inflation'] || "0") === 3 ? 1 : 0) +
     (parseInt(surveyAnswers['q_diversification'] || "0") === 3 ? 1 : 0);
     

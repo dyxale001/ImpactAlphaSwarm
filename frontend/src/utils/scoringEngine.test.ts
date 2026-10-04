@@ -152,7 +152,7 @@ describe('determinePsychometrics — expertise', () => {
     expect(
       answers({
         q_financial_knowledge_self: '5', // 5
-        q_financial_math: '2',           // +1 (must be > 1)
+        q_financial_math: '3',           // +1 (must equal 3)
         q_inflation: '3',                // +1 (must equal 3)
         q_diversification: '3',          // +1  = 8
       }).calculatedExpertise,
@@ -166,7 +166,7 @@ describe('determinePsychometrics — expertise', () => {
   it('the band between is intermediate', () => {
     expect(answers({ q_financial_knowledge_self: '4' }).calculatedExpertise).toBe('intermediate')
     expect(
-      answers({ q_financial_knowledge_self: '3', q_financial_math: '2' }).calculatedExpertise,
+      answers({ q_financial_knowledge_self: '3', q_financial_math: '3' }).calculatedExpertise,
     ).toBe('intermediate')
   })
 
@@ -186,12 +186,17 @@ describe('determinePsychometrics — expertise', () => {
     ).toBe('intermediate')
   })
 
-  it('the financial-maths question credits any answer above 1', () => {
+  it('the financial-maths question credits only "More than R1,020"', () => {
+    // Value 3 is the correct compound-interest answer. "Exactly R1,020" (2) is
+    // the simple-interest mistake and used to earn the mark as well.
     expect(
       answers({ q_financial_knowledge_self: '5', q_financial_math: '1' }).calculatedExpertise,
     ).toBe('intermediate')
     expect(
       answers({ q_financial_knowledge_self: '5', q_financial_math: '2' }).calculatedExpertise,
+    ).toBe('intermediate')
+    expect(
+      answers({ q_financial_knowledge_self: '5', q_financial_math: '3' }).calculatedExpertise,
     ).toBe('advanced')
   })
 
@@ -199,7 +204,7 @@ describe('determinePsychometrics — expertise', () => {
     const cautiousExpert = answers({
       q_a: '0',
       q_financial_knowledge_self: '5',
-      q_financial_math: '2',
+      q_financial_math: '3',
       q_inflation: '3',
       q_diversification: '3',
     })

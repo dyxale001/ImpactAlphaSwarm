@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Layers, ArrowUpRight, Activity, Search, Check, Eye, ArrowRight, Terminal } from 'lucide-react'
 import { useOnboarding } from '../hooks/useOnboarding'
 import { SURVEY_QUESTIONS, GOAL_QUESTIONS, UNIVERSE_OPTIONS, INVESTOR_PATHS, FAMILIAR_ASSETS } from '../utils/onboardingData'
@@ -9,6 +9,8 @@ import { FUNDS_ENABLED } from '../utils/fundsFlags'
 import InvestorProfileCard from '../components/InvestorProfileCard'
 import { describeGoals } from '../utils/goals'
 import { useAuthStore } from '../store/authStore'
+import { sectorColour } from '../utils/sectorColours'
+import { describeAssessmentGaps } from '../utils/assessmentGaps'
 
 // ─── Display maps ──────────────────────────────────────────────────────────
 
@@ -20,13 +22,11 @@ const PATH_ICONS: Record<string, React.ElementType> = {
   value_hunter:   Search,
 }
 
-// Sector accent dot per universe option
-const SECTOR_DOT: Record<string, string> = {
-  'Technology':    'bg-sector-technology',
-  'Green Energy':  'bg-sector-green-energy',
-  'Finance':       'bg-sector-finance',
-  'AI & Robotics': 'bg-sector-ai-robotics',
-  'Healthcare':    'bg-sector-healthcare',
+
+// The asset cards' sector label is 8px caps in a narrow card, so long names shorten
+const SECTOR_SHORT: Record<string, string> = {
+  'AI & Robotics':          'AI',
+  'Media & Communications': 'Media',
 }
 
 const STEP_TITLES = ['Your Path', 'What You Know', 'Assessment', 'Profile']
@@ -72,6 +72,7 @@ export default function Onboarding() {
     setAddPicksToWatchlist,
     handleSubmit,
     toggleUniverse,
+    universeTouched,
     prevStep,
     handleSurveyAnswer,
     goalAnswers,
@@ -84,9 +85,21 @@ export default function Onboarding() {
     window.scrollTo(0, 0)
   }, [step])
 
+  // The banner sits above the form, which on step 3 is far off screen from
+  // the button that raised it. Bring it into view so a click never looks inert.
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
+
   const answeredCount = Object.keys(formData.surveyAnswers).length
   const totalQuestions = SURVEY_QUESTIONS.length
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100)
+  const assessmentGaps = describeAssessmentGaps({
+    goalsMissing: GOAL_QUESTIONS.length - goalsAnswered,
+    riskMissing: totalQuestions - answeredCount,
+    sectorMissing: formData.universe.length === 0,
+  })
 
   const firstName = user?.user_metadata?.first_name || 'Authorised'
   const lastName = user?.user_metadata?.last_name || 'Investor'
@@ -200,7 +213,7 @@ export default function Onboarding() {
           </div>
 
           {error && (
-            <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
+            <div ref={errorRef} className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
               {error}
             </div>
           )}
@@ -273,9 +286,9 @@ export default function Onboarding() {
                       }`}
                     >
                       <div className="mb-2 flex items-center gap-[5px]">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTOR_DOT[asset.sector] ?? 'bg-sector-technology'}`} />
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${sectorColour(asset.sector).fill}`} />
                         <span className="truncate text-[8px] font-bold uppercase tracking-[0.08em] text-muted">
-                          {asset.sector.replace(' & Robotics', '')}
+                          {SECTOR_SHORT[asset.sector] ?? asset.sector}
                         </span>
                       </div>
                       <p className="text-sm font-extrabold tracking-tight text-forest-900">{asset.ticker}</p>
@@ -381,7 +394,7 @@ export default function Onboarding() {
               <div className="rounded-xl bg-white p-6 shadow-sm">
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-eyebrow text-forest-700">Target Sectors</p>
                 <p className="mb-3.5 text-[13px] text-muted">
-                  {formData.universe.length > 0
+                  {formData.universe.length > 0 && !universeTouched
                     ? 'Pre-filled from your picks, adjust as needed.'
                     : 'Select sectors where you want the Swarm to look.'}
                 </p>
@@ -399,7 +412,9 @@ export default function Onboarding() {
                             : 'border-forest-900/14 bg-white text-muted'
                         }`}
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${SECTOR_DOT[item] ?? 'bg-sector-technology'}`} />
+                        {/* The selected chip is dark forest, the same as the darker sector
+                            colours, so the dot gets a light ring to stay visible on it. */}
+                        <span className={`h-1.5 w-1.5 rounded-full ${sectorColour(item).fill} ${selected ? 'ring-1 ring-white/80' : ''}`} />
                         {item}
                       </button>
                     )
@@ -434,7 +449,7 @@ export default function Onboarding() {
                     Your goals
                   </h3>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-forest-900">
-                    {describeGoals(goals)}
+                    {capitalise(describeGoals(goals) ?? '')}
                   </p>
                   <p className="mt-2 text-[12px] leading-relaxed text-muted">
                     We use these to narrow fund categories to the ones whose published risk
@@ -457,6 +472,11 @@ export default function Onboarding() {
           )}
 
           {/* ── Navigation ── */}
+          {step === 3 && assessmentGaps && (
+            <p className="-mb-3 text-center text-[13px] text-muted" aria-live="polite">
+              {assessmentGaps}
+            </p>
+          )}
           <div className="flex items-center gap-3 border-t border-forest-900/8 pt-5">
             {step > 1 && (
               <button
@@ -480,7 +500,7 @@ export default function Onboarding() {
 
             <button
               type="submit"
-              disabled={loading || (step === 3 && (progressPercent < 100 || formData.universe.length === 0))}
+              disabled={loading || (step === 3 && Boolean(assessmentGaps))}
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-forest-700 p-4 text-[13px] sm:text-[15px] font-semibold text-white transition-opacity hover:opacity-85 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading
@@ -489,7 +509,7 @@ export default function Onboarding() {
                   ? 'Continue'
                   : step === 2
                     ? familiarAssets.length > 0
-                      ? `Continue with ${familiarAssets.length} picks`
+                      ? `Continue with ${familiarAssets.length} ${familiarAssets.length === 1 ? 'pick' : 'picks'}`
                       : 'Continue'
                     : step === 3
                       ? 'Generate Profile'

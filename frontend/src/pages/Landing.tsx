@@ -624,7 +624,7 @@ export default function Landing() {
                   <span className="text-[13px] font-bold text-muted-foreground">Green Energy</span>
                   <span className="h-3 w-3 rounded-full border border-forest-900/14" />
                 </div>
-                <p className="mt-1 text-[10px] leading-normal text-muted-foreground">Solar, wind &amp; clean infrastructure</p>
+                <p className="mt-1 text-[10px] leading-normal text-muted-foreground">Solar, wind, water &amp; clean infrastructure</p>
               </div>
               <div className="rounded-md border border-lime-500 bg-white p-3.5 ring-4 ring-lime-500/25">
                 <div className="flex items-center justify-between">

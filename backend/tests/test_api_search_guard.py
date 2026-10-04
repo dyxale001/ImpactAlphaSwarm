@@ -8,7 +8,8 @@ be scored, ranked and shown against US equities on numbers that mean nothing.
 A JSE fund belongs in the funds catalogue, which reads published fact sheets.
 
 The exchange codes are not invented here: they were read off live Yahoo search
-responses for US and South African names.
+responses for US and South African names. Since 2026-10-03 the guard also keeps
+a watchlist to stocks on the NYSE and Nasdaq: no ETFs, no Cboe, no OTC.
 
 No network: the filter is a pure function over the shape Yahoo returns.
 """
@@ -39,17 +40,29 @@ class TestUsListings:
     @pytest.mark.parametrize(
         "symbol,exchange",
         [
-            ("AAPL", "NMS"),    # NASDAQ
-            ("QQQ", "NGM"),     # NASDAQ, second code
+            ("AAPL", "NMS"),    # Nasdaq
+            ("APPS", "NGM"),    # Nasdaq, second tier
+            ("CLSK", "NCM"),    # Nasdaq, third tier
             ("BRK-B", "NYQ"),   # NYSE, share class written with a hyphen
-            ("IVV", "PCX"),     # NYSE Arca, where most US ETFs answer
-            ("SPYI", "BTS"),    # BATS
-            ("NPSNY", "PNK"),   # US over-the-counter, deliberately included
-            ("AAUKF", "OQX"),
+            ("IMO", "ASE"),     # NYSE American
         ],
     )
-    def test_a_us_venue_passes(self, symbol, exchange):
+    def test_a_nyse_or_nasdaq_listing_passes(self, symbol, exchange):
         assert _is_us_listed(quote(symbol, exchange)) is True
+
+    @pytest.mark.parametrize(
+        "symbol,exchange",
+        [
+            ("IVV", "PCX"),     # NYSE Arca, where most US ETFs answer
+            ("SPYI", "BTS"),    # Cboe
+            ("NPSNY", "PNK"),   # US over-the-counter, allowed until 2026-10-03
+            ("AAUKF", "OQX"),
+            ("OTCQB", "OQB"),
+        ],
+    )
+    def test_other_us_venues_are_dropped(self, symbol, exchange):
+        # A watchlist is for stocks on the NYSE and Nasdaq only.
+        assert _is_us_listed(quote(symbol, exchange)) is False
 
     @pytest.mark.parametrize(
         "symbol,exchange",
@@ -95,10 +108,14 @@ class TestTheFilter:
         ]
         assert [row["symbol"] for row in _filter_search_quotes(quotes)] == ["AAPL"]
 
-    def test_us_etfs_are_kept(self):
-        # The existing behaviour, unchanged: a US ETF is a legitimate search hit.
-        quotes = [quote("IVV", "PCX", "ETF")]
-        assert len(_filter_search_quotes(quotes)) == 1
+    def test_etfs_are_dropped_even_on_nasdaq(self):
+        # Stocks only: an ETF listed on Nasdaq itself is still not addable.
+        quotes = [quote("QQQ", "NGM", "ETF"), quote("AAPL", "NMS")]
+        assert [row["symbol"] for row in _filter_search_quotes(quotes)] == ["AAPL"]
+
+    def test_an_otc_listing_never_reaches_the_results(self):
+        quotes = [quote("NPSNY", "PNK"), quote("AAPL", "NMS")]
+        assert [row["symbol"] for row in _filter_search_quotes(quotes)] == ["AAPL"]
 
     def test_filtering_happens_before_the_slice(self):
         # REGRESSION GUARD. Filtering after the slice would fill all six slots
@@ -126,14 +143,15 @@ class TestTheFilter:
 
 
 class TestTheConstants:
-    def test_the_venues_are_the_ones_observed_live(self):
-        # PINNED VALUE. Read off live Yahoo search responses; a code removed
-        # here silently stops a real US venue being searchable.
-        assert US_EXCHANGE_CODES == {"NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "BTS", "PNK", "OQB", "OQX"}
+    def test_the_venues_are_the_nyse_and_nasdaq(self):
+        # PINNED VALUE. Nasdaq's three tiers, the NYSE and NYSE American, read off
+        # live Yahoo search responses. Narrowed to these on 2026-10-03.
+        assert US_EXCHANGE_CODES == {"NMS", "NGM", "NCM", "NYQ", "ASE"}
 
-    def test_no_foreign_venue_is_on_the_list(self):
-        for code in ("JNB", "LSE", "GER", "AMS", "TOR", "SAO", "EBS", "MIL", "FRA", "SET"):
+    def test_no_foreign_or_secondary_venue_is_on_the_list(self):
+        for code in ("JNB", "LSE", "GER", "AMS", "TOR", "SAO", "EBS", "MIL", "FRA", "SET",
+                     "PCX", "BTS", "PNK", "OQB", "OQX"):
             assert code not in US_EXCHANGE_CODES, code
 
-    def test_only_priceable_instruments_are_searchable(self):
-        assert SEARCHABLE_QUOTE_TYPES == {"EQUITY", "ETF"}
+    def test_only_stocks_are_searchable(self):
+        assert SEARCHABLE_QUOTE_TYPES == {"EQUITY"}

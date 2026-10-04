@@ -6,6 +6,7 @@ import {
   TrendingUp,
   Bot,
   Heart,
+  Tv,
   ArrowLeft,
   ChevronRight,
   Building2,
@@ -29,7 +30,7 @@ import type { FundHolding } from "../services/api/analysis";
 // Mirrors the universe tiles used in Settings' Investment Preferences.
 const UNIVERSE_TILES = [
   { id: "Technology", Icon: Cpu, desc: "Software, hardware & semiconductors" },
-  { id: "Green Energy", Icon: Zap, desc: "Solar, wind & clean infrastructure" },
+  { id: "Green Energy", Icon: Zap, desc: "Solar, wind, water & clean infrastructure" },
   {
     id: "Finance",
     Icon: TrendingUp,
@@ -37,6 +38,7 @@ const UNIVERSE_TILES = [
   },
   { id: "AI & Robotics", Icon: Bot, desc: "Machine learning & automation" },
   { id: "Healthcare", Icon: Heart, desc: "Biotech, pharma & medical devices" },
+  { id: "Media & Communications", Icon: Tv, desc: "Streaming, social media & telecoms" },
 ] as const;
 
 type Section = "universes" | "funds";

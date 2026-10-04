@@ -7,8 +7,10 @@ analyst agents look at — never how they score. See DISCOVERY_AGENT_PLAN.md.
 Pipeline (all wrapped so any stage failing degrades to the previous pool):
   1. Candidate generation  — StockTwits trending (+ optional Groq gap-filler)
   2. Validation funnel      — real US common stock, seasoned, big, liquid, covered
-  3. Universe classification — static industry map first, Groq for the residue
-  4. Scoring + hysteresis    — stable pools, capped churn, decay, quarantine
+  3. Universe classification — pins, static industry map, Groq for the residue,
+                               then a Groq pass splitting AI & Robotics out of Technology
+  4. Scoring + hysteresis    — stable pools, capped churn, decay, quarantine;
+                               curated seeds are scored by the same formula, never decayed
 
 Only Stage 4's persistence touches the DB, and only when ``dry_run`` is False;
 everything upstream is pure computation over injected data, so the ``--dry-run``
@@ -30,8 +32,12 @@ test can drive the whole pass without a socket.
 	└── ResearchabilityGate      is anyone trustworthy writing about it?
 
 	Classifier (ABC)             stage 3 — which universe does it belong to?
+	├── PinnedClassifier         curated names, never up for debate
 	├── IndustryClassifier       the static map
 	└── LlmClassifier            the residue the map cannot place
+
+	Refiner (ABC)                stage 3, second look at what was placed
+	└── AiRoboticsSplitter       Technology names that are really AI & Robotics
 
 The funnel is a chain: a candidate is offered to each gate in turn and the first
 one to return a reason stops it, which is why the rejection log can name the exact
@@ -52,8 +58,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -72,7 +79,33 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger("asset-discovery")
 
 # ── Universes (must match the seed labels / onboardingData.ts exactly) ────────
-UNIVERSES = ["Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare"]
+UNIVERSES = [
+    "Technology", "Green Energy", "Finance", "AI & Robotics", "Healthcare",
+    "Media & Communications",
+]
+
+# What each universe covers, for the Groq prompts. A bare label is not enough: the
+# model reads "Green Energy" as solar and wind only, and would never offer or place
+# a water company there. Keep in step with the card copy in the frontend.
+UNIVERSE_SCOPES: dict[str, str] = {
+    "Technology": "software, hardware, semiconductors and networking equipment",
+    "Green Energy": (
+        "solar, wind, hydrogen and other clean power, and water: water utilities, "
+        "water treatment, and water infrastructure such as pipes, pumps and meters"
+    ),
+    "Finance": "banks, insurers, fintech, payments and asset management",
+    "AI & Robotics": "AI chips and infrastructure, AI software, robotics and automation",
+    "Healthcare": "biotech, pharma, medical devices and health services",
+    "Media & Communications": (
+        "search and social media, streaming, entertainment, video games, publishing, "
+        "and telecoms carriers, cable and satellite communications"
+    ),
+}
+
+
+def describe_universes(universes: list[str]) -> str:
+    """'Label' (scope); 'Label' (scope) ... for a prompt."""
+    return "; ".join(f"'{u}' ({UNIVERSE_SCOPES[u]})" for u in universes)
 
 # ── Config (all env-tunable; see DISCOVERY_AGENT_PLAN.md §9) ───────────────────
 DISCOVERY_LLM_FILLER = os.getenv("DISCOVERY_LLM_FILLER", "true").lower() == "true"
@@ -104,16 +137,54 @@ STOCKTWITS_STREAM_HEADERS = {
 }
 
 # Finnhub finnhubIndustry (substring, lowercased) → universe. First match wins.
-# Deliberately partial: Technology/Finance/Healthcare classify cleanly here;
+# Deliberately partial: Technology/Finance/Healthcare/Media & Communications
+# classify cleanly here;
 # Green Energy and (especially) AI & Robotics are not real industry categories,
 # so their residue falls through to the Groq classifier.
 INDUSTRY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("Green Energy", ("renewable", "solar", "wind", "hydrogen", "clean energy")),
+    ("Green Energy", ("renewable", "solar", "wind", "hydrogen", "clean energy", "water")),
     ("Healthcare", ("pharmaceutic", "biotech", "health", "life sciences", "medical", "drug")),
     ("Finance", ("bank", "insurance", "financial", "capital markets", "asset management")),
+    # Ahead of Technology on purpose: "telecommunications" contains "communications".
+    # Finnhub's bare "Communications" is networking equipment (CSCO, ANET, CIEN),
+    # which stays in Technology; its "Media" covers GOOGL and META, as GICS does.
+    ("Media & Communications", ("media", "telecommunication", "entertainment",
+                                "broadcasting", "publishing")),
     ("Technology", ("semiconductor", "software", "technology", "hardware", "electronic",
-                    "communications", "telecommunication", "internet", "media")),
+                    "communications", "internet")),
 ]
+
+# Names whose universe is fixed whatever Finnhub calls them. Finnhub files NVDA under
+# Semiconductors and ISRG under health care, so the keyword map would put them in
+# Technology and Healthcare; pinning them skips both the map and the model.
+AI_ROBOTICS_PINS = (
+    "NVDA", "PLTR", "ARM", "TSLA", "ISRG", "SYM", "TER",
+    "PATH", "AI", "SOUN", "ROK", "CGNX",
+    # AI infrastructure the splitter keeps calling Technology, run to run.
+    "AMD", "AVGO", "ALAB", "MRVL", "APLD", "CRWV", "NBIS", "SMCI",
+)
+# Water belongs in Green Energy, but Finnhub files water utilities under Utilities and
+# the equipment makers under Machinery, so neither the map nor the model would put
+# them there unaided. Pure plays only; Ecolab and the like, where water is one
+# segment of many, are left to the classifier.
+WATER_PINS = (
+    "AWK", "WTRG", "AWR", "CWT", "HTO",          # water utilities
+    "XYL", "VLTO", "WTS", "ZWS", "PNR", "BMI",   # treatment, flow control, metering
+    "MWA", "WMS", "FELE", "ERII",                # pipes, pumps, recovery
+)
+# Media and telecoms names whose Finnhub industry sits outside the map's keywords
+# (Hotels, Restaurants & Leisure for live events, Software for games) or that should
+# never be left to a model's mood.
+MEDIA_PINS = (
+    "GOOGL", "GOOG", "META", "NFLX", "DIS", "WBD", "ROKU", "SPOT", "RDDT", "SNAP",
+    "PINS", "TTWO", "EA", "RBLX", "LYV", "TKO", "FOXA", "NYT",
+    "T", "VZ", "TMUS", "CMCSA", "CHTR", "ASTS",
+)
+PINNED_UNIVERSES: dict[str, str] = {
+    **{ticker: "AI & Robotics" for ticker in AI_ROBOTICS_PINS},
+    **{ticker: "Green Energy" for ticker in WATER_PINS},
+    **{ticker: "Media & Communications" for ticker in MEDIA_PINS},
+}
 
 
 @dataclass
@@ -136,26 +207,92 @@ class Candidate:
 # Groq helpers (thin; isolated for stubbing)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _get_groq():
-    # 3000 rather than 600: classifying a whole residue of tickers is the most
-    # demanding prompt here and spends most of its tokens reasoning, which left
-    # nothing for the answer under the old budget. Headroom is not billed, and a
-    # ceiling reached mid-thought produces an empty reply rather than a shorter one.
-    from ..utils.llm_client import GroqClient
+class DiscoveryLlm:
+    """Discovery's Groq access: one call on its own account, one retry on another.
 
-    # Discovery names its own account so its usage stays legible in the Groq
-    # dashboards, separate from the reasoning traces. It shares that account with a
-    # trace lane, which is safe on both counts that matter: the two never issue a
-    # call in the same minute (api.run_daily awaits this pass to completion before
-    # the batch, and discovery never runs on the interactive path), and this agent
-    # spends about six calls a night in total against the daily quota.
-    return GroqClient.create(
-        purpose="discovery",
-        max_tokens=3000,
-        temperature=0.2,
-        key_env="GROQ_API_KEY3",
-        fallback_key_env="GROQ_API_KEY",
-    )
+    Discovery names its own account (key 3) so its usage stays legible in the Groq
+    dashboards, separate from the reasoning traces. It shares that account with a
+    trace lane, which is safe because the two never issue a call in the same minute:
+    api.run_daily awaits this pass to completion before the batch, and discovery
+    never runs on the interactive path.
+
+    A failed call gets exactly one retry, on key 2. Key 2 is a trace lane and
+    nothing else, so it sits idle while discovery runs, and a retry there starts on
+    a fresh per-minute token allowance instead of stacking onto the one the first
+    attempt just spent. What the retry changes depends on how the first call failed:
+
+    * an empty or truncated reply (``EmptyCompletionError``) means the model spent
+      its budget reasoning, so the retry gets a bigger budget. Headroom is not
+      billed, and this only ever applies to the call that failed. Without key 2 it
+      retries on the same account, since a bigger budget is the actual fix;
+    * any other error (a 429, a timeout, an outage) is about the account or the
+      connection, so the retry keeps the budget and only changes account. Without
+      key 2 there is nowhere else to go, and the error stands.
+
+    Each call site passes a label (``gap_fill``, ``classify``, ``split``), which
+    becomes the client's purpose and so names the call in every log line.
+    """
+
+    KEY_ENV = "GROQ_API_KEY3"
+    FALLBACK_KEY_ENV = "GROQ_API_KEY"
+    RETRY_KEY_ENV = "GROQ_API_KEY2"
+    # 3000 rather than 600: classifying a whole residue of tickers spends most of its
+    # tokens reasoning, which left nothing for the answer under the old budget.
+    MAX_TOKENS = 3000
+    RETRY_MAX_TOKENS = 8000
+    TEMPERATURE = 0.2
+
+    def __init__(self, label: str, factory=None):
+        self.purpose = f"discovery.{label}"
+        self._factory = factory
+        self._primary = self._build(self.KEY_ENV, self.MAX_TOKENS, self.FALLBACK_KEY_ENV)
+
+    @classmethod
+    def create(cls, label: str, factory=None) -> Optional["DiscoveryLlm"]:
+        """The client for one call site, or None when Groq is unconfigured."""
+        llm = cls(label, factory)
+        return llm if llm._primary is not None else None
+
+    def _build(self, key_env: str, max_tokens: int, fallback_key_env: Optional[str] = None,
+               suffix: str = ""):
+        if self._factory is None:
+            from ..utils.llm_client import GroqClient
+
+            self._factory = GroqClient.create
+        return self._factory(
+            purpose=self.purpose + suffix,
+            max_tokens=max_tokens,
+            temperature=self.TEMPERATURE,
+            key_env=key_env,
+            fallback_key_env=fallback_key_env,
+        )
+
+    def complete(self, prompt: str) -> str:
+        """The reply text, or raise the retry's error when both attempts fail."""
+        from ..utils.llm_client import EmptyCompletionError
+
+        try:
+            return self._primary.complete(prompt)
+        except EmptyCompletionError as exc:
+            first_error: Exception = exc
+            retry = (
+                self._build(self.RETRY_KEY_ENV, self.RETRY_MAX_TOKENS, suffix=".retry")
+                or self._build(self.KEY_ENV, self.RETRY_MAX_TOKENS, self.FALLBACK_KEY_ENV,
+                               suffix=".retry")
+            )
+        except Exception as exc:
+            first_error = exc
+            retry = self._build(self.RETRY_KEY_ENV, self.MAX_TOKENS, suffix=".retry")
+
+        if retry is None:
+            raise first_error
+        logger.warning("%s failed, retrying once as %s: %s",
+                       self.purpose, f"{self.purpose}.retry", first_error)
+        return retry.complete(prompt)
+
+
+def _get_groq(label: str) -> Optional[DiscoveryLlm]:
+    return DiscoveryLlm.create(label)
 
 
 def _groq_text(llm, prompt: str) -> str:
@@ -164,7 +301,8 @@ def _groq_text(llm, prompt: str) -> str:
     except Exception as exc:
         # Warning, not info: at the default LOG_LEVEL an info line is invisible, which
         # is how a model retirement went unnoticed across a whole run.
-        logger.warning("Groq invoke failed for discovery: %s", exc)
+        logger.warning("Groq invoke failed for %s: %s",
+                       getattr(llm, "purpose", "discovery"), exc)
         return ""
 
 
@@ -418,12 +556,14 @@ class LlmGapFillSource(CandidateSource):
         decays a universe's incumbents on the strength of an empty result, so
         treating a failure as [] retires assets on the back of a model hiccup.
         """
-        llm = _get_groq()
+        llm = _get_groq("gap_fill")
         if llm is None:
             return None
         prompt = (
             f"List up to {DISCOVERY_LLM_CANDIDATES} large, liquid, US-listed (NYSE or NASDAQ) "
-            f"common-stock companies in the '{universe}' sector. Return ONLY a JSON array of "
+            f"common-stock companies in the '{universe}' sector, which here covers "
+            f"{UNIVERSE_SCOPES[universe]}; spread the list across all of those. "
+            "Return ONLY a JSON array of "
             f'ticker symbol strings, e.g. ["AAA","BBB"]. No prose.'
         )
         raw = _groq_text(llm, prompt)
@@ -447,6 +587,26 @@ class LlmGapFillSource(CandidateSource):
                 pool.add(ticker, self.name)
 
 
+class CuratedSource(CandidateSource):
+    """A fixed list offered to the funnel every night.
+
+    For themes that neither trend on StockTwits nor come back reliably from the gap
+    fill: water names almost never trend, and asked for Green Energy the model
+    offered one real water ticker among invented ones. Offering them is all this
+    does. Each still has to pass every gate and earn its place on score, and because
+    it is seen every night it never decays out while it keeps passing.
+    """
+
+    name = "curated"
+
+    def __init__(self, tickers: tuple[str, ...] | list[str] | None = None):
+        self.tickers = tuple(tickers) if tickers is not None else WATER_PINS
+
+    def contribute(self, pool: CandidatePool) -> None:
+        for ticker in self.tickers:
+            pool.add(ticker, self.name)
+
+
 class SourceFactory:
     """Builds the candidate sources that configuration says are switched on.
 
@@ -456,7 +616,7 @@ class SourceFactory:
 
     @staticmethod
     def from_config() -> list[CandidateSource]:
-        sources: list[CandidateSource] = [StockTwitsTrendingSource()]
+        sources: list[CandidateSource] = [StockTwitsTrendingSource(), CuratedSource()]
         if DISCOVERY_LLM_FILLER:
             sources.append(LlmGapFillSource())
         return sources
@@ -645,6 +805,17 @@ class Classifier(ABC):
         """Map ticker → universe. A ticker it cannot place is simply absent."""
 
 
+class PinnedClassifier(Classifier):
+    """Curated names whose universe is not up for debate. Runs first, so nothing
+    downstream (the keyword map or the model) can place them elsewhere."""
+
+    def __init__(self, pins: dict[str, str] | None = None):
+        self.pins = pins if pins is not None else PINNED_UNIVERSES
+
+    def classify(self, candidates: list[Candidate]) -> dict[str, str]:
+        return {c.ticker: self.pins[c.ticker] for c in candidates if c.ticker in self.pins}
+
+
 class IndustryClassifier(Classifier):
     """The static industry→universe map. Free, deterministic, and right for the
     three universes that are real industry categories."""
@@ -680,12 +851,13 @@ class LlmClassifier(Classifier):
         dropped rather than guessed."""
         if not tickers:
             return {}
-        llm = _get_groq()
+        llm = _get_groq("classify")
         if llm is None:
             return {}
         prompt = (
             "Classify each stock ticker into exactly one of these sectors: "
-            f"{UNIVERSES + ['none']}. Use 'none' if it fits none well. "
+            f"{describe_universes(UNIVERSES)}; or 'none'. Use 'none' if it fits none well. "
+            "Answer with the sector name only, without the description. "
             f"Tickers: {tickers}. "
             'Return ONLY a JSON object mapping ticker -> sector, e.g. {"AAA":"Technology"}.'
         )
@@ -701,18 +873,89 @@ class LlmClassifier(Classifier):
         return out
 
 
+class Refiner(ABC):
+    """Second opinion on candidates that are already placed."""
+
+    @abstractmethod
+    def refine(self, candidates: list[Candidate]) -> dict[str, str]:
+        """Map ticker → new universe. A ticker it leaves out keeps its universe."""
+
+
+class AiRoboticsSplitter(Refiner):
+    """Asks Groq which Technology names are really AI & Robotics.
+
+    Finnhub has no AI industry, so the keyword map files every AI chip and AI
+    platform under Technology and the residue classifier never gets to see them.
+    That is what left AI & Robotics empty while Technology overflowed. Only an
+    explicit "AI & Robotics" answer moves a ticker; a failed or vague reply leaves
+    it in Technology, where it was.
+    """
+
+    source = "Technology"
+    target = "AI & Robotics"
+
+    def refine(self, candidates: list[Candidate]) -> dict[str, str]:
+        tech = [c for c in candidates if c.universe == self.source]
+        if not tech:
+            return {}
+        llm = _get_groq("split")
+        if llm is None:
+            return {}
+        listing = "; ".join(
+            f"{c.ticker} ({c.name or c.ticker}, {c.industry or 'unknown industry'})" for c in tech
+        )
+        # These are investment themes, not industry codes, so the question is how the
+        # market trades the stock today. Asked about "core business" instead, the model
+        # kept every name in Technology, AMD and SMCI included.
+        prompt = (
+            f"For each US stock below, answer '{self.target}' or '{self.source}', judged by "
+            "how investors trade the stock today. "
+            f"'{self.target}': the stock is widely held as an AI or robotics play, because "
+            "most of its growth now comes from AI accelerator chips, AI servers, AI data "
+            "centres and compute, AI software platforms, or robots and automation "
+            "(e.g. NVIDIA, AMD, Broadcom, Super Micro, CoreWeave, Vertiv, Palantir, "
+            "Symbotic, Intuitive Surgical). "
+            f"'{self.source}': diversified tech giants (e.g. Apple, Microsoft, Alphabet, Meta, "
+            "Amazon) and companies whose business is mainly general software, consumer "
+            "devices, storage, networking, telecoms or general purpose chips, even if "
+            "they mention AI. "
+            f"Stocks: {listing}. "
+            'Return ONLY a JSON object mapping ticker -> label, e.g. {"AAA":"Technology"}.'
+        )
+        parsed = _parse_json_object(_groq_text(llm, prompt))
+        tech_tickers = {c.ticker for c in tech}
+        out: dict[str, str] = {}
+        for ticker, label in parsed.items():
+            tk = str(ticker).upper()
+            if tk in tech_tickers and label == self.target:
+                out[tk] = self.target
+        return out
+
+
 class ClassificationChain:
     """Cheap classifier first; whatever it cannot place falls through to the next.
 
     Ordering is the whole design: the static map costs nothing and is never wrong,
-    so the LLM is only ever asked about the residue.
+    so the LLM is only ever asked about the residue. Refiners then get a second
+    look at what was placed, for the one split the map cannot make by industry.
     """
 
-    def __init__(self, classifiers: list[Classifier] | None = None):
+    def __init__(
+        self,
+        classifiers: list[Classifier] | None = None,
+        refiners: list[Refiner] | None = None,
+    ):
         self.classifiers = classifiers if classifiers is not None else [
+            PinnedClassifier(),
             IndustryClassifier(),
             LlmClassifier(),
         ]
+        # The production splitter comes with the production classifiers only: a caller
+        # that hands in its own classifiers is composing a chain and gets no hidden
+        # Groq call on top of it.
+        self.refiners = refiners if refiners is not None else (
+            [AiRoboticsSplitter()] if classifiers is None else []
+        )
 
     def apply(self, survivors: list[Candidate]) -> None:
         """Set ``candidate.universe`` in place."""
@@ -728,6 +971,11 @@ class ClassificationChain:
                 if ticker in by_ticker:
                     by_ticker[ticker].universe = universe
             unplaced = [c for c in unplaced if c.universe is None]
+
+        for refiner in self.refiners:
+            for ticker, universe in refiner.refine(survivors).items():
+                if ticker in by_ticker and universe in UNIVERSES:
+                    by_ticker[ticker].universe = universe
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -815,6 +1063,88 @@ class HysteresisPolicy:
         return plan
 
 
+class SeedScorer:
+    """Gives every active curated seed tonight's score, by the formula discovered
+    names get.
+
+    Seeds used to be ranked at a fixed baseline, so "not scored by discovery" read
+    as "a weak candidate": AAPL, MSFT and AMZN sat below the 15th discovered
+    Technology name and never reached a run. Scoring them on the same trending,
+    news and liquidity terms lets a strong seed rise and a weak one fall on merit.
+
+    Seeds skip the gates. Those decide whether a new name gets in, and a curated
+    name is already in; an ETF seed would fail the common-stock gate and lose its
+    score for a reason that says nothing about its strength. A seed the funnel
+    already measured tonight reuses those facts. Any other costs one Finnhub news
+    call and one yfinance call, spaced so this pass alone stays under Finnhub's
+    per-minute limit, because a refused call reads as zero news, not as an error.
+
+    Scoring is all this does. It never decays, retires, quarantines or moves a seed.
+    """
+
+    PAUSE_SECONDS = 1.0
+
+    def __init__(
+        self,
+        finnhub: FinnhubClient | None = None,
+        liquidity: LiquiditySource | None = None,
+        scorer: DiscoveryScorer | None = None,
+        pause: float | None = None,
+        sleep=None,
+    ):
+        self.finnhub = finnhub or FinnhubClient()
+        self.liquidity = liquidity or LiquiditySource()
+        self.scorer = scorer or DiscoveryScorer()
+        self.pause = self.PAUSE_SECONDS if pause is None else pause
+        self._sleep = sleep or time.sleep
+
+    @staticmethod
+    def active_seeds(pool_rows: list[dict]) -> list[dict]:
+        """Seeds in a known universe that a person has not switched off."""
+        return [
+            r for r in pool_rows
+            if r.get("origin") == "seed" and r.get("ticker")
+            and r.get("universe") in UNIVERSES and r.get("is_active") is not False
+        ]
+
+    def score_all(
+        self,
+        seed_rows: list[dict],
+        pool: CandidatePool,
+        measured: dict[str, Candidate],
+        max_watchlist_by_universe: dict[str, int],
+        now: datetime,
+    ) -> dict[str, Candidate]:
+        """ticker -> the seed as measured tonight, ``score`` set. ``measured`` holds
+        the candidates whose news and liquidity the funnel already fetched (its
+        survivors). The candidate is returned whole because its ``dollar_volume`` is
+        stored too: it breaks ties between equal scores in the run's ranking."""
+        scored: dict[str, Candidate] = {}
+        fetched = 0
+        for row in sorted(seed_rows, key=lambda r: r["ticker"]):
+            ticker = row["ticker"]
+            cand = measured.get(ticker)
+            if cand is not None:
+                cand = replace(cand)  # a copy: the funnel's candidate keeps its own score
+            else:
+                if fetched and self.pause:
+                    self._sleep(self.pause)
+                cand = Candidate(
+                    ticker=ticker,
+                    watchlist_count=pool.candidates[ticker].watchlist_count
+                    if ticker in pool.candidates else 0,
+                    news_count=self.finnhub.trusted_news_count(ticker, now),
+                    dollar_volume=self.liquidity.avg_dollar_volume(ticker),
+                )
+                fetched += 1
+            # The trending term is relative to the busiest name in the seed's own
+            # universe tonight; a seed busier than every candidate there sets the max.
+            ceiling = max(max_watchlist_by_universe.get(row["universe"], 0), cand.watchlist_count)
+            cand.score = self.scorer.score(cand, ceiling)
+            scored[ticker] = cand
+        return scored
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Orchestration
 # ══════════════════════════════════════════════════════════════════════════════
@@ -834,12 +1164,16 @@ class DiscoveryRun:
         classifier: ClassificationChain | None = None,
         scorer: DiscoveryScorer | None = None,
         hysteresis: HysteresisPolicy | None = None,
+        seed_scorer: SeedScorer | None = None,
     ):
         self.sources = sources if sources is not None else SourceFactory.from_config()
         self.funnel = funnel or ValidationFunnel()
         self.classifier = classifier or ClassificationChain()
         self.scorer = scorer or DiscoveryScorer()
         self.hysteresis = hysteresis or HysteresisPolicy()
+        self.seed_scorer = seed_scorer or SeedScorer(
+            finnhub=self.funnel.finnhub, scorer=self.scorer
+        )
 
     def gather(self) -> CandidatePool:
         """Stage 1: merge every source into a deduped pool, recording provenance."""
@@ -861,6 +1195,39 @@ class DiscoveryRun:
                 )
         return by_universe
 
+    def follow_moved_incumbents(
+        self,
+        by_universe: dict[str, list[Candidate]],
+        incumbents_by_universe: dict[str, list[dict]],
+    ) -> list[str]:
+        """Re-home discovered incumbents that were classified into a new universe tonight.
+
+        Hysteresis plans each universe on its own, so without this a ticker moving from
+        Technology to AI & Robotics would be a brand new name in AI & Robotics (queued
+        behind the nightly entrant cap) and a quiet incumbent in Technology (decayed
+        towards retirement). Moving its row first makes it a refreshed incumbent where
+        it now belongs. Returns the tickers moved, in a stable order.
+        """
+        home = {
+            row["ticker"]: universe
+            for universe, rows in incumbents_by_universe.items()
+            for row in rows
+            if row.get("ticker")
+        }
+        moved: list[str] = []
+        for universe, cands in by_universe.items():
+            for cand in cands:
+                old = home.get(cand.ticker)
+                if old is None or old == universe:
+                    continue
+                rows = incumbents_by_universe[old]
+                row = next(r for r in rows if r.get("ticker") == cand.ticker)
+                rows.remove(row)
+                incumbents_by_universe[universe].append({**row, "universe": universe})
+                home[cand.ticker] = universe
+                moved.append(cand.ticker)
+        return sorted(moved)
+
     def execute(self, dry_run: bool = False) -> dict[str, Any]:
         """Run the nightly discovery pass. Returns a summary dict. When ``dry_run``
         is True, computes everything (reading the current pool) but writes nothing —
@@ -879,13 +1246,24 @@ class DiscoveryRun:
             update_discovery_scores,
             retire_assets,
             record_discovery_run,
+            update_seed_scores,
         )
 
         pool_rows = get_discovery_pool_rows(UNIVERSES)
+        max_watchlist_by_universe: dict[str, int] = {}
+        # Seeds have their own scoring step below and are never written as discovered
+        # rows (the upsert skips them). Left in hysteresis, a trending seed took one of
+        # the nightly new-name places and was then skipped: on 2026-10-03 Finance and
+        # Healthcare admitted no new name at all, every place gone to JPM, LLY and the
+        # like. Every seed is excluded, switched off or not.
+        seed_tickers = {
+            r["ticker"] for r in pool_rows if r.get("origin") == "seed" and r.get("ticker")
+        }
         incumbents_by_universe: dict[str, list[dict]] = {u: [] for u in UNIVERSES}
         for row in pool_rows:
             if row.get("origin") == "discovered" and row.get("universe") in incumbents_by_universe:
                 incumbents_by_universe[row["universe"]].append(row)
+        summary["reclassified"] = self.follow_moved_incumbents(by_universe, incumbents_by_universe)
 
         for universe in UNIVERSES:
             cands = by_universe[universe]
@@ -906,9 +1284,12 @@ class DiscoveryRun:
                 )
 
             max_watchlist = max((c.watchlist_count for c in cands), default=0)
+            max_watchlist_by_universe[universe] = max_watchlist
             for cand in cands:
                 cand.score = self.scorer.score(cand, max_watchlist)
-            fresh_scores = {c.ticker: c.score for c in cands}
+            # A trending seed still sets the busiest-name ceiling above, so discovered
+            # scores are unchanged; it just does not compete for a new-name place.
+            fresh_scores = {c.ticker: c.score for c in cands if c.ticker not in seed_tickers}
             cand_by_ticker = {c.ticker: c for c in cands}
 
             plan = self.hysteresis.plan(incumbents_by_universe[universe], fresh_scores, now)
@@ -925,6 +1306,7 @@ class DiscoveryRun:
                         sources=c.sources,
                         market_cap_usd=c.market_cap_usd,
                         ipo_date=c.ipo_date,
+                        avg_dollar_volume=c.dollar_volume,
                     )
                 if plan.score_updates and surveyed:
                     update_discovery_scores(plan.score_updates)
@@ -933,6 +1315,7 @@ class DiscoveryRun:
 
             summary["universes"][universe] = {
                 "candidates": len(cands),
+                "seeds_seen": sum(1 for c in cands if c.ticker in seed_tickers),
                 "new_entrants": plan.new_entrants,
                 "refreshed": len(plan.refreshed),
                 "decayed": len(plan.score_updates) if surveyed else 0,
@@ -940,6 +1323,27 @@ class DiscoveryRun:
                 "deferred": len(plan.deferred),
                 **({} if surveyed else {"unsurveyed": "gap_fill_failed"}),
             }
+
+        # Last, and fenced off: a failure here leaves seeds on last night's score (or
+        # the baseline) and must not cost the discovered pool its update.
+        try:
+            seeds = self.seed_scorer.score_all(
+                SeedScorer.active_seeds(pool_rows),
+                pool,
+                {c.ticker: c for c in survivors},
+                max_watchlist_by_universe,
+                now,
+            )
+            seed_scores = {t: c.score for t, c in seeds.items()}
+            if not dry_run:
+                update_seed_scores(seed_scores, {t: c.dollar_volume for t, c in seeds.items()})
+            summary["seeds_scored"] = len(seed_scores)
+            if dry_run:
+                summary["seed_scores"] = seed_scores
+                summary["seed_volumes"] = {t: c.dollar_volume for t, c in seeds.items()}
+        except Exception as exc:
+            logger.warning("Discovery: seed scoring failed, seeds keep their last score: %s", exc)
+            summary["seeds_scored"] = 0
 
         summary["total_candidates"] = len(pool.candidates)
         summary["validated"] = len(survivors)
@@ -950,6 +1354,101 @@ class DiscoveryRun:
         else:
             summary["rejection_detail"] = rejections
         return summary
+
+
+@dataclass
+class ReclassificationPlan:
+    """What a reclassification pass would do to the existing pool."""
+    moves: dict[str, tuple[str, str]] = field(default_factory=dict)  # ticker -> (from, to)
+    seeds_held: dict[str, tuple[str, str]] = field(default_factory=dict)  # same, never written
+
+    def by_target(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for ticker, (_old, new) in sorted(self.moves.items()):
+            out.setdefault(new, []).append(ticker)
+        return out
+
+
+class PoolReclassifier:
+    """Applies tonight's classification rules to rows already in the pool.
+
+    The nightly pass only re-routes a name when it trends again, so the pins, a new
+    universe and the AI & Robotics split would otherwise take weeks to reach the
+    names already sitting in Technology. This runs the same steps over the stored
+    rows once: pins across every universe (ISRG sits in Healthcare), the industry map
+    over Technology (which predates Media & Communications, and so holds Finnhub's
+    Media and Telecommunication names), then the splitter over what is still in
+    Technology, in batches small enough for one reasoning budget.
+
+    Seeds are reported but never moved: the repository refuses to reclassify a
+    curated row, and the plan says which ones it would have moved so a person can
+    decide.
+    """
+
+    BATCH_SIZE = 25
+
+    def __init__(
+        self,
+        finnhub: FinnhubClient | None = None,
+        pinned: PinnedClassifier | None = None,
+        splitter: AiRoboticsSplitter | None = None,
+        industry: IndustryClassifier | None = None,
+    ):
+        self.finnhub = finnhub or FinnhubClient()
+        self.pinned = pinned or PinnedClassifier()
+        self.splitter = splitter or AiRoboticsSplitter()
+        self.industry = industry or IndustryClassifier()
+
+    def candidates(self, rows: list[dict]) -> list[Candidate]:
+        """Rows as candidates. Only Technology rows need an industry (the splitter's
+        prompt uses it), so only they cost a Finnhub call."""
+        out = []
+        for row in rows:
+            ticker = row.get("ticker")
+            if not ticker:
+                continue
+            cand = Candidate(ticker=ticker, name=row.get("name") or "", universe=row.get("universe"))
+            if cand.universe == AiRoboticsSplitter.source and ticker not in self.pinned.pins:
+                cand.industry = self.finnhub.profile(ticker).get("finnhubIndustry")
+            out.append(cand)
+        return out
+
+    def plan(self, rows: list[dict]) -> ReclassificationPlan:
+        cands = self.candidates(rows)
+        origin = {row["ticker"]: row.get("origin") for row in rows if row.get("ticker")}
+        current = {c.ticker: c.universe for c in cands}
+        target: dict[str, str] = {}
+
+        for ticker, universe in self.pinned.classify(cands).items():
+            if universe != current[ticker]:
+                target[ticker] = universe
+
+        # The map is the cheap, deterministic step, so it is trusted to move a row;
+        # an industry it cannot place (Retail, Aerospace) leaves the row where it is.
+        unpinned_tech = [
+            c for c in cands if c.universe == AiRoboticsSplitter.source and c.ticker not in target
+        ]
+        for ticker, universe in self.industry.classify(unpinned_tech).items():
+            if universe != current[ticker]:
+                target[ticker] = universe
+
+        tech = [c for c in cands if c.universe == AiRoboticsSplitter.source and c.ticker not in target]
+        for start in range(0, len(tech), self.BATCH_SIZE):
+            target.update(self.splitter.refine(tech[start : start + self.BATCH_SIZE]))
+
+        plan = ReclassificationPlan()
+        for ticker, universe in target.items():
+            if universe not in UNIVERSES or universe == current[ticker]:
+                continue
+            bucket = plan.seeds_held if origin.get(ticker) == "seed" else plan.moves
+            bucket[ticker] = (current[ticker], universe)
+        return plan
+
+    def apply(self, plan: ReclassificationPlan) -> None:
+        from ..utils.supabase_client import reclassify_assets
+
+        for universe, tickers in plan.by_target().items():
+            reclassify_assets(tickers, universe)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
