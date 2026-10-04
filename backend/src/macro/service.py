@@ -15,6 +15,7 @@ from typing import Any, Callable, Optional
 from ..agents.asset_discovery import UNIVERSES
 from .collector import Article, MacroNewsCollector
 from .config import MACRO_LOOKBACK_DAYS, MACRO_RETENTION_DAYS, MACRO_TAG_THRESHOLD
+from .digest import DigestStory, MacroDigestGenerator, is_commentary
 from .jev_client import JevClient
 from .repository import MacroNewsRepository
 from .tagger import Scores, tags_for
@@ -53,11 +54,13 @@ class MacroNewsService:
         repository: Optional[MacroNewsRepository] = None,
         collector: Optional[MacroNewsCollector] = None,
         jev: Optional[JevClient] = None,
+        digester: Optional[MacroDigestGenerator] = None,
         now: Callable[[], datetime] = _utcnow,
     ):
         self.repository = repository or MacroNewsRepository()
         self.collector = collector or MacroNewsCollector()
         self.jev = jev or JevClient()
+        self.digester = digester or MacroDigestGenerator()
         self.now = now
 
     # ── writing ───────────────────────────────────────────────────────────────
@@ -108,6 +111,7 @@ class MacroNewsService:
             tagged += bool(row["tags"])
 
         written = self.repository.upsert(rows)
+        overviews = self._refresh_digests(since, now)
         if not force:
             self.repository.prune(now - timedelta(days=MACRO_RETENTION_DAYS))
 
@@ -118,11 +122,66 @@ class MacroNewsService:
             "unscored": len(batch) - scored,
             "tagged": tagged,
             "written": written,
+            "overviews": overviews,
             "question_version": version,
             "jev_cost_usd": round(self.jev.cost - cost_before, 6),
         }
         logger.info("Macro news %s: %s", "rescore" if force else "pull", summary)
         return summary
+
+    # ── overviews ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _groups() -> list[str]:
+        return [MARKET_WIDE, *UNIVERSES]
+
+    @staticmethod
+    def _group_p(row: dict[str, Any], group: str) -> float:
+        if group == MARKET_WIDE:
+            return row.get("market_wide_p") or 0.0
+        return (row.get("universe_probs") or {}).get(group) or 0.0
+
+    def _members(self, rows: list[dict[str, Any]], group: str) -> list[dict[str, Any]]:
+        """A group's tagged stories, most relevant first, newest first on a tie."""
+        tagged = [r for r in rows if group in (r.get("tags") or [])]
+        tagged.sort(key=lambda r: str(r["published_at"]), reverse=True)
+        return sorted(tagged, key=lambda r: self._group_p(r, group), reverse=True)
+
+    def _refresh_digests(self, since: datetime, now: datetime) -> int:
+        """Rewrite the overview of every group whose tagged stories changed. Returns how many."""
+        rows = self.repository.read_window(since)
+        latest = self.repository.latest_digests()
+        written = 0
+        for group in self._groups():
+            members = self._members(rows, group)
+            if not members:
+                continue
+            ids = sorted(int(r["finnhub_id"]) for r in members)
+            previous = latest.get(group)
+            if previous and sorted(int(i) for i in previous.get("article_ids") or []) == ids:
+                continue
+            stories = [
+                DigestStory(
+                    publisher=r["source"],
+                    published_at=_parse_ts(r["published_at"]),
+                    headline=r["headline"],
+                    blurb=r.get("blurb") or "",
+                )
+                for r in members
+            ]
+            summary = self.digester.generate(group, stories, total=len(members))
+            if summary is None:
+                continue
+            written += self.repository.insert_digest(
+                {
+                    "universe": group,
+                    "slot_start": now.isoformat(),
+                    "summary": summary,
+                    "article_ids": ids,
+                    "model": self.digester.model,
+                }
+            )
+        return written
 
     def pull(self) -> dict[str, Any]:
         """The scheduled job. Never raises."""
@@ -161,6 +220,9 @@ class MacroNewsService:
             # scored reads null until the next re-score, rather than being left out.
             "universes": {u: probs.get(u) for u in UNIVERSES},
             "tags": list(row.get("tags") or []),
+            # A presenter's stock pick or a trading idea, not a news event. Still listed
+            # and still scored, but labelled, and kept out of the sector summaries.
+            "commentary": is_commentary(row["headline"]),
         }
 
     def feed(self, days: int = MACRO_LOOKBACK_DAYS) -> dict[str, Any]:
@@ -168,12 +230,25 @@ class MacroNewsService:
         rows = self.repository.read_window(self.now() - timedelta(days=days))
         items = [self._serialise(r) for r in rows]
         fetched = [r.get("fetched_at") for r in rows if r.get("fetched_at")]
+        # An overview is shown only while its group still has tagged stories in the
+        # window, so a paragraph about stories that have aged out never outlives them.
+        overviews = {}
+        latest = self.repository.latest_digests()
+        for group in self._groups():
+            digest = latest.get(group)
+            if digest and self._members(rows, group):
+                overviews[group] = {
+                    "summary": digest["summary"],
+                    "generated_at": digest.get("generated_at") or digest.get("slot_start"),
+                    "article_count": len(digest.get("article_ids") or []),
+                }
         return {
             "universes": list(UNIVERSES),
             "market_wide_label": MARKET_WIDE,
             "threshold": MACRO_TAG_THRESHOLD,
             "days": days,
             "updated_at": max(fetched) if fetched else None,
+            "overviews": overviews,
             "tagged": [i for i in items if i["tags"]],
             "other": [i for i in items if not i["tags"]],
         }

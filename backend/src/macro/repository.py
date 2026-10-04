@@ -86,3 +86,39 @@ class MacroNewsRepository:
             self._client().table(self.TABLE).delete().lt("published_at", before.isoformat()).execute()
         except Exception as exc:
             logger.info("Macro news: prune failed: %s", exc)
+        try:
+            self._client().table(self.DIGEST_TABLE).delete().lt("slot_start", before.isoformat()).execute()
+        except Exception as exc:
+            logger.info("Macro news: overview prune failed: %s", exc)
+
+    # ── per-sector overviews ─────────────────────────────────────────────────
+
+    DIGEST_TABLE = "macro_universe_digest"
+    DIGEST_COLUMNS = "universe, slot_start, summary, article_ids, model, generated_at"
+
+    def latest_digests(self) -> dict[str, dict[str, Any]]:
+        """The newest overview per sector (and for 'Market-wide'). Empty on a failed read."""
+        try:
+            res = (
+                self._client()
+                .table(self.DIGEST_TABLE)
+                .select(self.DIGEST_COLUMNS)
+                .order("slot_start", desc=True)
+                .limit(200)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning("Macro news: overview read failed: %s", exc)
+            return {}
+        latest: dict[str, dict[str, Any]] = {}
+        for row in res.data or []:
+            latest.setdefault(row["universe"], row)
+        return latest
+
+    def insert_digest(self, row: dict[str, Any]) -> bool:
+        try:
+            self._client().table(self.DIGEST_TABLE).upsert(row, on_conflict="universe,slot_start").execute()
+            return True
+        except Exception as exc:
+            logger.warning("Macro news: overview write failed for %s: %s", row.get("universe"), exc)
+            return False

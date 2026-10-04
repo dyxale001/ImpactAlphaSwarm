@@ -22,6 +22,7 @@ from src.agents.asset_discovery import UNIVERSES  # noqa: E402
 from src.macro import collector as collector_mod  # noqa: E402
 from src.macro import universes as uni  # noqa: E402
 from src.macro.collector import Article, MacroNewsCollector, parse_article  # noqa: E402
+from src.macro.digest import DigestStory, MacroDigestGenerator, MacroDigestPromptBuilder  # noqa: E402
 from src.macro.jev_client import JevClient, parse_answers  # noqa: E402
 from src.macro.routes import get_service, mount_macro_news, router  # noqa: E402
 from src.macro.service import MacroNewsService  # noqa: E402
@@ -285,6 +286,19 @@ class FakeRepo:
     def prune(self, before):
         self.pruned_before = before
 
+    # Overviews: newest last in the list, so "latest" is the last one per group.
+    digests: list
+
+    def latest_digests(self):
+        latest = {}
+        for row in getattr(self, "digests", []):
+            latest[row["universe"]] = row
+        return latest
+
+    def insert_digest(self, row):
+        self.digests = [*getattr(self, "digests", []), row]
+        return True
+
 
 class FakeCollector:
     def __init__(self, articles):
@@ -311,8 +325,28 @@ class FakeJev:
         return [next((s for h, s in self.table.items() if h in st), None) for st in states]
 
 
-def _service(articles, table, repo=None):
-    return MacroNewsService(repository=repo or FakeRepo(), collector=FakeCollector(articles), jev=FakeJev(table), now=lambda: NOW)
+class FakeDigester:
+    """Writes "<group>: <n> stories" and records what it was asked for."""
+
+    model = "openai/gpt-oss-20b"
+
+    def __init__(self, fail: bool = False):
+        self.calls: list[tuple[str, int]] = []
+        self.fail = fail
+
+    def generate(self, group, stories, total):
+        self.calls.append((group, total))
+        return None if self.fail else f"{group}: {total} stories, led by {stories[0].headline}."
+
+
+def _service(articles, table, repo=None, digester=None):
+    return MacroNewsService(
+        repository=repo or FakeRepo(),
+        collector=FakeCollector(articles),
+        jev=FakeJev(table),
+        digester=digester or FakeDigester(),
+        now=lambda: NOW,
+    )
 
 
 def test_pull_scores_tags_and_stores_new_stories():
@@ -378,6 +412,109 @@ def test_feed_reads_a_universe_added_after_scoring_as_null():
     assert item["universes"]["Media & Communications"] is None
 
 
+# ── overviews ────────────────────────────────────────────────────────────────
+
+
+def test_pull_writes_an_overview_per_group_with_stories():
+    digester = FakeDigester()
+    svc = _service([_article(1, "Fed signals pause"), _article(2, "Lilly trial")],
+                   {"Fed": _scores(mw=0.98, Finance=0.97), "Lilly": _scores(Healthcare=0.95)}, digester=digester)
+    result = svc.pull()
+    assert sorted(g for g, _ in digester.calls) == sorted([uni.MARKET_WIDE, "Finance", "Healthcare"])
+    assert result["overviews"] == 3
+    stored = svc.repository.latest_digests()
+    assert stored["Finance"]["article_ids"] == [1] and stored["Finance"]["model"] == "openai/gpt-oss-20b"
+
+
+def test_an_unchanged_group_is_not_rewritten_and_a_changed_one_is():
+    repo, digester = FakeRepo(), FakeDigester()
+    _service([_article(1, "Fed")], {"Fed": _scores(Finance=0.9)}, repo, digester).pull()
+    _service([_article(1, "Fed")], {"Fed": _scores(Finance=0.9)}, repo, digester).pull()
+    assert digester.calls == [("Finance", 1)]
+    _service([_article(1, "Fed"), _article(2, "Bank results")],
+             {"Fed": _scores(Finance=0.9), "Bank": _scores(Finance=0.8)}, repo, digester).pull()
+    assert digester.calls[-1] == ("Finance", 2)
+
+
+def test_a_failed_overview_stores_nothing_and_is_retried_next_pull():
+    repo = FakeRepo()
+    _service([_article(1, "Fed")], {"Fed": _scores(Finance=0.9)}, repo, FakeDigester(fail=True)).pull()
+    assert repo.latest_digests() == {}
+    digester = FakeDigester()
+    _service([], {}, repo, digester).pull()
+    assert digester.calls == [("Finance", 1)]
+
+
+def test_overview_stories_are_most_relevant_first():
+    repo = FakeRepo()
+    _service([_article(1, "Mild"), _article(2, "Strong")],
+             {"Mild": _scores(Finance=0.65), "Strong": _scores(Finance=0.95)}, repo).pull()
+    assert repo.latest_digests()["Finance"]["summary"].endswith("led by Strong.")
+
+
+def test_feed_carries_overviews_only_for_groups_with_stories():
+    repo = FakeRepo()
+    _service([_article(1, "Fed")], {"Fed": _scores(Finance=0.9)}, repo).pull()
+    repo.digests.append({"universe": "Healthcare", "slot_start": NOW.isoformat(), "summary": "Old.", "article_ids": [99]})
+    feed = _service([], {}, repo).feed()
+    assert set(feed["overviews"]) == {"Finance"}
+    assert feed["overviews"]["Finance"]["article_count"] == 1
+
+
+def test_prompt_lists_most_relevant_first_caps_the_list_and_drops_repeat_blurbs():
+    stories = [DigestStory("Reuters", NOW, f"Story {i}", f"Story {i}  Reuters") for i in range(10)]
+    stories[0] = DigestStory("CNBC", NOW, "Private capital funds Hollywood", "Financing is diversifying.")
+    prompt = MacroDigestPromptBuilder().build("Media & Communications", stories, total=10)
+    assert "[1] CNBC" in prompt and "Summary: Financing is diversifying." in prompt
+    assert "[8]" in prompt and "[9]" not in prompt
+    assert "8 most relevant of 10" in prompt
+    assert "Summary: Story 3" not in prompt
+    assert "Never say whether the news is good or bad" in prompt and "buy, sell or hold" in prompt
+    assert "markets broadly" in MacroDigestPromptBuilder().build(uni.MARKET_WIDE, stories[:1], total=1)
+
+
+def test_guard_discards_advice_direction_and_bad_lengths():
+    gen = MacroDigestGenerator(client=object())
+    ok = "Reuters reported that the Bank of England admitted mishandling its first response to the Iran shock."
+    assert gen.validate("Finance", ok) == ok
+    for bad in [
+        ok + " Investors should watch banks.",
+        ok + " This is good news for lenders.",
+        ok + " Bank shares will rise.",
+        ok + " It creates an opportunity.",
+        "Too short.",
+        "x" * 700,
+    ]:
+        assert gen.validate("Finance", bad) is None, bad
+
+
+def test_generator_without_groq_writes_nothing():
+    class NoClient(MacroDigestGenerator):
+        @property
+        def client(self):
+            return None
+
+    assert NoClient().generate("Finance", [DigestStory("Reuters", NOW, "h", "")], total=1) is None
+
+
+def test_generator_retries_then_cleans_the_reply():
+    class Flaky:
+        model = "m"
+
+        def __init__(self):
+            self.n = 0
+
+        def complete(self, prompt):
+            self.n += 1
+            if self.n == 1:
+                raise RuntimeError("429")
+            return "Reuters reported that UK gilt yields rose above six percent for the first time since 1998."
+
+    gen = MacroDigestGenerator(client=Flaky())
+    gen.BACKOFF_SECONDS = (0.0, 0.0)
+    assert gen.generate("Finance", [DigestStory("Reuters", NOW, "Gilts top 6%", "")], total=1).startswith("Reuters")
+
+
 # ── HTTP ─────────────────────────────────────────────────────────────────────
 
 
@@ -417,3 +554,78 @@ def test_flag_off_mounts_nothing():
 
 def test_router_paths():
     assert {r.path for r in router.routes} == {"/api/macro/pull", "/api/macro/rescore", "/api/macro/news"}
+
+
+def test_generator_asks_again_when_the_reply_runs_long():
+    class Wordy:
+        model = "m"
+
+        def __init__(self):
+            self.prompts = []
+
+        def complete(self, prompt):
+            self.prompts.append(prompt)
+            if len(self.prompts) == 1:
+                return "Reuters reported a long list of things. " * 30
+            return "Reuters reported that UK gilt yields rose above six percent for the first time since 1998."
+
+    client = Wordy()
+    text = MacroDigestGenerator(client=client).generate("Finance", [DigestStory("Reuters", NOW, "Gilts top 6%", "")], total=1)
+    assert text.startswith("Reuters reported that UK gilt")
+    assert "too long" in client.prompts[1] and "broke a rule" in client.prompts[1]
+
+
+def test_stock_tips_never_reach_the_prompt_and_boilerplate_blurbs_are_dropped():
+    class Recorder:
+        model = "m"
+        prompt = ""
+
+        def complete(self, prompt):
+            Recorder.prompt = prompt
+            return "CNBC reported that Lilly released mixed data from an obesity drug trial."
+
+    stories = [
+        DigestStory("CNBC", NOW, "Jim Cramer sees a huge catalyst for Apple. How to play the stock", ""),
+        DigestStory("CNBC", NOW, "Wall Street closes a strong quarter. Plus, Lilly's mixed trial data",
+                    "Every weekday, the Investing Club releases the Homestretch."),
+    ]
+    assert MacroDigestGenerator(client=Recorder()).generate("Healthcare", stories, total=2) is not None
+    assert "Cramer" not in Recorder.prompt and "Homestretch" not in Recorder.prompt
+    assert "Lilly's mixed trial data" in Recorder.prompt
+
+
+def test_a_reply_that_judges_the_news_gets_one_corrected_retry():
+    class Judgy:
+        model = "m"
+
+        def __init__(self):
+            self.prompts = []
+
+        def complete(self, prompt):
+            self.prompts.append(prompt)
+            if len(self.prompts) == 1:
+                return "CNBC reported that Nvidia hit record highs, which is good news for chipmakers."
+            return "CNBC reported that Nvidia shares reached a new record high this week."
+
+    client = Judgy()
+    text = MacroDigestGenerator(client=client).generate("Technology", [DigestStory("CNBC", NOW, "Nvidia hits a record", "")], total=1)
+    assert text == "CNBC reported that Nvidia shares reached a new record high this week."
+    assert '"good news"' in client.prompts[1]
+
+
+def test_a_second_bad_reply_is_discarded():
+    class Stubborn:
+        model = "m"
+
+        def complete(self, prompt):
+            return "CNBC reported record highs for Nvidia, and investors should take note of it."
+
+    assert MacroDigestGenerator(client=Stubborn()).generate("Technology", [DigestStory("CNBC", NOW, "h", "")], total=1) is None
+
+
+def test_feed_flags_stock_tips_as_commentary():
+    repo = FakeRepo()
+    _service([_article(1, "Jim Cramer sees a huge catalyst for Apple. How to play the stock"), _article(2, "Fed signals pause")],
+             {"Cramer": _scores(Technology=0.99), "Fed": _scores(Finance=0.9)}, repo).pull()
+    by_id = {a["id"]: a for a in _service([], {}, repo).feed()["tagged"]}
+    assert by_id[1]["commentary"] is True and by_id[2]["commentary"] is False

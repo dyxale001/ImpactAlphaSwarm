@@ -58,6 +58,12 @@ JEV_API_KEY_ENV = os.getenv("JEV_API_KEY_ENV", "TYPESAFE_API_KEY_OPENROUTER")
 JEV_CONCURRENCY = _int("JEV_CONCURRENCY", 6)
 JEV_TIMEOUT_SECONDS = _int("JEV_TIMEOUT_SECONDS", 30)
 
+# The Groq account the per-sector overviews are written on. The sentiment drivers' lane
+# by default: at most seven overviews a pull, three pulls a day, is a rounding error on
+# it. Point it at another key if that lane ever gets busy.
+MACRO_DIGEST_KEY_ENV = os.getenv("MACRO_DIGEST_KEY_ENV", "GROQ_API_KEY6")
+MACRO_DIGEST_FALLBACK_KEY_ENV = os.getenv("MACRO_DIGEST_FALLBACK_KEY_ENV", "GROQ_API_KEY4")
+
 # Publisher tiers an article must be in to be kept (the sentiment scout's registry).
 MACRO_KEEP_TIERS = (1, 2)
 
