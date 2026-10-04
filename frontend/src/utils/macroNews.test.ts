@@ -7,6 +7,8 @@ import {
   formatProbability,
   groupByDay,
   probabilityRows,
+  shortLabel,
+  splitScores,
   tagCounts,
 } from './macroNews'
 
@@ -49,6 +51,35 @@ describe('probabilityRows', () => {
     const a = article({ universes: { ...article().universes, 'Media & Communications': null } })
     const rows = probabilityRows(a, UNIVERSES, MW)
     expect(rows[rows.length - 1]).toMatchObject({ label: 'Media & Communications', p: null })
+  })
+})
+
+describe('splitScores', () => {
+  it('boxes tagged and notable scores and keeps the near-zero rest', () => {
+    const a = article({ universes: { ...article().universes, Finance: 0.33, Healthcare: 0.04 }, market_wide: 0.86, tags: [MW] })
+    const { cells, rest } = splitScores(probabilityRows(a, UNIVERSES, MW))
+    expect(cells.map((c) => c.label)).toEqual([MW, 'Finance'])
+    expect(rest).toHaveLength(UNIVERSES.length - 1)
+    expect(cells.length + rest.length).toBe(UNIVERSES.length + 1)
+  })
+
+  it('always boxes a tagged score, even under the floor', () => {
+    const a = article({ market_wide: 0.05, tags: [MW] })
+    expect(splitScores(probabilityRows(a, UNIVERSES, MW)).cells.map((c) => c.label)).toContain(MW)
+  })
+
+  it('puts unscored rows with the rest', () => {
+    const a = article({ universes: { ...article().universes, Healthcare: null } })
+    const { rest } = splitScores(probabilityRows(a, UNIVERSES, MW))
+    expect(rest.find((r) => r.label === 'Healthcare')!.p).toBeNull()
+  })
+})
+
+describe('shortLabel', () => {
+  it('shortens the long universe names and leaves unknown ones alone', () => {
+    expect(shortLabel('Media & Communications')).toBe('Media')
+    expect(shortLabel('Healthcare')).toBe('Health')
+    expect(shortLabel('Space')).toBe('Space')
   })
 })
 

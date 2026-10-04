@@ -37,6 +37,36 @@ export function probabilityRows(
   return rows.sort((a, b) => (b.p ?? -1) - (a.p ?? -1));
 }
 
+/** Short names for the score strip, where the full universe name would not fit a
+ * cell. The full name is always the cell's accessible label. */
+export const SHORT_LABELS: Record<string, string> = {
+  "Market-wide": "Market-wide",
+  Technology: "Tech",
+  "Green Energy": "Green Energy",
+  Finance: "Finance",
+  "AI & Robotics": "AI & Robotics",
+  Healthcare: "Health",
+  "Media & Communications": "Media",
+};
+
+export function shortLabel(label: string): string {
+  return SHORT_LABELS[label] ?? label;
+}
+
+/** Splits a story's scores into the cells worth a box and the near-zero rest.
+ *
+ * Every tagged score gets a cell, and so does anything at or above `floor`; the
+ * remainder is listed on one muted line rather than dropped, so all seven numbers
+ * stay on the card. Unscored rows count as part of the rest. */
+export function splitScores(
+  rows: ProbabilityRow[],
+  floor = 0.1,
+): { cells: ProbabilityRow[]; rest: ProbabilityRow[] } {
+  const cells = rows.filter((r) => r.tagged || (r.p !== null && r.p >= floor));
+  const rest = rows.filter((r) => !cells.includes(r));
+  return { cells, rest };
+}
+
 /** The headline without a trailing " - Reuters" (or whichever publisher), which the
  * card already shows above it. */
 export function displayHeadline(headline: string, source: string): string {
