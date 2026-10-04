@@ -54,8 +54,13 @@ export function useOnboarding() {
     )
   }
 
+  // Set once the user picks or drops a sector themselves. From then on the
+  // sectors are theirs, and going back to change picks must not overwrite them.
+  const [universeTouched, setUniverseTouched] = useState(false)
+
   // ── Universe toggle (survey step) ─────────────────────────────────────
   const toggleUniverse = (item: string) => {
+    setUniverseTouched(true)
     setFormData(prev => ({
       ...prev,
       universe: prev.universe.includes(item)
@@ -90,12 +95,11 @@ export function useOnboarding() {
       if (!investorPath) return setError('Please choose an investor path to continue.')
     }
 
-    if (step === 2) {
-      // Asset picker is optional — but infer universe from picks if any were made
-      const inferred = inferUniverseFromAssets(familiarAssets)
-      if (inferred.length > 0) {
-        setFormData(prev => ({ ...prev, universe: inferred }))
-      }
+    if (step === 2 && !universeTouched) {
+      // Until the user edits the sectors, they simply mirror the picks, so
+      // clearing every pick clears the pre-fill too rather than leaving
+      // sectors that no longer come from anything.
+      setFormData(prev => ({ ...prev, universe: inferUniverseFromAssets(familiarAssets) }))
     }
 
     if (step === 3) {
@@ -172,11 +176,18 @@ export function useOnboarding() {
         .insert([analysisPayload])
 
       if (analysisError) {
-        setError(`Database Error: ${analysisError.message}`)
+        console.error('Could not save onboarding answers:', analysisError)
+        // 23505 is a unique violation: this user already has an analysis row,
+        // typically finished in another tab. Loading it lets the route guard
+        // take them to the dashboard rather than leaving them on a dead form.
+        if (analysisError.code === '23505') {
+          setError('You have already finished setting up. Taking you to your dashboard. You can change your answers in Settings.')
+          void fetchProfile(currentUserId)
+        } else {
+          setError('We could not save your profile. Please try again.')
+        }
         return
       }
-
-      saveCompletedAnalysis(analysisPayload)
 
       // Save familiar-asset picks to the watchlist if the user opted in.
       // Wrapped so a failure here can never block onboarding from completing.
@@ -218,7 +229,9 @@ export function useOnboarding() {
       try {
         const { run_id } = await startAnalysis({
           universes: formData.universe,
-          watchlist: familiarAssets, // seed watchlist with familiar picks
+          // The picks join the run only when they joined the watchlist; an
+          // unticked box means the user did not ask for them to be analysed.
+          watchlist: addPicksToWatchlist ? familiarAssets : [],
           risk_tolerance: psychometrics.riskTolerance,
           expertise_level: psychometrics.calculatedExpertise,
         })
@@ -231,6 +244,11 @@ export function useOnboarding() {
       } catch (err) {
         console.error('Failed to start analysis', err)
       }
+
+      // Last, because holding an analysis is what sends the route guard from
+      // /onboarding to the dashboard; any earlier and the page unmounts before
+      // the watchlist rows and the run exist for the dashboard to show.
+      saveCompletedAnalysis(analysisPayload)
 
       if (useAuthStore.getState().user?.id === currentUserId) {
         navigate('/dashboard', { replace: true })
@@ -266,6 +284,7 @@ export function useOnboarding() {
     // Existing
     handleSubmit,
     toggleUniverse,
+    universeTouched,
     nextStep,
     prevStep,
     handleSurveyAnswer,
