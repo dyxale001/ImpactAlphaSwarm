@@ -1,17 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, ChevronDown, Info, Newspaper } from "lucide-react";
 import { getMacroNews, type MacroFeed } from "../services/api/macroNews";
 import MacroArticleCard from "../components/macroNews/MacroArticleCard";
+import SectorSummary from "../components/macroNews/SectorSummary";
 import WireMotif from "../components/macroNews/WireMotif";
 import { universeIcon } from "../components/macroNews/universeIcons";
 import FundsNotice from "../components/funds/FundsNotice";
 import { sectorColour } from "../utils/sectorColours";
-import { filterByTag, groupByDay, tagCounts } from "../utils/macroNews";
+import { filterByTag, groupByDay, storiesFor, tagCounts, userSectors } from "../utils/macroNews";
+import { useAuthStore } from "../store/authStore";
 
 // World and market news, three updates a day, each story with the model's
 // probability that it is relevant to every investment universe (D-223).
 //
-// The page lists only stories tagged to at least one universe or as market-wide;
+// Three layers, read top down: what each of the reader's sectors' week adds up to
+// (an AI overview and its three most relevant stories), then market-wide news, then
+// every story with every score as the evidence. The sectors default to the ones the
+// reader chose at onboarding (D-127), with a switch to all of them.
+//
+// The feed lists only stories tagged to at least one universe or as market-wide;
 // everything else sits in a collapsed section underneath, numbers and all, so
 // nothing is hidden, only ordered. Relevance only: no story is called good or bad
 // for anything, and none of it feeds the rankings.
@@ -36,6 +43,11 @@ function AboutPanel({ threshold }: { threshold: number }) {
         Every story shows all seven of those probabilities. A filled box means the story is tagged with that
         universe, which happens at {pct}% or more; the line along the bottom of each box shows how high the score
         is. Scores under 10% are listed on one line underneath. One story can carry several tags, or none.
+      </p>
+      <p>
+        Each sector's overview is written by an AI model from the stories tagged to it, and rewritten when those
+        stories change. It is told to report only what the stories say, never whether the news is good or bad, and
+        never to advise. It can still make mistakes, so the stories it was written from sit right under it.
       </p>
       <p>
         These numbers say how relevant a story is, not whether it is good or bad news. The model only sees the
@@ -118,6 +130,9 @@ export default function MarketNewsPage() {
   const [filter, setFilter] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showOther, setShowOther] = useState(false);
+  const [allSectors, setAllSectors] = useState(false);
+  const allStoriesRef = useRef<HTMLElement>(null);
+  const chosen = useAuthStore((s) => s.analysis?.investment_universe);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +157,15 @@ export default function MarketNewsPage() {
     : null;
 
   const cardProps = feed ? { universes: feed.universes, marketWideLabel: mw } : null;
+
+  // The reader's own sectors first; every sector when they chose none or asked for all.
+  const mine = feed ? userSectors(chosen, feed.universes) : [];
+  const sectors = feed ? (allSectors || mine.length === 0 ? feed.universes : mine) : [];
+
+  const seeAll = (group: string) => {
+    setFilter(group);
+    allStoriesRef.current?.scrollIntoView({ block: "start" });
+  };
 
   return (
     <div className="animate-fade-up mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
@@ -207,117 +231,179 @@ export default function MarketNewsPage() {
 
       {feed && cardProps && (
         <>
-          {/* ── Filters: one scrolling row on a phone, wrapping from tablet up ── */}
-          <div
-            className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
-            role="group"
-            aria-label="Filter by universe"
-          >
-            <button
-              type="button"
-              onClick={() => setFilter(null)}
-              aria-pressed={filter === null}
-              className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm ${
-                filter === null ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary"
-              }`}
-            >
-              All
-              <span
-                className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
-                  filter === null ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
-                }`}
-              >
-                {feed.tagged.length}
-              </span>
-            </button>
-            {filters.map((f) => (
-              <FilterPill
-                key={f}
-                label={f}
-                count={counts[f] ?? 0}
-                active={filter === f}
-                marketWide={f === mw}
-                onClick={() => setFilter(filter === f ? null : f)}
-              />
-            ))}
-          </div>
-
-          {/* ── Tagged stories, by day. Keyed on the filter so a change fades in. ── */}
-          <div key={filter ?? "all"} className="animate-fade-up">
-            {days.length === 0 ? (
-              <div className="mt-6">
-                <FundsNotice
-                  icon={Newspaper}
-                  title={filter ? `No ${filter} news in the last ${feed.days} days` : "No tagged news yet"}
-                  body={
-                    filter
-                      ? "Nothing in this period was tagged to this universe."
-                      : "Stories appear here once they have been read and tagged. The next update is within a few hours."
-                  }
-                  actionLabel={pointToMarketWide ? `See ${storyCount(counts[mw] ?? 0)} of market-wide news` : undefined}
-                  onAction={pointToMarketWide ? () => setFilter(mw) : undefined}
-                />
-              </div>
-            ) : (
-              days.map((day) => (
-                <section key={day.key} className="mt-10 flex flex-col gap-4">
-                  <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
-                    {day.label}
-                    <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
-                  </h2>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {day.articles.map((a) => (
-                      <MacroArticleCard key={a.id} article={a} {...cardProps} />
-                    ))}
-                  </div>
-                </section>
-              ))
-            )}
-
-            {days.length > 0 && pointToMarketWide && (
-              <button
-                type="button"
-                onClick={() => setFilter(mw)}
-                className={`${PRESSABLE} mt-8 inline-flex items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline`}
-              >
-                Market-wide news touches every universe too: {storyCount(counts[mw] ?? 0)}
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            )}
-          </div>
-
-          {/* ── Everything else ── */}
-          {feed.other.length > 0 && (
-            <section className="mt-12 border-t border-brand-border/60 pt-6">
-              <button
-                type="button"
-                onClick={() => setShowOther((s) => !s)}
-                aria-expanded={showOther}
-                className={`${PRESSABLE} flex items-center gap-2 rounded-full text-xs font-semibold text-brand-secondary hover:text-brand-primary`}
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${showOther ? "rotate-180" : ""}`} aria-hidden />
-                {feed.other.length} other {feed.other.length === 1 ? "story wasn't" : "stories weren't"} tagged to any
-                universe
-              </button>
-              {showOther && (
-                <div className="animate-fade-up">
-                  {otherDays.map((day) => (
-                    <div key={day.key} className="mt-6 flex flex-col gap-3">
-                      <h3 className="flex items-baseline gap-2 text-sm font-bold text-brand-secondary">
-                        {day.label}
-                        <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {day.articles.map((a) => (
-                          <MacroArticleCard key={a.id} article={a} {...cardProps} />
-                        ))}
-                      </div>
-                    </div>
+          {/* ── Layer 1: the reader's sectors, summarised ── */}
+          <section className="mt-8 flex flex-col gap-4" aria-labelledby="sectors-heading">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="sectors-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
+                {mine.length > 0 && !allSectors ? "Your sectors this week" : "Sectors this week"}
+              </h2>
+              {mine.length > 0 && mine.length < feed.universes.length && (
+                <div className="inline-flex rounded-full bg-brand-surface p-1 shadow-sm" role="group" aria-label="Which sectors">
+                  {[
+                    { label: `Your sectors · ${mine.length}`, value: false },
+                    { label: "All sectors", value: true },
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setAllSectors(opt.value)}
+                      aria-pressed={allSectors === opt.value}
+                      className={`${PRESSABLE} rounded-full px-3 py-1 text-xs font-semibold ${
+                        allSectors === opt.value ? "bg-brand-primary text-brand-bg" : "text-brand-secondary hover:text-brand-primary"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
                   ))}
                 </div>
               )}
-            </section>
-          )}
+            </div>
+            <div key={allSectors ? "all" : "mine"} className="animate-fade-up grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {sectors.map((group) => (
+                <SectorSummary
+                  key={group}
+                  group={group}
+                  stories={storiesFor(feed.tagged, group, mw)}
+                  overview={feed.overviews?.[group]}
+                  marketWideLabel={mw}
+                  onSeeAll={() => seeAll(group)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* ── Layer 2: news that touches every sector ── */}
+          <section className="mt-8">
+            <SectorSummary
+              group={mw}
+              stories={storiesFor(feed.tagged, mw, mw)}
+              overview={feed.overviews?.[mw]}
+              marketWideLabel={mw}
+              onSeeAll={() => seeAll(mw)}
+            />
+          </section>
+
+          {/* ── Layer 3: every story, every score ── */}
+          <section ref={allStoriesRef} className="mt-14 scroll-mt-6" aria-labelledby="all-stories-heading">
+            <h2 id="all-stories-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
+              All stories
+            </h2>
+            <p className="mt-1 text-xs text-brand-muted-fg">
+              Every tagged story from the last {feed.days} days, with all of its scores.
+            </p>
+
+            {/* ── Filters: one scrolling row on a phone, wrapping from tablet up ── */}
+            <div
+              className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+              role="group"
+              aria-label="Filter by universe"
+            >
+              <button
+                type="button"
+                onClick={() => setFilter(null)}
+                aria-pressed={filter === null}
+                className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm ${
+                  filter === null ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary"
+                }`}
+              >
+                All
+                <span
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
+                    filter === null ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
+                  }`}
+                >
+                  {feed.tagged.length}
+                </span>
+              </button>
+              {filters.map((f) => (
+                <FilterPill
+                  key={f}
+                  label={f}
+                  count={counts[f] ?? 0}
+                  active={filter === f}
+                  marketWide={f === mw}
+                  onClick={() => setFilter(filter === f ? null : f)}
+                />
+              ))}
+            </div>
+
+            {/* ── Tagged stories, by day. Keyed on the filter so a change fades in. ── */}
+            <div key={filter ?? "all"} className="animate-fade-up">
+              {days.length === 0 ? (
+                <div className="mt-6">
+                  <FundsNotice
+                    icon={Newspaper}
+                    title={filter ? `No ${filter} news in the last ${feed.days} days` : "No tagged news yet"}
+                    body={
+                      filter
+                        ? "Nothing in this period was tagged to this universe."
+                        : "Stories appear here once they have been read and tagged. The next update is within a few hours."
+                    }
+                    actionLabel={pointToMarketWide ? `See ${storyCount(counts[mw] ?? 0)} of market-wide news` : undefined}
+                    onAction={pointToMarketWide ? () => setFilter(mw) : undefined}
+                  />
+                </div>
+              ) : (
+                days.map((day) => (
+                  <section key={day.key} className="mt-10 flex flex-col gap-4">
+                    <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
+                      {day.label}
+                      <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
+                    </h2>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {day.articles.map((a) => (
+                        <MacroArticleCard key={a.id} article={a} {...cardProps} />
+                      ))}
+                    </div>
+                  </section>
+                ))
+              )}
+
+              {days.length > 0 && pointToMarketWide && (
+                <button
+                  type="button"
+                  onClick={() => setFilter(mw)}
+                  className={`${PRESSABLE} mt-8 inline-flex items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline`}
+                >
+                  Market-wide news touches every universe too: {storyCount(counts[mw] ?? 0)}
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+
+            {/* ── Everything else ── */}
+            {feed.other.length > 0 && (
+              <section className="mt-12 border-t border-brand-border/60 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowOther((s) => !s)}
+                  aria-expanded={showOther}
+                  className={`${PRESSABLE} flex items-center gap-2 rounded-full text-xs font-semibold text-brand-secondary hover:text-brand-primary`}
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showOther ? "rotate-180" : ""}`} aria-hidden />
+                  {feed.other.length} other {feed.other.length === 1 ? "story wasn't" : "stories weren't"} tagged to any
+                  universe
+                </button>
+                {showOther && (
+                  <div className="animate-fade-up">
+                    {otherDays.map((day) => (
+                      <div key={day.key} className="mt-6 flex flex-col gap-3">
+                        <h3 className="flex items-baseline gap-2 text-sm font-bold text-brand-secondary">
+                          {day.label}
+                          <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {day.articles.map((a) => (
+                            <MacroArticleCard key={a.id} article={a} {...cardProps} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </section>
         </>
       )}
     </div>

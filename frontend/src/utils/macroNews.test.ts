@@ -8,8 +8,11 @@ import {
   groupByDay,
   probabilityRows,
   shortLabel,
+  shortWhen,
   splitScores,
+  storiesFor,
   tagCounts,
+  userSectors,
 } from './macroNews'
 
 // What a reader of the Market News page sees: every probability, in order, with
@@ -131,5 +134,39 @@ describe('formatProbability', () => {
   it('shows a percentage, or a dash when there is no score', () => {
     expect(formatProbability(0.824)).toBe('82%')
     expect(formatProbability(null)).toBe('–')
+  })
+})
+
+describe('storiesFor', () => {
+  it('keeps a group\'s tagged stories, most relevant first', () => {
+    const list = [
+      article({ id: 1, tags: ['Finance'], universes: { ...article().universes, Finance: 0.7 } }),
+      article({ id: 2, tags: ['Healthcare'], universes: { ...article().universes, Healthcare: 0.9 } }),
+      article({ id: 3, tags: ['Finance'], universes: { ...article().universes, Finance: 0.95 } }),
+    ]
+    expect(storiesFor(list, 'Finance', MW).map((a) => a.id)).toEqual([3, 1])
+  })
+  it('ranks market-wide stories by their market-wide score', () => {
+    const list = [article({ id: 1, market_wide: 0.7 }), article({ id: 2, market_wide: 0.98 })]
+    expect(storiesFor(list, MW, MW).map((a) => a.id)).toEqual([2, 1])
+  })
+})
+
+describe('userSectors', () => {
+  it('keeps known sectors in the feed order and drops the rest', () => {
+    expect(userSectors(['Healthcare', 'Space', 'Technology'], UNIVERSES)).toEqual(['Technology', 'Healthcare'])
+  })
+  it('treats a missing or malformed choice as none', () => {
+    expect(userSectors(undefined, UNIVERSES)).toEqual([])
+    expect(userSectors('Technology', UNIVERSES)).toEqual([])
+  })
+})
+
+describe('shortWhen', () => {
+  it('names today and yesterday, and dates anything older', () => {
+    const now = new Date(2026, 9, 4, 18, 0)
+    expect(shortWhen(new Date(2026, 9, 4, 9, 30).toISOString(), now)).toMatch(/^Today /)
+    expect(shortWhen(new Date(2026, 9, 3, 9, 30).toISOString(), now)).toMatch(/^Yesterday /)
+    expect(shortWhen(new Date(2026, 9, 1, 9, 30).toISOString(), now)).not.toMatch(/Today|Yesterday/)
   })
 })

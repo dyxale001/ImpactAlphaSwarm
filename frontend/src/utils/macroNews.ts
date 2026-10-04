@@ -136,3 +136,43 @@ export function groupByDay(
 export function formatProbability(p: number | null): string {
   return p === null ? "–" : `${Math.round(p * 100)}%`;
 }
+
+/** The probability a story carries for one group: a universe, or market-wide. */
+export function groupProbability(article: MacroArticle, group: string, marketWideLabel: string): number {
+  if (group === marketWideLabel) return article.market_wide ?? 0;
+  return article.universes[group] ?? 0;
+}
+
+/** A group's tagged stories, most relevant first, newest first on a tie. */
+export function storiesFor(
+  articles: MacroArticle[],
+  group: string,
+  marketWideLabel: string,
+): MacroArticle[] {
+  return articles
+    .filter((a) => a.tags.includes(group))
+    .sort(
+      (a, b) =>
+        groupProbability(b, group, marketWideLabel) - groupProbability(a, group, marketWideLabel) ||
+        new Date(b.published_at).getTime() - new Date(a.published_at).getTime(),
+    );
+}
+
+/** The signed-in user's sectors from onboarding, in the feed's order, unknown names
+ * dropped. Empty when they chose none, which callers treat as "show every sector". */
+export function userSectors(chosen: unknown, universes: string[]): string[] {
+  if (!Array.isArray(chosen)) return [];
+  const picked = new Set(chosen.filter((c): c is string => typeof c === "string"));
+  return universes.filter((u) => picked.has(u));
+}
+
+/** "Today 14:00", "Yesterday 09:12", or "Fri 2 Oct" for anything older. */
+export function shortWhen(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return `Today ${time}`;
+  if (diff === 1) return `Yesterday ${time}`;
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}

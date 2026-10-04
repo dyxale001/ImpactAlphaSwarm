@@ -131,6 +131,14 @@ export default function MacroArticleCard({
           <time dateTime={article.published_at} className="tabular-nums">
             {time}
           </time>
+          {article.commentary && (
+            <span
+              className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning-strong"
+              title="A presenter's or columnist's view on a stock, not a news event"
+            >
+              Commentary
+            </span>
+          )}
         </div>
         {article.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

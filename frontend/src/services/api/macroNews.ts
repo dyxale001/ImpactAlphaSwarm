@@ -24,6 +24,17 @@ export interface MacroArticle {
   universes: Record<string, number | null>;
   /** Universe names and/or the market-wide label that cleared the threshold. */
   tags: string[];
+  /** A presenter's stock pick or a trading idea rather than a news event. Labelled on
+   *  its card and kept out of the sector summaries. */
+  commentary?: boolean;
+}
+
+/** An AI-written overview of one sector's tagged stories (or market-wide ones). */
+export interface MacroOverview {
+  summary: string;
+  generated_at: string;
+  /** How many tagged stories it was written from. */
+  article_count: number;
 }
 
 export interface MacroFeed {
@@ -33,6 +44,8 @@ export interface MacroFeed {
   threshold: number;
   days: number;
   updated_at: string | null;
+  /** Keyed by universe name or the market-wide label; absent when none is written yet. */
+  overviews: Record<string, MacroOverview>;
   tagged: MacroArticle[];
   other: MacroArticle[];
 }
