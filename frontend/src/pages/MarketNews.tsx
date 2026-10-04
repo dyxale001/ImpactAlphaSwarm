@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, ChevronDown, Info, Newspaper } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { AlertTriangle, ArrowRight, Info, Newspaper } from "lucide-react";
 import { getMacroNews, type MacroFeed } from "../services/api/macroNews";
 import MacroArticleCard from "../components/macroNews/MacroArticleCard";
 import SectorSummary from "../components/macroNews/SectorSummary";
@@ -13,13 +14,11 @@ import { useAuthStore } from "../store/authStore";
 // World and market news, three updates a day, each story with the model's
 // probability that it is relevant to every investment universe (D-223).
 //
-// Three layers, read top down: what each of the reader's sectors' week adds up to
-// (an AI overview and its three most relevant stories), then market-wide news, then
-// every story with every score as the evidence. The sectors default to the ones the
-// reader chose at onboarding (D-127), with a switch to all of them.
-//
-// The feed lists only stories tagged to at least one universe or as market-wide;
-// everything else sits in a collapsed section underneath, numbers and all, so
+// Two tabs. Sectors is the summary: what each of the reader's sectors' week adds up
+// to (an AI overview and its three most relevant stories) and the same for
+// market-wide news, defaulting to the sectors chosen at onboarding (D-127) with a
+// switch to all of them. All stories is the evidence: every tagged story with every
+// score, and a subtab for the stories that were not tagged, numbers and all, so
 // nothing is hidden, only ordered. Relevance only: no story is called good or bad
 // for anything, and none of it feeds the rankings.
 
@@ -124,14 +123,89 @@ function storyCount(n: number): string {
   return `${n} ${n === 1 ? "story" : "stories"}`;
 }
 
+type PageTab = "sectors" | "stories";
+type StoriesView = "tagged" | "other";
+
+// The platform's tab bar, as on the stock and fund pages: a pill with the active tab
+// in lime. self-start keeps it from stretching to the page width inside a flex column.
+function PageTabs({ value, onChange }: { value: PageTab; onChange: (tab: PageTab) => void }) {
+  const tabs: { key: PageTab; label: string }[] = [
+    { key: "sectors", label: "Sectors" },
+    { key: "stories", label: "All stories" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Market news sections"
+      className="self-start inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          id={`tab-${tab.key}`}
+          aria-selected={value === tab.key}
+          aria-controls={`panel-${tab.key}`}
+          onClick={() => onChange(tab.key)}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            value === tab.key ? "bg-brand-accent text-brand-fg" : "text-brand-muted-fg hover:text-brand-fg"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// The smaller forest toggle for choices inside a tab (which sectors, tagged or not),
+// so the two levels never look like the same control.
+function Toggle<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+  asTabs = false,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+  /** A subtab (role tab, aria-selected) rather than a filter (aria-pressed). */
+  asTabs?: boolean;
+}) {
+  return (
+    <div className="inline-flex self-start rounded-full bg-brand-surface p-1 shadow-sm" role={asTabs ? "tablist" : "group"} aria-label={label}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          {...(asTabs ? { role: "tab", "aria-selected": value === opt.value } : { "aria-pressed": value === opt.value })}
+          className={`${PRESSABLE} rounded-full px-3 py-1 text-xs font-semibold ${
+            value === opt.value ? "bg-brand-primary text-brand-bg" : "text-brand-secondary hover:text-brand-primary"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function MarketNewsPage() {
   const [feed, setFeed] = useState<MacroFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [showOther, setShowOther] = useState(false);
-  const [allSectors, setAllSectors] = useState(false);
-  const allStoriesRef = useRef<HTMLElement>(null);
+  const [sectorScope, setSectorScope] = useState<"mine" | "all">("mine");
+  // Opens on ?tab=stories (and ?view=other) when asked, like the stock page's ?tab=.
+  // Read once on mount; switching afterwards is local state.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<PageTab>(() => (searchParams.get("tab") === "stories" ? "stories" : "sectors"));
+  const [view, setView] = useState<StoriesView>(() => (searchParams.get("view") === "other" ? "other" : "tagged"));
+  const tabsRef = useRef<HTMLDivElement>(null);
   const chosen = useAuthStore((s) => s.analysis?.investment_universe);
 
   useEffect(() => {
@@ -160,11 +234,15 @@ export default function MarketNewsPage() {
 
   // The reader's own sectors first; every sector when they chose none or asked for all.
   const mine = feed ? userSectors(chosen, feed.universes) : [];
-  const sectors = feed ? (allSectors || mine.length === 0 ? feed.universes : mine) : [];
+  const showAll = sectorScope === "all" || mine.length === 0;
+  const sectors = feed ? (showAll ? feed.universes : mine) : [];
 
+  // From a sector card to its full list: the All stories tab, filtered.
   const seeAll = (group: string) => {
+    setTab("stories");
+    setView("tagged");
     setFilter(group);
-    allStoriesRef.current?.scrollIntoView({ block: "start" });
+    tabsRef.current?.scrollIntoView({ block: "start" });
   };
 
   return (
@@ -230,181 +308,192 @@ export default function MarketNewsPage() {
       )}
 
       {feed && cardProps && (
-        <>
-          {/* ── Layer 1: the reader's sectors, summarised ── */}
-          <section className="mt-8 flex flex-col gap-4" aria-labelledby="sectors-heading">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="sectors-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
-                {mine.length > 0 && !allSectors ? "Your sectors this week" : "Sectors this week"}
-              </h2>
-              {mine.length > 0 && mine.length < feed.universes.length && (
-                <div className="inline-flex rounded-full bg-brand-surface p-1 shadow-sm" role="group" aria-label="Which sectors">
-                  {[
-                    { label: `Your sectors · ${mine.length}`, value: false },
-                    { label: "All sectors", value: true },
-                  ].map((opt) => (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      onClick={() => setAllSectors(opt.value)}
-                      aria-pressed={allSectors === opt.value}
-                      className={`${PRESSABLE} rounded-full px-3 py-1 text-xs font-semibold ${
-                        allSectors === opt.value ? "bg-brand-primary text-brand-bg" : "text-brand-secondary hover:text-brand-primary"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
+        <div className="mt-6 flex flex-col gap-6">
+          <div ref={tabsRef} className="flex scroll-mt-6 flex-col">
+            <PageTabs value={tab} onChange={setTab} />
+          </div>
+
+          {/* ── Sectors: the summary ── */}
+          {tab === "sectors" && (
+            <div role="tabpanel" id="panel-sectors" aria-labelledby="tab-sectors" className="animate-fade-up flex flex-col gap-8">
+              <section className="flex flex-col gap-4" aria-labelledby="sectors-heading">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 id="sectors-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
+                    {showAll ? "Sectors this week" : "Your sectors this week"}
+                  </h2>
+                  {mine.length > 0 && mine.length < feed.universes.length && (
+                    <Toggle
+                      label="Which sectors"
+                      value={sectorScope}
+                      onChange={setSectorScope}
+                      options={[
+                        { value: "mine", label: `Your sectors · ${mine.length}` },
+                        { value: "all", label: "All sectors" },
+                      ]}
+                    />
+                  )}
+                </div>
+                <div key={sectorScope} className="animate-fade-up grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {sectors.map((group) => (
+                    <SectorSummary
+                      key={group}
+                      group={group}
+                      stories={storiesFor(feed.tagged, group, mw)}
+                      overview={feed.overviews?.[group]}
+                      marketWideLabel={mw}
+                      onSeeAll={() => seeAll(group)}
+                    />
                   ))}
                 </div>
-              )}
+              </section>
+
+              {/* News that touches every sector, whichever ones the reader chose. */}
+              <SectorSummary
+                group={mw}
+                stories={storiesFor(feed.tagged, mw, mw)}
+                overview={feed.overviews?.[mw]}
+                marketWideLabel={mw}
+                onSeeAll={() => seeAll(mw)}
+              />
             </div>
-            <div key={allSectors ? "all" : "mine"} className="animate-fade-up grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {sectors.map((group) => (
-                <SectorSummary
-                  key={group}
-                  group={group}
-                  stories={storiesFor(feed.tagged, group, mw)}
-                  overview={feed.overviews?.[group]}
-                  marketWideLabel={mw}
-                  onSeeAll={() => seeAll(group)}
-                />
-              ))}
-            </div>
-          </section>
+          )}
 
-          {/* ── Layer 2: news that touches every sector ── */}
-          <section className="mt-8">
-            <SectorSummary
-              group={mw}
-              stories={storiesFor(feed.tagged, mw, mw)}
-              overview={feed.overviews?.[mw]}
-              marketWideLabel={mw}
-              onSeeAll={() => seeAll(mw)}
-            />
-          </section>
+          {/* ── All stories: the evidence ── */}
+          {tab === "stories" && (
+            <div role="tabpanel" id="panel-stories" aria-labelledby="tab-stories" className="animate-fade-up flex flex-col gap-4">
+              <Toggle
+                asTabs
+                label="Tagged or untagged stories"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "tagged", label: `Tagged · ${feed.tagged.length}` },
+                  { value: "other", label: `Untagged · ${feed.other.length}` },
+                ]}
+              />
 
-          {/* ── Layer 3: every story, every score ── */}
-          <section ref={allStoriesRef} className="mt-14 scroll-mt-6" aria-labelledby="all-stories-heading">
-            <h2 id="all-stories-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
-              All stories
-            </h2>
-            <p className="mt-1 text-xs text-brand-muted-fg">
-              Every tagged story from the last {feed.days} days, with all of its scores.
-            </p>
+              {view === "tagged" && (
+                <div key="tagged" className="animate-fade-up">
+                  <p className="text-xs text-brand-muted-fg">
+                    Every story from the last {feed.days} days tagged to a sector or as market-wide, with all of its
+                    scores.
+                  </p>
 
-            {/* ── Filters: one scrolling row on a phone, wrapping from tablet up ── */}
-            <div
-              className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
-              role="group"
-              aria-label="Filter by universe"
-            >
-              <button
-                type="button"
-                onClick={() => setFilter(null)}
-                aria-pressed={filter === null}
-                className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm ${
-                  filter === null ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary"
-                }`}
-              >
-                All
-                <span
-                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
-                    filter === null ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
-                  }`}
-                >
-                  {feed.tagged.length}
-                </span>
-              </button>
-              {filters.map((f) => (
-                <FilterPill
-                  key={f}
-                  label={f}
-                  count={counts[f] ?? 0}
-                  active={filter === f}
-                  marketWide={f === mw}
-                  onClick={() => setFilter(filter === f ? null : f)}
-                />
-              ))}
-            </div>
+                  {/* Filters: one scrolling row on a phone, wrapping from tablet up. */}
+                  <div
+                    className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+                    role="group"
+                    aria-label="Filter by universe"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setFilter(null)}
+                      aria-pressed={filter === null}
+                      className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm ${
+                        filter === null ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary"
+                      }`}
+                    >
+                      All
+                      <span
+                        className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
+                          filter === null ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
+                        }`}
+                      >
+                        {feed.tagged.length}
+                      </span>
+                    </button>
+                    {filters.map((f) => (
+                      <FilterPill
+                        key={f}
+                        label={f}
+                        count={counts[f] ?? 0}
+                        active={filter === f}
+                        marketWide={f === mw}
+                        onClick={() => setFilter(filter === f ? null : f)}
+                      />
+                    ))}
+                  </div>
 
-            {/* ── Tagged stories, by day. Keyed on the filter so a change fades in. ── */}
-            <div key={filter ?? "all"} className="animate-fade-up">
-              {days.length === 0 ? (
-                <div className="mt-6">
-                  <FundsNotice
-                    icon={Newspaper}
-                    title={filter ? `No ${filter} news in the last ${feed.days} days` : "No tagged news yet"}
-                    body={
-                      filter
-                        ? "Nothing in this period was tagged to this universe."
-                        : "Stories appear here once they have been read and tagged. The next update is within a few hours."
-                    }
-                    actionLabel={pointToMarketWide ? `See ${storyCount(counts[mw] ?? 0)} of market-wide news` : undefined}
-                    onAction={pointToMarketWide ? () => setFilter(mw) : undefined}
-                  />
+                  {/* Keyed on the filter so a change fades in. */}
+                  <div key={filter ?? "all"} className="animate-fade-up">
+                    {days.length === 0 ? (
+                      <div className="mt-6">
+                        <FundsNotice
+                          icon={Newspaper}
+                          title={filter ? `No ${filter} news in the last ${feed.days} days` : "No tagged news yet"}
+                          body={
+                            filter
+                              ? "Nothing in this period was tagged to this universe."
+                              : "Stories appear here once they have been read and tagged. The next update is within a few hours."
+                          }
+                          actionLabel={pointToMarketWide ? `See ${storyCount(counts[mw] ?? 0)} of market-wide news` : undefined}
+                          onAction={pointToMarketWide ? () => setFilter(mw) : undefined}
+                        />
+                      </div>
+                    ) : (
+                      days.map((day) => (
+                        <section key={day.key} className="mt-8 flex flex-col gap-4">
+                          <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
+                            {day.label}
+                            <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
+                          </h2>
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {day.articles.map((a) => (
+                              <MacroArticleCard key={a.id} article={a} {...cardProps} />
+                            ))}
+                          </div>
+                        </section>
+                      ))
+                    )}
+
+                    {days.length > 0 && pointToMarketWide && (
+                      <button
+                        type="button"
+                        onClick={() => setFilter(mw)}
+                        className={`${PRESSABLE} mt-8 inline-flex items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline`}
+                      >
+                        Market-wide news touches every universe too: {storyCount(counts[mw] ?? 0)}
+                        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                days.map((day) => (
-                  <section key={day.key} className="mt-10 flex flex-col gap-4">
-                    <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
-                      {day.label}
-                      <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
-                    </h2>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {day.articles.map((a) => (
-                        <MacroArticleCard key={a.id} article={a} {...cardProps} />
-                      ))}
+              )}
+
+              {view === "other" && (
+                <div key="other" className="animate-fade-up">
+                  <p className="max-w-3xl text-xs leading-relaxed text-brand-muted-fg">
+                    Stories from the last {feed.days} days that weren't tagged to any sector or as market-wide, usually
+                    crime, courts, lifestyle or one-off events. Their scores are shown so you can see why.
+                  </p>
+                  {otherDays.length === 0 ? (
+                    <div className="mt-6">
+                      <FundsNotice
+                        icon={Newspaper}
+                        title="No untagged stories"
+                        body="Every story in this period was tagged to a sector or as market-wide."
+                      />
                     </div>
-                  </section>
-                ))
-              )}
-
-              {days.length > 0 && pointToMarketWide && (
-                <button
-                  type="button"
-                  onClick={() => setFilter(mw)}
-                  className={`${PRESSABLE} mt-8 inline-flex items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline`}
-                >
-                  Market-wide news touches every universe too: {storyCount(counts[mw] ?? 0)}
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              )}
-            </div>
-
-            {/* ── Everything else ── */}
-            {feed.other.length > 0 && (
-              <section className="mt-12 border-t border-brand-border/60 pt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowOther((s) => !s)}
-                  aria-expanded={showOther}
-                  className={`${PRESSABLE} flex items-center gap-2 rounded-full text-xs font-semibold text-brand-secondary hover:text-brand-primary`}
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showOther ? "rotate-180" : ""}`} aria-hidden />
-                  {feed.other.length} other {feed.other.length === 1 ? "story wasn't" : "stories weren't"} tagged to any
-                  universe
-                </button>
-                {showOther && (
-                  <div className="animate-fade-up">
-                    {otherDays.map((day) => (
-                      <div key={day.key} className="mt-6 flex flex-col gap-3">
-                        <h3 className="flex items-baseline gap-2 text-sm font-bold text-brand-secondary">
+                  ) : (
+                    otherDays.map((day) => (
+                      <section key={day.key} className="mt-8 flex flex-col gap-4">
+                        <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
                           {day.label}
                           <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
-                        </h3>
+                        </h2>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                           {day.articles.map((a) => (
                             <MacroArticleCard key={a.id} article={a} {...cardProps} />
                           ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-          </section>
-        </>
+                      </section>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
