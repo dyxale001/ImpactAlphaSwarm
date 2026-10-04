@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, BrainCircuit } from "lucide-react";
 import type { MacroArticle, MacroOverview } from "../../services/api/macroNews";
 import { sectorColour } from "../../utils/sectorColours";
 import { displayHeadline, formatProbability, groupProbability, shortWhen } from "../../utils/macroNews";
@@ -97,11 +97,17 @@ export default function SectorSummary({
       ) : (
         <>
           {overview ? (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm leading-relaxed text-brand-secondary">{overview.summary}</p>
-              <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-brand-muted-fg">
-                <Sparkles className="h-3 w-3" aria-hidden />
-                AI overview of these stories, can contain mistakes
+            // The reasoning-trace box, exactly as the stock page, the sentiment and quant
+            // panels and Whale Watching frame theirs, so AI-written prose reads as the
+            // same kind of object wherever it appears.
+            <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
+                <BrainCircuit className="w-3 h-3 text-brand-primary" />
+                AI overview
+              </div>
+              <p className="text-sm leading-relaxed text-brand-fg/90">{overview.summary}</p>
+              <p className="mt-2 text-[11px] text-brand-muted-fg">
+                Written from the stories below. It can contain mistakes, so check the source.
               </p>
             </div>
           ) : (
