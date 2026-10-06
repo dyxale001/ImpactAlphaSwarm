@@ -13,7 +13,7 @@ export default function AssetDetailsSkeleton() {
             <div className="h-8 w-40 rounded bg-brand-border/35" />
           </div>
 
-          <div className="soft-card w-full p-5 space-y-5">
+          <div className="soft-card w-full p-4 sm:p-5 space-y-5">
             <div className="flex flex-col lg:flex-row lg:items-start gap-6">
               <div className="h-40 w-40 rounded-full bg-brand-border/35 shrink-0" />
               <div className="flex-1 space-y-4">
@@ -36,7 +36,7 @@ export default function AssetDetailsSkeleton() {
             </div>
           </div>
 
-          <div className="soft-card w-full p-5 space-y-4">
+          <div className="soft-card w-full p-4 sm:p-5 space-y-4">
             <div className="h-3 w-32 rounded bg-brand-border/35" />
             <div className="h-4 w-72 rounded bg-brand-border/30" />
             <div className="h-2 w-full rounded bg-brand-border/30" />
@@ -53,7 +53,7 @@ export default function AssetDetailsSkeleton() {
             </div>
           </div>
 
-          <div className="soft-card w-full p-5 space-y-4">
+          <div className="soft-card w-full p-4 sm:p-5 space-y-4">
             <div className="h-3 w-36 rounded bg-brand-border/35" />
             <div className="h-4 w-72 rounded bg-brand-border/30" />
             <div className="h-2 w-full rounded bg-brand-border/30" />

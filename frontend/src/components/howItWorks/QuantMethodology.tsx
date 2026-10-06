@@ -21,7 +21,7 @@ import {
 // the same source the asset page uses — so this page cannot drift from the panel.
 export default function QuantMethodology() {
   return (
-    <div id="quant" className="soft-card w-full space-y-5 p-6" style={{ scrollMarginTop: "1.5rem" }}>
+    <div id="quant" className="soft-card w-full space-y-5 p-4 sm:p-6" style={{ scrollMarginTop: "1.5rem" }}>
       <MethodologyCardHeader
         icon={BarChart3}
         title="The price measurements"

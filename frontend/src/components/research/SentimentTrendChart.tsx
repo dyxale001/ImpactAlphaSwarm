@@ -828,15 +828,17 @@ export function SentimentTrendChart({
           {/* What a click actually does differs by page: the source pages open that
               day's list, the sentiment tab opens its written summary. The chart cannot
               know which, and a hint that promises the wrong thing is worse than none,
-              so the caller that wires the click supplies the words for it. */}
+              so the caller that wires the click supplies the words for it. "Choose",
+              not "Click": on a phone the day is tapped, and there is no mouse to
+              click with. */}
           {onSelectDay ? (
             <span className="sm:ml-auto">
               {selectHint ??
                 (newsDays
-                  ? "Click a day to read its news and posts"
+                  ? "Choose a day to read its news and posts"
                   : isNews
-                    ? "Click a day to read its articles"
-                    : "Click a day to read its posts")}
+                    ? "Choose a day to read its articles"
+                    : "Choose a day to read its posts")}
             </span>
           ) : null}
         </div>

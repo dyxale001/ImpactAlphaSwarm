@@ -88,7 +88,11 @@ export default function SignalScorecard({
   const quantNote = terms.quantState ? QUANT_STATE_NOTE[terms.quantState] : undefined;
 
   return (
-    <div className="space-y-3">
+    // A size container, so each row below lays out by the scorecard's own width
+    // rather than the screen's. It sits in a phone-width card and in the 256px
+    // Top Pick column on desktop alike, and both are too narrow for a label and
+    // its question side by side.
+    <div className="@container space-y-3">
       {/* Headline: a STATE, not a grade. */}
       {state && (
         <div>
@@ -126,7 +130,10 @@ export default function SignalScorecard({
                 aria-expanded={isOpen}
                 className="w-full text-left group"
               >
-                <div className="flex items-baseline justify-between gap-2">
+                {/* Stacked below 24rem of scorecard. Side by side in a narrower
+                    box, "FIT WITH YOUR PROFILE" and "Does it match what you told
+                    us?" each wrapped to two ragged lines against each other. */}
+                <div className="flex flex-col items-start gap-0.5 @sm:flex-row @sm:items-baseline @sm:justify-between @sm:gap-2">
                   <span
                     className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
                   >

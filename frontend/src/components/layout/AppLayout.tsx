@@ -214,8 +214,14 @@ export default function AppLayout() {
           block for any absolutely positioned descendant that lacks a positioned
           parent (sr-only labels are the usual case), so such a box scrolls with
           the page instead of anchoring to the document and giving the window a
-          second scrollbar beside this one. */}
-      <main className="relative flex-1 overflow-y-auto pt-14 lg:pt-0">
+          second scrollbar beside this one. Below lg the floating Ask button sits
+          over the bottom-right corner of the content, so pb-20 lets the last card
+          on every page scroll clear of it; /ask has no floating button. */}
+      <main
+        className={`relative flex-1 overflow-y-auto pt-14 lg:pt-0 ${
+          location.pathname === "/ask" ? "" : "pb-20 lg:pb-0"
+        }`}
+      >
         <Outlet />{" "}
       </main>
 

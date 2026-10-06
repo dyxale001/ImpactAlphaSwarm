@@ -57,7 +57,7 @@ export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
     // own styling, so a written account of one day reads as the same kind of object
     // as the reasoning trace on the ranking tab: an AI-written paragraph about the
     // run, framed the same way wherever it appears.
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
       {/* The heading names the day the chart selection points at, and carries the two
           badges that qualify the reading. */}
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
