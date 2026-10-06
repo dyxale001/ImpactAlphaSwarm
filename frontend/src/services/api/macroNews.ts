@@ -57,3 +57,34 @@ export async function getMacroNews(days = 7): Promise<MacroFeed> {
   }
   return res.json();
 }
+
+/** One group on a stock's Market news tab: its overview and most relevant stories. */
+export interface StockMacroSection {
+  group: string;
+  overview: MacroOverview | null;
+  /** All stories tagged to the group in the window, including any not listed. */
+  total: number;
+  stories: MacroArticle[];
+}
+
+/** /api/assets/{ticker}/macro: news for the stock's universe, then market-wide news. */
+export interface StockMacro {
+  ticker: string;
+  /** Null when the stock has no universe the news is tagged against. */
+  universe: string | null;
+  market_wide_label: string;
+  universes: string[];
+  threshold: number;
+  days: number;
+  updated_at: string | null;
+  sector: StockMacroSection | null;
+  market_wide: StockMacroSection;
+}
+
+export async function getStockMacro(ticker: string, days = 7): Promise<StockMacro> {
+  const res = await fetch(`${BASE}/api/assets/${encodeURIComponent(ticker)}/macro?days=${days}`);
+  if (!res.ok) {
+    throw new Error(`Market news could not be loaded (HTTP ${res.status})`);
+  }
+  return res.json();
+}

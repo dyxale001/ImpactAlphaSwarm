@@ -197,12 +197,13 @@ function Toggle<T extends string>({
 export default function MarketNewsPage() {
   const [feed, setFeed] = useState<MacroFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  // ?filter=Finance arrives from a stock's Market news tab. Read once, like ?tab=.
+  const [filter, setFilter] = useState<string | null>(() => searchParams.get("filter"));
   const [showAbout, setShowAbout] = useState(false);
   const [sectorScope, setSectorScope] = useState<"mine" | "all">("mine");
   // Opens on ?tab=stories (and ?view=other) when asked, like the stock page's ?tab=.
   // Read once on mount; switching afterwards is local state.
-  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<PageTab>(() => (searchParams.get("tab") === "stories" ? "stories" : "sectors"));
   const [view, setView] = useState<StoriesView>(() => (searchParams.get("view") === "other" ? "other" : "tagged"));
   const tabsRef = useRef<HTMLDivElement>(null);

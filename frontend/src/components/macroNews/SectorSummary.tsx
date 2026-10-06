@@ -12,7 +12,7 @@ const MARKET_WIDE_TINT = "bg-neutral-100";
 const PRESSABLE =
   "transition-transform duration-[120ms] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent";
 
-function StoryRow({
+export function StoryRow({
   article,
   group,
   marketWideLabel,
@@ -48,6 +48,25 @@ function StoryRow({
         </span>
       </a>
     </li>
+  );
+}
+
+/** The AI overview, framed as the platform's reasoning-trace box. */
+export function AIOverviewBox({ summary }: { summary: string }) {
+  // The reasoning-trace box, exactly as the stock page, the sentiment and quant
+  // panels and Whale Watching frame theirs, so AI-written prose reads as the
+  // same kind of object wherever it appears.
+  return (
+    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
+        <BrainCircuit className="w-3 h-3 text-brand-primary" />
+        AI overview
+      </div>
+      <p className="text-sm leading-relaxed text-brand-fg/90">{summary}</p>
+      <p className="mt-2 text-[11px] text-brand-muted-fg">
+        Written from the stories below. It can contain mistakes, so check the source.
+      </p>
+    </div>
   );
 }
 
@@ -97,19 +116,7 @@ export default function SectorSummary({
       ) : (
         <>
           {overview ? (
-            // The reasoning-trace box, exactly as the stock page, the sentiment and quant
-            // panels and Whale Watching frame theirs, so AI-written prose reads as the
-            // same kind of object wherever it appears.
-            <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
-              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                AI overview
-              </div>
-              <p className="text-sm leading-relaxed text-brand-fg/90">{overview.summary}</p>
-              <p className="mt-2 text-[11px] text-brand-muted-fg">
-                Written from the stories below. It can contain mistakes, so check the source.
-              </p>
-            </div>
+            <AIOverviewBox summary={overview.summary} />
           ) : (
             <p className="text-xs leading-relaxed text-brand-muted-fg">
               The overview for these stories is written at the next update.
