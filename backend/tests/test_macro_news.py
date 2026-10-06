@@ -24,7 +24,7 @@ from src.macro import universes as uni  # noqa: E402
 from src.macro.collector import Article, MacroNewsCollector, parse_article  # noqa: E402
 from src.macro.digest import DigestStory, MacroDigestGenerator, MacroDigestPromptBuilder  # noqa: E402
 from src.macro.jev_client import JevClient, parse_answers  # noqa: E402
-from src.macro.routes import get_service, mount_macro_news, router  # noqa: E402
+from src.macro.routes import asset_router, get_service, mount_macro_news, router  # noqa: E402
 from src.macro.service import MacroNewsService  # noqa: E402
 from src.macro.tagger import Scores, tags_for  # noqa: E402
 from src.utils.ss_sources import PublisherRegistry  # noqa: E402
@@ -267,9 +267,13 @@ def test_no_key_means_no_call(monkeypatch):
 
 
 class FakeRepo:
-    def __init__(self):
+    def __init__(self, universes: Optional[dict[str, str]] = None):
         self.rows: dict[int, dict[str, Any]] = {}
         self.pruned_before: Optional[datetime] = None
+        self.universes = universes or {}
+
+    def universe_for(self, ticker):
+        return self.universes.get(ticker.upper())
 
     def max_finnhub_id(self):
         return max(self.rows) if self.rows else None
@@ -554,6 +558,56 @@ def test_flag_off_mounts_nothing():
 
 def test_router_paths():
     assert {r.path for r in router.routes} == {"/api/macro/pull", "/api/macro/rescore", "/api/macro/news"}
+    assert {r.path for r in asset_router.routes} == {"/api/assets/{ticker}/macro"}
+
+
+# ── the stock tab ────────────────────────────────────────────────────────────
+
+
+def _stock_repo():
+    repo = FakeRepo(universes={"JPM": "Finance", "ODD": "Retired Sector"})
+    _service(
+        [
+            _article(1, "Fed signals pause"),
+            _article(2, "Bank results"),
+            _article(3, "Jim Cramer: how to play the stock in banks"),
+            _article(4, "Lilly trial"),
+        ],
+        {
+            "Fed": _scores(mw=0.98, Finance=0.97),
+            "Bank": _scores(Finance=0.8),
+            "Cramer": _scores(Finance=0.99),
+            "Lilly": _scores(Healthcare=0.95),
+        },
+        repo,
+    ).pull()
+    return repo
+
+
+def test_stock_view_shows_its_universe_then_market_wide():
+    view = _service([], {}, _stock_repo()).stock_view("jpm")
+    assert view["ticker"] == "JPM" and view["universe"] == "Finance"
+    sector = view["sector"]
+    assert sector["group"] == "Finance" and sector["total"] == 3
+    # Most relevant first, and the presenter's pick never leads (though it is counted).
+    assert [a["id"] for a in sector["stories"]] == [1, 2]
+    assert sector["overview"]["summary"].startswith("Finance:")
+    assert [a["id"] for a in view["market_wide"]["stories"]] == [1]
+
+
+def test_stock_without_a_known_universe_still_gets_market_wide():
+    repo = _stock_repo()
+    for ticker in ("ODD", "NOPE"):
+        view = _service([], {}, repo).stock_view(ticker)
+        assert view["universe"] is None and view["sector"] is None
+        assert view["market_wide"]["total"] == 1
+
+
+def test_stock_route_validates_the_ticker(client):
+    assert client.get("/api/assets/AAPL/macro").status_code == 200
+    assert client.get("/api/assets/BRK.B/macro").status_code == 200
+    assert client.get("/api/assets/1abc/macro").status_code == 422
+
 
 
 def test_generator_asks_again_when_the_reply_runs_long():

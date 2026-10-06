@@ -225,29 +225,73 @@ class MacroNewsService:
             "commentary": is_commentary(row["headline"]),
         }
 
-    def feed(self, days: int = MACRO_LOOKBACK_DAYS) -> dict[str, Any]:
-        """What the Market News page shows: tagged stories, and everything else apart."""
-        rows = self.repository.read_window(self.now() - timedelta(days=days))
-        items = [self._serialise(r) for r in rows]
+    @staticmethod
+    def _updated_at(rows: list[dict[str, Any]]) -> Optional[str]:
         fetched = [r.get("fetched_at") for r in rows if r.get("fetched_at")]
-        # An overview is shown only while its group still has tagged stories in the
-        # window, so a paragraph about stories that have aged out never outlives them.
-        overviews = {}
+        return max(fetched) if fetched else None
+
+    def _overviews(self, rows: list[dict[str, Any]], groups: list[str]) -> dict[str, dict[str, Any]]:
+        """The latest overview per group, shown only while the group still has tagged
+        stories in the window, so a paragraph never outlives the stories it describes."""
         latest = self.repository.latest_digests()
-        for group in self._groups():
+        out: dict[str, dict[str, Any]] = {}
+        for group in groups:
             digest = latest.get(group)
             if digest and self._members(rows, group):
-                overviews[group] = {
+                out[group] = {
                     "summary": digest["summary"],
                     "generated_at": digest.get("generated_at") or digest.get("slot_start"),
                     "article_count": len(digest.get("article_ids") or []),
                 }
+        return out
+
+    def _section(self, rows: list[dict[str, Any]], group: str, overviews: dict, limit: int) -> dict[str, Any]:
+        """One group for the stock tab: its overview and its most relevant stories.
+        Commentary (a presenter's pick, a trading idea) never leads, as on the page."""
+        members = self._members(rows, group)
+        news = [r for r in members if not is_commentary(r["headline"])]
+        return {
+            "group": group,
+            "overview": overviews.get(group),
+            "total": len(members),
+            "stories": [self._serialise(r) for r in news[:limit]],
+        }
+
+    def stock_view(self, ticker: str, days: int = MACRO_LOOKBACK_DAYS) -> dict[str, Any]:
+        """The stock page's Market news tab: its universe's news, then market-wide news.
+
+        Universe level, never ticker level (D-223): every stock in a universe sees the
+        same stories, and the tab says so. A stock with no universe, or one no longer
+        in the list, gets ``sector: None`` and still sees market-wide news."""
+        universe = self.repository.universe_for(ticker)
+        if universe not in UNIVERSES:
+            universe = None
+        rows = self.repository.read_window(self.now() - timedelta(days=days))
+        groups = [MARKET_WIDE] + ([universe] if universe else [])
+        overviews = self._overviews(rows, groups)
+        return {
+            "ticker": ticker.upper(),
+            "universe": universe,
+            "market_wide_label": MARKET_WIDE,
+            "universes": list(UNIVERSES),
+            "threshold": MACRO_TAG_THRESHOLD,
+            "days": days,
+            "updated_at": self._updated_at(rows),
+            "sector": self._section(rows, universe, overviews, limit=5) if universe else None,
+            "market_wide": self._section(rows, MARKET_WIDE, overviews, limit=3),
+        }
+
+    def feed(self, days: int = MACRO_LOOKBACK_DAYS) -> dict[str, Any]:
+        """What the Market News page shows: tagged stories, and everything else apart."""
+        rows = self.repository.read_window(self.now() - timedelta(days=days))
+        items = [self._serialise(r) for r in rows]
+        overviews = self._overviews(rows, self._groups())
         return {
             "universes": list(UNIVERSES),
             "market_wide_label": MARKET_WIDE,
             "threshold": MACRO_TAG_THRESHOLD,
             "days": days,
-            "updated_at": max(fetched) if fetched else None,
+            "updated_at": self._updated_at(rows),
             "overviews": overviews,
             "tagged": [i for i in items if i["tags"]],
             "other": [i for i in items if not i["tags"]],

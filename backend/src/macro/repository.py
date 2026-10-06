@@ -91,6 +91,23 @@ class MacroNewsRepository:
         except Exception as exc:
             logger.info("Macro news: overview prune failed: %s", exc)
 
+    def universe_for(self, ticker: str) -> Optional[str]:
+        """The universe a stock is placed in (``assets.universe``), or None."""
+        try:
+            res = (
+                self._client()
+                .table("assets")
+                .select("universe")
+                .eq("ticker", ticker.upper())
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            return rows[0].get("universe") if rows else None
+        except Exception as exc:
+            logger.warning("Macro news: universe lookup failed for %s: %s", ticker, exc)
+            return None
+
     # ── per-sector overviews ─────────────────────────────────────────────────
 
     DIGEST_TABLE = "macro_universe_digest"

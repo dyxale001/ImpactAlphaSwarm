@@ -12,7 +12,7 @@ import os
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Path, Query
 
 from .config import MACRO_LOOKBACK_DAYS, MACRO_NEWS_ENABLED, MACRO_RETENTION_DAYS
 from .service import MacroNewsService
@@ -61,9 +61,24 @@ def news(
     return service.feed(days)
 
 
+# The stock page's tab, beside the other per-ticker reads under /api/assets/{ticker}/.
+# A router of its own because it does not share the /api/macro prefix.
+asset_router = APIRouter(tags=["macro-news"])
+
+
+@asset_router.get("/api/assets/{ticker}/macro")
+def stock_macro(
+    ticker: str = Path(..., pattern=r"^[A-Za-z][A-Za-z.\-]{0,9}$"),
+    days: int = Query(MACRO_LOOKBACK_DAYS, ge=1, le=MACRO_RETENTION_DAYS),
+    service: MacroNewsService = Depends(get_service),
+):
+    return service.stock_view(ticker, days)
+
+
 def mount_macro_news(app: FastAPI, enabled: bool = MACRO_NEWS_ENABLED) -> bool:
-    """Attach the router if the feature is on. Returns whether it was mounted."""
+    """Attach both routers if the feature is on. Returns whether they were mounted."""
     if not enabled:
         return False
     app.include_router(router)
+    app.include_router(asset_router)
     return True
