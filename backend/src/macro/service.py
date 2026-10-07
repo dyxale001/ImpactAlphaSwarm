@@ -9,12 +9,18 @@ the next scheduled pull, without anyone calling ``/rescore``.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from ..agents.asset_discovery import UNIVERSES
 from .collector import Article, MacroNewsCollector
-from .config import MACRO_LOOKBACK_DAYS, MACRO_RETENTION_DAYS, MACRO_TAG_THRESHOLD
+from .config import (
+    MACRO_DIGEST_SPACING_SECONDS,
+    MACRO_LOOKBACK_DAYS,
+    MACRO_RETENTION_DAYS,
+    MACRO_TAG_THRESHOLD,
+)
 from .digest import DigestStory, MacroDigestGenerator, is_commentary
 from .jev_client import JevClient
 from .repository import MacroNewsRepository
@@ -56,12 +62,14 @@ class MacroNewsService:
         jev: Optional[JevClient] = None,
         digester: Optional[MacroDigestGenerator] = None,
         now: Callable[[], datetime] = _utcnow,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         self.repository = repository or MacroNewsRepository()
         self.collector = collector or MacroNewsCollector()
         self.jev = jev or JevClient()
         self.digester = digester or MacroDigestGenerator()
         self.now = now
+        self.sleep = sleep
 
     # ── writing ───────────────────────────────────────────────────────────────
 
@@ -152,6 +160,7 @@ class MacroNewsService:
         rows = self.repository.read_window(since)
         latest = self.repository.latest_digests()
         written = 0
+        called = False
         for group in self._groups():
             members = self._members(rows, group)
             if not members:
@@ -169,6 +178,10 @@ class MacroNewsService:
                 )
                 for r in members
             ]
+            # Spaced out so a pull's overviews stay under the key's per-minute token limit.
+            if called:
+                self.sleep(MACRO_DIGEST_SPACING_SECONDS)
+            called = True
             summary = self.digester.generate(group, stories, total=len(members))
             if summary is None:
                 continue

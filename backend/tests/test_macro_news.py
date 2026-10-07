@@ -343,13 +343,14 @@ class FakeDigester:
         return None if self.fail else f"{group}: {total} stories, led by {stories[0].headline}."
 
 
-def _service(articles, table, repo=None, digester=None):
+def _service(articles, table, repo=None, digester=None, sleeps=None):
     return MacroNewsService(
         repository=repo or FakeRepo(),
         collector=FakeCollector(articles),
         jev=FakeJev(table),
         digester=digester or FakeDigester(),
         now=lambda: NOW,
+        sleep=(sleeps.append if sleeps is not None else lambda _s: None),
     )
 
 
@@ -683,3 +684,18 @@ def test_feed_flags_stock_tips_as_commentary():
              {"Cramer": _scores(Technology=0.99), "Fed": _scores(Finance=0.9)}, repo).pull()
     by_id = {a["id"]: a for a in _service([], {}, repo).feed()["tagged"]}
     assert by_id[1]["commentary"] is True and by_id[2]["commentary"] is False
+
+
+def test_overview_calls_are_spaced_out_within_a_pull():
+    sleeps: list = []
+    _service([_article(1, "Fed"), _article(2, "Lilly")],
+             {"Fed": _scores(mw=0.98, Finance=0.97), "Lilly": _scores(Healthcare=0.95)}, sleeps=sleeps).pull()
+    # Three overviews (market-wide, Finance, Healthcare): a pause before the second and third only.
+    assert sleeps == [15.0, 15.0]
+
+
+def test_no_pause_when_nothing_needs_writing():
+    repo, sleeps = FakeRepo(), []
+    _service([_article(1, "Fed")], {"Fed": _scores(Finance=0.9)}, repo).pull()
+    _service([], {}, repo, sleeps=sleeps).pull()
+    assert sleeps == []

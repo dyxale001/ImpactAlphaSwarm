@@ -146,7 +146,10 @@ class MacroDigestGenerator:
     #: bought invented detail in testing ("varied efficacy across patient groups").
     TEMPERATURE = 0.15
     RETRIES = 2
-    BACKOFF_SECONDS = (1.0, 2.0)
+    #: Long enough for a per-minute rate limit to clear: the likeliest failure on a
+    #: free-tier key is a 429 from the token-per-minute window, which a one-second
+    #: wait just hits again. Nobody waits on a pull, so the time is free.
+    BACKOFF_SECONDS = (10.0, 30.0)
     MIN_CHARS = 40
     MAX_CHARS = 600
 

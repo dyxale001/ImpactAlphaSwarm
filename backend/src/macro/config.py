@@ -58,12 +58,19 @@ JEV_API_KEY_ENV = os.getenv("JEV_API_KEY_ENV", "TYPESAFE_API_KEY_OPENROUTER")
 JEV_CONCURRENCY = _int("JEV_CONCURRENCY", 6)
 JEV_TIMEOUT_SECONDS = _int("JEV_TIMEOUT_SECONDS", 30)
 
-# The Groq account the per-sector overviews are written on: GROQ_API_KEY7, which nothing
-# else reads, so a pull's burst of up to seven calls never queues behind another
-# feature's. Falls back to GROQ_API_KEY4, the background summaries' lane, when key 7 is
-# not set. Both names are overridable without a deploy.
-MACRO_DIGEST_KEY_ENV = os.getenv("MACRO_DIGEST_KEY_ENV", "GROQ_API_KEY7")
-MACRO_DIGEST_FALLBACK_KEY_ENV = os.getenv("MACRO_DIGEST_FALLBACK_KEY_ENV", "GROQ_API_KEY4")
+# The Groq account the per-sector overviews are written on. GROQ_API_KEY5 is the least
+# used: its one other reader, the Big investors and Insider trading summaries, writes
+# only when someone opens those tabs, and stores what it writes. Falls back to
+# GROQ_API_KEY6, whose one reader's scheduled burst (00:30 UTC) never meets a pull.
+# Both names are overridable without a deploy.
+MACRO_DIGEST_KEY_ENV = os.getenv("MACRO_DIGEST_KEY_ENV", "GROQ_API_KEY5")
+MACRO_DIGEST_FALLBACK_KEY_ENV = os.getenv("MACRO_DIGEST_FALLBACK_KEY_ENV", "GROQ_API_KEY6")
+
+# Seconds between one overview call and the next within a pull. Groq's free tier
+# allows about 8,000 tokens a minute per account, and an overview costs roughly 1,000
+# to 2,000, so seven back to back would trip it on any key. At 15 seconds a full
+# pull's seven stay under it and take about two minutes, which no one waits on.
+MACRO_DIGEST_SPACING_SECONDS = _float("MACRO_DIGEST_SPACING_SECONDS", 15.0)
 
 # Publisher tiers an article must be in to be kept (the sentiment scout's registry).
 MACRO_KEEP_TIERS = (1, 2)
