@@ -10,6 +10,7 @@ import { SentimentTrendChart } from "../components/research/SentimentTrendChart"
 import { dayLabel } from "../components/research/sentimentDays";
 import {
   EmptyStateCard,
+  FilterChipRow,
   SentimentFilterChips,
   SortToggle,
   SourceList,
@@ -121,7 +122,7 @@ export default function SocialSentimentPage() {
           {/* The day's posts, framed the way DaySummaryPanel frames its prose: an
               accent-outlined panel with the day as its heading, and the list itself
               in a quiet inner box under a labelled eyebrow. */}
-          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <h4 className="text-sm font-semibold text-brand-fg">
                 {activeDay ? dayLabel(activeDay) : "Posts"}
@@ -136,14 +137,14 @@ export default function SocialSentimentPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
+              <FilterChipRow>
                 <SentimentFilterChips
                   total={posts.length}
                   counts={bucketCounts}
                   value={sentimentFilter}
                   onChange={setSentimentFilter}
                 />
-              </div>
+              </FilterChipRow>
               <SortToggle value={sort} onChange={setSort} />
             </div>
 

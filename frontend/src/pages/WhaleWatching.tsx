@@ -297,31 +297,37 @@ export default function WhaleWatchingPage() {
                 const assets = assetsFor(id);
                 const newCount = assets.filter((a) => a.isNew).length;
                 return (
+                  // A row on a phone (icon, text, chevron), a card from sm. As
+                  // one-column cards each tile was about 170px tall for a name
+                  // and a line of copy, and the six filled two screens.
                   <button
                     key={id}
                     onClick={() => setUniverse(id)}
                     disabled={isLoading || assets.length === 0}
-                    className="group text-left p-5 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="group flex items-center gap-4 text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed sm:block sm:p-5"
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex shrink-0 items-start justify-between sm:mb-4">
                       {/* Solid forest tile with the icon knocked out in the
                           page background, the same weight the dashboard gives
                           its primary actions. The old 10% tint read as grey. */}
-                      <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                      <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform">
                         <Icon className="w-5 h-5 text-brand-bg" />
                       </div>
-                      <ChevronRight className="w-4 h-4 text-brand-muted-fg group-hover:text-brand-primary transition-colors" />
+                      <ChevronRight className="hidden w-4 h-4 text-brand-muted-fg group-hover:text-brand-primary transition-colors sm:block" />
                     </div>
-                    <p className="text-base font-semibold text-brand-fg">
-                      {id}
-                    </p>
-                    <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
-                    <p className="text-[11px] mt-3 font-semibold flex items-center gap-1.5">
-                      <span className="text-brand-primary">
-                        {isLoading ? "Loading…" : `${assets.length} companies`}
-                      </span>
-                      {newCount > 0 && <NewBadge />}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold text-brand-fg">
+                        {id}
+                      </p>
+                      <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
+                      <p className="text-[11px] mt-2 font-semibold flex items-center gap-1.5 sm:mt-3">
+                        <span className="text-brand-primary">
+                          {isLoading ? "Loading…" : `${assets.length} companies`}
+                        </span>
+                        {newCount > 0 && <NewBadge />}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 shrink-0 text-brand-muted-fg group-hover:text-brand-primary transition-colors sm:hidden" />
                   </button>
                 );
               })}

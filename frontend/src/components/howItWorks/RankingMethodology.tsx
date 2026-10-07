@@ -18,7 +18,7 @@ export default function RankingMethodology() {
   ];
 
   return (
-    <div id="ranking" className="soft-card w-full space-y-5 p-6" style={{ scrollMarginTop: "1.5rem" }}>
+    <div id="ranking" className="soft-card w-full space-y-5 p-4 sm:p-6" style={{ scrollMarginTop: "1.5rem" }}>
       <MethodologyCardHeader
         icon={ListOrdered}
         title="How the list is ordered"

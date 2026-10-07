@@ -10,7 +10,7 @@ export default function FundsSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="soft-card flex animate-pulse flex-col gap-4 p-5">
+        <div key={i} className="soft-card flex animate-pulse flex-col gap-4 p-4 sm:p-5">
           <div className="flex flex-col gap-2">
             <div className="flex gap-1.5">
               <div className="h-4 w-20 rounded-md bg-brand-border/25" />

@@ -335,8 +335,12 @@ function Hero({
   const linksToDocument = Boolean(fund.mdd_url);
 
   return (
-    <header className="hero-card overflow-hidden px-6 pb-6 pt-7 sm:px-7">
-      <TiersMotif className="h-full" />
+    <header className="hero-card overflow-hidden px-4 pb-6 pt-6 sm:px-7 sm:pt-7">
+      {/* Not drawn on a phone. The copy runs to this card's bottom edge, so
+          there is no empty band to keep the branches in, and stretched to the
+          full height of a card that narrow they cut through the fund's name and
+          the fact sheet line. */}
+      <TiersMotif className="hidden h-full sm:block" />
       <div className="relative flex flex-col gap-1">
         {/* The same three badges the fund card carries, styled the same way
             round: vehicle plain, tracker outlined, the accent fill spent on

@@ -237,15 +237,24 @@ function AnalysisTabs({
       // self-start, not just inline-flex: the parent is a flex column, and a flex
       // child stretches to the full line width unless told otherwise, which turned
       // the pill into a full page-width bar.
-      className="self-start inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap"
+      // One row that scrolls sideways rather than wrapping: the five labels are
+      // about 450px against 361px of phone, and wrapped they made a two-row box
+      // whose rounded-full ends no longer read as one pill. max-w-full caps the
+      // pill at the column so the overflow scrolls inside it, and the tab cut off
+      // at the right edge says there is more.
+      className="self-start inline-flex max-w-full items-center overflow-x-auto no-scrollbar rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5"
     >
       {tabs.map((tab) => (
         <button
           key={tab.key}
           role="tab"
           aria-selected={value === tab.key}
-          onClick={() => onChange(tab.key)}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+          onClick={(event) => {
+            onChange(tab.key);
+            // A tab half off the edge comes fully into view once chosen.
+            event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
+          }}
+          className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
             value === tab.key
               ? "bg-brand-accent text-brand-fg"
               : "text-brand-muted-fg hover:text-brand-fg"
@@ -288,7 +297,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="soft-card w-full p-5 space-y-4 hover:border-brand-primary/30 transition-all">
+    // p-4 on a phone. The tabs nest an accent panel and an inner box inside this
+    // card, and at p-5 on all three the AI summaries read in a column about 260px
+    // wide on a 393px screen.
+    <div className="soft-card w-full p-4 sm:p-5 space-y-4 hover:border-brand-primary/30 transition-all">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
@@ -557,7 +569,7 @@ export default function AssetDetailsPage() {
           the header's flex gap and the other two in the page's, and the spacing
           jumped as you switched tabs. */}
       {recommendation && tab === "ranking" ? (
-          <div className="soft-card w-full p-5 space-y-5">
+          <div className="soft-card w-full p-4 sm:p-5 space-y-5">
             {/* The top card had no explainer of its own, even though it carries the
                 headline judgement. It gets the ranking walkthrough. */}
             <div className="flex items-start justify-between gap-3">
@@ -648,7 +660,7 @@ export default function AssetDetailsPage() {
         ) : null}
 
       {!recommendation && (
-        <div className="soft-card w-full p-5">
+        <div className="soft-card w-full p-4 sm:p-5">
           <p className="text-brand-muted-fg text-sm italic">
             No recent AI analysis found for this asset.
           </p>
@@ -749,7 +761,7 @@ export default function AssetDetailsPage() {
                   newsDays={newsDays}
                   selectedDay={activeDay}
                   onSelectDay={setSelectedDay}
-                  selectHint="Click a day to read what happened"
+                  selectHint="Choose a day to read what happened"
                 />
                 {/* Held back until the chart itself has something to show. While the
                     history is loading or still being built the chart draws its own

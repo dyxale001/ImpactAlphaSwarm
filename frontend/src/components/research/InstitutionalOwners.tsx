@@ -129,7 +129,7 @@ export default function InstitutionalOwners({
 
   return (
     <section
-      className={`soft-card w-full p-5 space-y-4 ${
+      className={`soft-card w-full p-4 sm:p-5 space-y-4 ${
         onAsset ? "hover:border-brand-primary/30 transition-all" : ""
       }`}
     >
