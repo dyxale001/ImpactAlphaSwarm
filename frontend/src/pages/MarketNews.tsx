@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Info, Newspaper } from "lucide-react";
 import { getMacroNews, type MacroFeed } from "../services/api/macroNews";
 import MacroArticleCard from "../components/macroNews/MacroArticleCard";
 import SectorSummary from "../components/macroNews/SectorSummary";
+import AboutMarketNewsModal from "../components/macroNews/AboutMarketNewsModal";
 import WireMotif from "../components/macroNews/WireMotif";
 import { universeIcon } from "../components/macroNews/universeIcons";
 import FundsNotice from "../components/funds/FundsNotice";
@@ -26,36 +27,6 @@ import { useAuthStore } from "../store/authStore";
 // rest of the app uses.
 const PRESSABLE =
   "transition-transform duration-[120ms] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent";
-
-function AboutPanel({ threshold }: { threshold: number }) {
-  const pct = Math.round(threshold * 100);
-  return (
-    <section className="soft-card animate-fade-up flex flex-col gap-2 p-5 text-xs leading-relaxed text-brand-secondary [&>p]:max-w-3xl">
-      <h2 className="text-[13px] font-bold text-brand-primary">How to read this page</h2>
-      <p>
-        Each story is read by a decision model, Jev from TypeSafe AI. It answers one yes-or-no question per
-        investment universe, such as "Does this news directly concern healthcare companies?", and gives the
-        probability that the answer is yes. A separate question asks whether the story affects markets broadly,
-        such as interest rates, inflation, trade or oil.
-      </p>
-      <p>
-        Every story shows all seven of those probabilities. A filled box means the story is tagged with that
-        universe, which happens at {pct}% or more; the line along the bottom of each box shows how high the score
-        is. Scores under 10% are listed on one line underneath. One story can carry several tags, or none.
-      </p>
-      <p>
-        Each sector's overview is written by an AI model from the stories tagged to it, and rewritten when those
-        stories change. It is told to report only what the stories say, never whether the news is good or bad, and
-        never to advise. It can still make mistakes, so the stories it was written from sit right under it.
-      </p>
-      <p>
-        These numbers say how relevant a story is, not whether it is good or bad news. The model only sees the
-        headline and the publisher's short summary, so it can be wrong; the link to the full story is always
-        there. Nothing on this page changes AlphaSwarm's rankings or signals.
-      </p>
-    </section>
-  );
-}
 
 function FilterPill({
   label,
@@ -207,6 +178,8 @@ export default function MarketNewsPage() {
   const [tab, setTab] = useState<PageTab>(() => (searchParams.get("tab") === "stories" ? "stories" : "sectors"));
   const [view, setView] = useState<StoriesView>(() => (searchParams.get("view") === "other" ? "other" : "tagged"));
   const tabsRef = useRef<HTMLDivElement>(null);
+  // Stable, so the modal's open effect doesn't re-run (and refocus) on every render.
+  const closeAbout = useCallback(() => setShowAbout(false), []);
   const chosen = useAuthStore((s) => s.analysis?.investment_universe);
 
   useEffect(() => {
@@ -279,8 +252,8 @@ export default function MarketNewsPage() {
             )}
             <button
               type="button"
-              onClick={() => setShowAbout((s) => !s)}
-              aria-expanded={showAbout}
+              onClick={() => setShowAbout(true)}
+              aria-haspopup="dialog"
               className={`${PRESSABLE} inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg hover:bg-lime-400`}
             >
               <Info className="h-3.5 w-3.5" aria-hidden />
@@ -290,11 +263,7 @@ export default function MarketNewsPage() {
         </div>
       </div>
 
-      {showAbout && (
-        <div className="mt-4">
-          <AboutPanel threshold={feed?.threshold ?? 0.6} />
-        </div>
-      )}
+      <AboutMarketNewsModal open={showAbout} onClose={closeAbout} threshold={feed?.threshold ?? 0.6} />
 
       {error && (
         <div className="mt-6">
