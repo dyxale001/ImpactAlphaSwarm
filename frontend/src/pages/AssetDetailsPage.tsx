@@ -9,7 +9,10 @@ import {
   TriangleAlert,
   HelpCircle,
   ArrowRight,
+  Columns2,
 } from "lucide-react";
+import { COMPARE_ENABLED } from "../utils/compareFlags";
+import { compareHref } from "../utils/compareUrl";
 import ConfidenceRing from "../components/dashboard/ConfidenceRing";
 import SignalScorecard, {
   type SignalTerms,
@@ -552,6 +555,18 @@ export default function AssetDetailsPage() {
             <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-3">
               {asset.description}
             </p>
+          )}
+          {/* Opens Compare with this stock already in the first column and the
+              search ready for the next. Every stock can be compared, analysed or
+              not: the page's price and tone rows do not depend on a run. */}
+          {COMPARE_ENABLED && (
+            <Link
+              to={compareHref("stocks", [asset.ticker])}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-card px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
+            >
+              <Columns2 className="h-4 w-4 text-brand-primary" />
+              Compare with…
+            </Link>
           )}
         </div>
 

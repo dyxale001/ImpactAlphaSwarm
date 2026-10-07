@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Pencil, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Columns2, ExternalLink, FileText, Pencil, Search } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import RiskScale from "../components/funds/RiskScale";
@@ -15,6 +15,8 @@ import FundPerformance, { hasPerformance } from "../components/funds/FundPerform
 import FundSwings, { hasSwings } from "../components/funds/FundSwings";
 import FundIncomeHistory, { hasIncome } from "../components/funds/FundIncomeHistory";
 import { useFundDetail, useFundPrices } from "../hooks/useFundCatalogue";
+import { COMPARE_ENABLED } from "../utils/compareFlags";
+import { compareHref } from "../utils/compareUrl";
 import {
   AS_AT,
   COST_LABEL,
@@ -416,6 +418,15 @@ function Hero({
               {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
               <ExternalLink className="h-3 w-3" />
             </a>
+          )}
+          {COMPARE_ENABLED && (
+            <Link
+              to={compareHref("funds", [fund.fund_id])}
+              className="inline-flex items-center gap-1 font-bold text-brand-accent hover:underline"
+            >
+              <Columns2 className="h-3 w-3" />
+              Compare with…
+            </Link>
           )}
           {isAdmin && (
             <Link

@@ -27,6 +27,8 @@ import FundDetailPage from "./pages/FundDetail";
 import AdminFunds from "./pages/AdminFunds";
 import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
+import ComparePage from "./pages/Compare";
+import { COMPARE_ENABLED } from "./utils/compareFlags";
 import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
@@ -97,6 +99,7 @@ export default function App() {
               gated, so a deep link cannot reach a page whose API is off. */}
           {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
           {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
+          {COMPARE_ENABLED && <Route path="/compare" element={<ComparePage />} />}
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/research" element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />

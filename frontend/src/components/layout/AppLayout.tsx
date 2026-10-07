@@ -15,12 +15,14 @@ import {
   Settings,
   Waves,
   Landmark,
+  Columns2,
   Sparkles,
   Menu,
   X,
   LogOut,
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
+import { COMPARE_ENABLED } from "../../utils/compareFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -63,6 +65,7 @@ export default function AppLayout() {
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Stocks", path: "/assets", icon: CandlestickChart },
     { name: "Funds", path: "/funds", icon: Landmark },
+    { name: "Compare", path: "/compare", icon: Columns2 },
     { name: "Learning", path: "/learning", icon: BookOpen },
     { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
@@ -84,7 +87,8 @@ export default function AppLayout() {
       // Behind the flag: the entry has to be in both the list above and this
       // allow-list to appear, and the page it links to needs the backend flag
       // as well, so nothing half-appears.
-      (FUNDS_ENABLED && i.name === "Funds")
+      (FUNDS_ENABLED && i.name === "Funds") ||
+      (COMPARE_ENABLED && i.name === "Compare")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social

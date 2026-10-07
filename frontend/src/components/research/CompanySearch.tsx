@@ -12,10 +12,12 @@ export default function CompanySearch({
   assets,
   onSelect,
   disabled,
+  placeholder = "Search companies",
 }: {
   assets: UniverseAsset[];
   onSelect: (ticker: string, universe: string | null) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -89,8 +91,8 @@ export default function CompanySearch({
           type="text"
           value={query}
           disabled={disabled}
-          placeholder="Search companies"
-          aria-label="Search companies"
+          placeholder={placeholder}
+          aria-label={placeholder}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
