@@ -177,6 +177,12 @@ from src.quant.routes import mount_quant_routes  # noqa: E402
 
 mount_quant_routes(app)
 
+# The Compare page's written comparison, built on the quant window service above. Mounted
+# the same way and for the same reason: off, it answers `available: false`.
+from src.compare.routes import mount_compare_routes  # noqa: E402
+
+mount_compare_routes(app)
+
 # --- Funds catalogue ----------------------------------------------------------
 # South African unit trusts and JSE-listed ETFs, matched to the onboarding
 # profile from published fact sheets. Off unless FUNDS_ENABLED is set: with the
