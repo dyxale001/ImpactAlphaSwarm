@@ -69,6 +69,7 @@ _social_history_instance = None
 _social_backfiller_instance = None
 _news_history_instance = None
 _social_ticker_instance = None
+_news_ticker_instance = None
 _day_summaries_instance = None
 _day_drivers_instance = None
 
@@ -124,6 +125,17 @@ def _social_ticker():
 
         _social_ticker_instance = SocialTicker(history=_social_history())
     return _social_ticker_instance
+
+
+def _news_ticker():
+    """The intraday news top-up, built once on first use. Shares the news history reader,
+    so it writes through the same guarded merge the nightly does."""
+    global _news_ticker_instance
+    if _news_ticker_instance is None:
+        from src.utils.ns_tick import NewsTicker
+
+        _news_ticker_instance = NewsTicker(history=_news_history())
+    return _news_ticker_instance
 
 
 def _day_summaries():
@@ -4603,6 +4615,14 @@ async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
 
     Overlapping anything else is harmless. This writes only social_sentiment_daily, through
     the same accumulate RPC a run uses, which merges under a row lock.
+
+    The same pass also tops up the news (src/utils/ns_tick.py) when NEWS_TICK_ENABLED is
+    on, so "What's driving the sentiment" has today's articles to explain during the
+    session rather than only after the nightly. The two halves run side by side, since
+    they wait on different services with separate rate limits, and each fails on its own:
+    a Finnhub outage never costs the social top-up, nor the reverse. The social summary
+    keeps its top level keys so the scheduler's view of it is unchanged; the news summary
+    sits under "news".
     """
     if not DAILY_RUN_SECRET:
         raise HTTPException(status_code=503, detail="Tick not configured")
@@ -4622,12 +4642,20 @@ async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
         logger.warning("Tick could not list recently ranked tickers: %s", exc)
         return {"ok": False, "error": str(exc), "walked": 0}
 
-    try:
-        summary = await loop.run_in_executor(None, _social_ticker().tick, tickers, None)
-        return {"ok": True, **summary}
-    except Exception as exc:
-        logger.warning("Tick failed: %s", exc)
-        return {"ok": False, "error": str(exc), "walked": 0}
+    social, news = await asyncio.gather(
+        loop.run_in_executor(None, _social_ticker().tick, tickers, None),
+        loop.run_in_executor(None, _news_ticker().tick, tickers, None),
+        return_exceptions=True,
+    )
+
+    if isinstance(news, BaseException):
+        logger.warning("News tick failed: %s", news)
+        news = {"enabled": True, "error": str(news)}
+
+    if isinstance(social, BaseException):
+        logger.warning("Tick failed: %s", social)
+        return {"ok": False, "error": str(social), "walked": 0, "news": news}
+    return {"ok": True, **social, "news": news}
 
 
 @app.post("/api/sentiment/summaries")

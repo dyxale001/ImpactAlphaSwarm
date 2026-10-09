@@ -163,6 +163,43 @@ class SentimentConfig:
 	# the rest. Raise it to gcp_top_n to make a tick score exactly as a run does.
 	social_tick_gcp_top_n: int = 5
 
+	# ── intraday news ticks ──────────────────────────────────────────────────
+	# Off means news is fetched only by the 22:00 UTC nightly, which is the behaviour
+	# before this existed: today's news row and the paragraph written from it stay empty
+	# through the whole US session. Needs news_history_enabled as well, since a tick that
+	# cannot store what it fetched has no reason to fetch it.
+	news_tick_enabled: bool = False
+
+	# How far back a news tick fetches. One means yesterday and today: today is the point,
+	# and yesterday catches the articles published after the 22:00 nightly had run.
+	news_tick_lookback_days: int = 1
+
+	# Seconds between two Finnhub calls when the tick shares FINNHUB_API_KEY. Finnhub's free
+	# plan allows 60 a minute PER KEY, across every container, and whale watching and user
+	# refreshes draw on the same key while a tick is running. Two seconds is thirty a
+	# minute, which leaves the other half for them. On a dedicated key (FINNHUB_API_KEY2)
+	# nothing else competes, so the tick paces at finnhub_min_interval instead.
+	news_tick_min_interval: float = 2.0
+
+	# How many tickers one news tick will fetch. One call each.
+	news_tick_quota: int = 60
+
+	# A refused call is retried once after this pause, because Finnhub's limit is per
+	# minute and a short wait is usually enough to get back under it.
+	news_tick_backoff_seconds: float = 15.0
+
+	# Refusals in a row before the pass stops. Carrying on after that only hammers a key
+	# that is already over its limit, and starves whatever else is sharing it.
+	news_tick_max_rate_limited: int = 3
+
+	# Wall clock budget for the news half of a tick. It runs beside the social walk rather
+	# than after it, so this sits inside the same scheduler attempt.
+	news_tick_max_seconds: float = 240.0
+
+	# Articles a news tick scores with GCP per ticker, for articles it has not scored before.
+	# An article already on a stored day row reuses that score and costs nothing.
+	news_tick_gcp_top_n: int = 5
+
 	# ── generated day summaries ──────────────────────────────────────────────
 	# Off means the chart's bars are inert and the summary endpoint returns nothing, which
 	# is the behaviour before this existed. Run migrations/022 first.
@@ -234,6 +271,14 @@ class SentimentConfig:
 			social_tick_quota=max(1, _env_int("SOCIAL_TICK_QUOTA", 60)),
 			social_tick_max_seconds=_env_float("SOCIAL_TICK_MAX_SECONDS", 300.0),
 			social_tick_gcp_top_n=max(0, _env_int("SOCIAL_TICK_GCP_TOP_N", 5)),
+			news_tick_enabled=_env_bool("NEWS_TICK_ENABLED", False),
+			news_tick_lookback_days=max(1, _env_int("NEWS_TICK_LOOKBACK_DAYS", 1)),
+			news_tick_min_interval=max(0.0, _env_float("NEWS_TICK_MIN_INTERVAL_SECONDS", 2.0)),
+			news_tick_quota=max(1, _env_int("NEWS_TICK_QUOTA", 60)),
+			news_tick_backoff_seconds=max(0.0, _env_float("NEWS_TICK_BACKOFF_SECONDS", 15.0)),
+			news_tick_max_rate_limited=max(1, _env_int("NEWS_TICK_MAX_RATE_LIMITED", 3)),
+			news_tick_max_seconds=_env_float("NEWS_TICK_MAX_SECONDS", 240.0),
+			news_tick_gcp_top_n=max(0, _env_int("NEWS_TICK_GCP_TOP_N", 5)),
 			day_summary_enabled=_env_bool("DAY_SUMMARY_ENABLED", False),
 			day_summary_today_cooldown_minutes=max(
 				0, _env_int("DAY_SUMMARY_TODAY_COOLDOWN_MINUTES", 90)
