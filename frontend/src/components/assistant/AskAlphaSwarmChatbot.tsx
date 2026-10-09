@@ -82,7 +82,7 @@ export default function AskAlphaSwarmChatbot() {
         <div
           role="dialog"
           aria-label="Ask AlphaSwarm assistant"
-          className="mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border border-brand-border/60 bg-brand-card shadow-2xl overflow-hidden"
+          className="mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20 overflow-hidden"
           style={{ animation: 'slide-up 0.2s ease-out forwards' }}
         >
           {/* Header */}
@@ -172,7 +172,7 @@ export default function AskAlphaSwarmChatbot() {
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
         >
           {open ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>

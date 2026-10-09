@@ -14,6 +14,7 @@ import {
 import {
   WIDGETS,
   WIDGET_SPEC,
+  starterLayout,
   widgetById,
   type WidgetDef,
 } from "../dashboard/widgetRegistry";
@@ -192,10 +193,11 @@ export function useDashboardLayout() {
 
   // ── Operations ───────────────────────────────────────────────────────────
 
-  /** Claim the blank page as theirs without placing anything on it. What
-   *  dismissing the guide calls, so it does not reopen on the next visit. */
+  /** Claim the page as theirs. Seeds a starter layout — one widget from each
+   *  major group — so a brand-new account isn't staring at an empty board;
+   *  what dismissing the guide calls, so it does not reopen on the next visit. */
   const startBlank = useCallback(
-    () => commit(emptyLayout()),
+    () => commit(starterLayout()),
     [commit],
   );
 
