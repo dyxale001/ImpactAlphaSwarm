@@ -810,7 +810,7 @@ class AskResponse(BaseModel):
 _ASK_REDIRECT_SUGGESTIONS = [
     "Show me technology assets in my universe",
     "Tell me about NVDA",
-    "How does AlphaSwarm calculate Signal Score?",
+    "What is RSI?",
 ]
 
 _ASK_NO_ADVICE_MESSAGE = (

@@ -5,6 +5,16 @@ import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
 import AskAnswerCard from '../ask/AskAnswerCard'
 
+// Mirrors the backend's own _ASK_REDIRECT_SUGGESTIONS (api.py) — same
+// three example questions shown wherever Ask AlphaSwarm has nothing to
+// show yet, so a new user sees one consistent set of starting points
+// rather than a different list depending on which entry point they used.
+const SUGGESTED_QUESTIONS = [
+  'Show me technology assets in my universe',
+  'Tell me about NVDA',
+  "What is RSI?",
+]
+
 /**
  * Global floating Ask AlphaSwarm assistant, mounted once at the layout
  * level (see AppLayout.tsx) so it's available on every authenticated page
@@ -115,12 +125,24 @@ export default function AskAlphaSwarmChatbot() {
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
-              <div className="h-full flex flex-col items-center justify-center text-center gap-2 py-6">
+              <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
                 <Sparkles className="w-6 h-6 text-brand-primary" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
                 </p>
+                <div className="flex flex-col items-center gap-1.5 w-full pt-1">
+                  {SUGGESTED_QUESTIONS.map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => ask(q)}
+                      className="w-full text-center px-3 py-2 rounded-lg border border-brand-primary bg-brand-primary text-xs text-white hover:brightness-110 transition-all"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <>
