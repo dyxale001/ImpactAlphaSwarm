@@ -208,7 +208,8 @@ export default function StockComparison({
   return (
     <div className="space-y-6">
       <ComparisonTracePanel
-        tickers={tickers}
+        kind="stocks"
+        ids={tickers}
         horizon={horizon}
         hasRun={hasRun || runLoading}
         followUp={

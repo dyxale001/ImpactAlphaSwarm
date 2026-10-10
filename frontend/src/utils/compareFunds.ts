@@ -134,69 +134,6 @@ export interface FundFacts {
   asOf: string | null;
 }
 
-function pct(value: number): string {
-  return `${Number(value.toFixed(2))}%`;
-}
-
-/**
- * "What separates these" for funds, built by a fixed template from the fact
- * sheets. Templated rather than written by a model for the same reason the fund
- * page's own explanation is: the facts are few and structured, and a template
- * says them faithfully (D-210's "no black boxing" sits right beside this).
- *
- * Says what is the same before what differs, because for funds that is usually
- * the story: three trackers of one index differ mainly in what they cost.
- */
-export function fundsSummary(funds: FundFacts[], shared: SharedHoldings | null): string | null {
-  if (funds.length < 2) return null;
-  const n = funds.length === 2 ? "Both" : "All three";
-  const out: string[] = [];
-
-  const benchmarks = funds.map((f) => f.benchmark?.trim() || null);
-  const categories = funds.map((f) => f.category);
-  if (funds.every((f) => f.indexTracker) && benchmarks[0] && benchmarks.every((b) => b === benchmarks[0])) {
-    out.push(`${n} track the same index, ${benchmarks[0]}.`);
-  } else if (categories[0] && categories.every((c) => c === categories[0])) {
-    out.push(`${n} sit in the same ASISA category, ${categories[0]}.`);
-  }
-
-  if (shared && shared.of > 0) {
-    out.push(
-      shared.shared === shared.of
-        ? "Their largest holdings are the same companies, so they will tend to move together."
-        : `${shared.shared} of the ${shared.of} largest holdings appear in every one of them.`,
-    );
-  }
-
-  const risks = funds.map((f) => f.riskLevel);
-  if (risks.every((r): r is number => r !== null)) {
-    const low = Math.min(...risks);
-    const high = Math.max(...risks);
-    out.push(
-      low === high
-        ? `Each carries a risk rating of ${low} out of 5 on its own fact sheet.`
-        : `Their fact sheets rate risk from ${low} to ${high} out of 5.`,
-    );
-  }
-
-  const range = costRange(funds.map((f) => f.ter));
-  if (range) {
-    out.push(
-      range.low === range.high
-        ? `They cost the same each year, ${pct(range.low)} (TER), which is R${yearlyCost(range.low)} a year on R10,000.`
-        : `Their yearly costs (TER) run from ${pct(range.low)} to ${pct(range.high)}, which on R10,000 is R${yearlyCost(range.low)} to R${yearlyCost(range.high)} a year.`,
-    );
-  }
-
-  const gap = daysApart(funds.map((f) => f.asOf));
-  if (gap !== null && gap > DATE_GAP_WARN_DAYS) {
-    out.push(`Their fact sheets are ${gap} days apart, so their figures end on different dates.`);
-  }
-
-  out.push("These are each manager's published figures, set side by side; they do not rank the funds.");
-  return out.join(" ");
-}
-
 export type FundRow = "ter" | "risk" | "return1y";
 
 const FUND_GAP_SCALES: Record<FundRow, number> = { ter: 0.5, risk: 2, return1y: 10 };

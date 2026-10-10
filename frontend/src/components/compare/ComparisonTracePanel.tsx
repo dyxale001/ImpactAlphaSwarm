@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
 import { BrainCircuit, Sparkles } from "lucide-react";
-import { useComparisonTrace } from "../../hooks/useComparisonTrace";
+import { useComparisonTrace, type TraceKind } from "../../hooks/useComparisonTrace";
 import {
   TRACE_BUTTON,
   TRACE_DISCLOSURE,
+  TRACE_DISCLOSURE_FUNDS,
+  TRACE_DISCLOSURE_FUNDS_NO_PROFILE,
   TRACE_DISCLOSURE_PRICES,
   TRACE_INVITE,
+  TRACE_INVITE_FUNDS,
   TRACE_INVITE_NO_RUN,
   TRACE_TITLE,
   TRACE_WRITING,
@@ -36,19 +39,24 @@ function localDay(timestamp: string): string {
 }
 
 export default function ComparisonTracePanel({
-  tickers,
-  horizon,
+  kind = "stocks",
+  ids,
+  horizon = null,
   hasRun,
   followUp,
 }: {
-  tickers: string[];
-  horizon: QuantHorizon;
+  kind?: TraceKind;
+  /** Tickers for stocks, fund ids for funds, in the order picked. */
+  ids: string[];
+  /** The price window; stocks only. */
+  horizon?: QuantHorizon | null;
   /** Whether the reader has a completed run, for what the invitation promises. */
   hasRun: boolean;
   /** The Ask AlphaSwarm button, offered once there is a paragraph to follow up on. */
   followUp?: ReactNode;
 }) {
-  const { trace, isLoading, isWriting, error, explain } = useComparisonTrace(tickers, horizon);
+  const { trace, isLoading, isWriting, error, explain } = useComparisonTrace(kind, ids, horizon);
+  const funds = kind === "funds";
   if (trace && !trace.available) return null;
 
   const text = trace?.trace ?? null;
@@ -98,14 +106,20 @@ export default function ComparisonTracePanel({
           <>
             <p className="text-sm leading-relaxed text-brand-fg">{text}</p>
             <p className="mt-2 text-[10px] text-brand-muted-fg">
-              {trace?.personal && trace.run_at ? `${traceFromRun(localDay(trace.run_at))}. ` : ""}
-              {trace?.personal ? TRACE_DISCLOSURE : TRACE_DISCLOSURE_PRICES}
+              {!funds && trace?.personal && trace.run_at ? `${traceFromRun(localDay(trace.run_at))}. ` : ""}
+              {funds
+                ? trace?.personal
+                  ? TRACE_DISCLOSURE_FUNDS
+                  : TRACE_DISCLOSURE_FUNDS_NO_PROFILE
+                : trace?.personal
+                  ? TRACE_DISCLOSURE
+                  : TRACE_DISCLOSURE_PRICES}
             </p>
           </>
         ) : (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex-1 text-sm leading-relaxed text-brand-muted-fg">
-              {hasRun ? TRACE_INVITE : TRACE_INVITE_NO_RUN}
+              {funds ? TRACE_INVITE_FUNDS : hasRun ? TRACE_INVITE : TRACE_INVITE_NO_RUN}
             </p>
             <button
               type="button"

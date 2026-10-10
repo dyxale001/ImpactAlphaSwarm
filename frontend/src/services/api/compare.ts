@@ -7,9 +7,12 @@ import type { QuantHorizon } from "../../data/quantExplainers";
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export interface ComparisonTraceResponse {
-  /** In the order asked for. The store behind it ignores order. */
-  tickers: string[];
-  horizon: QuantHorizon;
+  /** In the order asked for, for a stock comparison. The store ignores order. */
+  tickers?: string[];
+  /** In the order asked for, for a fund comparison. */
+  fund_ids?: string[];
+  /** The price window, or "FUNDS" for a fund comparison, which has none. */
+  horizon: QuantHorizon | "FUNDS";
   /** False when the deployment has not switched the feature on. */
   available: boolean;
   /** The paragraph, or null: none written yet, or the stored one is out of date. */
@@ -17,7 +20,7 @@ export interface ComparisonTraceResponse {
   source: "model" | "template" | null;
   model: string | null;
   generated_at: string | null;
-  /** Whether it explains the reader's own run, or covers prices only (no run). */
+  /** Whether it explains the reader's own run (stocks) or profile matches (funds). */
   personal: boolean;
   /** When the run it explains finished. */
   run_at: string | null;
@@ -47,6 +50,28 @@ export async function explainComparison(tickers: string[], horizon: QuantHorizon
     method: "POST",
     headers: { ...(await authHeaders()), "Content-Type": "application/json" },
     body: JSON.stringify({ tickers, horizon }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ComparisonTraceResponse>;
+}
+
+// The fund comparison: the same two calls, keyed on fund ids. Personal too (it says
+// which funds are among the reader's matches), so both carry the token.
+
+export async function getSavedFundComparison(fundIds: string[]) {
+  const params = new URLSearchParams({ ids: fundIds.join(",") });
+  const res = await fetch(`${BASE}/api/compare/funds/trace?${params.toString()}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ComparisonTraceResponse>;
+}
+
+export async function explainFundComparison(fundIds: string[]) {
+  const res = await fetch(`${BASE}/api/compare/funds/trace`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ fund_ids: fundIds }),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<ComparisonTraceResponse>;

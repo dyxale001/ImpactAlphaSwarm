@@ -131,6 +131,13 @@ export const TRACE_DISCLOSURE_PRICES =
   "Written for you from the figures on this page, then checked: every number in it appears in those figures, and verdict or advice wording fails it. It describes past price behaviour; it does not rank, predict or advise.";
 export const traceFromRun = (date: string) => `Explains your analysis of ${date}`;
 
+export const TRACE_INVITE_FUNDS =
+  "A short explanation of how these funds differ on their fact sheets, and why each one is or is not among the funds matched to your profile. Written for you when you ask.";
+export const TRACE_DISCLOSURE_FUNDS =
+  "Written for you from these funds' fact sheets and the fixed rules your profile is matched by, then checked: every number in it appears in those figures, and verdict, advice or suitability wording fails it. The matches come from those rules, not from AI; this explains them and does not choose a fund for you.";
+export const TRACE_DISCLOSURE_FUNDS_NO_PROFILE =
+  "Written from these funds' fact sheets, then checked: every number in it appears in those figures, and verdict or advice wording fails it. Complete your risk profile to see which of them are matched to you.";
+
 export const ASK_ABOUT_THIS = "Ask AlphaSwarm a follow-up";
 export const askPrompt = (tickers: string[]) =>
   tickers.length === 2
@@ -164,8 +171,5 @@ export const FUND_RISK_MEANING =
   "Each fund house's own label from its fact sheet, on the common 1 to 5 scale.";
 export const fundDateWarning = (days: number) =>
   `These fact sheets are about ${Math.round(days / 30)} month${Math.round(days / 30) === 1 ? "" : "s"} apart, so their figures end on different dates and do not cover exactly the same period.`;
-export const FUND_TRACE_BADGE = "From template";
-export const FUND_TRACE_DISCLOSURE =
-  "Built from the fact sheets on each fund's page by a fixed template, with no AI.";
 export const FUNDS_DISCLAIMER =
   "Figures are transcribed from each manager's published fact sheet. AlphaSwarm is not a licensed financial services provider and does not advise; the order of the columns is the order you picked them in.";

@@ -1,4 +1,4 @@
-import { BrainCircuit, CalendarClock } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import type { CatalogueFundDetail } from "../../services/api/fundCatalogue";
 import { VEHICLE_LABEL, formatPercent } from "../../utils/fundsCopy";
 import { formatFullDate } from "../research/quantSeries";
@@ -8,7 +8,6 @@ import {
   commonPeriods,
   daysApart,
   fundDiffersMost,
-  fundsSummary,
   partialPeriods,
   sharedHoldings,
   yearlyCost,
@@ -26,12 +25,10 @@ import {
   FUND_SECTION_RETURNS,
   FUND_SECTION_RISK,
   FUND_SECTION_WHAT,
-  FUND_TRACE_BADGE,
-  FUND_TRACE_DISCLOSURE,
   SAME,
-  TRACE_TITLE,
   fundDateWarning,
 } from "../../data/compareCopy";
+import ComparisonTracePanel from "./ComparisonTracePanel";
 import { CompareGrid, CompareRow, CompareSection, Missing, RowTag, Value, type CompareColumn } from "./CompareGrid";
 
 // The fund side of the Compare page. Every figure is the manager's own, read off
@@ -40,6 +37,10 @@ import { CompareGrid, CompareRow, CompareSection, Missing, RowTag, Value, type C
 // when they are months apart, only the return periods every fund reports, costs
 // as one year on R10,000 with no growth (D-225), and "Reg 28 compliant", never
 // "RA-approved".
+//
+// The written comparison at the top is personal: it says which funds are among the
+// reader's matches and which rule left the others out. The matches come from the
+// Funds page's own fixed rules, never from AI (D-153); the model only words them.
 //
 // There is no Ask AlphaSwarm button on this side: the assistant does not read
 // the funds catalogue yet (D-166), and a button that cannot answer is worse than
@@ -79,7 +80,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
     asOf: f.snapshot?.as_of ?? f.as_of,
   }));
   const shared = sharedHoldings(snaps.map((s) => s?.top_holdings));
-  const summary = fundsSummary(facts, shared);
   const most = fundDiffersMost(facts);
   const gap = daysApart(facts.map((f) => f.asOf));
   const periods = commonPeriods(snaps.map((s) => s?.performance));
@@ -100,24 +100,7 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
         </div>
       )}
 
-      {summary && (
-        <section className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-brand-fg">{TRACE_TITLE}</h2>
-            <span className="rounded-full bg-brand-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
-              {FUND_TRACE_BADGE}
-            </span>
-          </div>
-          <div className="mt-3 rounded-xl border border-brand-border/60 bg-brand-surface/70 p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-              <BrainCircuit className="h-3 w-3 text-brand-primary" />
-              Reasoning trace
-            </div>
-            <p className="text-sm leading-relaxed text-brand-fg">{summary}</p>
-            <p className="mt-2 text-[10px] text-brand-muted-fg">{FUND_TRACE_DISCLOSURE}</p>
-          </div>
-        </section>
-      )}
+      <ComparisonTracePanel kind="funds" ids={funds.map((f) => f.fund_id)} hasRun />
 
       <CompareGrid columns={columns}>
         <CompareSection title={FUND_SECTION_WHAT} />

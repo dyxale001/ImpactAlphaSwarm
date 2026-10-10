@@ -3,7 +3,6 @@ import {
   commonPeriods,
   costRange,
   fundDiffersMost,
-  fundsSummary,
   daysApart,
   normaliseHolding,
   partialPeriods,
@@ -84,45 +83,3 @@ describe("costRange", () => {
   });
 });
 
-describe("fundsSummary", () => {
-  const tracker = (code: string, ter: number, asOf = "2026-08-31") => ({
-    code,
-    benchmark: "S&P 500",
-    indexTracker: true,
-    category: "Global - Equity - Unclassified",
-    riskLevel: 4,
-    ter,
-    performance: { "1y": 18 },
-    asOf,
-  });
-
-  it("says what is the same, then what differs", () => {
-    const text = fundsSummary(
-      [tracker("STX500", 0.35), tracker("SYG500", 0.2), tracker("CSP500", 0.08, "2026-06-30")],
-      { shared: 10, of: 10 },
-    )!;
-    expect(text).toContain("All three track the same index, S&P 500.");
-    expect(text).toContain("Their largest holdings are the same companies");
-    expect(text).toContain("risk rating of 4 out of 5");
-    expect(text).toContain("from 0.08% to 0.35%, which on R10,000 is R8 to R35 a year");
-    expect(text).toContain("62 days apart");
-  });
-
-  it("never ranks the funds", () => {
-    const text = fundsSummary([tracker("A", 0.35), tracker("B", 0.08)], null)!.toLowerCase();
-    for (const word of ["better", "best", "cheapest", "should", "recommend"]) {
-      expect(text).not.toContain(word);
-    }
-  });
-
-  it("falls back to the category when the funds do not track one index", () => {
-    const active = { ...tracker("A", 1.2), indexTracker: false, benchmark: "CPI + 3%" };
-    const text = fundsSummary([active, { ...active, code: "B", benchmark: "CPI + 5%" }], null)!;
-    expect(text).toContain("Both sit in the same ASISA category");
-  });
-
-  it("marks cost as what differs most for same-index trackers", () => {
-    expect(fundDiffersMost([tracker("A", 0.35), tracker("B", 0.08)])).toBe("ter");
-    expect(fundDiffersMost([tracker("A", 0.35), tracker("B", 0.34)])).toBeNull();
-  });
-});

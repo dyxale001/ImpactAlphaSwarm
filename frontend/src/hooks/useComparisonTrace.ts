@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   explainComparison,
+  explainFundComparison,
   getSavedComparison,
+  getSavedFundComparison,
   type ComparisonTraceResponse,
 } from "../services/api/compare";
 import type { QuantHorizon } from "../data/quantExplainers";
 
-// The written comparison over the picked stocks: personal, and written on request.
+// The written comparison over the picked stocks or funds: personal, and written on
+// request. Stocks are keyed on the price window as well; funds have none.
 //
 // On settling, the page asks whether the reader already has a current paragraph for
 // this set and window (free, never a model call). If not, the panel offers the
@@ -19,7 +22,18 @@ import type { QuantHorizon } from "../data/quantExplainers";
 
 const SETTLE_MS = 600;
 
-export function useComparisonTrace(tickers: string[], horizon: QuantHorizon) {
+export type TraceKind = "stocks" | "funds";
+
+function fetchers(kind: TraceKind, horizon: QuantHorizon | null) {
+  return kind === "funds"
+    ? { saved: (ids: string[]) => getSavedFundComparison(ids), explain: (ids: string[]) => explainFundComparison(ids) }
+    : {
+        saved: (ids: string[]) => getSavedComparison(ids, horizon ?? "6M"),
+        explain: (ids: string[]) => explainComparison(ids, horizon ?? "6M"),
+      };
+}
+
+export function useComparisonTrace(kind: TraceKind, tickers: string[], horizon: QuantHorizon | null) {
   const [trace, setTrace] = useState<ComparisonTraceResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isWriting, setIsWriting] = useState(false);
@@ -27,7 +41,7 @@ export function useComparisonTrace(tickers: string[], horizon: QuantHorizon) {
   const cache = useRef(new Map<string, ComparisonTraceResponse>());
 
   const ordered = tickers.join(",");
-  const key = `${[...tickers].sort().join("|")}:${horizon}`;
+  const key = `${kind}:${[...tickers].sort().join("|")}:${horizon ?? ""}`;
   const ready = tickers.length >= 2;
   // The key the latest answer belongs to, so a slow reply for an old selection
   // never lands on a new one.
@@ -53,7 +67,8 @@ export function useComparisonTrace(tickers: string[], horizon: QuantHorizon) {
     setTrace(null);
     setIsLoading(true);
     const timer = setTimeout(() => {
-      getSavedComparison(ordered.split(","), horizon)
+      fetchers(kind, horizon)
+        .saved(ordered.split(","))
         .then((res) => {
           if (cancelled) return;
           cache.current.set(key, res);
@@ -73,14 +88,15 @@ export function useComparisonTrace(tickers: string[], horizon: QuantHorizon) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [key, ordered, horizon, ready]);
+  }, [key, kind, ordered, horizon, ready]);
 
   const explain = useCallback(() => {
     if (!ready) return;
     const asked = key;
     setIsWriting(true);
     setError(null);
-    explainComparison(ordered.split(","), horizon)
+    fetchers(kind, horizon)
+      .explain(ordered.split(","))
       .then((res) => {
         cache.current.set(asked, res);
         if (current.current !== asked) return;
@@ -97,7 +113,7 @@ export function useComparisonTrace(tickers: string[], horizon: QuantHorizon) {
       .finally(() => {
         if (current.current === asked) setIsWriting(false);
       });
-  }, [key, ordered, horizon, ready]);
+  }, [key, kind, ordered, horizon, ready]);
 
   return { trace, isLoading, isWriting, error, explain };
 }
