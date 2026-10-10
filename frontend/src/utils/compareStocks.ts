@@ -75,10 +75,10 @@ export const THIN_EVIDENCE = 0.7;
  * sponsor's question ("Google's RSI is 37 and Apple's is 66 ... but it says that
  * Apple is a better buy. I wonder why", 22/09).
  *
- * Templated rather than written by a model because it is personal: it reads the
- * user's own run, so a model call per user per comparison could never be cached.
- * And because the facts are a handful of stored numbers that a template says
- * faithfully.
+ * Templated, and always on the page, so the placement is explained whether or
+ * not the reader asks for the written comparison at the top. That paragraph
+ * (backend src/compare/trace.py) reads the same run and says it the same way:
+ * its fallback template mirrors this one, and its thresholds are these.
  *
  * Stocks are named in the order the user picked them, never sorted by place.
  * Returns null when fewer than two of the stocks are in the run, since there is
@@ -166,6 +166,37 @@ export function weekTone(points: SentimentHistoryPoint[]): WeekTone {
   };
 }
 
+export type ToneSource = "social" | "news";
+
+/** Whether any of the stocks' histories carries news. Absent fields mean this
+ *  deployment stores no news history, which is a different thing from a quiet day. */
+export function hasNewsHistory(series: Array<{ points: SentimentHistoryPoint[] }>): boolean {
+  return series.some((s) => s.points.some((p) => p.news_score !== undefined));
+}
+
+/**
+ * One row per day across every stock's history, oldest first, with each stock's
+ * score for that day under its ticker. A day a stock had nothing written about it
+ * is null, never 0: the chart draws a gap there, as the stock page's chart does.
+ */
+export function toneRows(
+  series: Array<{ ticker: string; points: SentimentHistoryPoint[] }>,
+  source: ToneSource,
+): Array<Record<string, string | number | null>> {
+  const byDate = new Map<string, Record<string, string | number | null>>();
+  for (const s of series) {
+    for (const p of s.points) {
+      const row = byDate.get(p.date) ?? { date: p.date };
+      const value = source === "social" ? p.score : (p.news_score ?? null);
+      row[s.ticker] = typeof value === "number" ? value : null;
+      byDate.set(p.date, row);
+    }
+  }
+  const rows = [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  for (const row of rows) for (const s of series) if (!(s.ticker in row)) row[s.ticker] = null;
+  return rows;
+}
+
 // ── the rows ─────────────────────────────────────────────────────────────────
 
 /** The rows whose gap can be measured, and the gap that counts as a lot. The
@@ -241,13 +272,16 @@ export interface Rebasable {
   points: Array<{ date: string; close: number }>;
 }
 
-/** Every stock's closes as an index starting at 100, merged by date.
+/** Every stock's closes as the percent change since its first close in the window,
+ *  merged by date.
  *
  *  Rebased because a R4,000 share and a R300 share on one price axis would draw
- *  the cheaper one flat; starting both at 100 shows the shape of each move, which
- *  is what a side-by-side is for. A date one listing has and another lacks keeps
- *  its gap rather than being filled. */
-export function rebaseSeries(series: Rebasable[]): Array<Record<string, number | string>> {
+ *  the cheaper one flat; starting both at 0% shows the shape of each move, which
+ *  is what a side-by-side is for. Percent rather than an index of 100 because it
+ *  is what retail comparison charts show, and because the line then ends on the
+ *  same figure as the Change row under it. A date one listing has and another
+ *  lacks keeps its gap rather than being filled. */
+export function changeSeries(series: Rebasable[]): Array<Record<string, number | string>> {
   const rows = new Map<string, Record<string, number | string>>();
   for (const s of series) {
     const first = s.points.find((p) => Number.isFinite(p.close) && p.close > 0);
@@ -255,7 +289,7 @@ export function rebaseSeries(series: Rebasable[]): Array<Record<string, number |
     for (const p of s.points) {
       if (!Number.isFinite(p.close)) continue;
       const row = rows.get(p.date) ?? { date: p.date };
-      row[s.ticker] = Math.round((p.close / first.close) * 1000) / 10;
+      row[s.ticker] = Math.round((p.close / first.close - 1) * 1000) / 10;
       rows.set(p.date, row);
     }
   }

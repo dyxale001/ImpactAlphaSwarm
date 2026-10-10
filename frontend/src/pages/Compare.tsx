@@ -5,12 +5,12 @@ import CompareMotif from "../components/compare/CompareMotif";
 import ComparePicks, { type Pick } from "../components/compare/ComparePicks";
 import StockComparison from "../components/compare/StockComparison";
 import FundComparison, { fundColumn } from "../components/compare/FundComparison";
-import FundSearch from "../components/compare/FundSearch";
-import CompanySearch from "../components/research/CompanySearch";
-import { useUniverseAssets } from "../hooks/useUniverseAssets";
+import FundSearch, { type FundBrowseGroup } from "../components/compare/FundSearch";
+import CompanySearch, { type BrowseGroup } from "../components/research/CompanySearch";
+import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAssets";
 import { useWatchedTickers } from "../hooks/useCompareStocks";
 import { useCompareFunds } from "../hooks/useCompareFunds";
-import { useFundCatalogue } from "../hooks/useFundCatalogue";
+import { useFundCatalogue, useFundMatches } from "../hooks/useFundCatalogue";
 import { FUNDS_ENABLED } from "../utils/fundsFlags";
 import { rememberHubPage } from "../utils/lastHubPage";
 import {
@@ -20,15 +20,13 @@ import {
   type CompareKind,
   type CompareState,
 } from "../utils/compareUrl";
-import {
-  QUANT_HORIZONS,
-  type QuantHorizon,
-} from "../data/quantExplainers";
+import type { QuantHorizon } from "../data/quantExplainers";
 import {
   COMPARE_EYEBROW,
   COMPARE_LEAD,
   COMPARE_TITLE,
   FROM_WATCHLIST,
+  FUNDS_MATCHED,
   KIND_LABELS,
   PICK_FUND_PLACEHOLDER,
   PICK_STOCK_PLACEHOLDER,
@@ -99,33 +97,27 @@ export default function ComparePage() {
         </div>
       </div>
 
-      {/* ── Controls: what kind, and over what window ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        {FUNDS_ENABLED ? (
-          <Tabs
-            label="What to compare"
-            value={kind}
-            onChange={(v) => setKind(v as CompareKind)}
-            options={[
-              { id: "stocks", label: KIND_LABELS.stocks, Icon: CandlestickChart },
-              { id: "funds", label: KIND_LABELS.funds, Icon: Building2 },
-            ]}
-          />
-        ) : (
-          <span />
-        )}
-        {kind === "stocks" && state.ids.length >= 2 && (
-          <Tabs
-            label="Price window"
-            value={state.horizon}
-            onChange={(v) => update({ horizon: v as QuantHorizon })}
-            options={QUANT_HORIZONS.map((h) => ({ id: h, label: h }))}
-          />
-        )}
-      </div>
+      {/* ── What kind. The price window lives on the Overview chart it changes. ── */}
+      {FUNDS_ENABLED && (
+        <Tabs
+          label="What to compare"
+          value={kind}
+          onChange={(v) => setKind(v as CompareKind)}
+          options={[
+            { id: "stocks", label: KIND_LABELS.stocks, Icon: CandlestickChart },
+            { id: "funds", label: KIND_LABELS.funds, Icon: Building2 },
+          ]}
+        />
+      )}
 
       {kind === "stocks" ? (
-        <StocksSide ids={state.ids} horizon={state.horizon} onAdd={add} onRemove={remove} />
+        <StocksSide
+          ids={state.ids}
+          horizon={state.horizon}
+          onHorizon={(h) => update({ horizon: h })}
+          onAdd={add}
+          onRemove={remove}
+        />
       ) : (
         <FundsSide ids={state.ids} onAdd={add} onRemove={remove} />
       )}
@@ -136,19 +128,37 @@ export default function ComparePage() {
 function StocksSide({
   ids,
   horizon,
+  onHorizon,
   onAdd,
   onRemove,
 }: {
   ids: string[];
   horizon: QuantHorizon;
+  onHorizon: (h: QuantHorizon) => void;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const { all, isLoading } = useUniverseAssets();
+  const { all, byUniverse, isLoading } = useUniverseAssets();
   const watched = useWatchedTickers();
   const byTicker = useMemo(() => new Map(all.map((a) => [a.ticker, a])), [all]);
   const searchable = useMemo(() => all.filter((a) => !ids.includes(a.ticker)), [all, ids]);
   const suggestions = watched.filter((t) => !ids.includes(t) && byTicker.has(t)).slice(0, 5);
+
+  // What the search box lists when opened with nothing typed: the reader's
+  // watchlist first, then every comparable stock under its sector, A to Z.
+  const browseGroups = useMemo(() => {
+    const groups: BrowseGroup[] = [];
+    const mine = watched
+      .filter((t) => !ids.includes(t))
+      .map((t) => byTicker.get(t))
+      .filter((a): a is UniverseAsset => Boolean(a));
+    if (mine.length) groups.push({ label: FROM_WATCHLIST, assets: mine });
+    for (const universe of Object.keys(byUniverse).sort()) {
+      const assets = byUniverse[universe].filter((a) => !ids.includes(a.ticker));
+      if (assets.length) groups.push({ label: universe, assets });
+    }
+    return groups;
+  }, [watched, ids, byTicker, byUniverse]);
 
   const picks: Pick[] = ids.map((t) => ({ id: t, title: t, subtitle: byTicker.get(t)?.name ?? null }));
 
@@ -160,6 +170,7 @@ function StocksSide({
         search={
           <CompanySearch
             assets={searchable}
+            browseGroups={browseGroups}
             onSelect={(ticker) => onAdd(ticker)}
             disabled={isLoading}
             placeholder={PICK_STOCK_PLACEHOLDER}
@@ -174,7 +185,7 @@ function StocksSide({
           onPick={onAdd}
         />
       ) : (
-        <StockComparison tickers={ids} horizon={horizon} />
+        <StockComparison tickers={ids} horizon={horizon} onHorizon={onHorizon} />
       )}
     </>
   );
@@ -190,8 +201,32 @@ function FundsSide({
   onRemove: (id: string) => void;
 }) {
   const catalogue = useFundCatalogue({});
+  const { matches } = useFundMatches();
   const { funds, missing, isLoading, error } = useCompareFunds(ids);
   const known = useMemo(() => new Map(catalogue.funds.map((f) => [f.fund_id, f])), [catalogue.funds]);
+
+  // What the search box lists when opened with nothing typed: the funds matched to
+  // the reader's profile first (the Funds page's own matches), then the whole
+  // catalogue by region and asset class, the order the fund page names them in.
+  // South African before Global, since that is where a local reader starts.
+  const browseGroups = useMemo(() => {
+    const groups: FundBrowseGroup[] = [];
+    const mine = matches
+      .map((m) => known.get(m.fund_id))
+      .filter((f): f is NonNullable<typeof f> => Boolean(f) && !ids.includes(f!.fund_id));
+    if (mine.length) groups.push({ label: FUNDS_MATCHED, funds: mine });
+    const byGroup = new Map<string, FundBrowseGroup["funds"]>();
+    for (const f of catalogue.funds) {
+      if (ids.includes(f.fund_id)) continue;
+      const label = `${f.asisa_geography} · ${f.asisa_asset_class}`;
+      byGroup.set(label, [...(byGroup.get(label) ?? []), f]);
+    }
+    const rank = (label: string) => (label.startsWith("South African") ? 0 : label.startsWith("Global") ? 1 : 2);
+    for (const label of [...byGroup.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))) {
+      groups.push({ label, funds: byGroup.get(label)!.sort((a, b) => a.name.localeCompare(b.name)) });
+    }
+    return groups;
+  }, [matches, known, catalogue.funds, ids]);
 
   const picks: Pick[] = ids.map((id) => {
     const f = funds[id] ?? known.get(id);
@@ -208,6 +243,7 @@ function FundsSide({
           <FundSearch
             funds={catalogue.funds}
             exclude={ids}
+            browseGroups={browseGroups}
             onSelect={onAdd}
             disabled={catalogue.isLoading}
             placeholder={PICK_FUND_PLACEHOLDER}

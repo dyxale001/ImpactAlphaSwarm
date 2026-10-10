@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 import type { ConvergenceState } from "../data/signalCopy";
@@ -37,6 +37,15 @@ function num(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** A watchlist row's ticker. Some rows carry only the asset link (the dashboard's
+ *  add button used to save no ticker), so the joined asset's ticker is the
+ *  fallback, as the stocks page reads it. */
+function watchlistTicker(row: { ticker?: string | null; assets?: unknown }): string {
+  const joined = Array.isArray(row.assets) ? row.assets[0] : row.assets;
+  const fromAsset = (joined as { ticker?: string | null } | null | undefined)?.ticker;
+  return (row.ticker || fromAsset || "").toUpperCase();
 }
 
 export function useCompareStocks(tickers: string[]) {
@@ -183,8 +192,9 @@ export function useCompareStocks(tickers: string[]) {
   return { assets, readings, runSize, runDate, hasRun, isLoading, error };
 }
 
-/** The user's watched tickers, for the start state's suggestions. Quiet on failure:
- *  suggestions are a convenience, and the search box works without them. */
+/** The user's watched tickers, most recently added first: the start state's
+ *  suggestions and the top group of the browse list. Quiet on failure, since both
+ *  are conveniences and the search box works without them. */
 export function useWatchedTickers() {
   const { profile } = useAuthStore();
   const [tickers, setTickers] = useState<string[]>([]);
@@ -194,17 +204,12 @@ export function useWatchedTickers() {
     let cancelled = false;
     supabase
       .from("user_watchlist_assets")
-      .select("ticker, created_at")
+      .select("ticker, created_at, assets(ticker)")
       .eq("user_id", profile.id)
       .order("created_at", { ascending: false })
-      .limit(8)
       .then(({ data }) => {
         if (cancelled || !data) return;
-        setTickers(
-          data
-            .map((r) => (r.ticker ?? "").toUpperCase())
-            .filter((t, i, all) => t && all.indexOf(t) === i),
-        );
+        setTickers(data.map(watchlistTicker).filter((t, i, all) => t && all.indexOf(t) === i));
       });
     return () => {
       cancelled = true;
@@ -212,4 +217,66 @@ export function useWatchedTickers() {
   }, [profile?.id]);
 
   return tickers;
+}
+
+/**
+ * Which of the compared stocks the reader follows, and a way to follow one.
+ *
+ * Following is what puts a stock into the reader's next analysis run: the nightly
+ * batch reads the watchlist on the server, and the interactive run sends it from
+ * the browser. So a stock the Your analysis tab has nothing on can be one click
+ * from having something, which is the only useful thing to offer there.
+ */
+export function useCompareWatchlist(tickers: string[]) {
+  const { profile } = useAuthStore();
+  const [watched, setWatched] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const key = tickers.join(",");
+
+  useEffect(() => {
+    const list = key ? key.split(",") : [];
+    if (!profile?.id || !list.length) {
+      setWatched(new Set());
+      return;
+    }
+    let cancelled = false;
+    // The whole (small) watchlist, matched here rather than filtered by ticker in
+    // the query, because a row may carry only its asset link.
+    supabase
+      .from("user_watchlist_assets")
+      .select("ticker, assets(ticker)")
+      .eq("user_id", profile.id)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setWatched(new Set(data.map(watchlistTicker).filter((t) => list.includes(t))));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, profile?.id]);
+
+  const add = useCallback(
+    async (ticker: string, assetId: string) => {
+      if (!profile?.id) return;
+      setAdding(ticker);
+      setError(null);
+      const { error: insertError } = await supabase
+        .from("user_watchlist_assets")
+        .insert({ user_id: profile.id, ticker, asset_id: assetId });
+      // 23505 is the unique (user, asset) row already being there: the state we
+      // wanted, reached from another tab or an earlier click.
+      if (insertError && insertError.code !== "23505") {
+        console.error("Error adding to the watchlist:", insertError);
+        setError(ticker);
+      } else {
+        setWatched((prev) => new Set(prev).add(ticker));
+      }
+      setAdding(null);
+    },
+    [profile?.id],
+  );
+
+  return { watched, adding, error, add };
 }

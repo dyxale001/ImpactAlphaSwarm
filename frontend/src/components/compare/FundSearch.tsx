@@ -5,9 +5,16 @@ import { VEHICLE_LABEL } from "../../utils/fundsCopy";
 
 // Jump to a fund by name, JSE code or manager. The fund twin of CompanySearch,
 // with the same field, dropdown and keys, so the two halves of the Compare toggle
-// are searched the same way.
+// are searched the same way. That includes browsing: focused with nothing typed,
+// it lists `browseGroups` (the reader's matched funds, then the catalogue by
+// region and asset class) in one scrolling list.
 
 const MAX_RESULTS = 8;
+
+export interface FundBrowseGroup {
+  label: string;
+  funds: CatalogueFund[];
+}
 
 export default function FundSearch({
   funds,
@@ -15,12 +22,15 @@ export default function FundSearch({
   onSelect,
   disabled,
   placeholder = "Search funds",
+  browseGroups,
 }: {
   funds: CatalogueFund[];
   exclude: string[];
   onSelect: (fundId: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /** What the box lists when it is focused with nothing typed. */
+  browseGroups?: FundBrowseGroup[];
 }) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -48,7 +58,22 @@ export default function FundSearch({
       .map((r) => r.f);
   }, [funds, exclude, query]);
 
+  const browsing = !query.trim() && Boolean(browseGroups?.some((g) => g.funds.length));
+  // What the arrow keys move through: the ranked matches, or every browsed row in
+  // the order drawn (a matched fund also appears under its group).
+  const options = useMemo(
+    () => (browsing ? (browseGroups ?? []).flatMap((g) => g.funds) : results),
+    [browsing, browseGroups, results],
+  );
+
   useEffect(() => setActiveIndex(0), [query]);
+
+  useEffect(() => {
+    if (!browsing || !isOpen) return;
+    containerRef.current
+      ?.querySelector(`[data-option="${activeIndex}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, browsing, isOpen]);
 
   useEffect(() => {
     function onPointerDown(e: MouseEvent) {
@@ -69,16 +94,20 @@ export default function FundSearch({
       setIsOpen(false);
       return;
     }
-    if (!results.length) return;
+    if (!options.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % results.length);
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      setActiveIndex((i) => (i + 1) % options.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => (i - 1 + results.length) % results.length);
-    } else if (e.key === "Enter") {
+      setActiveIndex((i) => (i - 1 + options.length) % options.length);
+    } else if (e.key === "Enter" && isOpen) {
       e.preventDefault();
-      choose(results[activeIndex]);
+      choose(options[activeIndex]);
     }
   }
 
@@ -115,35 +144,87 @@ export default function FundSearch({
         )}
       </div>
 
-      {isOpen && query.trim() && (
+      {isOpen && browsing && (
+        <div className="absolute z-20 mt-2 max-h-80 w-full overflow-y-auto rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg sm:w-[26rem]">
+          {(() => {
+            let index = -1;
+            return (browseGroups ?? [])
+              .filter((g) => g.funds.length)
+              .map((g) => (
+                <div key={g.label}>
+                  <p className="sticky top-0 bg-brand-card px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+                    {g.label}
+                  </p>
+                  {g.funds.map((f) => {
+                    index += 1;
+                    const i = index;
+                    return (
+                      <FundRow
+                        key={`${g.label}:${f.fund_id}`}
+                        fund={f}
+                        index={i}
+                        active={i === activeIndex}
+                        onHover={() => setActiveIndex(i)}
+                        onChoose={() => choose(f)}
+                      />
+                    );
+                  })}
+                </div>
+              ));
+          })()}
+        </div>
+      )}
+
+      {isOpen && !browsing && query.trim() && (
         <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg sm:w-[26rem]">
           {results.length === 0 ? (
             <p className="px-4 py-3 text-sm italic text-brand-muted-fg">No funds match "{query.trim()}".</p>
           ) : (
             results.map((f, i) => (
-              <button
+              <FundRow
                 key={f.fund_id}
-                type="button"
-                onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => choose(f)}
-                className={`flex w-full flex-col px-4 py-2.5 text-left transition-colors ${
-                  i === activeIndex ? "bg-brand-primary/10" : ""
-                }`}
-              >
-                <span className="flex items-baseline gap-2">
-                  {f.jse_code && (
-                    <span className="shrink-0 font-mono text-sm font-bold text-brand-fg">{f.jse_code}</span>
-                  )}
-                  <span className="min-w-0 truncate text-sm text-brand-fg">{f.name}</span>
-                </span>
-                <span className="text-[11px] text-brand-muted-fg">
-                  {VEHICLE_LABEL[f.vehicle] ?? f.vehicle} · {f.fund_house}
-                </span>
-              </button>
+                fund={f}
+                index={i}
+                active={i === activeIndex}
+                onHover={() => setActiveIndex(i)}
+                onChoose={() => choose(f)}
+              />
             ))
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function FundRow({
+  fund,
+  index,
+  active,
+  onHover,
+  onChoose,
+}: {
+  fund: CatalogueFund;
+  index: number;
+  active: boolean;
+  onHover: () => void;
+  onChoose: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-option={index}
+      onMouseEnter={onHover}
+      onClick={onChoose}
+      className={`flex w-full flex-col px-4 py-2.5 text-left transition-colors ${active ? "bg-brand-primary/10" : ""}`}
+    >
+      <span className="flex items-baseline gap-2">
+        {fund.jse_code && <span className="shrink-0 font-mono text-sm font-bold text-brand-fg">{fund.jse_code}</span>}
+        <span className="min-w-0 truncate text-sm text-brand-fg">{fund.name}</span>
+      </span>
+      <span className="text-[11px] text-brand-muted-fg">
+        {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle} · {fund.fund_house}
+      </span>
+    </button>
   );
 }

@@ -16,25 +16,31 @@ export const COMPARE_LEAD =
 
 export const KIND_LABELS = { stocks: "Stocks", funds: "Funds" } as const;
 
-export const PICK_STOCK_PLACEHOLDER = "Add a stock";
-export const PICK_FUND_PLACEHOLDER = "Add a fund";
+export const PICK_STOCK_PLACEHOLDER = "Search or browse stocks";
+export const PICK_FUND_PLACEHOLDER = "Search or browse funds";
 export const PICK_FULL = "Three is the most this page lines up. Remove one to add another.";
 
 export const START_TITLE_STOCKS = "Pick two stocks to start";
 export const START_TITLE_FUNDS = "Pick two funds to start";
 export const START_ONE_MORE = "Pick one more to start";
 export const START_BODY_STOCKS =
-  "Search any stock in AlphaSwarm's universes. You can line up as many as three, and the explanation appears once two are chosen.";
+  "Type a name or ticker, or click the search box to browse every stock by sector. You can line up as many as three, and the comparison appears once two are chosen.";
 export const START_BODY_FUNDS =
-  "Search the fund catalogue by name or JSE code. Funds in the same category compare most clearly, for example three trackers of the same index.";
+  "Type a fund's name or JSE code, or click the search box to browse the catalogue, starting with the funds matched to your profile. Funds in the same category compare most clearly, for example three trackers of the same index.";
 export const FROM_WATCHLIST = "From your watchlist";
+export const FUNDS_MATCHED = "Matched to your profile";
 
 // ── stock sections and rows ────────────────────────────────────────────────
 
-export const SECTION_OVERVIEW = "Overview";
+// The three tabs under the written comparison. The trace sits above them, outside
+// any tab, because it speaks to all three.
+export const TAB_OVERVIEW = "Overview";
+export const TAB_TONE = "Tone";
+export const TAB_YOURS = "Your analysis";
+
+export const SECTION_OVERVIEW = "Listing and price";
 export const SECTION_WINDOW = "Price over";
 export const SECTION_TONE = "News and social tone · last 7 days";
-export const SECTION_YOURS = "Your analysis";
 export const SECTION_YOURS_NOTE =
   "From your latest completed run. Places and percentiles compare each stock with the others in that run, so they are about your run, not fixed facts about the stock.";
 
@@ -70,6 +76,16 @@ export const TONE_MEANING =
   "The average tone of what was written about each stock this week, weighted by how much was written each day. Tone is what people said, not what the price will do.";
 export const TONE_BUILDING = "Building history…";
 
+export const TONE_CHART_TITLE = "Tone, day by day";
+export const TONE_SOURCE_SOCIAL = "Social";
+export const TONE_SOURCE_NEWS = "News";
+export const TONE_CHART_NOTE =
+  "The tone of what was written about each stock each day, from 0 to 100, where 50 is neutral. A gap is a day nothing was written. Tone is what people said, not what the price will do.";
+export const TONE_CHART_EMPTY =
+  "Nothing was written about these stocks in the last 7 days, so there is no tone to plot.";
+export const TONE_CHART_BUILDING =
+  "The tone history for one of these stocks is still being gathered. Check back in a moment.";
+
 export const YOURS_PLACE = "Place in your run";
 export const YOURS_SIGNALS = "Signals";
 export const YOURS_CONFIDENCE = "Confidence score";
@@ -77,29 +93,55 @@ export const YOURS_BETA = "Beta";
 export const YOURS_SHARPE = "Sharpe ratio";
 export const YOURS_NOT_IN_RUN = "Not in your latest analysis";
 export const YOURS_NOT_IN_RUN_BODY =
-  "Your latest run did not include this stock, so it has no place or scorecard. Its price and tone above still apply; nothing here is filled in from an older run.";
+  "Your latest run did not include this stock, so it has no place or scorecard. Its price and tone still apply; nothing here is filled in from an older run. A stock on your watchlist is in every run after you add it.";
+export const YOURS_ADD_WATCHLIST = "Add to watchlist";
+export const YOURS_ADDING = "Adding…";
+export const YOURS_ON_WATCHLIST = "On your watchlist, so your next run includes it";
+export const YOURS_ADD_FAILED = "That stock could not be added to your watchlist. Try again in a moment.";
+
+export const PRICE_LABEL = "Price";
+export const PRICE_MEANING =
+  "The most recent close, the one the chart above ends on, in rand. A higher share price is not a bigger or more valuable company, which is why the chart above compares change rather than price.";
+export const priceCloseOn = (date: string) => `Close on ${date}`;
+export const PRICE_STORED = "Last stored price";
 export const YOURS_NO_RUN =
   "You have no completed analysis yet, so there is no place or scorecard to compare. The price and tone above do not depend on one.";
 export const WHY_TITLE = "Why your analysis places them differently";
 export const WHY_BADGE = "From your run's numbers";
 export const OWN_TRACE = "analysis, explained";
+/** The one line near the top that answers "where did my run put these?" before the
+ *  figures, pointing down to the section that explains it. */
+export const RUN_STRIP_LABEL = "In your run";
+export const RUN_STRIP_NOT_IN = "not in it";
+export const RUN_STRIP_WHY = "See why";
+export const RUN_STRIP_DETAILS = "See your analysis";
 
 // ── the written comparison ─────────────────────────────────────────────────
 
 export const TRACE_TITLE = "What separates these";
+export const TRACE_INVITE =
+  "A short explanation of where these stocks' prices differ, and why your latest analysis placed them where it did. Written for you when you ask, from the figures on this page.";
+export const TRACE_INVITE_NO_RUN =
+  "A short explanation of where these stocks' prices differ, written for you when you ask, from the figures on this page. Once you have a completed analysis it also explains where that placed them.";
+export const TRACE_BUTTON = "Explain this comparison";
+export const TRACE_WRITING = "Writing your comparison…";
 export const TRACE_DISCLOSURE =
-  "Written from the figures in the price rows below and each stock's stored measurements only, then checked: every number in it appears in those figures, and verdict or advice words fail it. It describes past price behaviour; it does not rank, predict or advise.";
-export const TRACE_EMPTY = "No written comparison for these yet. The rows below still explain each difference.";
+  "Written for you from the figures on this page and your latest analysis, then checked: every number in it appears in those figures, and verdict, advice or suitability wording fails it. It explains; it does not rank, predict or advise.";
+export const TRACE_DISCLOSURE_PRICES =
+  "Written for you from the figures on this page, then checked: every number in it appears in those figures, and verdict or advice wording fails it. It describes past price behaviour; it does not rank, predict or advise.";
+export const traceFromRun = (date: string) => `Explains your analysis of ${date}`;
 
-export const ASK_ABOUT_THIS = "Ask AlphaSwarm about this";
+export const ASK_ABOUT_THIS = "Ask AlphaSwarm a follow-up";
 export const askPrompt = (tickers: string[]) =>
   tickers.length === 2
     ? `Compare ${tickers[0]} and ${tickers[1]}`
     : `Compare ${tickers.slice(0, -1).join(", ")} and ${tickers[tickers.length - 1]}`;
 
-export const CHART_TITLE = "Price, with every stock starting at 100";
+export const CHART_TITLE = "Change since the start of the window";
+export const CHART_EMPTY =
+  "There are not enough prices in this window to draw the change. A longer window may have more.";
 export const CHART_NOTE =
-  "Rebased so a different share price does not hide the shape of each move: 110 means 10% above where that stock started the window. Past movement only.";
+  "Every stock starts at 0%, so a different share price does not hide the shape of each move. Each line ends on the same change as the Change row below. Past movement only.";
 
 export const STOCKS_DISCLAIMER =
   "AlphaSwarm describes and explains; it does not recommend. Nothing on this page is a suggestion to buy, sell or hold, and the order of the columns is the order you picked them in.";

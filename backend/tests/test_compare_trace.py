@@ -1,11 +1,12 @@
 """Tests for the Compare page's written comparison (src/compare/trace.py).
 
 Like the quant trace's tests, these assert on what the paragraph may NOT do rather than on
-its prose: quote a number it was not given, name a winner, leave a stock out, or be paid
-for twice. Plus the one thing this page adds: the set is the key, whatever order it was
-picked in.
+its prose: quote a number it was not given, name a winner, tell the reader a stock suits
+them, leave a stock out, be paid for twice, or be served after the page has moved on. Plus
+what this page adds: the set is the key whatever order it was picked in, and one reader's
+paragraph is never another's.
 
-Nothing external is touched. Groq, the store and the windows are fakes.
+Nothing external is touched. Groq, the store, the runs and the windows are fakes.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 import datetime
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -29,16 +31,21 @@ from src.compare.trace import (  # noqa: E402
 	ComparisonPromptBuilder,
 	ComparisonTemplate,
 	ComparisonTraceService,
+	RunPlacing,
+	UserRun,
+	UserRunReader,
 	normalise_tickers,
+	ordinal,
 	set_key,
 )
 from src.quant.trace import QuantEvidence  # noqa: E402
 
 TODAY = datetime.date(2026, 10, 7)
+USER = "user-1"
 
 
 def cfg(**overrides) -> CompareConfig:
-	base = dict(trace_enabled=True, trace_max_chars=1300, trace_min_chars=40)
+	base = dict(trace_enabled=True, trace_max_chars=1500, trace_min_chars=40, trace_daily_limit=25)
 	base.update(overrides)
 	return CompareConfig(**base)
 
@@ -106,6 +113,40 @@ RUNS = {
 	"MSFT": {},
 }
 
+#: The reader's run: AAPL 3rd and GOOGL 11th of 40, MSFT not in it. The puzzle the page
+#: exists for: AAPL has the higher RSI and is placed higher, but RSI is not why.
+YOURS = UserRun(
+	run_id="run-1",
+	created_at="2026-10-05T21:00:00+00:00",
+	size=40,
+	placings={
+		"AAPL": RunPlacing(
+			ticker="AAPL",
+			rank=3,
+			convergence_state="lean_together",
+			quant_lean=0.4,
+			sent_lean=0.2,
+			profile_fit=1.0,
+			data_sufficiency=0.9,
+			momentum_pctile=78,
+			risk_adj_pctile=81,
+			stability_pctile=64,
+		),
+		"GOOGL": RunPlacing(
+			ticker="GOOGL",
+			rank=11,
+			convergence_state="mixed",
+			quant_lean=-0.3,
+			sent_lean=0.05,
+			profile_fit=0.8,
+			data_sufficiency=0.9,
+			momentum_pctile=22,
+			risk_adj_pctile=35,
+			stability_pctile=41,
+		),
+	},
+)
+
 
 def stock(ticker: str) -> QuantEvidence:
 	return QuantEvidence(
@@ -121,20 +162,30 @@ def stock(ticker: str) -> QuantEvidence:
 	)
 
 
-def evidence(*tickers: str) -> ComparisonEvidence:
-	return ComparisonEvidence(horizon="6M", day=TODAY.isoformat(), stocks=tuple(stock(t) for t in tickers or ("AAPL", "GOOGL")))
+def evidence(*tickers: str, yours: UserRun | None = None) -> ComparisonEvidence:
+	return ComparisonEvidence(
+		horizon="6M",
+		day=TODAY.isoformat(),
+		stocks=tuple(stock(t) for t in tickers or ("AAPL", "GOOGL")),
+		yours=yours,
+	)
 
 
 class FakeHistory:
 	def __init__(self, enabled=True, missing=()):
 		self.enabled = enabled
 		self.missing = set(missing)
+		#: Override a stock's most recent close date, as a new close landing would.
+		self.ends: dict[str, str] = {}
 		self.calls: list[str] = []
 
 	def window(self, ticker, horizon):
 		self.calls.append(ticker)
 		if ticker in self.missing:
 			return {"ticker": ticker, "points": [], "facts": None}
+		facts = dict(FACTS[ticker])
+		if ticker in self.ends:
+			facts["end"] = self.ends[ticker]
 		return {
 			"ticker": ticker,
 			"horizon": horizon,
@@ -142,34 +193,49 @@ class FakeHistory:
 			"display_currency": "ZAR",
 			"fx_rate": 17.6,
 			"exchange_name": "Nasdaq",
-			"points": [{"date": "2026-10-06", "close": 1.0, "rsi": 50.0}],
-			"facts": dict(FACTS[ticker]),
+			"points": [{"date": facts["end"], "close": 1.0, "rsi": 50.0}],
+			"facts": facts,
 		}
 
 
 class FakeRepo:
-	def __init__(self, stored=None):
-		self.stored = stored
-		self.reads: list[str] = []
+	def __init__(self):
+		self.rows: dict[tuple[str, str, str], dict] = {}
 		self.writes: list[dict] = []
 		self.pruned = False
 
-	def read(self, key, day, horizon):
-		self.reads.append(key)
-		return self.stored
+	def read(self, user_id, key, horizon):
+		row = self.rows.get((user_id, key, horizon))
+		return dict(row) if row else None
 
-	def upsert(self, row):
+	def save(self, row):
 		self.writes.append(row)
-		self.stored = row
-		return 1
+		self.rows[(row["user_id"], row["set_key"], row["horizon"])] = dict(row)
+		return True
 
 	def prune(self, before):
 		self.pruned = True
 
 
-class FakeRuns:
+class FakeRunMetrics:
 	def latest_run_metrics(self, ticker):
 		return dict(RUNS.get(ticker, {}))
+
+
+class FakeUserRuns:
+	def __init__(self, run: UserRun | None = YOURS, broken=False):
+		self.run = run
+		self.broken = broken
+
+	def latest_run(self, user_id):
+		if self.broken:
+			raise RuntimeError("db down")
+		return {"id": self.run.run_id, "created_at": self.run.created_at} if self.run else None
+
+	def latest(self, user_id, tickers):
+		if self.broken:
+			raise RuntimeError("db down")
+		return self.run
 
 
 class FakeClient:
@@ -196,16 +262,26 @@ GOOD_REPLY = (
 	"reads 66 for AAPL and 37 for GOOGL; these describe the move, not what comes next."
 )
 
+PERSONAL_REPLY = (
+	GOOD_REPLY
+	+ " Your analysis placed AAPL 3rd and GOOGL 11th of 40 stocks. For AAPL the price measurements"
+	" and the tone lean the same way, while for GOOGL they only partly agree, and GOOGL's price moved"
+	" around more than the risk preference you set, which moved it down. AAPL showed a stronger trend"
+	" than about 8 in 10 stocks in the run, and RSI is not used to place stocks."
+)
 
-def service(config=None, repo=None, history=None, client=None):
+
+def service(config=None, repo=None, history=None, client=None, runs=None):
 	config = config or cfg()
 	return ComparisonTraceService(
 		config=config,
 		history=history or FakeHistory(),
 		repository=repo if repo is not None else FakeRepo(),
-		run_metrics=FakeRuns(),
-		generator=ComparisonGenerator(config, client=client or FakeClient(GOOD_REPLY)),
+		runs=runs if runs is not None else FakeUserRuns(),
+		run_metrics=FakeRunMetrics(),
+		generator=ComparisonGenerator(config, client=client or FakeClient(PERSONAL_REPLY)),
 		today=lambda: TODAY,
+		now=lambda: datetime.datetime(2026, 10, 7, 9, 0, tzinfo=datetime.timezone.utc),
 	)
 
 
@@ -223,6 +299,10 @@ class TestKey:
 	def test_dotted_tickers_survive(self):
 		assert normalise_tickers(["brk.b"]) == ["BRK.B"]
 
+	@pytest.mark.parametrize("n,word", [(1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (11, "11th"), (12, "12th"), (13, "13th"), (21, "21st"), (112, "112th")])
+	def test_ordinals(self, n, word):
+		assert ordinal(n) == word
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # the guard
@@ -234,6 +314,9 @@ class TestGuard:
 
 	def test_a_grounded_paragraph_passes(self):
 		assert self.guard().check(GOOD_REPLY, evidence()) is None
+
+	def test_a_grounded_personal_paragraph_passes(self):
+		assert self.guard().check(PERSONAL_REPLY, evidence(yours=YOURS)) is None
 
 	@pytest.mark.parametrize(
 		"verdict",
@@ -251,6 +334,26 @@ class TestGuard:
 	def test_a_verdict_is_refused(self, verdict):
 		text = GOOD_REPLY + " " + verdict + "."
 		reason = self.guard().check(text, evidence())
+		assert reason and "forbidden" in reason
+
+	@pytest.mark.parametrize(
+		"suitability",
+		[
+			"AAPL suits you",
+			"AAPL is more suitable for you",
+			"AAPL is right for you",
+			"AAPL is a good fit",
+			"AAPL fits your profile",
+			"AAPL matches your risk preference",
+			"for investors like you, AAPL",
+			"you might consider AAPL",
+			"AAPL is the ideal holding",
+			"AAPL is the appropriate one",
+		],
+	)
+	def test_suitability_is_refused(self, suitability):
+		text = PERSONAL_REPLY + " " + suitability + "."
+		reason = self.guard().check(text, evidence(yours=YOURS))
 		assert reason and "forbidden" in reason
 
 	def test_advice_is_still_refused(self):
@@ -281,6 +384,21 @@ class TestGuard:
 		)
 		assert self.guard().check(text, evidence()) is None
 
+	def test_a_place_the_run_did_not_give_is_refused(self):
+		text = GOOD_REPLY + " Your analysis placed AAPL 17th of 40 stocks."
+		reason = self.guard().check(text, evidence(yours=YOURS))
+		assert reason and "17" in reason
+
+	def test_places_are_not_allowed_without_a_run(self):
+		text = GOOD_REPLY + " Your analysis placed AAPL 3rd of 40 stocks."
+		reason = self.guard().check(text, evidence())
+		assert reason and "40" in reason
+
+	def test_a_raw_percentile_is_refused(self):
+		text = PERSONAL_REPLY + " Its momentum sat at the 78th percentile."
+		reason = self.guard().check(text, evidence(yours=YOURS))
+		assert reason and "78" in reason
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # the template
@@ -288,14 +406,18 @@ class TestGuard:
 
 class TestTemplate:
 	@pytest.mark.parametrize("tickers", [("AAPL", "GOOGL"), ("GOOGL", "AAPL", "MSFT"), ("MSFT", "AAPL")])
-	def test_the_template_passes_its_own_guard(self, tickers):
-		ev = evidence(*tickers)
+	@pytest.mark.parametrize("yours", [None, YOURS])
+	def test_the_template_passes_its_own_guard(self, tickers, yours):
+		ev = evidence(*tickers, yours=yours)
 		text = ComparisonTemplate().render(ev)
-		assert ComparisonGuard(cfg()).check(text, ev) is None, text
+		# Every wording rule, but not the length cap: that guards the model, and the
+		# template says each reading in full.
+		assert ComparisonGuard(cfg(trace_max_chars=4000)).check(text, ev) is None, text
 
 	def test_the_template_names_stocks_in_the_order_picked(self):
-		text = ComparisonTemplate().render(evidence("GOOGL", "AAPL"))
+		text = ComparisonTemplate().render(evidence("GOOGL", "AAPL", yours=YOURS))
 		assert text.index("GOOGL") < text.index("AAPL")
+		assert "placed GOOGL 11th and AAPL 3rd of 40 stocks" in text
 
 	def test_a_flat_window_is_called_flat(self):
 		text = ComparisonTemplate().render(evidence("AAPL", "MSFT"))
@@ -306,6 +428,20 @@ class TestTemplate:
 		assert "1.18 for AAPL" in text
 		assert "for MSFT, which" not in text
 
+	def test_no_run_means_no_places(self):
+		text = ComparisonTemplate().render(evidence())
+		assert "placed" not in text
+
+	def test_the_run_explains_why_and_says_rsi_is_not_used(self):
+		text = ComparisonTemplate().render(evidence(yours=YOURS))
+		assert "For AAPL, the price measurements leaned favourable" in text
+		assert "GOOGL moved around more than the risk preference you set" in text
+		assert "RSI is not used to place stocks" in text
+
+	def test_a_stock_outside_the_run_is_said_once(self):
+		text = ComparisonTemplate().render(evidence("AAPL", "GOOGL", "MSFT", yours=YOURS))
+		assert "MSFT was not in that run." in text
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # the prompt
@@ -313,16 +449,35 @@ class TestTemplate:
 
 class TestPrompt:
 	def test_every_stock_and_the_verdict_rule_are_in_the_prompt(self):
-		prompt = ComparisonPromptBuilder().build(evidence("AAPL", "GOOGL", "MSFT"))
+		prompt = ComparisonPromptBuilder().build(evidence("AAPL", "GOOGL", "MSFT", yours=YOURS))
 		for t in ("=== AAPL ===", "=== GOOGL ===", "=== MSFT ==="):
 			assert t in prompt
 		assert "Name every one of AAPL, GOOGL and MSFT" in prompt
 		assert "better, worse, safer, riskier" in prompt
 
-	def test_percentiles_never_reach_the_prompt(self):
-		ev = evidence()
-		prompt = ComparisonPromptBuilder().build(ev)
-		assert "percentile" not in prompt.lower()
+	def test_the_run_reaches_the_prompt_in_words(self):
+		prompt = ComparisonPromptBuilder().build(evidence("AAPL", "GOOGL", "MSFT", yours=YOURS))
+		assert "- AAPL: placed 3rd" in prompt
+		assert "40 stocks in all" in prompt
+		assert "a stronger trend than about 8 in 10 stocks in the run" in prompt
+		assert "moved around more than the risk preference the reader set" in prompt
+		assert "- MSFT: not in this run." in prompt
+		assert "RSI is not used to place stocks" in prompt
+
+	def test_raw_percentiles_never_reach_the_prompt(self):
+		prompt = ComparisonPromptBuilder().build(evidence(yours=YOURS))
+		for raw in ("78", "81", "64", "22", "35", "41"):
+			assert raw not in prompt
+
+	def test_the_suitability_rule_is_in_a_personal_prompt(self):
+		prompt = ComparisonPromptBuilder().build(evidence(yours=YOURS))
+		assert "Never say or imply that a stock suits, fits or is right for the reader" in prompt
+
+	def test_without_a_run_the_prompt_says_nothing_about_places(self):
+		prompt = ComparisonPromptBuilder().build(evidence())
+		assert "has no completed analysis run" in prompt
+		assert "Say nothing about places" in prompt
+		assert "placed 3rd" not in prompt
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -332,60 +487,225 @@ class TestPrompt:
 class TestService:
 	def test_off_means_nothing_is_fetched(self):
 		history = FakeHistory()
-		assert service(config=cfg(trace_enabled=False), history=history).trace_for(["AAPL", "GOOGL"], "6M") is None
+		svc = service(config=cfg(trace_enabled=False), history=history)
+		assert svc.explain(USER, ["AAPL", "GOOGL"], "6M") is None
+		assert svc.saved(USER, ["AAPL", "GOOGL"], "6M") is None
 		assert history.calls == []
 
 	def test_off_when_the_windows_are_off(self):
-		assert service(history=FakeHistory(enabled=False)).trace_for(["AAPL", "GOOGL"], "6M") is None
+		assert service(history=FakeHistory(enabled=False)).explain(USER, ["AAPL", "GOOGL"], "6M") is None
 
 	def test_a_paragraph_is_written_stored_and_served(self):
 		repo = FakeRepo()
-		point = service(repo=repo).trace_for(["GOOGL", "AAPL"], "6M")
-		assert point["trace"] == GOOD_REPLY
+		point = service(repo=repo).explain(USER, ["GOOGL", "AAPL"], "6M")
+		assert point["trace"] == PERSONAL_REPLY
 		assert point["source"] == "model"
-		assert repo.writes[0]["set_key"] == "AAPL|GOOGL"
-		assert repo.writes[0]["facts"]["tickers"] == ["GOOGL", "AAPL"]
+		assert point["personal"] is True
+		assert point["run_at"] == YOURS.created_at
+		row = repo.writes[0]
+		assert row["user_id"] == USER
+		assert row["set_key"] == "AAPL|GOOGL"
+		assert row["windows"] == "AAPL:2026-10-06|GOOGL:2026-10-06"
+		assert row["run_id"] == "run-1"
+		assert row["facts"]["tickers"] == ["GOOGL", "AAPL"]
+		assert row["facts"]["yours"]["placings"]["AAPL"]["rank"] == 3
 
-	def test_a_stored_paragraph_is_never_paid_for_twice(self):
-		client = FakeClient(GOOD_REPLY)
-		stored = {"trace": "stored", "source": "model", "model": "m", "generated_at": "x"}
-		point = service(repo=FakeRepo(stored=stored), client=client).trace_for(["AAPL", "GOOGL"], "6M")
-		assert point["trace"] == "stored"
+	def test_nothing_stored_means_nothing_saved(self):
+		assert service().saved(USER, ["AAPL", "GOOGL"], "6M") is None
+
+	def test_reading_back_never_calls_the_model(self):
+		client = FakeClient(PERSONAL_REPLY)
+		svc = service(client=client)
+		svc.saved(USER, ["AAPL", "GOOGL"], "6M")
 		assert client.calls == 0
 
-	def test_the_second_order_reads_the_first_orders_row(self):
-		client = FakeClient(GOOD_REPLY)
+	def test_a_current_paragraph_is_read_back(self):
+		svc = service()
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		point = svc.saved(USER, ["GOOGL", "AAPL"], "6M")
+		assert point and point["trace"] == PERSONAL_REPLY
+
+	def test_a_new_close_retires_the_paragraph(self):
+		history = FakeHistory()
+		svc = service(history=history)
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		history.ends["GOOGL"] = "2026-10-07"
+		assert svc.saved(USER, ["AAPL", "GOOGL"], "6M") is None
+
+	def test_a_new_run_retires_the_paragraph(self):
+		runs = FakeUserRuns()
+		svc = service(runs=runs)
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		runs.run = UserRun(run_id="run-2", created_at="2026-10-07T08:00:00+00:00", size=40, placings=YOURS.placings)
+		assert svc.saved(USER, ["AAPL", "GOOGL"], "6M") is None
+
+	def test_a_first_run_retires_a_prices_only_paragraph(self):
+		runs = FakeUserRuns(run=None)
+		svc = service(runs=runs, client=FakeClient(GOOD_REPLY))
+		assert svc.explain(USER, ["AAPL", "GOOGL"], "6M")["personal"] is False
+		runs.run = YOURS
+		assert svc.saved(USER, ["AAPL", "GOOGL"], "6M") is None
+
+	def test_a_current_paragraph_is_never_paid_for_twice(self):
+		client = FakeClient(PERSONAL_REPLY)
 		svc = service(client=client)
-		svc.trace_for(["AAPL", "GOOGL"], "6M")
-		svc.trace_for(["GOOGL", "AAPL"], "6M")
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		svc.explain(USER, ["GOOGL", "AAPL"], "6M")
 		assert client.calls == 1
+
+	def test_a_stale_paragraph_is_written_again(self):
+		client = FakeClient(PERSONAL_REPLY)
+		history = FakeHistory()
+		svc = service(client=client, history=history)
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		history.ends["AAPL"] = "2026-10-07"
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		assert client.calls == 2
+
+	def test_one_readers_paragraph_is_not_anothers(self):
+		svc = service()
+		svc.explain(USER, ["AAPL", "GOOGL"], "6M")
+		assert svc.saved("user-2", ["AAPL", "GOOGL"], "6M") is None
 
 	def test_a_rejected_reply_falls_back_to_the_template(self):
 		repo = FakeRepo()
-		point = service(repo=repo, client=FakeClient(GOOD_REPLY + " AAPL did better.")).trace_for(["AAPL", "GOOGL"], "6M")
+		point = service(repo=repo, client=FakeClient(PERSONAL_REPLY + " AAPL suits you.")).explain(USER, ["AAPL", "GOOGL"], "6M")
 		assert point["source"] == "template"
 		assert repo.writes[0]["model"] is None
+		assert "Your latest analysis placed AAPL 3rd" in point["trace"]
 
 	def test_a_failing_model_falls_back_to_the_template(self, monkeypatch):
 		monkeypatch.setattr(ComparisonGenerator, "BACKOFF_SECONDS", (0.0, 0.0))
-		point = service(client=FakeClient(RuntimeError("429"))).trace_for(["AAPL", "GOOGL"], "6M")
+		point = service(client=FakeClient(RuntimeError("429"))).explain(USER, ["AAPL", "GOOGL"], "6M")
 		assert point["source"] == "template"
+
+	def test_past_the_daily_limit_the_template_stands_in(self):
+		client = FakeClient(PERSONAL_REPLY)
+		history = FakeHistory()
+		svc = service(config=cfg(trace_daily_limit=1), client=client, history=history)
+		assert svc.explain(USER, ["AAPL", "GOOGL"], "6M")["source"] == "model"
+		history.ends["AAPL"] = "2026-10-07"
+		assert svc.explain(USER, ["AAPL", "GOOGL"], "6M")["source"] == "template"
+		assert client.calls == 1
+		# Another reader has their own allowance.
+		assert svc.explain("user-2", ["AAPL", "GOOGL"], "6M")["source"] == "model"
+
+	def test_an_unreadable_run_still_gives_the_price_half(self):
+		repo = FakeRepo()
+		point = service(repo=repo, runs=FakeUserRuns(broken=True), client=FakeClient(GOOD_REPLY)).explain(USER, ["AAPL", "GOOGL"], "6M")
+		assert point["trace"] == GOOD_REPLY
+		assert point["personal"] is False
+		assert repo.writes[0]["run_id"] is None
 
 	def test_one_stock_with_no_window_means_no_paragraph(self):
 		repo = FakeRepo()
-		assert service(repo=repo, history=FakeHistory(missing={"GOOGL"})).trace_for(["AAPL", "GOOGL"], "6M") is None
+		assert service(repo=repo, history=FakeHistory(missing={"GOOGL"})).explain(USER, ["AAPL", "GOOGL"], "6M") is None
 		assert repo.writes == []
 
 	@pytest.mark.parametrize("tickers", [["AAPL"], ["AAPL", "GOOGL", "MSFT", "NVDA"], ["AAPL", "aapl"]])
 	def test_the_wrong_number_of_stocks_means_no_paragraph(self, tickers):
-		assert service().trace_for(tickers, "6M") is None
+		assert service().explain(USER, tickers, "6M") is None
 
 	def test_a_broken_store_never_raises(self):
 		class BrokenRepo(FakeRepo):
-			def read(self, key, day, horizon):
+			def read(self, user_id, key, horizon):
 				raise RuntimeError("db down")
 
-		assert service(repo=BrokenRepo()).trace_for(["AAPL", "GOOGL"], "6M") is None
+		svc = service(repo=BrokenRepo())
+		assert svc.explain(USER, ["AAPL", "GOOGL"], "6M") is None
+		assert svc.saved(USER, ["AAPL", "GOOGL"], "6M") is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# reading the run
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FakeQuery:
+	def __init__(self, db, table):
+		self.db = db
+		self.table = table
+		self.filters: list[tuple[str, str, object]] = []
+		self.columns = ""
+		self.counted = False
+
+	def select(self, columns, count=None):
+		self.columns = columns
+		self.counted = count == "exact"
+		return self
+
+	def eq(self, column, value):
+		self.filters.append(("eq", column, value))
+		return self
+
+	def in_(self, column, values):
+		self.filters.append(("in", column, list(values)))
+		return self
+
+	def order(self, *args, **kwargs):
+		return self
+
+	def limit(self, n):
+		return self
+
+	def execute(self):
+		self.db.queries.append((self.table, list(self.filters)))
+
+		def keep(row):
+			for kind, column, value in self.filters:
+				if kind == "eq" and row.get(column) != value:
+					return False
+				if kind == "in" and row.get(column) not in value:
+					return False
+			return True
+
+		rows = [r for r in self.db.tables.get(self.table, []) if keep(r)]
+		return SimpleNamespace(data=rows, count=len(rows) if self.counted else None)
+
+
+class FakeSupabase:
+	def __init__(self, tables):
+		self.tables = tables
+		self.queries: list[tuple[str, list]] = []
+
+	def table(self, name):
+		return FakeQuery(self, name)
+
+
+def run_db():
+	return FakeSupabase(
+		{
+			"ai_runs": [
+				{"id": "run-1", "user_id": USER, "status": "complete", "created_at": "2026-10-05T21:00:00+00:00"},
+				{"id": "run-9", "user_id": "user-2", "status": "complete", "created_at": "2026-10-06T21:00:00+00:00"},
+			],
+			"assets": [
+				{"id": "a1", "ticker": "AAPL"},
+				{"id": "a2", "ticker": "GOOGL"},
+				{"id": "a3", "ticker": "MSFT"},
+			],
+			"ai_recommendation": [
+				{"id": 1, "run_id": "run-1", "asset_id": "a1", "rank": 3, "convergence_state": "lean_together", "quant_lean": 0.4, "momentum_pctile": 78},
+				{"id": 2, "run_id": "run-1", "asset_id": "a2", "rank": 11, "convergence_state": "mixed", "quant_lean": -0.3, "momentum_pctile": 22},
+				{"id": 3, "run_id": "run-1", "asset_id": "zz", "rank": 1},
+				{"id": 4, "run_id": "run-9", "asset_id": "a3", "rank": 2},
+			],
+		}
+	)
+
+
+class TestUserRunReader:
+	def test_the_readers_own_run_is_read(self):
+		db = run_db()
+		run = UserRunReader(client=db).latest(USER, ["AAPL", "GOOGL", "MSFT"])
+		assert run.run_id == "run-1"
+		assert run.size == 3
+		assert run.placings["AAPL"].rank == 3
+		assert run.placings["GOOGL"].convergence_state == "mixed"
+		assert "MSFT" not in run.placings
+		assert ("eq", "user_id", USER) in db.queries[0][1]
+
+	def test_no_completed_run_means_none(self):
+		assert UserRunReader(client=run_db()).latest("user-3", ["AAPL", "GOOGL"]) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -396,6 +716,7 @@ class TestService:
 def client(monkeypatch):
 	app = FastAPI()
 	routes.mount_compare_routes(app)
+	app.dependency_overrides[routes.current_user_id] = lambda: USER
 	yield TestClient(app)
 	monkeypatch.setattr(routes, "_trace_instance", None)
 
@@ -411,25 +732,48 @@ def test_the_endpoint_says_when_off(client, monkeypatch):
 		"source": None,
 		"model": None,
 		"generated_at": None,
+		"personal": False,
+		"run_at": None,
 	}
 
 
-def test_the_endpoint_serves_a_paragraph_in_the_order_asked(client, monkeypatch):
+def test_reading_back_before_asking_gives_no_paragraph(client, monkeypatch):
 	monkeypatch.setattr(routes, "_trace_instance", service())
-	body = client.get("/api/compare/trace?tickers=GOOGL,AAPL&horizon=6m").json()
+	body = client.get("/api/compare/trace?tickers=AAPL,GOOGL&horizon=6M").json()
+	assert body["available"] is True
+	assert body["trace"] is None
+
+
+def test_asking_writes_one_in_the_order_asked_and_reading_back_finds_it(client, monkeypatch):
+	monkeypatch.setattr(routes, "_trace_instance", service())
+	body = client.post("/api/compare/trace", json={"tickers": ["GOOGL", "AAPL"], "horizon": "6m"}).json()
 	assert body["tickers"] == ["GOOGL", "AAPL"]
-	assert body["trace"] == GOOD_REPLY
-	assert body["source"] == "model"
+	assert body["trace"] == PERSONAL_REPLY
+	assert body["personal"] is True
+	again = client.get("/api/compare/trace?tickers=AAPL,GOOGL&horizon=6M").json()
+	assert again["trace"] == PERSONAL_REPLY
 
 
 def test_the_endpoint_refuses_one_ticker_or_a_bad_horizon(client, monkeypatch):
 	monkeypatch.setattr(routes, "_trace_instance", service())
 	assert client.get("/api/compare/trace?tickers=AAPL&horizon=6M").status_code == 400
 	assert client.get("/api/compare/trace?tickers=AAPL,GOOGL&horizon=2W").status_code == 400
+	assert client.post("/api/compare/trace", json={"tickers": ["AAPL"], "horizon": "6M"}).status_code == 400
 
 
 def test_a_quiet_answer_is_still_available(client, monkeypatch):
 	monkeypatch.setattr(routes, "_trace_instance", service(history=FakeHistory(missing={"AAPL"})))
-	body = client.get("/api/compare/trace?tickers=AAPL,GOOGL&horizon=6M").json()
+	body = client.post("/api/compare/trace", json={"tickers": ["AAPL", "GOOGL"], "horizon": "6M"}).json()
 	assert body["available"] is True
 	assert body["trace"] is None
+
+
+def test_the_reader_comes_from_the_token_not_the_request(monkeypatch):
+	app = FastAPI()
+	routes.mount_compare_routes(app)
+	svc = service()
+	monkeypatch.setattr(routes, "_trace_instance", svc)
+	app.dependency_overrides[routes.current_user_id] = lambda: "user-2"
+	TestClient(app).post("/api/compare/trace?user_id=user-1", json={"tickers": ["AAPL", "GOOGL"], "horizon": "6M", "user_id": USER})
+	assert svc.repository.writes[0]["user_id"] == "user-2"
+	monkeypatch.setattr(routes, "_trace_instance", None)

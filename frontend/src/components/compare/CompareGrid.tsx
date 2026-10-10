@@ -9,6 +9,12 @@ import { seriesFor } from "./compareSeries";
 // pick's value inside it, so nothing scrolls sideways (the portrait-iPhone rule
 // every user page follows since PR #59) and a value is never read without its
 // label beside it.
+//
+// On a wide screen the header row stays pinned while the table scrolls under it:
+// with a note under every row the table runs long, and by the RSI rows the reader
+// would otherwise lose which column is which stock. The card clips with
+// overflow: clip rather than hidden, because hidden makes the card a scroll
+// container and the header would pin to the card, which never scrolls.
 
 export interface CompareColumn {
   id: string;
@@ -59,10 +65,11 @@ export function CompareGrid({
 }) {
   return (
     <Columns.Provider value={columns}>
-      <div className={`soft-card overflow-hidden ${className}`}>
-        {/* Header: wide screens only. On a phone each card names its picks. */}
+      <div className={`soft-card overflow-clip ${className}`}>
+        {/* Header: wide screens only, pinned below the phone/tablet top bar (h-14),
+            which is gone from lg up. On a phone each card names its picks. */}
         <div
-          className="hidden sm:grid gap-x-4 items-end px-4 py-3 bg-brand-bg/60 border-b border-brand-border/50"
+          className="hidden sm:grid sticky top-14 lg:top-0 z-10 gap-x-4 items-end px-4 py-3 bg-brand-bg border-b border-brand-border/50"
           style={gridStyle(columns.length)}
         >
           <span className="text-[10px] uppercase tracking-widest font-semibold text-brand-muted-fg">

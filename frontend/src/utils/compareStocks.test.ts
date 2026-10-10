@@ -3,10 +3,12 @@ import type { QuantWindowFacts, SentimentHistoryPoint } from "../services/api/an
 import {
   differsMost,
   explainPlacement,
+  hasNewsHistory,
   isAlike,
   leanWord,
   ordinal,
-  rebaseSeries,
+  changeSeries,
+  toneRows,
   weekTone,
   type RunReading,
 } from "./compareStocks";
@@ -177,23 +179,62 @@ describe("weekTone", () => {
   });
 });
 
-describe("rebaseSeries", () => {
-  it("starts every stock at 100 and merges by date", () => {
-    const rows = rebaseSeries([
+describe("toneRows", () => {
+  const day = (date: string, overrides: Partial<SentimentHistoryPoint> = {}): SentimentHistoryPoint => ({
+    date,
+    score: null,
+    post_count: 0,
+    bullish: 0,
+    bearish: 0,
+    top_posts: [],
+    summary: null,
+    ...overrides,
+  });
+
+  const series = [
+    { ticker: "AAPL", points: [day("2026-10-02", { score: 64, news_score: 58 }), day("2026-10-01", { score: 61 })] },
+    { ticker: "GOOGL", points: [day("2026-10-01", { score: 40, news_score: null }), day("2026-10-03", { score: 45 })] },
+  ];
+
+  it("lines every day up oldest first, with a gap where a stock had nothing", () => {
+    expect(toneRows(series, "social")).toEqual([
+      { date: "2026-10-01", AAPL: 61, GOOGL: 40 },
+      { date: "2026-10-02", AAPL: 64, GOOGL: null },
+      { date: "2026-10-03", AAPL: null, GOOGL: 45 },
+    ]);
+  });
+
+  it("reads the news score for news, and a missing field as a gap, never a zero", () => {
+    expect(toneRows(series, "news")).toEqual([
+      { date: "2026-10-01", AAPL: null, GOOGL: null },
+      { date: "2026-10-02", AAPL: 58, GOOGL: null },
+      { date: "2026-10-03", AAPL: null, GOOGL: null },
+    ]);
+  });
+
+  it("knows whether any stock carries news history", () => {
+    expect(hasNewsHistory(series)).toBe(true);
+    expect(hasNewsHistory([{ points: [day("2026-10-01", { score: 50 })] }])).toBe(false);
+  });
+});
+
+describe("changeSeries", () => {
+  it("starts every stock at 0% and merges by date", () => {
+    const rows = changeSeries([
       { ticker: "AAPL", points: [{ date: "2026-01-02", close: 200 }, { date: "2026-01-03", close: 220 }] },
       { ticker: "GOOGL", points: [{ date: "2026-01-03", close: 50 }, { date: "2026-01-02", close: 40 }] },
     ]);
     expect(rows).toEqual([
-      { date: "2026-01-02", AAPL: 100, GOOGL: 80 },
-      { date: "2026-01-03", AAPL: 110, GOOGL: 100 },
+      { date: "2026-01-02", AAPL: 0, GOOGL: -20 },
+      { date: "2026-01-03", AAPL: 10, GOOGL: 0 },
     ]);
   });
 
   it("leaves a gap where one listing has no close", () => {
-    const rows = rebaseSeries([
+    const rows = changeSeries([
       { ticker: "A", points: [{ date: "d1", close: 10 }, { date: "d2", close: 11 }] },
       { ticker: "B", points: [{ date: "d1", close: 5 }] },
     ]);
-    expect(rows[1]).toEqual({ date: "d2", A: 110 });
+    expect(rows[1]).toEqual({ date: "d2", A: 10 });
   });
 });

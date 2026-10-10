@@ -387,6 +387,21 @@ function Hero({
           </p>
         )}
 
+        {/* Opens Compare with this fund already in the first column and the search
+            ready for the next. The stock page's button, in the same place (under
+            the identity, before the detail) and in the same words, set for the
+            dark header: it is an action, so it does not sit among the facts in the
+            footer strip. */}
+        {COMPARE_ENABLED && (
+          <Link
+            to={compareHref("funds", [fund.fund_id])}
+            className="mt-3 inline-flex self-start items-center gap-1.5 rounded-full border border-lime-100/30 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-brand-accent/60 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            <Columns2 className="h-4 w-4 text-brand-accent" />
+            Compare with…
+          </Link>
+        )}
+
         <div className="mt-4">
           <RiskScale
             level={fund.risk_level}
@@ -418,15 +433,6 @@ function Hero({
               {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
               <ExternalLink className="h-3 w-3" />
             </a>
-          )}
-          {COMPARE_ENABLED && (
-            <Link
-              to={compareHref("funds", [fund.fund_id])}
-              className="inline-flex items-center gap-1 font-bold text-brand-accent hover:underline"
-            >
-              <Columns2 className="h-3 w-3" />
-              Compare with…
-            </Link>
           )}
           {isAdmin && (
             <Link

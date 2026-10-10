@@ -113,7 +113,7 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
               <BrainCircuit className="h-3 w-3 text-brand-primary" />
               Reasoning trace
             </div>
-            <p className="max-w-3xl text-sm leading-relaxed text-brand-fg">{summary}</p>
+            <p className="text-sm leading-relaxed text-brand-fg">{summary}</p>
             <p className="mt-2 text-[10px] text-brand-muted-fg">{FUND_TRACE_DISCLOSURE}</p>
           </div>
         </section>
