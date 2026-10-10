@@ -26,6 +26,8 @@ import { QuantTracePanel } from "../components/research/QuantTracePanel";
 import SentimentCalculation from "../components/research/SentimentCalculation";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
 import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
+import { carriedNews } from "../components/research/NewsArticles";
+import { formatDay } from "../components/research/sentimentDays";
 import { MarketClock } from "../components/research/MarketClock";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
@@ -123,13 +125,17 @@ function ContributorRow({
   weightPct,
   score,
   rightText,
+  note,
   to,
   linkText,
 }: {
   label: string;
-  weightPct: number;
+  /** This signal's share of the blended score, or null when it had no part in it. */
+  weightPct: number | null;
   score: number | null | undefined;
   rightText?: string;
+  /** A line under the bar qualifying the reading, e.g. news carried over. */
+  note?: string;
   to: string;
   linkText: string;
 }) {
@@ -139,9 +145,18 @@ function ContributorRow({
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
         <span className="text-xs font-semibold text-white flex items-center gap-1.5">
           {label}
-          <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-[10px] font-medium text-forest-900">
-            {weightPct}%
-          </span>
+          {/* The share this signal ACTUALLY had in this run's score. The blend falls
+              back to whichever signal had data, so a fixed 70 / 30 badge claimed a
+              weight for a signal that contributed nothing. */}
+          {weightPct != null ? (
+            <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-[10px] font-medium text-forest-900">
+              {weightPct}%
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-medium text-white/70">
+              Not in score
+            </span>
+          )}
         </span>
         <span className="text-xs whitespace-nowrap">
           {rightText ? (
@@ -159,6 +174,11 @@ function ContributorRow({
         </span>
       </div>
       <AnchoredBar score={rightText ? null : score} tone={verdict.tone} />
+      {note ? (
+        <p className="mt-1.5 text-[11px]" style={{ color: "rgba(255,255,255,0.6)" }}>
+          {note}
+        </p>
+      ) : null}
       {/* Underlined by default rather than on hover. This is the only route off the
           card to the evidence, so it should read as a link before the pointer arrives
           anywhere near it. */}
@@ -319,6 +339,8 @@ function SentimentVerdict({
   newsScore,
   socialScore,
   newsRightText,
+  socialRightText,
+  newsCarried,
   ticker,
   newsCount,
 }: {
@@ -326,10 +348,25 @@ function SentimentVerdict({
   newsScore: number | null | undefined;
   socialScore: number | null | undefined;
   newsRightText?: string;
+  socialRightText?: string;
+  /** Set when the news shown was carried over from an earlier run. */
+  newsCarried?: { from: string | null } | null;
   ticker: string;
   newsCount?: number;
 }) {
   const verdict = sentimentVerdict(blended);
+  // The share each signal really had. The blend is 70 / 30 only when both had data;
+  // with one missing the other is the whole score, and carried-over news was never in
+  // it at all (it was added after the score was computed and ranked on).
+  const newsIn = !newsRightText && !newsCarried && newsScore != null;
+  const socialIn = !socialRightText && socialScore != null;
+  const newsPct = newsIn ? (socialIn ? NEWS_WEIGHT_PCT : 100) : null;
+  const socialPct = socialIn ? (newsIn ? SOCIAL_WEIGHT_PCT : 100) : null;
+  const carriedNote = newsCarried
+    ? `No new articles in this run, so these are carried over${
+        newsCarried.from ? ` from ${formatDay(newsCarried.from)}` : ""
+      } for reference. They are not part of the score above.`
+    : undefined;
   return (
     // The same forest panel the trend chart sits on. The verdict and the week it came
     // from are one argument, and giving them one ground is what stops the top of the
@@ -367,9 +404,10 @@ function SentimentVerdict({
       <div className="flex-1 min-w-0 space-y-3.5">
         <ContributorRow
           label="News"
-          weightPct={NEWS_WEIGHT_PCT}
+          weightPct={newsPct}
           score={newsScore}
           rightText={newsRightText}
+          note={carriedNote}
           to={`/asset/${ticker}/news`}
           // The count is worth naming: it tells the reader how much is behind the
           // link, which is the difference between an invitation and a bare label.
@@ -381,8 +419,9 @@ function SentimentVerdict({
         />
         <ContributorRow
           label="Social"
-          weightPct={SOCIAL_WEIGHT_PCT}
+          weightPct={socialPct}
           score={socialScore}
+          rightText={socialRightText}
           to={`/asset/${ticker}/social`}
           // No count here. The card only ever holds a capped handful of posts, and the
           // real per-day totals live on the page this links to, so any number quoted
@@ -457,6 +496,14 @@ export default function AssetDetailsPage() {
 
   const activeDay = selectedDay ?? defaultDay;
   const activePoint = history.points.find((p) => p.date === activeDay);
+
+  // No posts in the run means no social reading at all. The stored figure used to be
+  // the scorer's neutral 50 for an empty list, which the card showed as a real
+  // "Social 50, Neutral". Judged on the posts rather than the score so rows written
+  // before the score went null read correctly too: the post list is empty exactly
+  // when nothing was scored.
+  const hasSocialPosts = (recommendation?.social_posts?.length ?? 0) > 0;
+  const newsCarried = carriedNews(recommendation?.news_articles);
 
   if (isLoading) {
     return <AssetDetailsSkeleton />;
@@ -697,10 +744,9 @@ export default function AssetDetailsPage() {
                 newsRightText={
                   recommendation.news_count ? undefined : "No recent news"
                 }
-                socialScore={
-                  recommendation.social_sentiment_score ??
-                  recommendation.sentiment_score
-                }
+                newsCarried={newsCarried}
+                socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
+                socialRightText={hasSocialPosts ? undefined : "No recent posts"}
                 ticker={asset.ticker}
                 newsCount={
                   typeof recommendation.news_count === "number"
@@ -717,11 +763,9 @@ export default function AssetDetailsPage() {
                 newsArticles={recommendation.news_articles ?? []}
                 socialPosts={recommendation.social_posts ?? []}
                 newsScore={recommendation.news_sentiment_score}
-                socialScore={
-                  recommendation.social_sentiment_score ??
-                  recommendation.sentiment_score
-                }
+                socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
                 blendedScore={recommendation.sentiment_score}
+                newsCarried={newsCarried}
               />
 
               {/* Only what nothing else on the card says. The windows are already in

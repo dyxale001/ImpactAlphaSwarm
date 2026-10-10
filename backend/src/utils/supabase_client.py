@@ -716,7 +716,7 @@ class RecommendationRepository(Repository):
         try:
             resp = (
                 self.table()
-                .select("news_articles,news_count,news_sentiment_score,news_bullish,news_bearish")
+                .select("news_articles,news_count,news_sentiment_score,news_bullish,news_bearish,created_at")
                 .eq("asset_id", asset_id)
                 .gt("news_count", 0)
                 .order("created_at", desc=True)

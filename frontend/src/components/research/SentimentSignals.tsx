@@ -10,16 +10,19 @@ import { scoreMeta } from "./sentimentDisplay";
 //     amounts, and Influence is what makes that visible.
 export default function SentimentSignals({
   score,
+  sentiment,
   influence,
 }: {
   score?: number;
-  influence?: number;
+  /** The item's own Positive / Neutral / Negative label, which colours the badge. */
+  sentiment?: string;
+  influence?: number | null;
 }) {
   return (
     <>
       {score != null && (
         <span
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium ${scoreMeta(score).cls}`}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium ${scoreMeta(score, sentiment).cls}`}
           title="Sentiment: this item's own text sentiment, from 0 (very negative) to 100 (very positive). Does not factor in date or source tier."
         >
           <span className="opacity-60">Sentiment</span>

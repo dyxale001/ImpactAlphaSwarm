@@ -81,6 +81,14 @@ function socialAverage(posts: SocialPost[]): {
   return { avg, reconstructable: true };
 }
 
+// A "value x weight = product" line multiplies the figures it SHOWS: the value
+// rounded to a whole number, times the whole-number percentage. Rounding for display
+// but multiplying the unrounded value printed sums a reader could check and find
+// wrong ("62 x 70% = 43.1").
+export function shownProduct(value: number, pct: number): number {
+  return (Math.round(value) * Math.round(pct)) / 100;
+}
+
 function fmt(n: number, digits = 1) {
   return Number.isFinite(n) ? n.toFixed(digits) : "—";
 }
@@ -95,6 +103,7 @@ function BlendRow({
   score: number;
   weightPct: number;
 }) {
+  const shown = Math.round(score);
   return (
     // Wraps rather than squashing: on a phone the label and the sum together are
     // wider than the panel, and a formula broken mid-way across two lines is worse
@@ -102,9 +111,9 @@ function BlendRow({
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[12px] text-brand-fg">
       <span className="text-forest-500">{label}</span>
       <span className="tabular-nums whitespace-nowrap">
-        {Math.round(score)} &times; {weightPct}% ={" "}
+        {shown} &times; {weightPct}% ={" "}
         <span className="font-semibold text-brand-fg">
-          {fmt((score * weightPct) / 100)}
+          {fmt(shownProduct(score, weightPct))}
         </span>
       </span>
     </div>
@@ -117,29 +126,40 @@ export default function SentimentCalculation({
   newsScore,
   socialScore,
   blendedScore,
+  newsCarried = null,
 }: {
   newsArticles: NewsArticle[];
   socialPosts: SocialPost[];
   newsScore?: number | null;
   socialScore?: number | null;
   blendedScore?: number | null;
+  /** Set when the news was carried over from an earlier run and so not blended. */
+  newsCarried?: { from: string | null } | null;
 }) {
   const [open, setOpen] = useState(false);
 
   const hasNews = newsArticles.length > 0;
   const hasSocial = socialPosts.length > 0;
   if (!hasNews && !hasSocial) return null;
+  // Carried-over news is listed for reference but was never in the blend: the score
+  // was computed and ranked on before it was added. The working must follow the
+  // score, not the card, or it adds up to a number nobody computed.
+  const newsInBlend = hasNews && !newsCarried;
 
   const news = breakDownByTier(newsArticles);
   const social = socialAverage(socialPosts);
 
-  // Prefer derived numbers (so the visible arithmetic is self-consistent), but
-  // fall back to the stored sub-scores for rows we can't reconstruct.
-  const newsSub = news.reconstructable
-    ? news.total
-    : typeof newsScore === "number"
+  // The stored sub-score where there is one, since that whole number is what the
+  // backend actually blended: with it, the blend rows below add up to the stored
+  // blended score rather than landing a point off it. The tier rows above it are
+  // the working, and agree with it to rounding. Rebuilt from the articles only for
+  // rows that never stored a sub-score.
+  const newsSub =
+    typeof newsScore === "number"
       ? newsScore
-      : 0;
+      : news.reconstructable
+        ? news.total
+        : 0;
   // News is still reconstructed from what is on screen, because every article that
   // fed the score is listed. Social is not, and must not be: the row now keeps only
   // the most influential handful of posts, with the full per-day lists on the social
@@ -156,15 +176,21 @@ export default function SentimentCalculation({
   // Mirror backend _blend_sentiment: fall back to whichever source has data.
   let blended: number;
   let blendNote: string | null = null;
-  if (hasNews && hasSocial) {
+  if (newsInBlend && hasSocial) {
     blended =
       (newsSub * NEWS_WEIGHT_PCT + socialSub * SOCIAL_WEIGHT_PCT) / 100;
-  } else if (hasNews) {
+  } else if (newsInBlend) {
     blended = newsSub;
     blendNote = "Only news had data in this window, so the blended score equals the news sub-score.";
-  } else {
+  } else if (hasSocial) {
     blended = socialSub;
-    blendNote = "Only social had data in this window, so the blended score equals the social sub-score.";
+    blendNote = newsCarried
+      ? "This run found no new articles, so the blended score equals the social sub-score. The news above was carried over from an earlier run for reference and is not part of it."
+      : "Only social had data in this window, so the blended score equals the social sub-score.";
+  } else {
+    blended = 50;
+    blendNote =
+      "This run found no new articles and no posts, so the blended score sits at the neutral 50. The news above was carried over from an earlier run for reference.";
   }
   const blendedShown =
     typeof blendedScore === "number" ? blendedScore : Math.round(blended);
@@ -195,6 +221,7 @@ export default function SentimentCalculation({
             <div className="space-y-2">
               <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
                 News sub-score, by reliability tier
+                {newsCarried ? " (carried over, not in the score)" : ""}
               </p>
               <div className="space-y-1.5">
                 {news.tiers.map((t) => {
@@ -220,7 +247,7 @@ export default function SentimentCalculation({
                       <span className="font-mono tabular-nums whitespace-nowrap text-brand-fg">
                         avg {Math.round(t.avg)} &times; {Math.round(t.sharePct)}% ={" "}
                         <span className="font-semibold">
-                          {fmt(t.contribution)}
+                          {fmt(shownProduct(t.avg, t.sharePct))}
                         </span>
                       </span>
                     </div>
@@ -238,7 +265,9 @@ export default function SentimentCalculation({
                 trusted wires are not drowned out by a flood of lower-tier
                 articles. Within a tier, newer articles count for more on a{" "}
                 {RECENCY_HALFLIFE_DAYS}-day half-life; that recency weighting is
-                already baked into each article's Influence in the list below.
+                already baked into each article's Influence in the list below. The
+                tier lines use rounded figures, so they add up to the sub-score to
+                within a point.
               </p>
             </div>
           )}
@@ -277,7 +306,7 @@ export default function SentimentCalculation({
             <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
               Blended score
             </p>
-            {hasNews && hasSocial ? (
+            {newsInBlend && hasSocial ? (
               <div className="space-y-1">
                 <BlendRow
                   label="News"

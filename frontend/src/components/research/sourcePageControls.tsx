@@ -30,7 +30,7 @@ export function sentimentBucket(sentiment?: string): SentimentBucket {
 
 type Sortable = {
   date?: string;
-  influence?: number;
+  influence?: number | null;
   sentiment_score?: number;
 };
 

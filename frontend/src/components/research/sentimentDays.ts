@@ -88,3 +88,12 @@ export function dayLabel(date: string): string {
   // different bars on the same chart.
   return formatDay(date);
 }
+
+// The day as it reads inside a sentence: "today", "yesterday", "on 5 Oct". For empty
+// states like "No posts today", where the title-case label would read "No posts on
+// Today".
+export function dayPhrase(date: string): string {
+  const label = dayLabel(date);
+  if (label === "Today" || label === "Yesterday") return label.toLowerCase();
+  return `on ${label}`;
+}

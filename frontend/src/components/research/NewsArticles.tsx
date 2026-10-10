@@ -14,7 +14,20 @@ export type NewsArticle = {
   sentiment?: string;
   sentiment_score?: number; // 0-100, this article's own text sentiment
   influence?: number; // % of the news score this article drives (tier + recency)
+  // Set when the run found no news of its own and these were carried over from an
+  // earlier run so the card is not blank. Carried news was NOT in the blended score.
+  carried_over?: boolean;
+  carried_from?: string | null; // YYYY-MM-DD of the run it was carried from
 };
+
+// Whether a row's news was carried over from an earlier run, and from when. Null when
+// it is the run's own news.
+export function carriedNews(
+  articles: NewsArticle[] | null | undefined,
+): { from: string | null } | null {
+  const carried = (articles ?? []).find((a) => a.carried_over);
+  return carried ? { from: carried.carried_from ?? null } : null;
+}
 
 // Highest-influence first; items without an influence value sink to the end.
 export function sortArticlesByInfluence(
@@ -58,7 +71,7 @@ export function NewsArticleRow({
         <span className={`px-1.5 py-0.5 rounded-full font-medium ${t.cls}`}>
           {t.label}
         </span>
-        <SentimentSignals score={a.sentiment_score} influence={a.influence} />
+        <SentimentSignals score={a.sentiment_score} sentiment={a.sentiment} influence={a.influence} />
         <span className="min-w-0 truncate">{a.source || "—"}</span>
         {a.url && (
           <ExternalLink className="h-3.5 w-3.5 shrink-0 text-brand-muted-fg" />

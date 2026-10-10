@@ -58,8 +58,12 @@ export function DaySummaryPanel({ ticker, day, point, newsDay, newsDays }: Props
   // belongs to an earlier, settled day. The server is the authority on what counts as
   // still open; a client deciding separately would disagree with it for two hours
   // around midnight UTC.
+  //
+  // Only an answer that actually carries a paragraph counts. The server answers every
+  // empty case (summaries off, no news, a failed generation) with is_final false, and
+  // reading that as "still open" put "So far today" on days that ended long ago.
   const provisional =
-    summary && !carriedFrom ? !summary.is_final : day === todayKey();
+    summary?.summary && !carriedFrom ? !summary.is_final : day === todayKey();
 
   return (
     // The neon-lime border and forest-toned ground are the reasoning-trace boxes'

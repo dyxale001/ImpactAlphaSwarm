@@ -56,6 +56,85 @@ class RecommendationWriteConfig:
         )
 
 
+class CarriedNews:
+    """Restates a prior run's news for a run that found none of its own.
+
+    The carry-forward exists so a transient Finnhub failure does not blank an asset's
+    news until the next nightly. It used to carry whatever the last good row held with
+    no age limit, so articles weeks old appeared under a card that says "news from the
+    past 7 days", next to a news score computed when they were fresh.
+
+    Restating means three things. Only articles inside the news lookback survive, and
+    with none left there is nothing to carry. The news score and each article's
+    influence are recomputed from the survivors, through the same aggregator a run
+    uses, so the figures describe exactly the articles listed. And every article is
+    tagged ``carried_over`` with the day it was carried from, because this news was
+    NOT in the blended score: that was computed, ranked on and explained in the
+    reasoning trace before this writer ran. The card says so rather than implying a
+    blend that never happened.
+    """
+
+    def __init__(
+        self,
+        lookback_days: Optional[int] = None,
+        today: Optional[datetime.date] = None,
+    ) -> None:
+        from .ss_aggregation import SentimentAggregator
+        from .ss_config import SentimentConfig
+
+        config = SentimentConfig.from_env()
+        self.lookback_days = config.news_lookback_days if lookback_days is None else lookback_days
+        self.today = today
+        self.aggregator = SentimentAggregator(config)
+
+    def cutoff(self) -> str:
+        """The oldest day an article may carry, matching the Finnhub fetch window."""
+        today = self.today or datetime.datetime.now(datetime.timezone.utc).date()
+        return (today - datetime.timedelta(days=max(1, self.lookback_days))).isoformat()
+
+    def restate(self, prior: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The prior row's news, trimmed to the window and re-scored, or None."""
+        cutoff = self.cutoff()
+        kept = [
+            dict(article)
+            for article in prior.get("news_articles") or []
+            if isinstance(article, dict) and str(article.get("date") or "")[:10] >= cutoff
+        ]
+        if not kept:
+            return None
+
+        items = [
+            {
+                "sentiment_raw": max(-1.0, min(1.0, self._score(article) / 50.0 - 1.0)),
+                "tier": article.get("tier"),
+                "created_at": article.get("date"),
+            }
+            for article in kept
+        ]
+        signed = self.aggregator.aggregate_signed(items)
+        weights = self.aggregator.influence_weights(items)
+        carried_from = str(prior.get("created_at") or "")[:10] or None
+        for article, item in zip(kept, items):
+            article["influence"] = round(weights.get(id(item), 0.0) * 100, 1)
+            article["carried_over"] = True
+            article["carried_from"] = carried_from
+
+        return {
+            "news_articles": kept,
+            "news_count": len(kept),
+            "news_sentiment_score": int(round(max(0.0, min(1.0, (signed + 1.0) / 2.0)) * 100)),
+            "news_bullish": sum(1 for a in kept if a.get("sentiment") == "Positive"),
+            "news_bearish": sum(1 for a in kept if a.get("sentiment") == "Negative"),
+        }
+
+    @staticmethod
+    def _score(article: Dict[str, Any]) -> float:
+        try:
+            return float(article.get("sentiment_score"))
+        except (TypeError, ValueError):
+            return 50.0
+
+
 class RecommendationWriter:
     """Persists the ranked assets of one run for one user.
 
@@ -69,12 +148,14 @@ class RecommendationWriter:
         client: Any = None,
         prices: Any = None,
         config: Optional[RecommendationWriteConfig] = None,
+        carried_news: Optional[CarriedNews] = None,
     ) -> None:
         from .supabase_client import supabase, zar_prices
 
         self._client = supabase if client is None else client
         self._prices = zar_prices if prices is None else prices
         self._config = config or RecommendationWriteConfig.from_env()
+        self._carried_news = carried_news or CarriedNews()
 
     # -- public ------------------------------------------------------------
 
@@ -272,7 +353,7 @@ class RecommendationWriter:
                 self._client.table("ai_recommendation")
                 .select(
                     "asset_id,news_articles,news_count,"
-                    "news_sentiment_score,news_bullish,news_bearish"
+                    "news_sentiment_score,news_bullish,news_bearish,created_at"
                 )
                 .in_("asset_id", ids)
                 .gt("news_count", 0)
@@ -282,7 +363,7 @@ class RecommendationWriter:
             )
         except Exception as e:
             print(f"Batched prior-news lookup failed ({e}); falling back per asset")
-            return self._prior_news_individually(ids)
+            return self._restated(self._prior_news_individually(ids))
 
         # Rows arrive newest first, so the first sighting of an asset is its most
         # recent one -- the same row the per-asset query used to return.
@@ -291,7 +372,16 @@ class RecommendationWriter:
             asset_id = row.get("asset_id")
             if asset_id and asset_id not in latest:
                 latest[asset_id] = row
-        return latest
+        return self._restated(latest)
+
+    def _restated(self, latest: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """Each prior row trimmed to the news window; assets left with nothing drop out."""
+        restated: Dict[str, Dict[str, Any]] = {}
+        for asset_id, row in latest.items():
+            carried = self._carried_news.restate(row)
+            if carried is not None:
+                restated[asset_id] = carried
+        return restated
 
     def _prior_news_individually(self, ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
         from .supabase_client import get_last_news_for_asset
@@ -365,11 +455,10 @@ class RecommendationWriter:
                 if news["news_sentiment_score"] is not None
                 else (sentiment.get("sentiment_score") or 0)
             ),
-            "social_sentiment_score": int(
-                sentiment.get("social_sentiment_score")
-                or sentiment.get("sentiment_score")
-                or 0
-            ),
+            # Null when no posts were scored. The scorer reports 50 for an empty list so
+            # the blend has a number to fall back from, but stored that reads as a real
+            # neutral reading of chatter that never happened.
+            "social_sentiment_score": self._social_score(sentiment),
             "news_count": news["news_count"],
             "news_bullish": news["news_bullish"],
             "news_bearish": news["news_bearish"],
@@ -420,6 +509,13 @@ class RecommendationWriter:
             "news_bullish": int(sentiment.get("news_bullish") or 0),
             "news_bearish": int(sentiment.get("news_bearish") or 0),
         }
+
+    @staticmethod
+    def _social_score(sentiment: Dict[str, Any]) -> Optional[int]:
+        if int(sentiment.get("mention_count") or 0) <= 0:
+            return None
+        score = sentiment.get("social_sentiment_score")
+        return int(score) if score is not None else None
 
     @staticmethod
     def _top_social_posts(posts: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:

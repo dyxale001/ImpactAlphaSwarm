@@ -8,7 +8,7 @@ import {
 
 type SourceItem = {
   date?: string;
-  influence?: number;
+  influence?: number | null;
   sentiment?: string;
   sentiment_score?: number;
   tier?: number | null;
