@@ -76,6 +76,11 @@ export function WatchlistWidget({
 
   return (
     <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed text-brand-muted-fg">
+        Track any stock here, with a fortnight of price history on each —
+        watched stocks are included automatically in your next analysis run.
+      </p>
+
       {/* Above the list, and outside every empty and loading branch below: the
           way out of an empty watchlist is the same control as the way to grow
           a full one, so it is always the first thing in the widget. Panelled
@@ -95,9 +100,6 @@ export function WatchlistWidget({
           searchLoading={searchLoading}
           onAdd={addToWatchlist}
         />
-        <p className="text-[11px] leading-relaxed text-brand-muted-fg">
-          Anything you add is included in your next analysis run.
-        </p>
       </div>
 
       {loading ? (
