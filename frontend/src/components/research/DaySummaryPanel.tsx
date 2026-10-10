@@ -30,12 +30,21 @@ interface Props {
   point?: SentimentHistoryPoint;
   /** That day's news, when the chart has a news series. */
   newsDay?: NewsDay;
+  /** Every day of the chart's news series, to check what the empty state claims. */
+  newsDays?: Map<string, NewsDay>;
 }
 
-export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
+export function DaySummaryPanel({ ticker, day, point, newsDay, newsDays }: Props) {
   const { summary, isLoading, error } = useDayDrivers(ticker, day);
 
   if (!day) return null;
+
+  // Whether the chart holds no news at all on or before this day. Only then is it true
+  // that there was nothing to explain; an empty answer otherwise means the paragraph
+  // has not been written yet, or failed, and the panel must not claim more than that.
+  const noNewsUpToDay =
+    newsDays !== undefined &&
+    ![...newsDays.values()].some((d) => d.date <= day && d.count > 0);
 
   const verdict = sentimentVerdict(point?.score ?? null);
   // Many tickers go days without an article. On such a day the server answers with the
@@ -130,7 +139,7 @@ export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
           </>
         ) : (
           <p className="text-sm text-brand-muted-fg italic">
-            {newsDay && newsDay.count === 0
+            {noNewsUpToDay
               ? `No news articles in the last ${SOCIAL_HISTORY_DAYS} days up to this day, so there is nothing to explain.`
               : "Not available for this day yet."}
           </p>
@@ -161,7 +170,9 @@ function DayFigures({
     parts.push(point.post_count === 1 ? "1 post" : `${point.post_count} posts`);
   }
   if (newsDay?.score != null) {
-    parts.push(`news ${newsDay.score}`);
+    // Rounded: the stored series is whole numbers already, but the fallback derived on
+    // the client from the article list is a weighted mean with every decimal it has.
+    parts.push(`news ${Math.round(newsDay.score)}`);
   }
   if (newsDay) {
     parts.push(newsDay.count === 1 ? "1 article" : `${newsDay.count} articles`);

@@ -4486,20 +4486,36 @@ async def get_sentiment_history(ticker: str, days: int = 7):
     # Scheduled, not awaited. create_task queues the walk on the event loop and this
     # handler returns immediately; the loop only picks the task up once the response is
     # on its way, which is the same fire and forget shape start_analysis uses.
+    #
+    # Only for something shaped like a ticker. The endpoint is unauthenticated, and
+    # without this any string at all started a StockTwits walk on the limiter the runs
+    # share and left a "walked" row behind for it.
     seeding = False
     try:
         backfiller = _social_backfiller()
-        if backfiller.enabled:
+        if backfiller.enabled and _SEEDABLE_TICKER_RE.fullmatch(symbol):
             walked = await loop.run_in_executor(
                 None, backfiller.history.is_seeded, symbol
             )
             if not walked:
-                asyncio.create_task(_seed_job(symbol))
+                task = asyncio.create_task(_seed_job(symbol))
+                # The event loop keeps only a weak reference to a task, so one nobody
+                # holds can be collected part way through its walk.
+                _SEED_TASKS.add(task)
+                task.add_done_callback(_SEED_TASKS.discard)
                 seeding = True
     except Exception as exc:
         logger.info("Seed check failed for %s: %s", symbol, exc)
 
     return {"ticker": symbol, "points": points, "seeding": seeding}
+
+
+#: What a lazy seed will walk: a US listing's symbol, optionally with a class suffix
+#: (BRK.B, BF-B). Everything else gets its stored history and no walk.
+_SEEDABLE_TICKER_RE = re.compile(r"[A-Z]{1,5}(?:[.\-][A-Z]{1,2})?")
+
+#: Seed tasks in flight, held so they are not collected before they finish.
+_SEED_TASKS: set = set()
 
 
 async def _seed_job(symbol: str) -> None:

@@ -1192,7 +1192,11 @@ class SentimentHistoryRepository(Repository):
     from "how did the ranking go", and the tables are a different concern.
     """
 
-    TABLES = ("social_sentiment_daily", "news_sentiment_daily")
+    #: Each table, with the count column that says a row actually holds something.
+    TABLES = (
+        ("social_sentiment_daily", "post_count"),
+        ("news_sentiment_daily", "article_count"),
+    )
 
     def last_updated(self) -> Optional[str]:
         """When sentiment data was last written, across every ticker.
@@ -1209,15 +1213,22 @@ class SentimentHistoryRepository(Repository):
         identically to this one on any deployment with more than a handful of users, for the
         cost of a second parameter and a join this page does not otherwise need.
 
+        Only rows that hold something count. A seed that walks a ticker and finds nothing
+        still writes a row, to record that it was walked, and that bookkeeping is not
+        sentiment arriving. Without this filter, opening the chart for a ticker nobody posts
+        about, or for a string that is not a ticker at all, moved every user's "Sentiment
+        updated" to just now.
+
         Returns ``None`` on any failure or when both tables are empty, which the caller shows
         as "unknown" rather than a wrong guess.
         """
         try:
             latest: Optional[str] = None
-            for table in self.TABLES:
+            for table, count_column in self.TABLES:
                 rows = (
                     self.table(table)
                     .select("updated_at")
+                    .gt(count_column, 0)
                     .order("updated_at", desc=True)
                     .limit(1)
                     .execute()

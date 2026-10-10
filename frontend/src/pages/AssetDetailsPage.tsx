@@ -761,6 +761,7 @@ export default function AssetDetailsPage() {
                     day={activeDay}
                     point={activePoint}
                     newsDay={newsDays.get(activeDay)}
+                    newsDays={newsDays}
                   />
                 )}
               </div>

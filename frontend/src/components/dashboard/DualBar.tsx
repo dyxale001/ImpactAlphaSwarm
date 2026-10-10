@@ -1,3 +1,5 @@
+import { ordinal } from "../research/QuantMetricsPanel";
+
 /**
  * Sentiment tone + quant position.
  *
@@ -67,21 +69,33 @@ export default function DualBar({
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
               <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
                 A measure of market mood from trusted news articles and social
-                posts. Higher means the tone of that coverage is more positive. It
-                describes what is being said, not what will happen.
+                posts, from 0 to 100. 50 is neutral: above it the coverage reads
+                positive, below it negative. It describes what is being said, not
+                what will happen.
               </div>
             </div>
           </span>
+          {/* Out of 100, not a percentage: the scale's meaningful point is 50, and
+              "62%" reads as "62 per cent positive", which is not what it measures. */}
           <span
             className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
           >
-            {sentimentScore}%
+            {sentimentScore} / 100
           </span>
         </div>
-        <div className={`h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
+        {/* The tick at 50 is neutral. Without it a fill reaching just past halfway
+            reads as middling, when it is in fact on the positive side. */}
+        <div className={`relative h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
           <div
             className={`h-full ${fillTone}`}
             style={{ width: `${sentimentScore}%` }}
+          />
+          <div
+            aria-hidden
+            title="Neutral 50"
+            className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${
+              onDark ? "bg-white/60" : "bg-brand-fg/40"
+            }`}
           />
         </div>
       </div>
@@ -106,7 +120,7 @@ export default function DualBar({
             className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
           >
             {hasPercentile
-              ? `${Math.round(quantPercentile as number)}th percentile`
+              ? `${ordinal(Math.round(quantPercentile as number))} percentile`
               : `${quantitativeScore}%`}
           </span>
         </div>

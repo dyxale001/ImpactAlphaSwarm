@@ -27,7 +27,6 @@ import FundDetailPage from "./pages/FundDetail";
 import AdminFunds from "./pages/AdminFunds";
 import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
-import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
 import PortfolioPage from "./pages/Portfolio";
@@ -98,7 +97,10 @@ export default function App() {
           {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
           {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
           <Route path="/learning" element={<LearningPage />} />
-          <Route path="/research" element={<ResearchPage />} />
+          {/* Retired: it only ever rendered mock data (a hard-coded NVDA sentiment
+              report), which a reader could not tell from the real thing. Kept as a
+              redirect so an old bookmark lands somewhere real. */}
+          <Route path="/research" element={<Navigate to="/dashboard" replace />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/ask" element={<AskAlphaSwarmPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
