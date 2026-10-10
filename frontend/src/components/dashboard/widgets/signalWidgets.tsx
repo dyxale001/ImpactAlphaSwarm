@@ -185,7 +185,7 @@ export function ShortlistWidget({ size }: WidgetProps) {
   if (isLoadingRecs) return <WidgetLoading rows={4} />;
   if (isRunInProgress) {
     return (
-      <WidgetEmpty message="An analysis run is in progress. Your shortlist appears here as soon as it lands." />
+      <WidgetEmpty dark message="An analysis run is in progress. Your shortlist appears here as soon as it lands." />
     );
   }
   if (!topPick) return <NoRunYet />;

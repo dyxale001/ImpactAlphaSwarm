@@ -9,6 +9,7 @@ export function WidgetEmpty({
   message,
   action,
   grow = false,
+  dark = false,
 }: {
   message: string;
   action?: ReactNode;
@@ -22,14 +23,18 @@ export function WidgetEmpty({
    * should stay the size of its message.
    */
   grow?: boolean;
+  /** Slightly stronger border/text contrast, for a box that otherwise reads
+   *  too faint against its surroundings. Opt-in so every other empty state
+   *  keeps its normal, lighter weight. */
+  dark?: boolean;
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-accent px-4 py-8 text-center ${
-        grow ? "flex-1" : ""
-      }`}
+      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-8 text-center ${
+        dark ? "border-brand-accent/80 bg-brand-fg/[0.03]" : "border-brand-accent"
+      } ${grow ? "flex-1" : ""}`}
     >
-      <p className="text-xs text-brand-muted-fg leading-relaxed max-w-xs">
+      <p className={`text-xs leading-relaxed max-w-xs ${dark ? "text-brand-fg/80" : "text-brand-muted-fg"}`}>
         {message}
       </p>
       {action}

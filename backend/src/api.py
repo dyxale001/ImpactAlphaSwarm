@@ -808,9 +808,9 @@ class AskResponse(BaseModel):
 
 
 _ASK_REDIRECT_SUGGESTIONS = [
-    "Show me technology assets in my universe",
+    "Compare AAPL and GOOGL",
     "Tell me about NVDA",
-    "What is RSI?",
+    "How does AlphaSwarm work?",
 ]
 
 _ASK_NO_ADVICE_MESSAGE = (
@@ -861,9 +861,11 @@ _ASK_PERSONAL_FINANCE_PATTERN = re.compile(
     r"\b("
     r"roth\s+ira|traditional\s+ira|401\s*\(?k\)?|ira\s+withdrawal|"
     r"pension\s+withdrawal|retirement\s+account|retirement\s+plan(?:ning)?|"
-    r"retirement\s+annuity|tfsa|tax[- ]free\s+savings\s+account|"
+    r"retirement\s+annuity|"
     r"tax\s+deduction|tax\s+bracket|avoid\s+taxes|tax[- ]free\s+withdrawal|"
     r"my\s+tax\b|tax\s+on\s+my\b|"
+    r"my\s+tfsa|tfsa\s+withdrawal|tfsa\s+contribution|"
+    r"my\s+tax[- ]free\s+savings\s+account|"
     r"pay\s+off\s+(?:my\s+)?debt|credit[- ]card\s+debt|"
     r"my\s+(?:personal\s+)?(?:situation|circumstances)|"
     r"my\s+portfolio\s+allocation|allocation\s+for\s+my\s+portfolio|"
@@ -988,7 +990,30 @@ _PLATFORM_NOT_A_BROKER = (
 # address the question at all) — each entry here is still a fixed, reviewed
 # string (never LLM-generated), just chosen by keyword match against the
 # actual question instead of being the same string unconditionally.
+_PLATFORM_FUNDS_CATALOGUE = (
+    "AlphaSwarm's fund catalogue covers South African unit trusts and JSE-listed ETFs. "
+    "Each fund's figures come from its official Minimum Disclosure Document (MDD) — the "
+    "fact sheet every such fund must publish — entered and reviewed by AlphaSwarm's admin "
+    "team, not scraped or AI-extracted. A fact sheet older than 45 days is shown as ageing "
+    "and over 90 days as out of date, but a fund is never hidden just for being stale — "
+    "only a retired fund is. AlphaSwarm does not recommend or pick a fund for you; it shows "
+    "the data (objective, risk rating, costs, allocation, benchmark, performance, TFSA "
+    "eligibility) so you can decide."
+)
+
+# Checked BEFORE the generic data-sources pattern below: "where does fund
+# data come from" would otherwise match that pattern's "where"+"data"
+# lookahead first and get the generic Finnhub/yfinance/StockTwits answer,
+# which says nothing about funds specifically.
 _PLATFORM_TOPIC_PATTERNS: tuple[tuple["re.Pattern[str]", Any], ...] = (
+    (
+        re.compile(
+            r"\bfund\s+catalogue|funds?\s+page|funds?\s+(?:section|tab)\b|"
+            r"\bhow\s+(?:do|does)\s+funds?\b|\bfund\s+data\b",
+            re.IGNORECASE,
+        ),
+        lambda: _PLATFORM_FUNDS_CATALOGUE,
+    ),
     (
         re.compile(r"\bdescription|longbusinesssummary|business\s+summary\b", re.IGNORECASE),
         lambda: _PLATFORM_DESCRIPTIONS,
@@ -1229,47 +1254,6 @@ def _classify_ask_intent(query: str) -> str:
     except Exception as e:
         logger.warning("Ask intent classification failed: %s", e)
         return "CLASSIFIER_UNAVAILABLE"
-
-
-def _rephrase_unclear_ask_query(query: str) -> Optional[str]:
-    """One bounded attempt to recognise a genuinely-meant question that just
-    didn't match AlphaSwarm's expected phrasing — e.g. a colloquial or
-    indirect wording the classifier didn't map to any supported intent.
-
-    Zero new hallucination surface: this model call is NEVER shown any
-    AlphaSwarm data and is explicitly forbidden from adding a fact, number,
-    or assumption — its only job is to restate the SAME question more
-    explicitly, in AlphaSwarm's own vocabulary. It cannot invent an answer;
-    it can only change whether the EXISTING deterministic retrieval/
-    validation pipeline downstream recognises what the user meant. The
-    rewritten text still has to pass the same safety gates and the same
-    classifier as any other query — see its one call site — so this cannot
-    be used to sneak advice-shaped phrasing past the blocklist either.
-    Returns None (never retries, never loops) on any failure, or when the
-    model itself says the question doesn't fit."""
-    client = _get_ask_intent_client()
-    if client is None:
-        return None
-    prompt = (
-        "A user asked an investing-platform assistant a question, but it "
-        "wasn't recognised. Restate the SAME question, meaning nothing "
-        "added or changed, as one clear sentence using plain, explicit "
-        "wording — e.g. naming the asset, metric, or topic directly instead "
-        "of an indirect or colloquial phrasing. Do not answer the question. "
-        "Do not add any fact, number, or assumption not already in the "
-        "question. If the question is already clear, or doesn't plausibly "
-        "concern a specific asset, a watchlist, a market/finance concept, "
-        "or how this platform's analysis works, reply with exactly: NONE\n\n"
-        f"Question: {query}\nRestated question or NONE:"
-    )
-    try:
-        out = client.complete(prompt).strip()
-    except Exception as e:
-        logger.warning("Ask unclear-query rephrase failed: %s", e)
-        return None
-    if not out or out.upper().startswith("NONE"):
-        return None
-    return out.strip().strip('"')
 
 
 def _format_price(value: float, currency: str) -> str:
@@ -1583,7 +1567,7 @@ def _narrate_ask(
         "information. Only mention a metric if it actually contributes to that "
         "explanation — do not list metrics that add nothing. HOWEVER, for a "
         "general 'tell me about X' style question where several metrics are "
-        "present in the data (e.g. RSI, beta, sentiment, confidence score, "
+        "present in the data (e.g. RSI, beta, sentiment, Signal Score, "
         "rank), do not collapse the answer down to price alone — mention at "
         "least two or three of the most relevant signals, each briefly "
         "explained in plain terms, not just a single number.\n"
@@ -1664,6 +1648,52 @@ def _narrate_ask(
     return _fallback()
 
 
+_ASK_MY_UNIVERSE_PATTERN = re.compile(r"\bmy\s+(?:universe|watchlist)\b", re.IGNORECASE)
+
+
+def _merge_assets_by_ticker(*asset_lists: list) -> list[dict]:
+    """Combine asset dict lists into one, MERGING fields (not overwriting)
+    when the same ticker appears in more than one list.
+
+    Root-cause bug this fixes: a watchlisted asset that was ALSO in the
+    latest run's top picks appeared in both the watchlist list (which
+    carries name/universe/current_price) and the top_picks list (which
+    carries only ai_recommendation fields, no price) — naively
+    concatenating them let the sparser top_picks dict silently clobber the
+    richer watchlist dict for that ticker in the validator's by-ticker map,
+    so a perfectly true price claim ("AAPL current price=5554") came back
+    as MISSING_DATA_CLAIM and the whole answer was rejected. Merging
+    instead of concatenating means neither list can erase the other's
+    fields for a shared ticker."""
+    merged: dict[str, dict] = {}
+    for assets in asset_lists:
+        for a in assets:
+            ticker = a.get("ticker") if isinstance(a, dict) else None
+            if not ticker:
+                continue
+            merged[ticker] = {**merged.get(ticker, {}), **a}
+    return list(merged.values())
+
+# Structural guard against the WHOLE CLASS of bug "technology"/"on"/"S&P 500"
+# each were one instance of: a query that is clearly asking about a
+# COLLECTION the user owns (their universe, watchlist, portfolio, holdings)
+# has no business being matched to a SPECIFIC company by an incidental
+# shared word — "technology" in "Micron Technology Inc", "on" in "assets ON
+# my watchlist". Those were fixed one collision at a time as each was
+# found, which only ever catches collisions already seen; this fixes the
+# SHAPE instead: when the query is possessive about a collection it owns,
+# the risky company-NAME-word match (free-text English words against
+# company names, the actual source of every collision so far) is skipped
+# entirely — ticker-token matching (explicit "AAPL"/"MSFT" etc., never
+# ambiguous with an ordinary word) still runs, so "is AAPL on my watchlist"
+# still resolves AAPL. A FUTURE sector/category word colliding with some
+# future company's name is caught by this without needing its own patch.
+_ASK_COLLECTION_PHRASING_PATTERN = re.compile(
+    r"\bmy\s+(?:universe|watchlist|portfolio|holdings|assets|stocks)\b",
+    re.IGNORECASE,
+)
+
+
 def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
     """Deterministic asset search. Respects the user's investment universe when
     it can be inferred from their saved preferences (user_analysis).
@@ -1706,8 +1736,34 @@ def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
                 raw = []
         universes = raw or []
 
-    q = supabase.table("assets").select("ticker,name,universe,current_price")
     matched_universe = next((u for u in universes if u.lower() in query.lower()), None)
+
+    # "in MY universe"/"my watchlist" means the user's own tracked assets —
+    # root-cause bug this fixes: this whole function used to query only
+    # AlphaSwarm's GLOBAL asset pool for the matched sector, so "show me
+    # technology assets in my universe" returned up to 5 arbitrary platform-
+    # wide tech assets (whichever rows the query happened to return first)
+    # instead of the user's own tracked assets — even when NONE of those
+    # global picks were anything the user had ever added. Checked first, and
+    # only acted on when it actually finds something: an empty watchlist (or
+    # one with nothing in the named sector) falls through unchanged to the
+    # platform-wide behaviour below, exactly as before this existed.
+    if _ASK_MY_UNIVERSE_PATTERN.search(query):
+        watchlist_resp = (
+            supabase.table("user_watchlist_assets").select("ticker").eq("user_id", user_id).execute()
+        )
+        watchlist_tickers = [r["ticker"] for r in (watchlist_resp.data or []) if r.get("ticker")]
+        if watchlist_tickers:
+            wq = supabase.table("assets").select("ticker,name,universe,current_price").in_(
+                "ticker", watchlist_tickers
+            )
+            if matched_universe:
+                wq = wq.eq("universe", matched_universe)
+            watchlist_assets = wq.execute().data or []
+            if watchlist_assets:
+                return {"assets": watchlist_assets}, "user_data"
+
+    q = supabase.table("assets").select("ticker,name,universe,current_price")
     if matched_universe:
         q = q.eq("universe", matched_universe)
     elif universes:
@@ -1718,14 +1774,47 @@ def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
 
 
 def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
-    """Deterministic retrieval of the user's own watchlist + latest run top picks."""
+    """Deterministic retrieval of the user's own watchlist + latest run top
+    picks.
+
+    Root-cause bug this fixes: `watchlist` used to be a bare list of ticker
+    STRINGS (no price, no universe, no metrics at all), and `top_picks` was
+    the run's GLOBAL top 5 by rank — not filtered to the user's watchlist at
+    all, and carrying only `rank` even though confidence_score was fetched
+    and then silently dropped. So "tell me about my watchlist" hands the
+    narrator a full ticker list with nothing to say about most of them, plus
+    an unrelated top-5 that happens to overlap on only whichever tickers
+    both lists share — which is exactly why a user with, say, 6 watchlisted
+    assets was told about only 3, with no metrics: those were the ones that
+    happened to ALSO be in the global top 5, and `rank` was the only field
+    that survived. Every watchlisted ticker that was actually scored in the
+    latest run (regardless of its global rank) now carries its real metrics;
+    `top_picks` is kept separately, unchanged, for "what's my latest
+    analysis" style questions."""
     watchlist_resp = (
         supabase.table("user_watchlist_assets")
-        .select("ticker")
+        .select("ticker,asset_id")
         .eq("user_id", user_id)
         .execute()
     )
-    watchlist = [r["ticker"] for r in (watchlist_resp.data or []) if r.get("ticker")]
+    watchlist_rows = watchlist_resp.data or []
+    watchlist_tickers = [r["ticker"] for r in watchlist_rows if r.get("ticker")]
+    watchlist_asset_ids = [r["asset_id"] for r in watchlist_rows if r.get("asset_id")]
+
+    # Basic info (name/universe/price) for every watchlisted asset, whether
+    # or not it was ever analysed.
+    asset_info_by_ticker: dict = {}
+    if watchlist_asset_ids:
+        assets_resp = (
+            supabase.table("assets").select("id,ticker,name,universe,current_price")
+            .in_("id", watchlist_asset_ids).execute()
+        )
+        for a in assets_resp.data or []:
+            if a.get("ticker"):
+                asset_info_by_ticker[a["ticker"]] = {
+                    "name": a.get("name"), "universe": a.get("universe"),
+                    "current_price": _valid_price(a.get("current_price")),
+                }
 
     run_resp = (
         supabase.table("ai_runs")
@@ -1738,14 +1827,17 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
     )
     run_rows = run_resp.data or []
     top_picks = []
+    metrics_by_ticker: dict = {}
     if run_rows:
         run_id = run_rows[0]["id"]
         recs_resp = (
             supabase.table("ai_recommendation")
-            .select("asset_id,rank,confidence_score")
+            .select(
+                "asset_id,rank,confidence_score,sentiment_score,quant_score,"
+                "rsi,beta,sharpe_ratio,volatility,macd,signal_strength,convergence"
+            )
             .eq("run_id", run_id)
             .order("rank", desc=False)
-            .limit(5)
             .execute()
         )
         recs = recs_resp.data or []
@@ -1754,11 +1846,20 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
         if asset_ids:
             assets_resp = supabase.table("assets").select("id,ticker").in_("id", asset_ids).execute()
             asset_map = {a["id"]: a["ticker"] for a in (assets_resp.data or [])}
+        for r in recs:
+            ticker = asset_map.get(r["asset_id"])
+            if not ticker:
+                continue
+            metrics_by_ticker[ticker] = {k: v for k, v in r.items() if k != "asset_id"}
         top_picks = [
-            {"ticker": asset_map.get(r["asset_id"], ""), "rank": r["rank"]}
-            for r in recs
-            if asset_map.get(r["asset_id"])
+            metrics_by_ticker[t] | {"ticker": t} for t in list(metrics_by_ticker)[:5]
+            if metrics_by_ticker[t]["rank"] <= 5
         ]
+
+    watchlist = [
+        {"ticker": t, **asset_info_by_ticker.get(t, {}), **metrics_by_ticker.get(t, {})}
+        for t in watchlist_tickers
+    ]
 
     return {"watchlist": watchlist, "top_picks": top_picks}, "user_data"
 
@@ -1786,6 +1887,31 @@ _ASSET_ALIASES: dict[str, tuple[str, ...]] = {
 _NAME_STOPWORDS = {
     "inc", "incorporated", "corp", "corporation", "ltd", "co", "plc",
     "company", "group", "holdings", "the", "class", "and", "one",
+    # AlphaSwarm's own investment-universe/sector category words (see
+    # asset_discovery.py's UNIVERSES) — excluded for the same reason as the
+    # corporate suffixes above: "technology" is a literal word in company
+    # names like "Micron Technology Inc" and "Marvell Technology Inc", so
+    # "Show me technology assets in my universe" matched THOSE names on the
+    # word "technology" and returned them as explicitly-named companies,
+    # short-circuiting _ask_asset_search before it ever reached the actual
+    # universe-filter branch — the user's real universe (their watchlist's
+    # sector) was never consulted. A sector word must never, by itself,
+    # resolve to a specific company.
+    "technology", "healthcare", "finance", "energy", "robotics",
+    "communications", "media",
+    # Ordinary English words found, by auditing the live `assets` table,
+    # to be the ONE distinguishing word in exactly one company's name —
+    # the same false-positive shape as "technology", just not sector words
+    # this time: "first" matches First Solar (FSLR), "financial" matches
+    # Capital One Financial (COF), "products" matches Mueller Water
+    # Products (MWA), and so on. Each is common enough to appear in an
+    # entirely unrelated sentence ("my first stock", "financial advice",
+    # "security concerns", "the national economy") and, unlike a tied
+    # match, a SINGLE distinguishing word resolves with no ambiguity
+    # check to catch it — exactly the mechanism that let "on" resolve to
+    # ON Semiconductor and "technology" to Micron Technology.
+    "first", "financial", "products", "utilities", "national", "security",
+    "west", "states", "mills", "run", "materials", "information",
 }
 
 
@@ -1982,31 +2108,35 @@ def _resolve_asset(query: str) -> Optional[dict]:
     # the full name as a substring (the old approach) missed "Tell me about
     # NVIDIA" against a stored name like "NVIDIA Corporation" — the query
     # never contains "corporation". Longest matching word wins.
-    q_words = set(re.findall(r"\b[a-z]+\b", query.lower()))
-    best_assets: list[dict] = []
-    best_len = 0
-    for asset in assets:
-        asset_best = 0
-        for word in re.findall(r"\b[a-z]+\b", (asset.get("name") or "").lower()):
-            if word in _NAME_STOPWORDS or len(word) < 3:
+    #
+    # Skipped entirely for collection-shaped phrasing ("my watchlist", "my
+    # universe") — see _ASK_COLLECTION_PHRASING_PATTERN's own comment.
+    if not _ASK_COLLECTION_PHRASING_PATTERN.search(query):
+        q_words = set(re.findall(r"\b[a-z]+\b", query.lower()))
+        best_assets: list[dict] = []
+        best_len = 0
+        for asset in assets:
+            asset_best = 0
+            for word in re.findall(r"\b[a-z]+\b", (asset.get("name") or "").lower()):
+                if word in _NAME_STOPWORDS or len(word) < 3:
+                    continue
+                if word in q_words and len(word) > asset_best:
+                    asset_best = len(word)
+            if asset_best == 0:
                 continue
-            if word in q_words and len(word) > asset_best:
-                asset_best = len(word)
-        if asset_best == 0:
-            continue
-        if asset_best > best_len:
-            best_assets, best_len = [asset], asset_best
-        elif asset_best == best_len:
-            best_assets.append(asset)
+            if asset_best > best_len:
+                best_assets, best_len = [asset], asset_best
+            elif asset_best == best_len:
+                best_assets.append(asset)
 
-    # Two or more DIFFERENT assets tied on the strongest match word — the
-    # name reference is genuinely ambiguous in this universe. Ask, don't
-    # guess: returning the first of two equally-good matches would silently
-    # pick the wrong company as often as the right one.
-    if len(best_assets) == 1:
-        return best_assets[0]
-    if best_assets:
-        return None
+        # Two or more DIFFERENT assets tied on the strongest match word — the
+        # name reference is genuinely ambiguous in this universe. Ask, don't
+        # guess: returning the first of two equally-good matches would silently
+        # pick the wrong company as often as the right one.
+        if len(best_assets) == 1:
+            return best_assets[0]
+        if best_assets:
+            return None
 
     # Last resort: a single, obvious one-edit ticker typo ("NDVA" for
     # "NVDA" — an adjacent-letter transposition). Only fires when exactly
@@ -2075,16 +2205,19 @@ def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
         if ticker and ticker in tokens:
             found[asset["id"]] = asset
 
-    q_words = set(re.findall(r"\b[a-z]+\b", query.lower()))
-    for asset in assets:
-        if asset["id"] in found:
-            continue
-        for word in re.findall(r"\b[a-z]+\b", (asset.get("name") or "").lower()):
-            if word in _NAME_STOPWORDS or len(word) < 3:
+    # Skipped entirely for collection-shaped phrasing — see
+    # _ASK_COLLECTION_PHRASING_PATTERN's own comment.
+    if not _ASK_COLLECTION_PHRASING_PATTERN.search(query):
+        q_words = set(re.findall(r"\b[a-z]+\b", query.lower()))
+        for asset in assets:
+            if asset["id"] in found:
                 continue
-            if word in q_words:
-                found[asset["id"]] = asset
-                break
+            for word in re.findall(r"\b[a-z]+\b", (asset.get("name") or "").lower()):
+                if word in _NAME_STOPWORDS or len(word) < 3:
+                    continue
+                if word in q_words:
+                    found[asset["id"]] = asset
+                    break
 
     return list(found.values())[:limit]
 
@@ -2109,6 +2242,15 @@ _FUND_METRIC_KEYWORDS: dict[str, tuple[str, str]] = {
     "min lump sum": ("min_lump_sum", "minimum lump sum"),
     "min investment": ("min_lump_sum", "minimum lump sum"),
     "debit order": ("min_debit_order", "minimum monthly debit order"),
+    "performance": ("performance", "performance history"),
+    "return": ("performance", "performance history"),
+    "top holding": ("top_holdings", "top holdings"),
+    "holdings": ("top_holdings", "top holdings"),
+    "allocation": ("asset_allocation", "asset allocation"),
+    "tfsa": ("tfsa_eligible", "TFSA eligibility"),
+    "manco": ("manco", "management company"),
+    "management company": ("manco", "management company"),
+    "fund house": ("fund_house", "fund house"),
 }
 
 
@@ -2123,7 +2265,8 @@ def _resolve_fund(query: str) -> Optional[dict]:
     if not FUNDS_ENABLED:
         return None
     try:
-        from src.funds.repository import FundRepository
+        if FUNDS_ENABLED:
+            from src.funds.repository import FundRepository
         funds = FundRepository().list_active()
     except Exception as e:
         logger.warning("Ask fund resolution failed to load catalogue: %s", e)
@@ -2137,21 +2280,42 @@ def _resolve_fund(query: str) -> Optional[dict]:
         if code and code in tokens:
             return fund
 
-    q_words = set(re.findall(r"\b[a-z]+\b", query.lower()))
+    # Root-cause bug this fixes: scoring by the single LONGEST shared word
+    # (as _resolve_asset does for companies) breaks down for fund families —
+    # "Coronation Balanced Plus Fund" and "Coronation Strategic Income Fund"
+    # both share "coronation" as their longest word, so "tell me about
+    # Coronation Balanced Plus Fund" tied 1-for-1 and gave up, even though
+    # "balanced" and "plus" in the question clearly pick one. Funds use the
+    # TOTAL overlap (sum of every matching significant word's length)
+    # instead — asset/company resolution keeps the single-longest-word rule
+    # unchanged, since company names rarely share a family prefix the way
+    # fund houses' product lines do.
+    #
+    # Second bug: [a-z]+ never matches a digit, so "Satrix 40 ETF" vs
+    # "Satrix MSCI World Feeder ETF" tied on "satrix" alone — the "40" that
+    # actually distinguishes it was invisible to the matcher. [a-z0-9]+
+    # captures it, and a pure-digit token (a share-class/index number, not
+    # an ordinary short word) gets a flat weight high enough to decide a
+    # tie on its own rather than being discarded by the length filter.
+    q_words = set(re.findall(r"\b[a-z0-9]+\b", query.lower()))
     best_funds: list[dict] = []
-    best_len = 0
+    best_score = 0
     for fund in funds:
-        fund_best = 0
-        for word in re.findall(r"\b[a-z]+\b", (fund.get("name") or "").lower()):
+        score = 0
+        for word in re.findall(r"\b[a-z0-9]+\b", (fund.get("name") or "").lower()):
+            if word.isdigit():
+                if word in q_words:
+                    score += 20
+                continue
             if word in _NAME_STOPWORDS or word in ("fund", "trust", "unit", "etf") or len(word) < 4:
                 continue
-            if word in q_words and len(word) > fund_best:
-                fund_best = len(word)
-        if fund_best == 0:
+            if word in q_words:
+                score += len(word)
+        if score == 0:
             continue
-        if fund_best > best_len:
-            best_funds, best_len = [fund], fund_best
-        elif fund_best == best_len:
+        if score > best_score:
+            best_funds, best_score = [fund], score
+        elif score == best_score:
             best_funds.append(fund)
 
     if len(best_funds) == 1:
@@ -2163,8 +2327,13 @@ def _fund_answer(fund: dict, query: str) -> AskResponse:
     """Grounded answer about one resolved fund — either the single metric
     asked about, or a short factual overview when none is named. Only ever
     states fields actually present on the row; a missing figure is reported
-    as missing, never inferred or estimated."""
-    from src.funds.repository import FundRepository
+    as missing, never inferred or estimated. Only ever called after
+    _resolve_fund has already confirmed FUNDS_ENABLED (it returns None
+    otherwise), but re-checked here too since this import must sit behind
+    the same static flag guard as every other funds import in this file."""
+    from src.funds.config import FUNDS_ENABLED
+    if FUNDS_ENABLED:
+        from src.funds.repository import FundRepository
     name = fund.get("name") or "This fund"
     snapshot: dict = {}
     try:
@@ -3034,14 +3203,19 @@ _ASK_GLOSSARY = {
     "data sufficiency": "Data sufficiency reflects how much evidence — news articles, social posts, price history — backs an asset's analysis. Thin coverage lowers this term.",
     "profile fit": "Profile fit reflects how well an asset's market exposure (beta) matches your stated risk tolerance. It only ever demotes a mismatch, never boosts a score.",
     "sentiment score": "The sentiment score blends news sentiment (weighted higher) and social sentiment (StockTwits) into a single 0-100 reading of tone, not a price forecast.",
-    "confidence score": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
-    "confidence": "The confidence score is AlphaSwarm's disclosed four-factor composite — signal strength, convergence, data sufficiency, and profile fit multiplied together — describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
+    "confidence score": "AlphaSwarm now shows this as the Signal Score rather than a \"confidence score\" — a disclosed four-factor composite (signal strength, convergence, data sufficiency, and profile fit multiplied together) describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
+    "confidence": "AlphaSwarm now shows this as the Signal Score rather than a \"confidence score\" — a disclosed four-factor composite (signal strength, convergence, data sufficiency, and profile fit multiplied together) describing how strongly and reliably the current data supports an asset's ranking. It is not a prediction or a guarantee.",
     "quant score": "The quant score is AlphaSwarm's quantitative (price-data-based) signal for an asset, before it's blended with sentiment — a measurement derived from price history, not a prediction.",
     "quant position": "Quant Position (shown as \"Quant Position vs Peers\") is where an asset's price-based measurements — momentum, risk-adjusted return, and stability — sit relative to the other assets analysed in the same run, expressed as a percentile from 0-100. A 70th percentile quant position means the asset's average of those three measurements ranked higher than about 70% of the candidates in that run. It is a factual position among today's candidates, not a quality rating or a forecast, and RSI/beta are deliberately excluded from it.",
     "quant lean": "Quant Position (shown as \"Quant Position vs Peers\") is where an asset's price-based measurements — momentum, risk-adjusted return, and stability — sit relative to the other assets analysed in the same run, expressed as a percentile from 0-100. A 70th percentile quant position means the asset's average of those three measurements ranked higher than about 70% of the candidates in that run. It is a factual position among today's candidates, not a quality rating or a forecast, and RSI/beta are deliberately excluded from it.",
-    "rank": "Rank is an asset's position in AlphaSwarm's most recent ranked run, ordered by its confidence score — 1 is the highest-ranked asset in that run. It reflects the current data, not a forecast.",
+    "rank": "Rank is an asset's position in AlphaSwarm's most recent ranked run, ordered by its Signal Score — 1 is the highest-ranked asset in that run. It reflects the current data, not a forecast.",
     "price": "An asset's current price, as last recorded by AlphaSwarm — the capital needed for one whole share, always quoted in South African Rand (ZAR). Not a measure of investment quality by itself.",
     "institutional ownership": "Institutional ownership shows what share of a company is held by large investors (funds, asset managers) based on their public 13F filings. It's purely informational — refreshed periodically, not part of AlphaSwarm's ranking or Signal Score.",
+    "institutional owners": "Institutional ownership shows what share of a company is held by large investors (funds, asset managers) based on their public 13F filings. It's purely informational — refreshed periodically, not part of AlphaSwarm's ranking or Signal Score.",
+    "13f": "A 13F is a quarterly SEC filing in which large institutional investment managers disclose their equity holdings. It's AlphaSwarm's source for the Whale Watching 'institutional owners' view — a lagging signal, since it's filed up to 45 days after quarter-end.",
+    "insider dealings": "Insider dealings tracks trades corporate insiders (executives, directors) make in their own company's stock, based on their public Form 4 filings with the SEC. It's shown on AlphaSwarm's Whale Watching page purely informationally — it never feeds the ranking or Signal Score.",
+    "insider trading": "Insider dealings tracks trades corporate insiders (executives, directors) make in their own company's stock, based on their public Form 4 filings with the SEC. It's shown on AlphaSwarm's Whale Watching page purely informationally — it never feeds the ranking or Signal Score.",
+    "form 4": "A Form 4 is the SEC filing a corporate insider (an executive or director) must submit when trading their own company's stock. It's AlphaSwarm's source for the Whale Watching 'insider dealings' view.",
     "spy": "SPY (the SPDR S&P 500 ETF Trust) is an exchange-traded fund that tracks the S&P 500 index — a basket of roughly 500 large U.S. companies — so its price moves up and down along with that index. AlphaSwarm uses SPY's price history as the market benchmark when it calculates beta for an asset, so an asset's beta specifically describes how it has moved relative to SPY.",
     "s&p 500": "The S&P 500 is a stock market index that tracks roughly 500 of the largest publicly traded companies in the United States, widely used as a general gauge of the US stock market as a whole. SPY (the SPDR S&P 500 ETF Trust) is a fund built to track this index, which is why AlphaSwarm uses SPY's price history as a practical stand-in for 'the market' when it calculates beta.",
     "sp500": "The S&P 500 is a stock market index that tracks roughly 500 of the largest publicly traded companies in the United States, widely used as a general gauge of the US stock market as a whole. SPY (the SPDR S&P 500 ETF Trust) is a fund built to track this index, which is why AlphaSwarm uses SPY's price history as a practical stand-in for 'the market' when it calculates beta.",
@@ -3056,6 +3230,15 @@ _ASK_GLOSSARY = {
     "bull market": "A bull market is a sustained period in which prices in a market are generally rising (or expected to rise), typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
     "bear market": "A bear market is a sustained period in which prices in a market are generally falling, typically accompanied by widespread pessimism. It's the opposite of a bull market, where prices are generally rising.",
     "whale watching": "In general market terminology, \"whale watching\" means tracking the trading activity of large holders (\"whales\") — big investors, funds, or institutions — since their large trades can move prices or signal a shift in sentiment. AlphaSwarm has its own whale-tracking feature, separate from its ranking/Signal Score methodology, that surfaces insider dealings and institutional ownership data (based on public filings) for an asset.",
+    # Fund-catalogue terms — general definitions only; any question about a
+    # user's OWN tax/withdrawal situation involving these still routes to
+    # the personal-finance boundary message above, never here.
+    "tfsa": "A TFSA (tax-free savings account) is a South African account whose growth and withdrawals are untaxed, within annual and lifetime contribution limits. Only certain funds qualify to be held in one — AlphaSwarm's fund catalogue marks each fund's TFSA eligibility where that has been checked.",
+    "mdd": "An MDD (Minimum Disclosure Document) is the fact sheet every South African collective investment scheme (unit trust or ETF) must publish: its objective, risk rating, asset allocation, top holdings, benchmark, performance history, costs (TER/TC/TIC), and minimum investment amounts.",
+    "isin": "An ISIN (International Securities Identification Number) is a unique code identifying a specific security — used for unit trusts (which have no ticker symbol) as well as ETFs, and it stays the same even if the fund is renamed or changes management company.",
+    "reg 28": "Regulation 28, under South Africa's Pension Funds Act, limits how a retirement fund may invest — for example, caps on equity and offshore exposure. A fund that stays within those limits is described as \"Regulation 28 compliant\" and can be held in a retirement annuity.",
+    "regulation 28": "Regulation 28, under South Africa's Pension Funds Act, limits how a retirement fund may invest — for example, caps on equity and offshore exposure. A fund that stays within those limits is described as \"Regulation 28 compliant\" and can be held in a retirement annuity.",
+    "asisa": "ASISA fund classification is the industry-standard way South African collective investment schemes (unit trusts and ETFs) are categorised — by geography (e.g. South African, Worldwide), then asset class (Equity, Multi Asset, Interest Bearing, Real Estate), then focus (e.g. Multi Asset — Low/Medium/High Equity). AlphaSwarm uses this classification in its fund catalogue.",
 }
 
 
@@ -3339,7 +3522,19 @@ _ASK_QUALITATIVE_PERFORMANCE_PATTERN = re.compile(
     r"\bdoing\s+well\b|\bperforming\b|\bperformance\b|"
     r"\blook(?:s|ing)?\s+(?:strong|weak|good|bad|healthy)\b|"
     r"\bwhat\s+do\s+you\s+think\s+(?:about|of)\b|"
-    r"\bhow(?:'s|\s+is)\s+\w+\s+(?:doing|looking)\b",
+    r"\bhow(?:'s|\s+is)\s+\w+\s+(?:doing|looking)\b|"
+    # Bare probing follow-up to an answer just given ("why is that?",
+    # "why's that", "why so", "is that concerning?") — never fires when a
+    # specific metric was already resolved (2b above runs first and takes
+    # that case), so this only catches the genuinely open-ended "go deeper
+    # on what you just told me" follow-up. Root-cause gap this closes:
+    # "why is that?" after an asset answer used to fall through to the
+    # classifier, which read it as ANALYSIS_EXPLANATION (same as the
+    # ORIGINAL question) and just re-stated raw metric values instead of
+    # actually explaining the reasoning — exactly the interpretation
+    # request CONTEXT_SYNTHESIS exists for.
+    r"\bwhy\s+(?:is|was|does|did)?\s*(?:that|this|it|so)\b|^\s*why\??\s*$|"
+    r"\bis\s+(?:that|this)\s+(?:concerning|worrying|a\s+concern)\b",
     re.IGNORECASE,
 )
 
@@ -4271,7 +4466,7 @@ def _ask_sense_check(query: str, response: Optional[AskResponse], user_id: Optio
     if not (data.get("watchlist") or data.get("top_picks")):
         return response  # nothing of the user's to show — keep the original answer
 
-    comparison_assets = [{"ticker": t} for t in data.get("watchlist", [])] + list(data.get("top_picks", []))
+    comparison_assets = _merge_assets_by_ticker(data.get("watchlist", []), data.get("top_picks", []))
     narration = _narrate_ask(query, str(_round_for_narration(data)), comparison_assets=comparison_assets or None)
     if narration is None:
         return response
@@ -4580,29 +4775,6 @@ async def _ask_alphaswarm_impl(
         )
 
     if intent == "UNKNOWN":
-        # One bounded second chance: the user's exact wording didn't match
-        # any supported intent, but the question itself may still be
-        # perfectly answerable once restated more explicitly (see
-        # _rephrase_unclear_ask_query — it only ever reworks the QUESTION
-        # TEXT, never sees or invents AlphaSwarm data, so this adds no new
-        # hallucination surface). The rewritten text still has to clear the
-        # exact same safety gates and classifier as any other query before
-        # it's trusted, and on any doubt this just falls through to the
-        # same honest "not sure" message as before — never silently retried
-        # more than once.
-        rephrased = _rephrase_unclear_ask_query(query)
-        if (
-            rephrased
-            and rephrased.lower() != query.lower()
-            and not _ASK_PERSONAL_FINANCE_PATTERN.search(rephrased)
-            and not _ask_blocklist_hit(rephrased)
-            and not _ASK_OUT_OF_SCOPE_PATTERN.search(rephrased)
-        ):
-            new_intent = _classify_ask_intent(rephrased)
-            if new_intent not in ("UNKNOWN", "CLASSIFIER_UNAVAILABLE", "UNSUPPORTED_FINANCIAL_ADVICE"):
-                intent, query = new_intent, rephrased
-
-    if intent == "UNKNOWN":
         return AskResponse(
             intent=intent,
             narration=(
@@ -4722,8 +4894,8 @@ async def _ask_alphaswarm_impl(
     if intent == "ASSET_SEARCH":
         comparison_assets = data.get("assets") or None
     elif intent == "USER_DATA_SEARCH":
-        comparison_assets = (
-            [{"ticker": t} for t in data.get("watchlist", [])] + list(data.get("top_picks", []))
+        comparison_assets = _merge_assets_by_ticker(
+            data.get("watchlist", []), data.get("top_picks", [])
         ) or None
     narration = _narrate_ask(
         query, str(_round_for_narration(data)),

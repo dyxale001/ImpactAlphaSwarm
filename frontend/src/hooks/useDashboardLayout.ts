@@ -201,6 +201,22 @@ export function useDashboardLayout() {
     [commit],
   );
 
+  // Seed the starter widgets as soon as a brand-new account is detected,
+  // rather than only once the guide is dismissed. Without this, the guide's
+  // "a few widgets to start" copy sat over a genuinely empty board (and the
+  // "Your dashboard is empty" state) until the reader closed it — seeding
+  // immediately keeps the guide and the board in agreement from the first
+  // paint. Fires at most once per mount; dismissGuide's own startBlank()
+  // call stays as a harmless fallback for the rare case this effect hasn't
+  // run yet.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (needsGuide && !seededRef.current && !isEditingRef.current) {
+      seededRef.current = true;
+      void startBlank();
+    }
+  }, [needsGuide, startBlank]);
+
   const forgetLayout = useCallback(async () => {
     if (!userId) return;
     setIsSaving(true);

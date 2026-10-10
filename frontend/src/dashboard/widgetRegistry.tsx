@@ -327,10 +327,12 @@ export function widgetById(id: string): WidgetDef | undefined {
   return BY_ID.get(id);
 }
 
-/** A sensible default board for a brand-new user: their shortlist, whether
- *  their numbers are fresh, their watchlist, and something to read next —
- *  one from each major group, so the dashboard isn't empty on day one. */
-const STARTER_WIDGET_IDS = ["top-pick", "run-status", "watchlist", "learning-next"];
+/** A sensible default board for a brand-new user: their shortlist and their
+ *  watchlist first (both wide), then run status, read-next and learning
+ *  progress together as a row of three small widgets — one from each major
+ *  group, so the dashboard isn't empty on day one, arranged so same-sized
+ *  cards sit next to each other instead of scattered. */
+const STARTER_WIDGET_IDS = ["top-pick", "watchlist", "run-status", "learning-next", "learning-progress"];
 
 export function starterLayout(): DashboardLayout {
   return {

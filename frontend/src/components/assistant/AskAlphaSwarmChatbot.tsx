@@ -4,15 +4,16 @@ import { Sparkles, X, Send, Loader2 } from 'lucide-react'
 import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
 import AskAnswerCard from '../ask/AskAnswerCard'
+import AskScopeTooltip from '../ask/AskScopeTooltip'
 
 // Mirrors the backend's own _ASK_REDIRECT_SUGGESTIONS (api.py) — same
 // three example questions shown wherever Ask AlphaSwarm has nothing to
 // show yet, so a new user sees one consistent set of starting points
 // rather than a different list depending on which entry point they used.
 const SUGGESTED_QUESTIONS = [
-  'Show me technology assets in my universe',
+  'Compare AAPL and GOOGL',
   'Tell me about NVDA',
-  "What is RSI?",
+  'How does AlphaSwarm work?',
 ]
 
 /**
@@ -184,6 +185,9 @@ export default function AskAlphaSwarmChatbot() {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </form>
+          <div className="flex items-center justify-center pb-2 px-3 shrink-0">
+            <AskScopeTooltip />
+          </div>
         </div>
       )}
 
