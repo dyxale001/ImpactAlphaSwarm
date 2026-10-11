@@ -872,7 +872,7 @@ export default function Landing() {
             <StopHeader
               eyebrow="Stop 05 · Learning Centre"
               title="Learn as You Go, Earn as You Learn"
-              body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 80%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
+              body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 75%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
             />
           </div>
           <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start">

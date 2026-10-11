@@ -217,7 +217,7 @@ export default function LearningQuizModal({
                 <p className="text-sm text-brand-muted-fg">
                   {result.passed
                     ? "You passed this quiz and the article is now marked as completed."
-                    : "You need 80% or higher to pass this quiz."}
+                    : "You need 75% or higher to pass this quiz."}
                 </p>
               </div>
 

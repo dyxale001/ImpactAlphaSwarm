@@ -77,7 +77,7 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
                 </div>
               </section>
             )}
-            <p className="text-xs leading-relaxed text-brand-muted-fg">Read a lesson, then take its quiz at the bottom of the article. Pass with 80% or higher to complete it and earn XP. Reading alone does not mark a lesson complete.</p>
+            <p className="text-xs leading-relaxed text-brand-muted-fg">Read a lesson, then take its quiz at the bottom of the article. Pass with 75% or higher to complete it and earn XP. Reading alone does not mark a lesson complete.</p>
           </div>
         </div>
       </section>

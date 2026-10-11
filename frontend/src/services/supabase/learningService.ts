@@ -371,7 +371,7 @@ export class LearningCentreRepository {
       questions,
       selectedAnswers,
     );
-    const passed = score >= 80;
+    const passed = score >= 75;
     const previousProgress = progressByArticleId[article.id];
     const previouslyCompleted = previousProgress?.status === "COMPLETED";
     const previousQuizScore = previousProgress?.quiz_score ?? null;
