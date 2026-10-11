@@ -910,7 +910,6 @@ export default function AssetDetailsPage() {
         <div className="space-y-3">
           <WhaleWatching
             ticker={asset.ticker}
-            emptyMessage="No insider trades reported for this stock recently"
             showTradeDate
             variant="asset"
             showSummary

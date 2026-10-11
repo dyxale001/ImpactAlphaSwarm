@@ -11,7 +11,9 @@ import {
   clusterBuyerCount,
   formatDate,
   formatName,
+  formatPct,
   formatUsd,
+  topTenIn,
 } from "../../research/whaleFormat";
 import { WidgetEmpty, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChrome";
 
@@ -182,9 +184,7 @@ export function InstitutionalOwnersWidget({
             Institutions
           </p>
           <p className="mt-0.5 font-mono text-lg font-bold text-brand-bg">
-            {data.institutions_pct != null
-              ? `${data.institutions_pct.toFixed(1)}%`
-              : "—"}
+            {formatPct(data.institutions_pct)}
           </p>
         </div>
         <div className="px-4 py-3">
@@ -192,9 +192,7 @@ export function InstitutionalOwnersWidget({
             Insiders
           </p>
           <p className="mt-0.5 font-mono text-lg font-bold text-brand-bg">
-            {data.insiders_pct != null
-              ? `${data.insiders_pct.toFixed(1)}%`
-              : "—"}
+            {formatPct(data.insiders_pct)}
           </p>
         </div>
       </div>
@@ -221,7 +219,7 @@ export function InstitutionalOwnersWidget({
                     {h.holder}
                   </p>
                   <p className="shrink-0 font-mono text-xs font-semibold text-brand-primary">
-                    {h.pct_held != null ? `${h.pct_held.toFixed(2)}%` : "—"}
+                    {formatPct(h.pct_held)}
                   </p>
                 </div>
 
@@ -304,8 +302,7 @@ export function TopFundsWidget() {
                     {fund.fund}
                   </p>
                   <p className="text-[11px] text-brand-muted-fg">
-                    {fund.positions.length} tracked position
-                    {fund.positions.length === 1 ? "" : "s"}
+                    {topTenIn(fund.positions.length)}
                   </p>
                 </div>
                 <p className="shrink-0 font-mono text-xs font-semibold text-brand-primary">

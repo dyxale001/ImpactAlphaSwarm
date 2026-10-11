@@ -1,22 +1,10 @@
 import { Building2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { useInstitutionalData } from "../../hooks/useInstitutionalData";
 import { InstitutionalTracePanel } from "./InstitutionalTracePanel";
+import { formatDate, formatPct, formatUsd } from "./whaleFormat";
 
 // Institutional (13F) ownership for a ticker — the "big funds" behind a stock.
 // Purely informational, kept out of the Unified Confidence Score.
-
-function fmtPct(v: number | null): string {
-  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
-}
-
-function fmtMoney(v: number | null): string {
-  if (v == null) return "—";
-  const a = Math.abs(v);
-  if (a >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-  if (a >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${v.toFixed(0)}`;
-}
 
 function fmtShares(v: number | null): string {
   if (v == null) return "—";
@@ -24,18 +12,6 @@ function fmtShares(v: number | null): string {
   if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
   if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
   return v.toLocaleString("en-US");
-}
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
 }
 
 function StatTile({
@@ -117,7 +93,9 @@ export default function InstitutionalOwners({
   // The added and trimmed counts below use the capped list, so they describe the rows
   // actually on screen.
   const holders = limit ? allHolders.slice(0, limit) : allHolders;
-  const asOf = allHolders[0]?.date_reported ?? data?.fetched_at ?? null;
+  // The filing's own date only. It used to fall back to the day we fetched, which the
+  // caveat below then called "the last filing".
+  const asOf = allHolders[0]?.date_reported ?? null;
   const hasData =
     !!data && (allHolders.length > 0 || data.institutions_pct != null);
 
@@ -139,7 +117,7 @@ export default function InstitutionalOwners({
             className={`text-[10px] uppercase tracking-widest ${eyebrowTone} font-semibold mb-1 flex items-center gap-1.5`}
           >
             <Building2 className="w-3 h-3 text-brand-primary" />
-            Institutional Owners
+            Big investors
           </p>
           <p
             className={`text-sm ${onAsset ? "text-brand-fg/90" : "text-brand-muted-fg"}`}
@@ -173,7 +151,7 @@ export default function InstitutionalOwners({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <StatTile
               label="Held by institutions"
-              value={fmtPct(data!.institutions_pct)}
+              value={formatPct(data!.institutions_pct)}
               hint="Share of the company owned by funds, banks & pensions"
               onForest={onAsset}
             />
@@ -185,14 +163,16 @@ export default function InstitutionalOwners({
             />
             <StatTile
               label="Insiders hold"
-              value={fmtPct(data!.insiders_pct)}
+              value={formatPct(data!.insiders_pct)}
               hint="Owned by the company's own execs & directors"
               onForest={onAsset}
             />
           </div>
 
-          {/* The written reading of the figures above and the holders below. */}
-          {showSummary && (
+          {/* The written reading of the figures above and the holders below. Left
+              out when the summary is switched off, rather than a skeleton that
+              appears and then vanishes. */}
+          {showSummary && data!.summary_enabled !== false && (
             <InstitutionalTracePanel
               ticker={ticker}
               institutionsPct={data!.institutions_pct}
@@ -236,13 +216,13 @@ export default function InstitutionalOwners({
                       {h.holder}
                     </p>
                     <p className="text-xs text-brand-muted-fg">
-                      {fmtShares(h.shares)} shares · {fmtPct(h.pct_held)} of
+                      {fmtShares(h.shares)} shares · {formatPct(h.pct_held)} of
                       company
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-mono font-semibold text-brand-fg">
-                      {fmtMoney(h.value)}
+                      {formatUsd(h.value)}
                     </p>
                     {h.pct_change != null && h.pct_change !== 0 && (
                       <p
@@ -273,7 +253,7 @@ export default function InstitutionalOwners({
             <p className="text-[11px] text-brand-muted-fg leading-snug">
               13F filings are a lagging signal: funds report only once a quarter,
               up to 45 days after it ends, so they may have traded since. Treat
-              this as a snapshot of the last filing{asOf ? ` (${fmtDate(asOf)})` : ""},
+              this as a snapshot of the last filing{asOf ? ` (${formatDate(asOf)})` : ""},
               not today's positions.
             </p>
           </div>
@@ -284,7 +264,8 @@ export default function InstitutionalOwners({
               Source
             </span>
             <span className="text-sm font-medium text-brand-fg">
-              {data!.source ?? "yfinance"} · as of {fmtDate(asOf)}
+              {data!.source ?? "yfinance"} ·{" "}
+              {asOf ? `as of ${formatDate(asOf)}` : "filing date not reported"}
             </span>
           </div>
         </div>

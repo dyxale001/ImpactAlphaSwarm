@@ -21,6 +21,10 @@ export function useWhaleData(ticker: string | undefined) {
   return {
     transactions: data?.transactions ?? NO_TRANSACTIONS,
     source: data?.source ?? null,
+    windowDays: data?.window_days ?? null,
+    // Null when the answer predates the flag: the panel then asks for the summary as
+    // it always did.
+    summaryEnabled: data?.summary_enabled ?? null,
     fetchedAt: data?.fetched_at ?? null,
     isLoading,
     error,

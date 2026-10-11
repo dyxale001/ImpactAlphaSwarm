@@ -2,13 +2,37 @@
 // page started showing the same insider rows as the per-company panel, so the
 // two cannot drift on how a dollar value or an insider name is rendered.
 
+// The one dollar formatter for every whale view. The funds pages and the ownership tab
+// had their own copies, so BlackRock read "$3.4T" on one and "$3393.4B" on another.
 export function formatUsd(value: number | null | undefined): string {
   if (value == null) return "—";
   const abs = Math.abs(value);
+  if (abs >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
   if (abs >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
   return `$${value.toFixed(0)}`;
+}
+
+// The ownership endpoints return shares as fractions (0.663 is 66.3%). Every view goes
+// through here: the dashboard widget printed the fraction itself, so Apple read 0.7%.
+export function formatPct(fraction: number | null | undefined): string {
+  return fraction == null ? "—" : `${(fraction * 100).toFixed(1)}%`;
+}
+
+// Only open-market trades are a decision to buy or sell. Everything else (grants,
+// option exercises, tax withholding, gifts) gets its own neutral label instead of a
+// Buy or Sell badge, which made a grant read as a purchase.
+export function isOpenMarket(code?: string | null): boolean {
+  const c = (code || "").trim().toUpperCase();
+  return c === "P" || c === "S";
+}
+
+// What a fund's position count really is. yfinance lists only each company's ten
+// largest holders, so a fund shows up only where it is one of them; "96 companies" on
+// its own read as everything the fund owns.
+export function topTenIn(count: number): string {
+  return `Top 10 holder in ${count} ${count === 1 ? "company" : "companies"}`;
 }
 
 export function formatShares(shares: number): string {
