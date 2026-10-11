@@ -151,7 +151,9 @@ export function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+      // shrink-0 and nowrap: on a phone the chip groups are a sideways-scrolling
+      // row (FilterChipRow), where a chip would otherwise squash and wrap its count.
+      className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
         active
           ? "bg-brand-primary/10 text-brand-primary border-brand-primary/40"
           : "border-brand-border/60 text-brand-muted-fg hover:text-brand-fg hover:border-brand-border"
@@ -164,6 +166,17 @@ export function FilterChip({
         </span>
       )}
     </button>
+  );
+}
+
+// The row the chip groups sit in, shared by both pages. One line that scrolls
+// sideways on a phone and wraps from sm. Wrapped at phone width, the news page's
+// eight chips took three rows above the list they filter.
+export function FilterChipRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto no-scrollbar sm:w-auto sm:flex-wrap">
+      {children}
+    </div>
   );
 }
 
@@ -293,7 +306,7 @@ export function SourceList({
 // Soft-card empty state used when nothing was analysed or nothing matches.
 export function EmptyStateCard({ message }: { message: string }) {
   return (
-    <div className="soft-card w-full p-5">
+    <div className="soft-card w-full p-4 sm:p-5">
       <p className="text-brand-muted-fg text-sm italic">{message}</p>
     </div>
   );

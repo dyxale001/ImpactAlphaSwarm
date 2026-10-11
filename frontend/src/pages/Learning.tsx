@@ -330,7 +330,10 @@ export default function LearningPage() {
             growth for the learning centre. Content sits on a relative layer so
             it clears the SVG. */}
         <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
-          <SproutMotif className="h-full" />
+          {/* h-14 on a phone: the 1440x220 drawing at the card's width is about
+              that tall, so the blades keep their shape and stay in the pb-12
+              band. At h-full a phone-width card stretched them through the copy. */}
+          <SproutMotif className="h-14 sm:h-full" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
@@ -358,7 +361,9 @@ export default function LearningPage() {
           </div>
         </div>
 
-        <div role="tablist" aria-label="Learning Centre views" className="flex flex-wrap gap-2 border-b border-brand-border pb-3">
+        {/* One row on a phone, the same as the Settings strip: wrapped, Financial
+            Tools dropped to a second line on its own under the other two. */}
+        <div role="tablist" aria-label="Learning Centre views" className="flex gap-2 overflow-x-auto no-scrollbar border-b border-brand-border pb-3 sm:flex-wrap">
           {learningTabs.map((tab, index) => (
             <button
               key={tab}
@@ -377,7 +382,7 @@ export default function LearningPage() {
                 setActiveTab(next);
                 document.getElementById(`learning-tab-${next}`)?.focus();
               }}
-              className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${activeTab === tab ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"}`}
+              className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:px-5 ${activeTab === tab ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"}`}
             >
               {learningTabLabels[tab]}
             </button>

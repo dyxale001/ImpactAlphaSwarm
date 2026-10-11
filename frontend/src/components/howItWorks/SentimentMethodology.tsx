@@ -112,7 +112,7 @@ function VerdictScale() {
 
 export default function SentimentMethodology() {
   return (
-    <div id="sentiment" className="soft-card w-full space-y-6 p-6" style={{ scrollMarginTop: "1.5rem" }}>
+    <div id="sentiment" className="soft-card w-full space-y-6 p-4 sm:p-6" style={{ scrollMarginTop: "1.5rem" }}>
       <MethodologyCardHeader
         icon={MessageSquare}
         title="The Sentiment Score"

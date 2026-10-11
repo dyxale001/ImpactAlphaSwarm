@@ -330,6 +330,19 @@ body {
   }
 }
 
+/* iPhone Safari zooms the whole page in when a text field under 16px takes
+   focus, and leaves it zoomed after the keyboard closes, so the reader has to
+   pinch back out. Most fields here are text-sm (14px). On touch screens every
+   typing field is held at 16px; unlayered, this beats the text-sm utility
+   without touching each field. Checkboxes, radios and sliders take no text. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 @layer utilities {
   /* Squiggle ribbons that draw themselves in on mount (auth panel, onboarding
      rail). The path must set pathLength="1" and stroke-dasharray="1"; duration
@@ -362,6 +375,16 @@ body {
     .ribbon-draw {
       stroke-dashoffset: 0;
     }
+  }
+
+  /* A row that scrolls sideways on a phone (tab strips, filter chips) without
+     drawing a scrollbar under it. The item cut off at the edge is what tells
+     the reader there is more; a scrollbar on a 30px pill row is just noise. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .font-sans {

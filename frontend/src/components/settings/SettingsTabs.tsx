@@ -15,7 +15,7 @@ export default function SettingsTabs({
     <div
       role="tablist"
       aria-label="Settings views"
-      className="flex gap-2 overflow-x-auto border-b border-brand-border pb-3 sm:flex-wrap"
+      className="flex gap-2 overflow-x-auto no-scrollbar border-b border-brand-border pb-3 sm:flex-wrap"
     >
       {SETTINGS_TABS.map((tab, index) => {
         const selected = active === tab;
@@ -43,7 +43,10 @@ export default function SettingsTabs({
               onChange(next);
               document.getElementById(`settings-tab-${next}`)?.focus();
             }}
-            className={`shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${
+            // px-4 on a phone: at px-5 the three tabs came to 375px against 361px
+            // of screen, and Account sat half cut off with nothing saying the
+            // strip scrolls.
+            className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:px-5 ${
               selected ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"
             }`}
           >
