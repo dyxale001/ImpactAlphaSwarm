@@ -50,8 +50,8 @@ export interface DashboardStatsOptions {
   limit?: number | null;
 }
 
-/** Defaults to five, so the dashboard keeps its top five by calling this with no
- * arguments. The assets page passes `limit: null` to read everything the run
+/** Defaults to five when no limit is supplied. Both the Dashboard data provider
+ * and the Stocks page pass `limit: null` to read everything the run
  * scored. A run scores about thirty tickers, well inside PostgREST's default page
  * size, so the uncapped read needs no pagination. */
 export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
@@ -96,7 +96,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
         setAnalysisProgressExecutionIdentity(null);
         setLatestRunCreatedAt(null);
         setRecommendationError(
-          "Unable to load dashboard data until your profile is available.",
+          "Unable to load analysis data until your profile is available.",
         );
         return;
       }
@@ -269,7 +269,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
       setRecs([]);
       setLatestRunCreatedAt(null);
       setRecommendationError(
-        "We couldn't load your dashboard recommendations right now.",
+        "We couldn't load your analysis data right now.",
       );
     } finally {
       setIsLoadingRecs(false);

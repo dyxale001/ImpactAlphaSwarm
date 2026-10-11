@@ -79,8 +79,8 @@ export default function AssetsPage() {
     latestRunCreatedAt,
     recommendations,
     refreshRecommendations,
-    // The whole ranked feed, not the dashboard's five. The page's own subtitle
-    // promises everything the committee ranked, and a run scores about thirty.
+    // Read the whole ranked feed, as the Dashboard data provider also does.
+    // This page separates the top five into cards and the remaining assets into rows.
   } = useDashboardStats({ limit: null });
 
   // Ranks 2 to 5: shortlisted, shown as cards alongside the hero at rank 1.
