@@ -406,6 +406,22 @@ export async function getQuantHistory(ticker: string, horizon: QuantHorizon) {
   return res.json() as Promise<QuantHistoryResponse>;
 }
 
+export interface ListingResponse {
+  ticker: string;
+  /** yfinance's exchange code, e.g. "NMS", or "" when the lookup found nothing. */
+  exchange: string;
+  /** The same exchange as a reader would name it, e.g. "Nasdaq". */
+  exchange_name: string;
+}
+
+// The exchange a ticker trades on, for the asset page header. One light
+// lookup the backend holds for a day. Informational, so no auth token is needed.
+export async function getListing(ticker: string) {
+  const res = await fetch(`${BASE}/api/assets/${encodeURIComponent(ticker)}/listing`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ListingResponse>;
+}
+
 export interface QuantTraceResponse {
   ticker: string;
   horizon: QuantHorizon;

@@ -49,6 +49,7 @@ import { MarketClock } from "../components/research/MarketClock";
 import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
 import { useAskChatbotStore } from "../store/askChatbotStore";
 import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
+import { ListingLine } from "../components/research/ListingLine";
 
 /** Assets that got an LLM-written trace, and so are shown as full cards. Mirrors
  *  REASONING_TRACE_TOP_N on the backend; everything below this rank carries the
@@ -540,6 +541,7 @@ export default function AssetsPage() {
                 </div>
               </div>
             </Link>
+            <ListingLine universe={topPick?.universe} exchange={topPick?.exchange} onDark />
             {topPick?.isDiscovered ? (
               <span
                 className="chip bg-brand-accent text-brand-fg w-fit"

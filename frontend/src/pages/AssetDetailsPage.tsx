@@ -29,6 +29,7 @@ import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
 import { carriedNews } from "../components/research/NewsArticles";
 import { formatDay } from "../components/research/sentimentDays";
 import { MarketClock } from "../components/research/MarketClock";
+import { ListingLine } from "../components/research/ListingLine";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
 import {
@@ -43,6 +44,7 @@ import {
 import { useAssetDetails } from "../hooks/useAssetDetails";
 import { useSentimentHistory } from "../hooks/useSentimentHistory";
 import { useQuantHistory } from "../hooks/useQuantHistory";
+import { useListing } from "../hooks/useListing";
 import {
   DEFAULT_QUANT_HORIZON,
   type QuantHorizon,
@@ -460,6 +462,10 @@ export default function AssetDetailsPage() {
   // the page for the ranking should not cost a price fetch for a chart they never saw.
   const [horizon, setHorizon] = useState<QuantHorizon>(DEFAULT_QUANT_HORIZON);
   const quantHistory = useQuantHistory(ticker?.toUpperCase(), horizon, tab === "quant");
+  // The exchange for the header line, stored on the asset row. A row not filled yet
+  // falls back to a light lookup of its own, not the window above, which is only
+  // fetched while the Quant tab is open.
+  const exchangeName = useListing(ticker, asset?.exchange);
 
   // Per-day news for the chart's second line: the history the backend stored where it
   // has any, and only otherwise the figure derived here from the run's article list.
@@ -569,6 +575,7 @@ export default function AssetDetailsPage() {
               <MarketClock />
             </div>
           </div>
+          <ListingLine universe={asset.universe} exchange={exchangeName} className="mb-3" />
           {/* Guarded: `recommendation` is nullable (see the checks below and the
               optional chaining above), and an asset only has one once it has
               reached a top 5. Dereferencing it here crashed the whole page for

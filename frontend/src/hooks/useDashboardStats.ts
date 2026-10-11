@@ -23,6 +23,10 @@ export interface AssetRecommendation {
   rank: number;
   isDiscovered: boolean;
   discoverySources: string[] | null;
+  /** The universe the asset belongs to, or null for an uncategorised row. */
+  universe: string | null;
+  /** Where it trades, e.g. "Nasdaq" (migration 032). "" until the nightly fill reaches it. */
+  exchange: string;
   // Unified ranking v2 terms (migration 010). Null on legacy rows and whenever the
   // backend ranking is disabled, which is what the legacy display falls back on.
   signalStrength: number | null;
@@ -204,7 +208,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
         ? await supabase
             .from("assets")
             .select(
-              "id, ticker, name, origin, discovery_sources, first_discovered_at",
+              "id, ticker, name, origin, discovery_sources, first_discovered_at, universe, exchange",
             )
             .in("id", assetIds)
         : { data: [], error: null };
@@ -247,6 +251,8 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
             isDiscovered: isRecentlyDiscovered(asset ?? {}),
             discoverySources:
               (asset?.discovery_sources as string[] | null) ?? null,
+            universe: asset?.universe ?? null,
+            exchange: asset?.exchange ?? "",
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,
             convergence: rec.convergence ?? null,

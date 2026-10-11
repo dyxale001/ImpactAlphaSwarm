@@ -13,6 +13,7 @@ import {
 import { useAskChatbotStore } from "../../store/askChatbotStore";
 import DualBar from "./DualBar";
 import AddToWatchlistButton from "./Addtowatchlistbutton";
+import { ListingLine } from "../research/ListingLine";
 
 // The four preview tabs (Overview / Vibe / Numbers / Hype) were removed. Three of
 // them restated numbers already on the card — the sentiment score, the quant
@@ -86,6 +87,10 @@ export default function RecommendationCard({
           Rank {asset.rank}
         </div>
       </div>
+
+      {/* Universe and exchange, as on the asset page. Every card has a universe, so
+          this line is on all of them and the cards in a row keep their alignment. */}
+      <ListingLine universe={asset.universe} exchange={asset.exchange} />
 
       <div className="flex items-end justify-between gap-3">
         {showScorecard && asset.convergenceState ? (

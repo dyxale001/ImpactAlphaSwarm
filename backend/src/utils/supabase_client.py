@@ -508,6 +508,37 @@ class AssetRepository(Repository):
             return {}
         return {r["ticker"]: r["universe"] for r in rows if r.get("ticker")}
 
+    def tickers_missing_exchange(self) -> Optional[List[str]]:
+        """Active tickers whose exchange has not been looked up yet (migration 032).
+
+        None when the read failed, so the backfill can tell "nothing to do" from "could
+        not look", which is what a missing column looks like before the migration runs.
+        """
+        try:
+            rows = (
+                self.table()
+                .select("ticker")
+                .eq("is_active", True)
+                .is_("exchange", "null")
+                .order("ticker")
+                .execute()
+                .data
+                or []
+            )
+        except Exception as e:
+            print(f"Could not read assets missing an exchange: {e}")
+            return None
+        return [r["ticker"] for r in rows if r.get("ticker")]
+
+    def set_exchange(self, ticker: str, exchange: str) -> bool:
+        """Store a ticker's exchange. False when the write failed."""
+        try:
+            self.table().update({"exchange": exchange}).eq("ticker", ticker).execute()
+            return True
+        except Exception as e:
+            print(f"Could not store the exchange for {ticker}: {e}")
+            return False
+
 
 # How long a run may sit in 'running' before it is presumed abandoned and may be
 # claimed by a new one. Mirrors api.STALE_RUN_MINUTES, which heals such rows.
