@@ -133,6 +133,28 @@ export default function LearningArticleForm({
             </select>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label htmlFor="article-display-order" className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+              Order within category
+            </label>
+            <input
+              id="article-display-order"
+              type="number"
+              min="1"
+              max="2147483647"
+              step="1"
+              value={values.display_order}
+              onChange={(event) => onChange("display_order", event.target.value)}
+              placeholder="Append to end"
+              aria-describedby="article-display-order-help"
+              className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            />
+            <p id="article-display-order-help" className="text-xs text-brand-muted-fg">
+              Leave blank to append to the selected category. Changing category resets this field.
+              Equal positions are ordered by creation date, then article ID if dates also match.
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"

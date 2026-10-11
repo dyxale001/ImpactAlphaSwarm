@@ -191,7 +191,9 @@ export class LearningCentreRepository {
         ...category,
         articles: [...(category.articles ?? [])]
           .sort((left, right) =>
-            left.created_at.localeCompare(right.created_at),
+            left.display_order - right.display_order ||
+            Date.parse(left.created_at) - Date.parse(right.created_at) ||
+            Number(left.id) - Number(right.id),
           )
           .map(({ quiz_questions, ...article }) => ({
             ...article,

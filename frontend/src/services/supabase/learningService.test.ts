@@ -3,6 +3,7 @@ import type { LearningArticle, LearningCategory, LearningProgress } from "../../
 import { deriveLearningRoadmap } from "../../utils/learningRoadmap";
 
 const database = vi.hoisted(() => ({
+  catalogue: [] as LearningCategory[],
   progress: null as LearningProgress | null,
   xp: 200,
   xpWrites: [] as number[],
@@ -30,7 +31,7 @@ vi.mock("../../lib/supabase", () => ({
           database.configReads++;
           return { data: database.xpConfig, error: database.configError };
         }
-        if (table === "learning_categories") return { data: [], error: null };
+        if (table === "learning_categories") return { data: database.catalogue, error: null };
         if (table === "user_learning_progress") {
           if (operation === "insert" || database.progress) {
             database.progress = { id: "progress", ...payload } as LearningProgress;
@@ -92,7 +93,7 @@ const questions = Array.from({ length: 4 }, (_, index) => ({
 
 const article: LearningArticle = {
   id: "lesson", category_id: "category", title: "Lesson", slug: "lesson",
-  summary: "Summary", content: "Content", difficulty_level: "BEGINNER",
+  summary: "Summary", content: "Content", display_order: 1, difficulty_level: "BEGINNER",
   created_at: "2026-01-01", quiz_question_count: 4, questions,
 };
 const nextArticle = { ...article, id: "next", slug: "next" };
@@ -130,6 +131,7 @@ beforeEach(() => {
   database.xpError = null;
   database.xpResponse = undefined;
   database.userFilter = "";
+  database.catalogue = [];
   database.progress = null;
   database.xp = 200;
   database.xpWrites = [];
@@ -305,5 +307,24 @@ describe("confirmed XP persistence", () => {
       progressByArticleId: {}, badges: [], earnedBadgeIds: new Set(), currentLearningXp: 200,
     });
     expect(result).toMatchObject({ xpEarned: 50, updatedLearningXp: 250 });
+  });
+});
+
+
+describe("article sequence", () => {
+  it("preserves category order and sorts by article position, creation date, then numeric ID", async () => {
+    database.catalogue = [
+      { ...categories[0], id: "later", display_order: 2, articles: [] },
+      { ...categories[0], display_order: 1, articles: [
+        { ...article, id: "4", display_order: 3, created_at: "2020-01-01" },
+        { ...article, id: "22", display_order: 2, created_at: "2030-01-01" },
+        { ...article, id: "1", display_order: 1, created_at: "2027-01-01T00:00:00Z" },
+        { ...article, id: "10", display_order: 1, created_at: "2026-01-01T00:00:00Z" },
+        { ...article, id: "3", display_order: 1, created_at: "2026-01-01T02:00:00+02:00" },
+      ] },
+    ];
+    const result = await new LearningCentreRepository().fetchLearningCentreData();
+    expect(result.map(category => category.id)).toEqual(["category", "later"]);
+    expect(result[0].articles.map(lesson => lesson.id)).toEqual(["3", "10", "1", "22", "4"]);
   });
 });

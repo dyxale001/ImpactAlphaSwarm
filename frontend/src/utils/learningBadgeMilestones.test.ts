@@ -45,7 +45,7 @@ import { deriveNextBadgeMilestone } from "./learningBadgeMilestones";
 import type { LearningArticle, LearningCategory, LearningProgress } from "../types/learning";
 const lessons: LearningArticle[] = ["a", "b", "c", "d"].map(id => ({
   id, title: id, slug: id, category_id: "category", summary: "", content: "",
-  difficulty_level: "BEGINNER", created_at: "", questions: [], quiz_question_count: 1,
+  difficulty_level: "BEGINNER", display_order: 1, created_at: "", questions: [], quiz_question_count: 1,
 }));
 const categories: LearningCategory[] = [{ id: "category", name: "Sample Category", slug: "sample", description: "", created_at: "", display_order: 0, articles: lessons }];
 const input = (badges: LearningBadge[]) => ({ badges, earnedBadgeIds: new Set<string>(), categories,
