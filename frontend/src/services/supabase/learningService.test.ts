@@ -6,6 +6,18 @@ const database = vi.hoisted(() => ({
   progress: null as LearningProgress | null,
   xp: 200,
   xpWrites: [] as number[],
+  xpConfig: [
+    { difficulty_level: "BEGINNER", xp: 50 },
+    { difficulty_level: "INTERMEDIATE", xp: 100 },
+    { difficulty_level: "ADVANCED", xp: 150 },
+  ] as Array<{ difficulty_level: string; xp: unknown }>,
+  configError: null as { message: string } | null,
+  configReads: 0,
+  xpError: null as { message: string } | null,
+  xpResponse: undefined as Array<{ id: string; learning_xp: number }> | undefined,
+  userFilter: "",
+
+
 }));
 
 vi.mock("../../lib/supabase", () => ({
@@ -14,6 +26,11 @@ vi.mock("../../lib/supabase", () => ({
       let operation = "";
       let payload: Record<string, unknown> = {};
       const execute = () => {
+        if (table === "learning_difficulty_xp") {
+          database.configReads++;
+          return { data: database.xpConfig, error: database.configError };
+        }
+        if (table === "learning_categories") return { data: [], error: null };
         if (table === "user_learning_progress") {
           if (operation === "insert" || database.progress) {
             database.progress = { id: "progress", ...payload } as LearningProgress;
@@ -22,9 +39,11 @@ vi.mock("../../lib/supabase", () => ({
           return { data: [], error: null };
         }
         if (table === "users") {
+          if (database.xpError) return { data: null, error: database.xpError };
+          if (database.xpResponse !== undefined) return { data: database.xpResponse, error: null };
           database.xp = payload.learning_xp as number;
           database.xpWrites.push(database.xp);
-          return { data: null, error: null };
+          return { data: [{ id: database.userFilter, learning_xp: database.xp }], error: null };
         }
         throw new Error(`Unexpected table: ${table}`);
       };
@@ -39,8 +58,12 @@ vi.mock("../../lib/supabase", () => ({
           payload = values;
           return query;
         },
-        eq: () => query,
-        select: async () => execute(),
+        eq: (column: string, value: string) => {
+          if (table === "users" && column === "id") database.userFilter = value;
+          return query;
+        },
+        order: () => query,
+        select: () => query,
         then: (resolve: (value: ReturnType<typeof execute>) => unknown) =>
           Promise.resolve(execute()).then(resolve),
       };
@@ -51,7 +74,7 @@ vi.mock("../../lib/supabase", () => ({
 
 vi.mock("./badgeStorageService", () => ({ getBadgeIconSignedUrl: vi.fn() }));
 
-import { LearningQuizEngine, submitLearningQuiz } from "./learningService";
+import { LearningCentreRepository, LearningQuizEngine, calculateArticleXp, submitLearningQuiz } from "./learningService";
 
 const questions = Array.from({ length: 4 }, (_, index) => ({
   id: `q${index}`,
@@ -97,6 +120,16 @@ function submit(correctCount: number, difficulty = article.difficulty_level) {
 }
 
 beforeEach(() => {
+  database.xpConfig = [
+    { difficulty_level: "BEGINNER", xp: 50 },
+    { difficulty_level: "INTERMEDIATE", xp: 100 },
+    { difficulty_level: "ADVANCED", xp: 150 },
+  ];
+  database.configError = null;
+  database.configReads = 0;
+  database.xpError = null;
+  database.xpResponse = undefined;
+  database.userFilter = "";
   database.progress = null;
   database.xp = 200;
   database.xpWrites = [];
@@ -171,5 +204,106 @@ describe("Learning Centre passing threshold", () => {
     })).toBe(true);
     expect(deriveLearningRoadmap(categories, progressMap(), "novice"))
       .toMatchObject({ completedCount: 1, recommended: { id: nextArticle.id } });
+  });
+});
+
+
+describe("database difficulty XP configuration", () => {
+  it("loads configuration with the catalogue and uses it for roadmap estimates", async () => {
+    const repository = new LearningCentreRepository();
+    await repository.fetchLearningCentreData();
+    expect(database.configReads).toBe(1);
+    expect(repository.calculateArticleXp("BEGINNER")).toBe(50);
+    expect(repository.calculateArticleXp("INTERMEDIATE")).toBe(100);
+    expect(repository.calculateArticleXp("ADVANCED")).toBe(150);
+  });
+
+  it("uses the database amount rather than a legacy mapping for completion and estimates", async () => {
+    database.xpConfig[0].xp = 65;
+    expect(await submit(3)).toMatchObject({ xpEarned: 65, updatedLearningXp: 265 });
+    expect(calculateArticleXp("BEGINNER")).toBe(65);
+  });
+
+  it("accepts an explicitly configured zero award", async () => {
+    database.xpConfig[0].xp = 0;
+    expect(await submit(3)).toMatchObject({ passed: true, xpEarned: 0 });
+    expect(database.progress?.status).toBe("COMPLETED");
+  });
+
+  it.each([
+    ["missing", [{ difficulty_level: "BEGINNER", xp: 50 }]],
+    ["empty", []],
+    ["negative", [{ difficulty_level: "BEGINNER", xp: -1 }]],
+    ["fractional", [{ difficulty_level: "BEGINNER", xp: 1.5 }]],
+    ["string", [{ difficulty_level: "BEGINNER", xp: "50" }]],
+    ["null", [{ difficulty_level: "BEGINNER", xp: null }]],
+    ["unknown difficulty", [{ difficulty_level: "OTHER", xp: 50 }]],
+    ["duplicate", [{ difficulty_level: "BEGINNER", xp: 50 }, { difficulty_level: "BEGINNER", xp: 50 }]],
+  ])("rejects %s configuration before any writes", async (_name, rows) => {
+    database.xpConfig = rows as typeof database.xpConfig;
+    await expect(submit(3)).rejects.toThrow("Learning XP configuration");
+    expect(database.progress).toBeNull();
+    expect(database.xpWrites).toEqual([]);
+  });
+
+  it("blocks reads and submission on a database error without using cached XP", async () => {
+    await submit(2);
+    const originalProgress = { ...database.progress };
+    database.configError = { message: "permission denied" };
+    await expect(submit(3)).rejects.toThrow("permission denied");
+    await expect(new LearningCentreRepository().fetchLearningCentreData()).rejects.toThrow("permission denied");
+    expect(() => calculateArticleXp("BEGINNER")).toThrow("unavailable");
+    expect(database.progress).toEqual(originalProgress);
+    expect(database.xpWrites).toEqual([]);
+  });
+
+  it("requires configuration even before the first catalogue load", () => {
+    expect(() => new LearningCentreRepository().calculateArticleXp("BEGINNER"))
+      .toThrow("unavailable");
+  });
+});
+
+
+describe("confirmed XP persistence", () => {
+  it("confirms the intended user's saved balance before returning an award", async () => {
+    expect(await submit(4)).toMatchObject({ xpEarned: 50, updatedLearningXp: 250 });
+    expect(database.userFilter).toBe("user");
+    expect(database.xp).toBe(250);
+  });
+
+  it("reports an XP update error instead of returning success", async () => {
+    database.xpError = { message: "permission denied" };
+    await expect(submit(4)).rejects.toThrow("Failed to update learning XP: permission denied");
+    expect(database.xp).toBe(200);
+    expect(database.xpWrites).toEqual([]);
+    // Existing separate-write architecture is preserved: progress was saved first.
+    expect(database.progress?.status).toBe("COMPLETED");
+  });
+
+  it.each([
+    { rows: [] },
+    { rows: [{ id: "other-user", learning_xp: 250 }] },
+    { rows: [{ id: "user", learning_xp: 200 }] },
+    { rows: [{ id: "user", learning_xp: 250 }, { id: "user", learning_xp: 250 }] },
+  ])("rejects unconfirmed update responses: %j", async ({ rows }) => {
+    database.xpResponse = rows;
+    await expect(submit(4)).rejects.toThrow("Could not confirm");
+    expect(database.xp).toBe(200);
+  });
+
+  it("uses the submission's returned map while another refresh clears shared configuration", async () => {
+    const repository = new LearningCentreRepository();
+    const fetch = repository.fetchDifficultyXp.bind(repository);
+    vi.spyOn(repository, "fetchDifficultyXp").mockImplementationOnce(async () => {
+      const ownMap = await fetch();
+      // Model another refresh's invalidation between fetch completion and lookup.
+      (repository as unknown as { difficultyXp: unknown }).difficultyXp = null;
+      return ownMap;
+    });
+    const result = await repository.submitLearningQuiz({
+      userId: "user", article, questions, selectedAnswers: selections(4), categories,
+      progressByArticleId: {}, badges: [], earnedBadgeIds: new Set(), currentLearningXp: 200,
+    });
+    expect(result).toMatchObject({ xpEarned: 50, updatedLearningXp: 250 });
   });
 });

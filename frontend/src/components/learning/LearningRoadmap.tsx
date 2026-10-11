@@ -38,7 +38,11 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
     return <div className="glass-card rounded-2xl p-6 text-brand-muted-fg">Your roadmap will appear when learning articles are available.</div>;
   }
 
-  const milestone = deriveNextBadgeMilestone({ badges, earnedBadgeIds, categories, progress, xp, recommended, calculateArticleXp });
+  const milestone = deriveNextBadgeMilestone({ badges, earnedBadgeIds, categories, progress, xp, recommended, calculateArticleXp: difficulty => {
+    try { return calculateArticleXp(difficulty); }
+    // Existing milestone logic omits XP lesson estimates when configuration is unavailable.
+    catch { return NaN; }
+  } });
   const earnedCount = badges.filter(badge => earnedBadgeIds.has(badge.id)).length;
   const percentage = Math.round(completedCount / articles.length * 100);
   const level = expertise ? expertise[0].toUpperCase() + expertise.slice(1) : "Not yet set";
