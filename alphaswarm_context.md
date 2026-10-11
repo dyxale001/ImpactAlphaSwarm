@@ -4,7 +4,7 @@
 AlphaSwarm is a multi-agent system designed to automate advanced financial research and democratize complex analysis for retail investors. 
 
 * **The Core Problem:** Retail investors face "Analysis Paralysis" due to fragmented financial data and emotional decision-making driven by social media hype.
-* **The Solution:** AlphaSwarm acts as an AI "Investment Committee" that systemizes analytical stages, centralizes market data/sentiment, and maps recommendations to personal risk profiles.
+* **The Solution:** AlphaSwarm acts as an AI "Investment Committee" that systemizes analytical stages, centralizes market data/sentiment, and filters and ranks analysed assets using personal risk profiles.
 * **Key Value Proposition:** Explainable AI (XAI). AlphaSwarm avoids the "black box" approach by providing explicit "Reasoning Traces" and a Unified Confidence Score (0-100%) to explain exactly how the AI arrived at its conclusions.
 
 ## 2. Target Users (Personas)
@@ -57,11 +57,11 @@ Designed for accessibility across all devices, prioritizing a sleek, data-rich u
 1. **Register/Authenticate User:** Users create profiles mapping to a Supabase UUID.
 2. **Configure Risk Profile:** Users define their investment capital, sector universe, and risk appetite (Conservative, Moderate, Aggressive).
 3. **Request Asset Analysis:** User enters a ticker; Orchestrator triggers agents to fetch and synthesize data.
-4. **View Combined Recommendation:** System displays the Confidence Score, suggested allocation, and hype check alerts.
+4. **View Asset Analysis:** System displays asset scores, rankings, reasoning traces, and hype check alerts.
 5. **View AI Reasoning Trace:** User drills down into the precise logic, viewing the top influential sources and technical metric breakdowns.
-6. **Generate Portfolio Suggestion:** System recommends a diversified asset allocation based strictly on the user's configured Risk Profile.
-7. **Run Paper Trade Simulation:** User tests the recommendation in a risk-free environment, tracking virtual ROI over time.
-8. **View Dashboard:** The central hub rendering active recommendations, watchlists, and portfolio performance.
+6. **View Paper Trading Portfolio:** Users review virtual holdings, cash, and simulated performance. The allocation display uses demo data; it is not a personalised allocation generated from the user's Risk Profile.
+7. **Run Paper Trade Simulation:** Users make their own simulated trades with virtual cash and review virtual portfolio returns; no real money is at risk.
+8. **View Dashboard:** Users arrange widgets for ranked assets, watchlists, sentiment, quantitative data, investor activity, and learning progress.
 
 ### Lifecycle State Machines
 To assist with state management and backend architecture, here are the expected lifecycle states for core entities:

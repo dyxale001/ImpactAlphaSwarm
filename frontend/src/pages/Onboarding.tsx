@@ -47,7 +47,7 @@ const STEP_LEADS = [
   'Pick the style that sounds most like you, adjustable any time.',
   "Select companies you recognise. We'll suggest sectors and can start your watchlist.",
   'These questions set the foundation for how the Swarm sizes and filters for you.',
-  'Every recommendation you see will be filtered through this mandate.',
+  'The ranked assets you see will be filtered through this mandate.',
 ]
 
 // Display casing only; stored DB values stay lowercase

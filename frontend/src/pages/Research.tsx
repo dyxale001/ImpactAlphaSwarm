@@ -10,7 +10,7 @@ export default function ResearchPage() {
     <div className="space-y-8 max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10">
       <div>
         <h1 className="text-3xl font-bold text-brand-fg">Research Deep Dive</h1>
-        <p className="text-brand-muted-fg text-sm mt-1">Explore the reasoning traces behind every recommendation.</p>
+        <p className="text-brand-muted-fg text-sm mt-1">Explore the reasoning traces behind each asset analysis.</p>
       </div>
 
       <HypeAlerts alerts={hypeAlerts} />

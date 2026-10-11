@@ -5353,7 +5353,7 @@ async def admin_reports_assets(range: str = "30d", limit: int = 10, authorizatio
             "most_analyzed_definition": (
                 "Number of completed analysis runs that scored this asset "
                 "(one ai_recommendation row per asset per completed run) — "
-                "not views, clicks, or recommendation rank."
+                "not views, clicks, or asset rank."
             ),
         }
     except Exception as e:
