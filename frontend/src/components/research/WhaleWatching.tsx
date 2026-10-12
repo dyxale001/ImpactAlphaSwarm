@@ -18,6 +18,7 @@ import {
   formatName,
   formatShares,
   formatUsd,
+  isOpenMarket,
   txnNature,
 } from "./whaleFormat";
 
@@ -61,8 +62,18 @@ export default function WhaleWatching({
   ) : (
     " · "
   );
-  const { transactions, source, fetchedAt, isLoading, error } =
-    useWhaleData(ticker);
+  const {
+    transactions,
+    source,
+    windowDays,
+    summaryEnabled,
+    fetchedAt,
+    isLoading,
+    error,
+  } = useWhaleData(ticker);
+  // The span the server kept, said wherever the panel claims anything about it. Absent
+  // only on an answer cached before the window existed.
+  const span = windowDays ? `in the last ${windowDays} days` : null;
   const [expanded, setExpanded] = useState(false);
 
   // Show only the most recent few by default; the rest expand on demand.
@@ -89,7 +100,7 @@ export default function WhaleWatching({
 
   return (
     <section
-      className={`soft-card w-full p-5 space-y-4 ${
+      className={`soft-card w-full p-4 sm:p-5 space-y-4 ${
         onAsset ? "hover:border-brand-primary/30 transition-all" : ""
       }`}
     >
@@ -104,13 +115,14 @@ export default function WhaleWatching({
             } font-semibold mb-1 flex items-center gap-1.5`}
           >
             <Waves className="w-3 h-3 text-brand-primary" />
-            Whale Watching
+            Insider trading
           </p>
           <p
             className={`text-sm ${onAsset ? "text-brand-fg/90" : "text-brand-muted-fg"}`}
           >
-            Recent insider dealings: Directors and Executives trading their own
-            company's stock. Reference data for your own judgment.
+            {span ? `Insider dealings ${span}` : "Recent insider dealings"}:
+            directors and executives trading their own company's stock.
+            Reference data for your own judgment.
           </p>
         </div>
 
@@ -130,11 +142,13 @@ export default function WhaleWatching({
       ) : transactions.length === 0 ? (
         <p className="text-sm text-brand-muted-fg italic py-2">
           {emptyMessage ??
-            `No recent insider dealings on record for ${ticker}. Insider data covers US-listed companies.`}
+            `No insider dealings ${span ?? "recently"} on record for ${ticker}. Insider data covers US-listed companies.`}
         </p>
       ) : (
         <div className="space-y-3">
-          {showSummary && (
+          {/* Left out entirely when the summary is switched off, rather than a
+              skeleton that appears and then vanishes. */}
+          {showSummary && summaryEnabled !== false && (
             <InsiderTracePanel ticker={ticker} transactions={transactions} />
           )}
 
@@ -164,6 +178,9 @@ export default function WhaleWatching({
             {visibleTransactions.map((t, i) => {
             const isBuy = t.type === "buy";
             const nature = txnNature(t.transaction_code);
+            // Only an open-market trade gets a Buy or Sell badge. Anything else is named
+            // for what it is, in a neutral badge, and then needs no second chip.
+            const openMarket = isOpenMarket(t.transaction_code);
             return (
               <div
                 key={`${t.name}-${t.filing_date}-${i}`}
@@ -171,27 +188,33 @@ export default function WhaleWatching({
                   onAsset ? "border-brand-accent" : "border-brand-border/60"
                 } bg-brand-bg/55 px-4 py-3`}
               >
-                <span
-                  className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                    onAsset
-                      ? // Neon lime with forest text for a buy, solid forest with white
-                        // text for a sell. Lime text on a light card is unreadable, so
-                        // the lime is the fill, as the brand does everywhere else.
-                        isBuy
-                        ? "bg-brand-accent text-brand-fg"
-                        : "bg-brand-primary text-white"
-                      : isBuy
-                        ? "bg-brand-primary/15 text-brand-primary"
-                        : "bg-semantic-danger/15 text-semantic-danger"
-                  }`}
-                >
-                  {isBuy ? (
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  ) : (
-                    <ArrowDownRight className="w-3.5 h-3.5" />
-                  )}
-                  {isBuy ? "Buy" : "Sell"}
-                </span>
+                {openMarket ? (
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
+                      onAsset
+                        ? // Neon lime with forest text for a buy, solid forest with white
+                          // text for a sell. Lime text on a light card is unreadable, so
+                          // the lime is the fill, as the brand does everywhere else.
+                          isBuy
+                          ? "bg-brand-accent text-brand-fg"
+                          : "bg-brand-primary text-white"
+                        : isBuy
+                          ? "bg-brand-primary/15 text-brand-primary"
+                          : "bg-semantic-danger/15 text-semantic-danger"
+                    }`}
+                  >
+                    {isBuy ? (
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    ) : (
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                    )}
+                    {isBuy ? "Buy" : "Sell"}
+                  </span>
+                ) : (
+                  <span className="shrink-0 inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg px-2 py-1 text-xs font-semibold text-brand-muted-fg">
+                    {nature ?? "Other"}
+                  </span>
+                )}
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-brand-fg truncate">
@@ -204,14 +227,16 @@ export default function WhaleWatching({
                     )}
                   </p>
                   <p className="text-xs text-brand-muted-fg flex items-center gap-1.5 flex-wrap mt-0.5">
-                    {nature && (
+                    {nature && openMarket && (
                       <span className="rounded-full border border-brand-border/60 bg-brand-bg px-1.5 py-0.5 text-[10px] font-medium text-brand-muted-fg">
                         {nature}
                       </span>
                     )}
                     <span className="inline-flex items-center flex-wrap">
                       {[
-                        `${formatShares(t.shares)} shares`,
+                        (t.lots ?? 1) > 1
+                          ? `${formatShares(t.shares)} shares in ${t.lots} trades`
+                          : `${formatShares(t.shares)} shares`,
                         ...(showTradeDate && t.transaction_date
                           ? [`traded ${formatDate(t.transaction_date)}`]
                           : []),
@@ -232,7 +257,7 @@ export default function WhaleWatching({
                   </p>
                   {t.price != null && t.price > 0 && (
                     <p className="text-xs text-brand-muted-fg font-mono">
-                      @ ${t.price.toFixed(2)}
+                      {(t.lots ?? 1) > 1 ? "avg" : "@"} ${t.price.toFixed(2)}
                     </p>
                   )}
                 </div>

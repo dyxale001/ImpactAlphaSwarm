@@ -52,7 +52,7 @@ logger = logging.getLogger("alpha-api")
 
 #: Bumped whenever the prompt or the facts change shape, so stored summaries are
 #: rewritten once.
-INSIDER_TRACE_VERSION = 4
+INSIDER_TRACE_VERSION = 5
 
 #: Several insiders dealing within this many days of each other is a cluster.
 CLUSTER_WINDOW_DAYS = 30
@@ -105,14 +105,33 @@ def _chief(role: Optional[str]) -> str:
     return ""
 
 
-def _clustered(dealings: list[tuple[datetime.date, str]], minimum: int) -> bool:
-    """Whether `minimum` different insiders dealt within the window of each other."""
+def _clustered(
+    dealings: list[tuple[datetime.date, str]], minimum: int
+) -> Optional[tuple[str, str]]:
+    """The first and last day of the latest run of `minimum` different insiders dealing
+    within the window of each other, or None when there is none.
+
+    The dates are said in the note. The tab's own callout counts only the last 30 days,
+    so a note that said "within weeks of each other" about a cluster in August read as a
+    contradiction of a callout that showed nothing.
+    """
     dealings = sorted(dealings)
+    latest: Optional[tuple[str, str]] = None
     for i, (start, _) in enumerate(dealings):
-        names = {name for day, name in dealings[i:] if (day - start).days <= CLUSTER_WINDOW_DAYS}
-        if len(names) >= minimum:
-            return True
-    return False
+        inside = [(day, name) for day, name in dealings[i:] if (day - start).days <= CLUSTER_WINDOW_DAYS]
+        if len({name for _, name in inside}) >= minimum:
+            latest = (start.isoformat(), inside[-1][0].isoformat())
+    return latest
+
+
+def _between(span: Optional[tuple[str, str]]) -> str:
+    """'between 10 September 2026 and 21 September 2026', or 'on 10 September 2026'."""
+    if not span:
+        return "within weeks of each other"
+    first, last = span
+    if first == last:
+        return f"on {spell_date(first)}"
+    return f"between {spell_date(first)} and {spell_date(last)}"
 
 
 _SUFFIXES = {"jr": "Jr.", "jr.": "Jr.", "sr": "Sr.", "sr.": "Sr.", "ii": "II", "iii": "III", "iv": "IV"}
@@ -214,6 +233,11 @@ class InsiderEvidence:
     as_of: Optional[str]
     highlights: tuple[Highlight, ...] = field(default_factory=tuple)
     price: Optional[PriceMove] = None
+    #: How far back the dealings reach (InsiderWindow), so "no purchase" says over what.
+    window_days: Optional[int] = None
+    #: First and last day of the latest cluster, so the note says when it was.
+    purchase_cluster_span: Optional[tuple[str, str]] = None
+    sale_cluster_span: Optional[tuple[str, str]] = None
 
     @classmethod
     def from_payload(cls, ticker: str, payload: dict) -> "InsiderEvidence":
@@ -242,18 +266,36 @@ class InsiderEvidence:
                 routine += 1
 
         filed = sorted((t.get("filing_date") or "")[:10] for t in transactions if t.get("filing_date"))
+        purchase_span = _clustered(purchases, CLUSTER_MIN_PURCHASERS)
+        sale_span = _clustered(sales, CLUSTER_MIN_SELLERS)
         return cls(
             ticker=ticker.upper(),
             total=len(transactions),
             purchasers=len(purchaser_names),
             sellers=len(seller_names),
             routine=routine,
-            purchase_cluster=_clustered(purchases, CLUSTER_MIN_PURCHASERS),
-            sale_cluster=_clustered(sales, CLUSTER_MIN_SELLERS),
+            purchase_cluster=purchase_span is not None,
+            sale_cluster=sale_span is not None,
             chief_purchased=chief_purchased,
             as_of=filed[-1] if filed else None,
             highlights=cls._pick_highlights(transactions),
+            window_days=cls._window_days(payload.get("window_days")),
+            purchase_cluster_span=purchase_span,
+            sale_cluster_span=sale_span,
         )
+
+    @staticmethod
+    def _window_days(value: Any) -> Optional[int]:
+        try:
+            days = int(value)
+        except (TypeError, ValueError):
+            return None
+        return days if days > 0 else None
+
+    @property
+    def span(self) -> str:
+        """' in the last 90 days', or '' when the window is unknown."""
+        return f" in the last {self.window_days} days" if self.window_days else ""
 
     @staticmethod
     def _pick_highlights(transactions: list[dict]) -> tuple[Highlight, ...]:
@@ -312,7 +354,10 @@ class InsiderEvidence:
         allowed = {float(n) for n in range(0, 13)}
         allowed |= {float(self.total), float(self.purchasers), float(self.sellers), float(self.routine)}
         allowed |= {float(CLUSTER_WINDOW_DAYS)}
+        if self.window_days:
+            allowed.add(float(self.window_days))
         days = [self.as_of] + [h.day for h in self.highlights]
+        days += list(self.purchase_cluster_span or ()) + list(self.sale_cluster_span or ())
         for h in self.highlights:
             allowed |= {float(n.replace(",", "")) for n in _NUMBER.findall(h.amount)}
         if self.price:
@@ -340,8 +385,11 @@ class InsiderEvidence:
             "routine": self.routine,
             "purchase_cluster": self.purchase_cluster,
             "sale_cluster": self.sale_cluster,
+            "purchase_cluster_span": list(self.purchase_cluster_span or ()) or None,
+            "sale_cluster_span": list(self.sale_cluster_span or ()) or None,
             "chief_purchased": self.chief_purchased,
             "as_of": self.as_of,
+            "window_days": self.window_days,
             "highlights": [h.as_dict() for h in self.highlights],
         }
 
@@ -456,13 +504,16 @@ class InsiderMeaning:
         if evidence.purchase_cluster:
             chief = f", including {evidence.chief_purchased}" if evidence.chief_purchased else ""
             return (
-                f"Several insiders made purchases within weeks of each other{chief}, a cluster"
-                " markets treat as stronger than one purchase."
+                f"Several insiders made purchases {_between(evidence.purchase_cluster_span)}{chief},"
+                " a cluster markets treat as stronger than one purchase."
             )
         if evidence.sale_cluster and evidence.purchasers == 0:
-            return "Several insiders sold within weeks of each other and none made a purchase, though such sales are often pre-scheduled."
+            return (
+                f"Several insiders sold {_between(evidence.sale_cluster_span)} and none made a purchase{evidence.span},"
+                " though such sales are often pre-scheduled."
+            )
         if evidence.purchasers == 0 and evidence.main is not None and not evidence.main.is_purchase:
-            return "No insider made an open-market purchase, the strongest kind of signal."
+            return f"No insider made an open-market purchase{evidence.span}, the strongest kind of signal."
         return ""
 
     @staticmethod
@@ -496,7 +547,7 @@ class InsiderTracePromptBuilder:
 
     def build(self, evidence: InsiderEvidence) -> str:
         meaning_block = "\n".join(f"- {line}" for line in self.meaning.lines(evidence))
-        return f"""You are writing a short note for an investing app in South Africa about the insider dealings listed on the "Insider trading" tab for {evidence.ticker}. Insiders are the company's own executives, directors and large shareholders. Write in the language a market analyst would use, but explain each market term briefly the first time, because many readers are new to investing.
+        return f"""You are writing a short note for an investing app in South Africa about the insider dealings listed on the "Insider trading" tab for {evidence.ticker}{evidence.span}. Insiders are the company's own executives, directors and large shareholders. Write in the language a market analyst would use, but explain each market term briefly the first time, because many readers are new to investing.
 
 The facts and what they mean, already worked out for you:
 {meaning_block}

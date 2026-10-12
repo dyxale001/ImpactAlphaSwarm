@@ -43,8 +43,10 @@ export function WhaleSummaryBox({
 
   return (
     // The neon lime border and forest toned ground are the reasoning trace boxes' own
-    // styling, the same frame the day summary and the Quant trace use.
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+    // styling, the same frame the day summary and the Quant trace use. p-3 on a
+    // phone, as on those: this box is the middle of three nested frames on the
+    // asset page, and the summary is the text the whole tab is read for.
+    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div className="flex items-baseline gap-2 flex-wrap">
           <h4 className="text-sm font-semibold text-brand-fg">

@@ -1,51 +1,32 @@
-import { useState, useEffect } from "react";
-import {
-  getWhaleActivity,
-  type WhaleTransactionDTO,
-} from "../services/api/analysis";
+import { getWhaleActivity, type WhaleTransactionDTO } from "../services/api/analysis";
+import { MINUTE } from "../utils/responseCache";
+import { useCachedFetch } from "./useCachedFetch";
+
+// The server keeps a ticker's dealings for 48 hours before refetching from Finnhub, so
+// half an hour on this side only matters for a page left open for a long time.
+const DEALINGS_FRESH_MS = 30 * MINUTE;
+// One empty list for every empty answer, so callers memoising on it stay stable.
+const NO_TRANSACTIONS: WhaleTransactionDTO[] = [];
 
 // Fetches insider dealings for a ticker. Informational only — this never feeds
-// the recommendation, so it loads independently of the AI run.
+// the recommendation, so it loads independently of the AI run. Cached across tab
+// switches and widgets (utils/responseCache).
 export function useWhaleData(ticker: string | undefined) {
-  const [transactions, setTransactions] = useState<WhaleTransactionDTO[]>([]);
-  const [source, setSource] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!ticker) {
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await getWhaleActivity(ticker);
-        if (cancelled) return;
-        setTransactions(res.transactions ?? []);
-        setSource(res.source);
-        setFetchedAt(res.fetched_at ?? null);
-      } catch (e) {
-        if (cancelled) return;
-        console.error("Error fetching whale activity:", e);
-        setError("Unable to load insider dealings.");
-        setTransactions([]);
-        setSource(null);
-        setFetchedAt(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [ticker]);
-
-  return { transactions, source, fetchedAt, isLoading, error };
+  const { data, isLoading, error } = useCachedFetch(
+    ticker ? `insiders:${ticker.toUpperCase()}` : null,
+    () => getWhaleActivity(ticker as string),
+    () => DEALINGS_FRESH_MS,
+    "Unable to load insider dealings.",
+  );
+  return {
+    transactions: data?.transactions ?? NO_TRANSACTIONS,
+    source: data?.source ?? null,
+    windowDays: data?.window_days ?? null,
+    // Null when the answer predates the flag: the panel then asks for the summary as
+    // it always did.
+    summaryEnabled: data?.summary_enabled ?? null,
+    fetchedAt: data?.fetched_at ?? null,
+    isLoading,
+    error,
+  };
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Pencil, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Columns2, ExternalLink, FileText, Pencil, Search } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import RiskScale from "../components/funds/RiskScale";
@@ -15,6 +15,8 @@ import FundPerformance, { hasPerformance } from "../components/funds/FundPerform
 import FundSwings, { hasSwings } from "../components/funds/FundSwings";
 import FundIncomeHistory, { hasIncome } from "../components/funds/FundIncomeHistory";
 import { useFundDetail, useFundPrices } from "../hooks/useFundCatalogue";
+import { COMPARE_ENABLED } from "../utils/compareFlags";
+import { compareHref } from "../utils/compareUrl";
 import {
   AS_AT,
   COST_LABEL,
@@ -335,8 +337,12 @@ function Hero({
   const linksToDocument = Boolean(fund.mdd_url);
 
   return (
-    <header className="hero-card overflow-hidden px-6 pb-6 pt-7 sm:px-7">
-      <TiersMotif className="h-full" />
+    <header className="hero-card overflow-hidden px-4 pb-6 pt-6 sm:px-7 sm:pt-7">
+      {/* Not drawn on a phone. The copy runs to this card's bottom edge, so
+          there is no empty band to keep the branches in, and stretched to the
+          full height of a card that narrow they cut through the fund's name and
+          the fact sheet line. */}
+      <TiersMotif className="hidden h-full sm:block" />
       <div className="relative flex flex-col gap-1">
         {/* The same three badges the fund card carries, styled the same way
             round: vehicle plain, tracker outlined, the accent fill spent on
@@ -379,6 +385,21 @@ function Hero({
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-lime-100/55">
             {fund.vehicle_note}
           </p>
+        )}
+
+        {/* Opens Compare with this fund already in the first column and the search
+            ready for the next. The stock page's button, in the same place (under
+            the identity, before the detail) and in the same words, set for the
+            dark header: it is an action, so it does not sit among the facts in the
+            footer strip. */}
+        {COMPARE_ENABLED && (
+          <Link
+            to={compareHref("funds", [fund.fund_id])}
+            className="mt-3 inline-flex self-start items-center gap-1.5 rounded-full border border-lime-100/30 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-brand-accent/60 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            <Columns2 className="h-4 w-4 text-brand-accent" />
+            Compare with…
+          </Link>
         )}
 
         <div className="mt-4">

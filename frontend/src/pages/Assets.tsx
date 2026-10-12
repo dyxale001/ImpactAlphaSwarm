@@ -49,6 +49,7 @@ import { MarketClock } from "../components/research/MarketClock";
 import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
 import { useAskChatbotStore } from "../store/askChatbotStore";
 import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
+import { ListingLine } from "../components/research/ListingLine";
 
 /** Assets that got an LLM-written trace, and so are shown as full cards. Mirrors
  *  REASONING_TRACE_TOP_N on the backend; everything below this rank carries the
@@ -475,8 +476,11 @@ export default function AssetsPage() {
       )}
 
       {/* Top Pick — dark hero surface (hero-card), same family as the
-          WhaleWatching and Watchlist headers */}
-      <div className="hero-card z-50 overflow-visible p-6">
+          WhaleWatching and Watchlist headers. z-10 lifts its hover tooltips
+          over the shortlist cards below; it was z-50, which tied with the
+          phone top bar and, coming later in the page, scrolled over it and
+          hid the logo and menu button. */}
+      <div className="hero-card z-10 overflow-visible p-4 sm:p-6">
         <Link
           to={`/asset/${topPick?.ticker}`}
           className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
@@ -540,6 +544,7 @@ export default function AssetsPage() {
                 </div>
               </div>
             </Link>
+            <ListingLine universe={topPick?.universe} exchange={topPick?.exchange} onDark />
             {topPick?.isDiscovered ? (
               <span
                 className="chip bg-brand-accent text-brand-fg w-fit"

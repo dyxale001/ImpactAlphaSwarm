@@ -7,9 +7,10 @@ import {
   type SocialPost,
 } from "../components/research/SocialPosts";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
-import { dayLabel } from "../components/research/sentimentDays";
+import { dayLabel, dayPhrase } from "../components/research/sentimentDays";
 import {
   EmptyStateCard,
+  FilterChipRow,
   SentimentFilterChips,
   SortToggle,
   SourceList,
@@ -29,7 +30,7 @@ import { useSentimentSources } from "../hooks/useSentimentSources";
 // different things.
 export default function SocialSentimentPage() {
   const { ticker } = useParams<{ ticker: string }>();
-  const { asset, recommendation, isLoading } = useAssetDetails(ticker);
+  const { asset, isLoading } = useAssetDetails(ticker);
   const { points, daysWithData, isLoading: historyLoading, isSeeding, error } =
     useSentimentHistory(ticker);
 
@@ -60,15 +61,18 @@ export default function SocialSentimentPage() {
   if (isLoading) return <AssetDetailsSkeleton />;
 
   const tickerLabel = asset?.ticker ?? ticker?.toUpperCase() ?? "";
-  const socialScore =
-    activePoint?.score ??
-    recommendation?.social_sentiment_score ??
-    recommendation?.sentiment_score;
+  // The selected day's own reading and nothing else. This used to fall back to the
+  // run's social score and then to the BLENDED score, so a day with no reading could
+  // show a news-weighted figure labelled "Social score".
+  const socialScore = activePoint?.score ?? null;
 
   // The day's real post count, which is not the same as how many we kept. A busy day
   // can score 143 posts while the row holds the top 15, and showing 15 here beside a
   // bar of 143 would make the chart look broken rather than the list look trimmed.
   const dayTotal = activePoint?.post_count ?? posts.length;
+  const hasAnyPosts = points.some(
+    (p) => p.post_count > 0 || (p.top_posts?.length ?? 0) > 0,
+  );
   const trimmed = dayTotal > posts.length;
 
   return (
@@ -91,7 +95,11 @@ export default function SocialSentimentPage() {
         onSelectDay={setSelectedDay}
       />
 
-      {posts.length === 0 ? (
+      {/* The whole week, not the selected day. Testing the day's own posts replaced the
+          entire panel with "no posts collected for this stock" the moment anyone
+          clicked a quiet Sunday, which is false, and took the day's heading with it so
+          the reader could not even see which day was empty. */}
+      {!hasAnyPosts ? (
         <EmptyStateCard message="No social posts have been collected for this stock yet." />
       ) : (
         <>
@@ -121,7 +129,7 @@ export default function SocialSentimentPage() {
           {/* The day's posts, framed the way DaySummaryPanel frames its prose: an
               accent-outlined panel with the day as its heading, and the list itself
               in a quiet inner box under a labelled eyebrow. */}
-          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <h4 className="text-sm font-semibold text-brand-fg">
                 {activeDay ? dayLabel(activeDay) : "Posts"}
@@ -136,14 +144,14 @@ export default function SocialSentimentPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
+              <FilterChipRow>
                 <SentimentFilterChips
                   total={posts.length}
                   counts={bucketCounts}
                   value={sentimentFilter}
                   onChange={setSentimentFilter}
                 />
-              </div>
+              </FilterChipRow>
               <SortToggle value={sort} onChange={setSort} />
             </div>
 
@@ -154,7 +162,9 @@ export default function SocialSentimentPage() {
               </div>
               {shown.length === 0 ? (
                 <p className="text-sm text-brand-muted-fg italic">
-                  No posts match the selected filters.
+                  {posts.length === 0
+                    ? `No posts ${activeDay ? dayPhrase(activeDay) : "on this day"}.`
+                    : "No posts match the selected filters."}
                 </p>
               ) : (
                 <SourceList nested>

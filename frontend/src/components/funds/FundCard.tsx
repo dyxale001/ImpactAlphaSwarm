@@ -102,7 +102,7 @@ export default function FundCard({
     (catalogue.has_factsheet === false ? RISK_NO_SHEET_NOTE : RISK_UNPUBLISHED_NOTE);
 
   return (
-    <article className="soft-card flex flex-col gap-4 p-5">
+    <article className="soft-card flex flex-col gap-4 p-4 sm:p-5">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Three badges saying three unrelated things, so they are drawn
@@ -114,7 +114,7 @@ export default function FundCard({
             {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}
           </span>
           {fund.is_index_tracker && (
-            <span className="chip border border-dashed border-brand-border text-forest-500">
+            <span className="chip border border-dashed border-brand-border bg-transparent text-forest-500">
               {TRACKER_BADGE}
             </span>
           )}

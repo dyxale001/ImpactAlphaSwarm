@@ -60,14 +60,31 @@ class FinnhubSource(NewsSource):
 		registry: PublisherRegistry | None = None,
 		limiter: RateLimiter | None = None,
 		limit: int = 30,
+		api_key: str | None = None,
+		http=None,
 	):
 		super().__init__(config, registry)
 		self.limiter = limiter or FINNHUB_LIMITER
 		self.limit = limit
+		# None reads FINNHUB_API_KEY at call time, which is what every existing caller
+		# gets. The news tick passes its own so it can run on a key of its own.
+		self._api_key = api_key
+		self.http = http
 
 	@property
 	def cache_max_age_hours(self) -> int:
 		return self.config.finnhub_cache_max_age_hours
+
+	def api_key(self) -> str:
+		if self._api_key is not None:
+			return self._api_key.strip()
+		return os.getenv("FINNHUB_API_KEY", "").strip()
+
+	def window(self, lookback_days: int | None = None) -> tuple[str, str]:
+		"""The ``from`` and ``to`` dates of a fetch, in UTC, both inclusive."""
+		days = self.config.news_lookback_days if lookback_days is None else lookback_days
+		today = datetime.now(timezone.utc).date()
+		return (today - timedelta(days=max(1, days))).isoformat(), today.isoformat()
 
 	def collect(self, tickers: list[str]) -> dict[str, list[SocialMention]]:
 		try:
@@ -77,41 +94,57 @@ class FinnhubSource(NewsSource):
 
 	def _collect(self, tickers: list[str]) -> dict[str, list[SocialMention]]:
 		results = self.empty(tickers)
-		if requests is None:
+		if (self.http or requests) is None or not self.api_key():
 			return results
 
-		api_key = os.getenv("FINNHUB_API_KEY", "").strip()
-		if not api_key:
-			return results
-
-		headers = {"Accept": "application/json"}
-		today = datetime.now(timezone.utc).date()
-		date_from = (today - timedelta(days=max(1, self.config.news_lookback_days))).isoformat()
-		date_to = today.isoformat()
-
+		date_from, date_to = self.window()
 		for ticker in tickers:
 			sym = ticker.upper()
-			params = {"symbol": _api_symbol(sym), "from": date_from, "to": date_to, "token": api_key}
-
-			try:
-				self.limiter.wait()
-				resp = requests.get(FINNHUB_NEWS_URL, params=params, headers=headers, timeout=10)
-				if resp.status_code != 200:
-					# Surface the failure instead of silently degrading to social-only.
-					if resp.status_code == 429:
-						logger.warning("Finnhub news fetch for %s rate limited (HTTP 429)", sym)
-					else:
-						logger.info("Finnhub news fetch for %s returned HTTP %s", sym, resp.status_code)
-					continue
-				payload = resp.json()
-				if not isinstance(payload, list):
-					continue
-
-				results[sym] = self._parse(sym, payload)
-			except Exception:
-				continue
-
+			self.limiter.wait()
+			status, mentions = self.fetch_one(sym, date_from, date_to)
+			if status == 200:
+				results[sym] = mentions
 		return results
+
+	def fetch_one(
+		self, sym: str, date_from: str, date_to: str
+	) -> tuple[int | None, list[SocialMention]]:
+		"""One ticker's articles between two dates, with the HTTP status it came back on.
+
+		The caller does the pacing. The status is returned rather than swallowed so a
+		caller that walks many tickers can tell a refusal from a quiet ticker: a 429 means
+		there IS news and we were told to slow down. ``None`` means the request never
+		got an answer.
+		"""
+		http = self.http or requests
+		api_key = self.api_key()
+		if http is None or not api_key:
+			return None, []
+
+		params = {"symbol": _api_symbol(sym), "from": date_from, "to": date_to, "token": api_key}
+		try:
+			resp = http.get(
+				FINNHUB_NEWS_URL, params=params, headers={"Accept": "application/json"}, timeout=10
+			)
+		except Exception as exc:
+			logger.info("Finnhub news fetch for %s failed: %s", sym, exc)
+			return None, []
+
+		if resp.status_code != 200:
+			# Surface the failure instead of silently degrading to social-only.
+			if resp.status_code == 429:
+				logger.warning("Finnhub news fetch for %s rate limited (HTTP 429)", sym)
+			else:
+				logger.info("Finnhub news fetch for %s returned HTTP %s", sym, resp.status_code)
+			return resp.status_code, []
+
+		try:
+			payload = resp.json()
+		except Exception:
+			return None, []
+		if not isinstance(payload, list):
+			return 200, []
+		return 200, self._parse(sym, payload)
 
 	def _parse(self, sym: str, payload: list) -> list[SocialMention]:
 		collected: list[SocialMention] = []

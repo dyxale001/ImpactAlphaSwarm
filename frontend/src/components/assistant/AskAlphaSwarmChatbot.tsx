@@ -172,9 +172,9 @@ export default function AskAlphaSwarmChatbot() {
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
-          className="w-14 h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
         >
-          {open ? <X className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
+          {open ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>
         {!open && (
           <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-2 z-50">

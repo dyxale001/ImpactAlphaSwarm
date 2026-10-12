@@ -30,12 +30,21 @@ interface Props {
   point?: SentimentHistoryPoint;
   /** That day's news, when the chart has a news series. */
   newsDay?: NewsDay;
+  /** Every day of the chart's news series, to check what the empty state claims. */
+  newsDays?: Map<string, NewsDay>;
 }
 
-export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
+export function DaySummaryPanel({ ticker, day, point, newsDay, newsDays }: Props) {
   const { summary, isLoading, error } = useDayDrivers(ticker, day);
 
   if (!day) return null;
+
+  // Whether the chart holds no news at all on or before this day. Only then is it true
+  // that there was nothing to explain; an empty answer otherwise means the paragraph
+  // has not been written yet, or failed, and the panel must not claim more than that.
+  const noNewsUpToDay =
+    newsDays !== undefined &&
+    ![...newsDays.values()].some((d) => d.date <= day && d.count > 0);
 
   const verdict = sentimentVerdict(point?.score ?? null);
   // Many tickers go days without an article. On such a day the server answers with the
@@ -49,15 +58,19 @@ export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
   // belongs to an earlier, settled day. The server is the authority on what counts as
   // still open; a client deciding separately would disagree with it for two hours
   // around midnight UTC.
+  //
+  // Only an answer that actually carries a paragraph counts. The server answers every
+  // empty case (summaries off, no news, a failed generation) with is_final false, and
+  // reading that as "still open" put "So far today" on days that ended long ago.
   const provisional =
-    summary && !carriedFrom ? !summary.is_final : day === todayKey();
+    summary?.summary && !carriedFrom ? !summary.is_final : day === todayKey();
 
   return (
     // The neon-lime border and forest-toned ground are the reasoning-trace boxes'
     // own styling, so a written account of one day reads as the same kind of object
     // as the reasoning trace on the ranking tab: an AI-written paragraph about the
     // run, framed the same way wherever it appears.
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
       {/* The heading names the day the chart selection points at, and carries the two
           badges that qualify the reading. */}
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -130,7 +143,7 @@ export function DaySummaryPanel({ ticker, day, point, newsDay }: Props) {
           </>
         ) : (
           <p className="text-sm text-brand-muted-fg italic">
-            {newsDay && newsDay.count === 0
+            {noNewsUpToDay
               ? `No news articles in the last ${SOCIAL_HISTORY_DAYS} days up to this day, so there is nothing to explain.`
               : "Not available for this day yet."}
           </p>
@@ -161,7 +174,9 @@ function DayFigures({
     parts.push(point.post_count === 1 ? "1 post" : `${point.post_count} posts`);
   }
   if (newsDay?.score != null) {
-    parts.push(`news ${newsDay.score}`);
+    // Rounded: the stored series is whole numbers already, but the fallback derived on
+    // the client from the article list is a weighted mean with every decimal it has.
+    parts.push(`news ${Math.round(newsDay.score)}`);
   }
   if (newsDay) {
     parts.push(newsDay.count === 1 ? "1 article" : `${newsDay.count} articles`);

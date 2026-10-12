@@ -8,13 +8,14 @@ import {
   type NewsArticle,
 } from "../components/research/NewsArticles";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
-import { dayLabel } from "../components/research/sentimentDays";
+import { dayLabel, dayPhrase } from "../components/research/sentimentDays";
 import {
   newsDayIndex,
   newsDaysFromHistory,
 } from "../components/research/newsDaily";
 import {
   EmptyStateCard,
+  FilterChipRow,
   SentimentFilterChips,
   SortToggle,
   SourceList,
@@ -134,7 +135,7 @@ export default function NewsSentimentPage() {
         variant="news"
         selectedDay={activeDay}
         onSelectDay={setSelectedDay}
-        selectHint="Click a day to read its articles"
+        selectHint="Choose a day to read its articles"
       />
 
       {!recommendation || !hasAnyArticles ? (
@@ -156,15 +157,18 @@ export default function NewsSentimentPage() {
                   ? `${dayTotal} (top ${dayArticles.length} shown)`
                   : dayTotal,
               },
-              { label: "Positive", value: bucketCounts.Positive },
-              { label: "Negative", value: bucketCounts.Negative },
+              // The day's totals, beside a day total. Counting labels in the listed
+              // articles counted only the top few, so a busy day read "Articles 20,
+              // Positive 5" when twelve were positive.
+              { label: "Positive", value: dayNews?.bullish ?? bucketCounts.Positive },
+              { label: "Negative", value: dayNews?.bearish ?? bucketCounts.Negative },
             ]}
           />
 
           {/* The day's articles, framed the way DaySummaryPanel frames its prose and
               the social page frames its posts: an accent-outlined panel with the day
               as its heading, the list in a quiet inner box under a labelled eyebrow. */}
-          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+          <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <h4 className="text-sm font-semibold text-brand-fg">
                 {activeDay ? dayLabel(activeDay) : "Articles"}
@@ -179,19 +183,26 @@ export default function NewsSentimentPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <SentimentFilterChips
-                  total={dayArticles.length}
-                  counts={bucketCounts}
-                  value={sentimentFilter}
-                  onChange={setSentimentFilter}
-                />
-                <span className="mx-1 h-4 w-px bg-brand-border/60" />
-                <TierFilterChips
-                  counts={tierCounts(dayArticles)}
-                  value={tierFilter}
-                  onChange={setTierFilter}
-                />
+              {/* A row per group on a phone. As one sideways row the tier chips sat
+                  wholly past the edge whenever the sentiment chips happened to fill
+                  the width, with nothing cut off to say they were there. */}
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+                <FilterChipRow>
+                  <SentimentFilterChips
+                    total={dayArticles.length}
+                    counts={bucketCounts}
+                    value={sentimentFilter}
+                    onChange={setSentimentFilter}
+                  />
+                </FilterChipRow>
+                <span className="mx-1 hidden h-4 w-px shrink-0 bg-brand-border/60 sm:block" />
+                <FilterChipRow>
+                  <TierFilterChips
+                    counts={tierCounts(dayArticles)}
+                    value={tierFilter}
+                    onChange={setTierFilter}
+                  />
+                </FilterChipRow>
               </div>
               <SortToggle value={sort} onChange={setSort} />
             </div>
@@ -203,7 +214,9 @@ export default function NewsSentimentPage() {
               </div>
               {shown.length === 0 ? (
                 <p className="text-sm text-brand-muted-fg italic">
-                  No articles match the selected filters.
+                  {dayArticles.length === 0
+                    ? `No articles ${activeDay ? dayPhrase(activeDay) : "on this day"}.`
+                    : "No articles match the selected filters."}
                 </p>
               ) : (
                 <SourceList nested>

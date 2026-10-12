@@ -46,7 +46,7 @@ export function QuantTracePanel({ ticker, horizon, active }: Props) {
     : null;
 
   return (
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
+    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <h4 className="text-sm font-semibold text-brand-fg">
           What the price did over {QUANT_HORIZON_LABELS[horizon]}

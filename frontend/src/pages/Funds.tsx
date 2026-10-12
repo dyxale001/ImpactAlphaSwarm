@@ -124,7 +124,10 @@ export default function FundsPage() {
     <div className="animate-fade-up mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
       {/* ── Header ── */}
       <div className="hero-card overflow-hidden px-5 pb-10 pt-8 sm:px-7">
-        <TiersMotif className="h-full" />
+        {/* h-10 on a phone keeps the branches inside the pb-10 band under the
+            copy. Stretched to h-full on a card that narrow, they ran up through
+            the lead paragraph. */}
+        <TiersMotif className="h-10 sm:h-full" />
         <div className="relative">
           <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-accent">
             {meta.meta?.header.eyebrow ?? FUNDS_HEADER_EYEBROW}
@@ -224,7 +227,7 @@ export default function FundsPage() {
           keeps the section above it looking personal. */}
       <section
         id={BROWSE_ID}
-        className="mt-10 flex scroll-mt-6 flex-col gap-4 rounded-brand border border-brand-border/40 bg-brand-bg/60 p-4 lg:p-5"
+        className="mt-10 flex scroll-mt-6 flex-col gap-4 rounded-brand border border-brand-border/40 bg-brand-bg/60 p-3 sm:p-4 lg:p-5"
       >
         <div className="flex flex-col gap-1">
           <h2 className="flex items-center gap-2 text-sm font-bold text-brand-primary">

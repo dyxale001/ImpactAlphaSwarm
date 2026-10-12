@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   CandlestickChart,
   BookOpen,
-  Search,
   Eye,
   LineChart,
   Terminal,
@@ -16,6 +15,7 @@ import {
   Waves,
   Landmark,
   Newspaper,
+  Columns2,
   Sparkles,
   Menu,
   X,
@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
 import { MACRO_NEWS_ENABLED } from "../../utils/macroNewsFlags";
+import { COMPARE_ENABLED } from "../../utils/compareFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,8 +67,8 @@ export default function AppLayout() {
     { name: "Stocks", path: "/assets", icon: CandlestickChart },
     { name: "Market News", path: "/news", icon: Newspaper },
     { name: "Funds", path: "/funds", icon: Landmark },
+    { name: "Compare", path: "/compare", icon: Columns2 },
     { name: "Learning", path: "/learning", icon: BookOpen },
-    { name: "Research", path: "/research", icon: Search },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
@@ -88,7 +89,8 @@ export default function AppLayout() {
       // allow-list to appear, and the page it links to needs the backend flag
       // as well, so nothing half-appears.
       (FUNDS_ENABLED && i.name === "Funds") ||
-      (MACRO_NEWS_ENABLED && i.name === "Market News")
+      (MACRO_NEWS_ENABLED && i.name === "Market News") ||
+      (COMPARE_ENABLED && i.name === "Compare")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
@@ -218,8 +220,14 @@ export default function AppLayout() {
           block for any absolutely positioned descendant that lacks a positioned
           parent (sr-only labels are the usual case), so such a box scrolls with
           the page instead of anchoring to the document and giving the window a
-          second scrollbar beside this one. */}
-      <main className="relative flex-1 overflow-y-auto pt-14 lg:pt-0">
+          second scrollbar beside this one. Below lg the floating Ask button sits
+          over the bottom-right corner of the content, so pb-20 lets the last card
+          on every page scroll clear of it; /ask has no floating button. */}
+      <main
+        className={`relative flex-1 overflow-y-auto pt-14 lg:pt-0 ${
+          location.pathname === "/ask" ? "" : "pb-20 lg:pb-0"
+        }`}
+      >
         <Outlet />{" "}
       </main>
 
