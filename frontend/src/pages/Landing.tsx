@@ -605,7 +605,7 @@ export default function Landing() {
             <StopHeader
               eyebrow="Stop 01 · Your Profile"
               title="Tell the Swarm Who You Are"
-              body="Choose your investor path, tap the companies you already know, and take a short risk assessment. All AI recommendations are filtered through the risk mandate that results. Fit with your profile is one of the four disclosed ranking factors."
+              body="Choose your investor path, tap the companies you already know, and take a short risk assessment. Ranked assets are filtered through the risk mandate that results. Fit with your profile is one of the four disclosed ranking factors."
             />
           </div>
           <div className="flex flex-col gap-4">
@@ -809,7 +809,7 @@ export default function Landing() {
                 </h4>
                 <p className="max-w-[400px] text-[13px] leading-relaxed text-neutral-100/75">
                   Insider dealings, the institutions that own each stock, and what the largest funds are buying.
-                  Informational only; this never affects your recommendations.
+                  Informational only; this never affects your asset rankings.
                 </p>
                 <div className="mt-[18px] flex flex-wrap gap-2.5">
                   <div className="min-w-[120px] flex-1 rounded-[14px] bg-white p-3.5">
@@ -872,7 +872,7 @@ export default function Landing() {
             <StopHeader
               eyebrow="Stop 05 · Learning Centre"
               title="Learn as You Go, Earn as You Learn"
-              body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 80%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
+              body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 75%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
             />
           </div>
           <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start">

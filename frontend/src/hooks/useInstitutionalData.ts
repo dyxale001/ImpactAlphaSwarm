@@ -1,45 +1,19 @@
-import { useState, useEffect } from "react";
-import {
-  getInstitutionalHolders,
-  type InstitutionalOwnershipResponse,
-} from "../services/api/analysis";
+import { getInstitutionalHolders } from "../services/api/analysis";
+import { MINUTE } from "../utils/responseCache";
+import { useCachedFetch } from "./useCachedFetch";
+
+// 13F data changes once a quarter and the server keeps it for a week, so half an hour
+// on this side only matters for a page left open for a long time.
+const OWNERSHIP_FRESH_MS = 30 * MINUTE;
 
 // Fetches institutional (13F) ownership for a ticker. Informational only —
-// independent of the AI run, like the insider-dealings panel.
+// independent of the AI run, like the insider-dealings panel. Cached across tab
+// switches and widgets (utils/responseCache).
 export function useInstitutionalData(ticker: string | undefined) {
-  const [data, setData] = useState<InstitutionalOwnershipResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!ticker) {
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await getInstitutionalHolders(ticker);
-        if (cancelled) return;
-        setData(res);
-      } catch (e) {
-        if (cancelled) return;
-        console.error("Error fetching institutional ownership:", e);
-        setError("Unable to load institutional ownership.");
-        setData(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [ticker]);
-
-  return { data, isLoading, error };
+  return useCachedFetch(
+    ticker ? `institutions:${ticker.toUpperCase()}` : null,
+    () => getInstitutionalHolders(ticker as string),
+    () => OWNERSHIP_FRESH_MS,
+    "Unable to load institutional ownership.",
+  );
 }

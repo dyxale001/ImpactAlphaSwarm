@@ -61,7 +61,7 @@ export default function HowItWorks() {
             </>
           ) : (
             <>
-              Every recommendation combines two independent engines: a{" "}
+              Each asset analysis combines two independent engines: a{" "}
               <span className="font-semibold text-brand-fg">Sentiment</span>{" "}
               signal (what people and the press are saying) and a{" "}
               <span className="font-semibold text-brand-fg">Quantitative</span>{" "}

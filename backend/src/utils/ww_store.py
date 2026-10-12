@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from .supabase_client import supabase
 from .ww_config import WhaleConfig
+from .ww_sources import InsiderWindow
 
 logger = logging.getLogger("alpha-api")
 
@@ -131,6 +132,18 @@ class InsiderCache(ReadThroughCache):
     def ttl(self) -> datetime.timedelta:
         return self.config.insider_ttl
 
+    def is_fresh(self, row: dict) -> bool:
+        """Inside the TTL, and written in the current shape. Rows cached before the
+        90 day window carry derivative rows and ungrouped batches and have no ``lots``,
+        so they are refetched once rather than served for up to two more days."""
+        transactions = row.get("transactions") or []
+        if any("lots" not in t for t in transactions):
+            return False
+        return super().is_fresh(row)
+
+    def window(self) -> InsiderWindow:
+        return InsiderWindow(self.config.insider_window_days)
+
     def value_of(self, row: dict) -> dict:
         return {"transactions": row.get("transactions") or [], "source": row.get("source")}
 
@@ -142,11 +155,15 @@ class InsiderCache(ReadThroughCache):
         }
 
     def shape(self, key: str, value: Any, cached: bool, fetched_at: Optional[str]) -> dict:
+        """The window is applied again here, so a dealing drops off the day it turns
+        91 days old, and a stale copy served after a failed fetch obeys it too."""
         value = value or {}
+        window = self.window()
         return {
             "ticker": key,
-            "transactions": value.get("transactions") or [],
+            "transactions": window.keep(value.get("transactions") or []),
             "source": value.get("source"),
+            "window_days": window.days,
             "cached": cached,
             "fetched_at": fetched_at,
         }
@@ -195,11 +212,13 @@ class FundsCache(ReadThroughCache):
     LABEL = "Funds"
     ALL_KEY = "ALL"
 
-    def __init__(self, config: Optional[WhaleConfig] = None, describer=None):
+    def __init__(self, config: Optional[WhaleConfig] = None, describer=None, families=None):
         super().__init__(config)
         # Descriptions are attached at serve time rather than baked into the
         # cached payload, so a blurb generated after the last build still shows.
         self.describer = describer
+        # Filers of one firm are merged at serve time for the same reason.
+        self.families = families
 
     @property
     def ttl(self) -> datetime.timedelta:
@@ -207,6 +226,8 @@ class FundsCache(ReadThroughCache):
 
     def shape(self, key: str, value: Any, cached: bool, fetched_at: Optional[str]) -> dict:
         funds = value or []
+        if self.families is not None:
+            funds = self.families.merge(funds)
         if self.describer is not None:
             funds = self.describer.attach(funds)
         return {"funds": funds, "cached": cached, "fetched_at": fetched_at}

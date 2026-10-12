@@ -124,6 +124,15 @@ _METRIC_CLAIM_RE = re.compile(
 _CURRENCY_PRICE_RE = re.compile(r"(?:R|\$|ZAR)\s?(" + _NUMBER + r")\b")
 _TICKER_RE = re.compile(r"\b[A-Z]{2,6}\b")
 
+# A ticker named in parentheses — "Mastercard Inc. (MA)", "(ticker MA)" — is
+# how narration conventionally cites the symbol for a company it just named.
+# Deliberately NOT the broad _TICKER_RE pattern (any bare 2-6 uppercase
+# letters): that would false-positive on acronyms like RSI/ETF/CPI/TFSA that
+# are ordinary narration vocabulary, not ticker claims. Parenthetical form is
+# narrow enough to check against a closed/known asset list with low
+# false-positive risk.
+_PAREN_TICKER_RE = re.compile(r"\((?:ticker\s+)?([A-Z]{1,6})\)")
+
 # A currency figure introduced by one of these words is the USER's own
 # hypothetical/reference amount ("your budget of R2,000", "if you had
 # R500"), not a claim about the asset's actual price — the comparison
@@ -232,6 +241,33 @@ def _check_numerical_claims(narration: str, assets: list[dict]) -> list[str]:
     return violations
 
 
+def _check_ticker_membership(narration: str, assets: list[dict]) -> list[str]:
+    """Flag a parenthetical ticker the narration cites that is NOT one of
+    the assets AlphaSwarm actually retrieved for this question.
+
+    Root-cause bug this catches: retrieval can hand the narrator a small,
+    definitive set of assets (e.g. "your watchlist is exactly these 3
+    tickers"), but nothing previously checked that the tickers the model
+    NAMED were drawn from that set — only that any NUMBER attributed to a
+    named ticker matched. A narration could name five entirely different,
+    fabricated tickers and pass validation as long as it stated no checkable
+    number about them. Only runs when the caller actually has a non-empty
+    asset list (an empty list means "no definitive set to check against",
+    not "nothing is allowed") and only looks at the parenthetical-citation
+    form, so it cannot flag ordinary acronyms like RSI/ETF/TFSA."""
+    if not assets:
+        return []
+    known_tickers = {a["ticker"] for a in assets if a.get("ticker")}
+    if not known_tickers:
+        return []
+    violations = []
+    for m in _PAREN_TICKER_RE.finditer(narration):
+        ticker = m.group(1)
+        if ticker not in known_tickers:
+            violations.append(f"UNSUPPORTED_TICKER_CLAIM: '{ticker}' not in retrieved data")
+    return violations
+
+
 def validate_ask_output(
     narration: Optional[str],
     *,
@@ -265,6 +301,13 @@ def validate_ask_output(
 
     assets = _assets_from(data, comparison_assets)
     violations.extend(_check_numerical_claims(_normalize_minus_signs(narration), assets))
+    # Membership is only checked against the LIST form (comparison_assets) —
+    # a definitive "these are the only valid tickers" set. The single `data`
+    # asset is deliberately excluded here: a one-asset narration may
+    # legitimately cite another ticker in parentheses for context (a
+    # benchmark, a peer), which isn't a claim that AlphaSwarm retrieved data
+    # on it the way a list-search result's tickers are.
+    violations.extend(_check_ticker_membership(narration, comparison_assets or []))
 
     if violations:
         return OutputValidationResult(valid=False, violations=violations, fallback_required=True)

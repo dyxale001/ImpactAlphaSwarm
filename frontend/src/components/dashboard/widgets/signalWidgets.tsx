@@ -14,6 +14,7 @@ import RecommendationCard from "../RecommendationCard";
 import ScoredAssetRow from "../ScoredAssetRow";
 import SignalScorecard from "../SignalScorecard";
 import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { ListingLine } from "../../research/ListingLine";
 
 // Widgets over the latest AI run. All three read the one shared feed from
 // DashboardDataContext rather than fetching their own, so a dashboard carrying
@@ -125,6 +126,8 @@ function TopPickHero({
             </div>
           </Link>
 
+          <ListingLine universe={topPick.universe} exchange={topPick.exchange} onDark />
+
           {topPick.isDiscovered ? (
             <span
               className="chip w-fit bg-brand-accent text-brand-fg"
@@ -185,7 +188,7 @@ export function ShortlistWidget({ size }: WidgetProps) {
   if (isLoadingRecs) return <WidgetLoading rows={4} />;
   if (isRunInProgress) {
     return (
-      <WidgetEmpty message="An analysis run is in progress. Your shortlist appears here as soon as it lands." />
+      <WidgetEmpty dark message="An analysis run is in progress. Your shortlist appears here as soon as it lands." />
     );
   }
   if (!topPick) return <NoRunYet />;

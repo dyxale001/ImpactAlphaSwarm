@@ -26,6 +26,7 @@ export type LearningArticle = {
   summary: string;
   content: string;
   difficulty_level: LearningDifficultyLevel;
+  display_order: number;
   created_at: string;
   questions: LearningQuestion[];
   /** Catalogue count only; full questions are loaded when the quiz opens. */

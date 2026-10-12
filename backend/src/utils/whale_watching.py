@@ -31,6 +31,7 @@ logger = logging.getLogger("alpha-api")
 
 __all__ = [
     "AssetRepository",
+    "FilerFamilies",
     "FundDescriber",
     "FundHoldingsBuilder",
     "FundsCache",
@@ -76,6 +77,76 @@ class FundDescriber:
         from . import descriptions as desc
 
         return desc.backfill_descriptions()
+
+
+class FilerFamilies:
+    """Shows a firm that files its 13F under several names as one fund.
+
+    Vanguard reports as Vanguard Capital Management LLC and Vanguard Portfolio
+    Management LLC, which put it in Top Funds twice (second and sixth) and read as a
+    duplicate. Applied when the list is served, so a payload built before this existed
+    shows merged too. The names it reported under are kept on the entry, so the page can
+    say so rather than hide it.
+    """
+
+    #: Display name -> lowercase fragment every one of its filers' names contains.
+    FAMILIES: dict[str, str] = {"Vanguard": "vanguard"}
+
+    def merge(self, funds: list[dict]) -> list[dict]:
+        out = list(funds)
+        for display, fragment in self.FAMILIES.items():
+            members = [f for f in out if fragment in (f.get("fund") or "").lower()]
+            if len(members) < 2:
+                continue
+            out = [f for f in out if f not in members]
+            out.append(self._combine(display, members))
+        out.sort(key=lambda f: f.get("total_value") or 0, reverse=True)
+        return out
+
+    def _combine(self, display: str, members: list[dict]) -> dict:
+        by_ticker: dict[str, list[dict]] = {}
+        for member in members:
+            for p in member.get("positions") or []:
+                by_ticker.setdefault(p.get("ticker"), []).append(p)
+        positions = [self._position(group) for group in by_ticker.values()]
+        positions.sort(key=lambda p: p.get("value") or 0, reverse=True)
+        return {
+            "fund": display,
+            "filers": sorted(m.get("fund") for m in members),
+            "total_value": sum(m.get("total_value") or 0 for m in members),
+            "positions": positions,
+        }
+
+    @staticmethod
+    def _sum(values: list) -> Optional[float]:
+        known = [v for v in values if v is not None]
+        return sum(known) if known else None
+
+    def _position(self, group: list[dict]) -> dict:
+        if len(group) == 1:
+            return dict(group[0])
+        return {
+            "ticker": group[0].get("ticker"),
+            "universe": group[0].get("universe"),
+            "pct_held": self._sum([p.get("pct_held") for p in group]),
+            "value": self._sum([p.get("value") for p in group]),
+            "shares": self._sum([p.get("shares") for p in group]),
+            "pct_change": self._combined_change(group),
+        }
+
+    @staticmethod
+    def _combined_change(group: list[dict]) -> Optional[float]:
+        """The change in the firm's whole holding, from each filer's shares now and the
+        shares its own change implies it had before. Unknown unless every filer
+        reports both; averaging the two percentages would weight a tiny filer equally."""
+        now = before = 0.0
+        for p in group:
+            shares, change = p.get("shares"), p.get("pct_change")
+            if shares is None or change is None or change <= -1:
+                return None
+            now += shares
+            before += shares / (1 + change)
+        return (now / before - 1) if before > 0 else None
 
 
 class FundHoldingsBuilder:
@@ -127,6 +198,8 @@ class FundHoldingsBuilder:
                     "universe": asset.get("universe"),
                     "pct_held": holder.get("pct_held"),
                     "value": holder.get("value"),
+                    # Kept so FilerFamilies can work out a merged firm's change.
+                    "shares": holder.get("shares"),
                     "pct_change": holder.get("pct_change"),
                 })
 
@@ -157,7 +230,7 @@ class WhaleWatcher:
         self.describer = describer or FundDescriber()
         self.insider_cache = insider_cache or InsiderCache(self.config)
         self.institutions_cache = institutions_cache or InstitutionsCache(self.config)
-        self.funds_cache = funds_cache or FundsCache(self.config, self.describer)
+        self.funds_cache = funds_cache or FundsCache(self.config, self.describer, FilerFamilies())
         self.assets = assets or AssetRepository()
         self.insider_source = insider_source or FinnhubInsiderSource(self.config)
         self.institutional_source = institutional_source or YFinanceInstitutionalSource(self.config)
@@ -166,8 +239,13 @@ class WhaleWatcher:
         self.insider_trace_service = insider_trace or InsiderTraceService(self.config)
 
     async def insider(self, ticker: str) -> dict:
-        symbol = ticker.upper()
+        """Insider dealings for a ticker. ``summary_enabled`` says whether the tab's AI
+        note is switched on, so the panel can leave its box out rather than show a
+        skeleton that then disappears."""
+        data = await self._insider_data(ticker.upper())
+        return {**data, "summary_enabled": self.insider_trace_service.enabled}
 
+    async def _insider_data(self, symbol: str) -> dict:
         api_key = self.insider_source.api_key()
         if not api_key:
             # No key: serve whatever we cached before, else an honest empty state.
@@ -176,18 +254,25 @@ class WhaleWatcher:
                 return self.insider_cache.shape(
                     symbol, self.insider_cache.value_of(row), True, row.get("fetched_at")
                 )
-            return {"ticker": symbol, "transactions": [], "source": None}
+            return {
+                "ticker": symbol,
+                "transactions": [],
+                "source": None,
+                "window_days": self.config.insider_window_days,
+            }
 
         return await self.insider_cache.serve(
             symbol, lambda: self.insider_source.fetch(symbol, api_key=api_key)
         )
 
     async def institutional(self, ticker: str) -> dict:
-        """Institutional ownership for a ticker, via yfinance."""
+        """Institutional ownership for a ticker, via yfinance. ``summary_enabled`` as
+        for ``insider``."""
         symbol = ticker.upper()
-        return await self.institutions_cache.serve(
+        data = await self.institutions_cache.serve(
             symbol, lambda: self.institutional_source.fetch(symbol)
         )
+        return {**data, "summary_enabled": self.institutions_trace.enabled}
 
     async def insider_trace(self, ticker: str) -> dict:
         """The Insider trading tab's AI summary, written from the same cached dealings the

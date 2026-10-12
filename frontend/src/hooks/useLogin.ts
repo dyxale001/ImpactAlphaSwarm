@@ -1,93 +1,30 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
-import { reactivateOwnAccount } from '../services/api/analysis'
+import { signInActiveAccount } from '../services/supabase/authService'
 
 export function useLogin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [needsReactivation, setNeedsReactivation] = useState(false)
-  const setRecovery = useAuthStore((state) => state.setRecovery)
   const navigate = useNavigate()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setNeedsReactivation(false)
-
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (authError) {
-      const msg = authError.message.toLowerCase()
-      if (msg.includes('banned')) {
-        // Admin-deactivated — not self-reversible
-        setError('This account has been deactivated by an administrator. Please contact support.')
-      } else if (authError.message === 'Invalid login credentials') {
-        setError('Incorrect email or password. Please try again.')
-      } else {
-        setError(authError.message)
-      }
-      setLoading(false)
-      return
-    }
-
-    if (authData.user) {
-      // Signing in with a password settles any recovery left hanging by a tab
-      // that was closed mid reset, so it cannot strand this session.
-      setRecovery(false)
-
-      const { data: profile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authData.user.id)
-        .maybeSingle()
-
-      // Self-deactivated — offer to reactivate instead of blocking
-      if (profile && profile.is_active === false) {
-        setNeedsReactivation(true)
-        setLoading(false)
-        return
-      }
-
-      setLoading(false)
-      navigate(profile?.role === 'admin' ? '/admin' : '/')
-      return
-    }
-
-    setLoading(false)
-  }
-
-  const handleReactivate = async () => {
-    setLoading(true)
-    setError('')
     try {
-      await reactivateOwnAccount()
-      const { data } = await supabase.auth.getUser()
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', data.user?.id ?? '')
-        .maybeSingle()
+      const profile = await signInActiveAccount(email, password)
+      useAuthStore.getState().setRecovery(false)
       navigate(profile?.role === 'admin' ? '/admin' : '/')
-    } catch {
-      setError('Could not reactivate your account. Please try again.')
+    } catch (err) {
+      useAuthStore.getState().setSession(null)
+      setError(err instanceof Error ? err.message : 'Could not sign in. Please try again.')
+    } finally {
       setLoading(false)
     }
   }
 
-  const cancelReactivation = async () => {
-    await supabase.auth.signOut()
-    setNeedsReactivation(false)
-    setPassword('')
-  }
-
-  return {
-    email, setEmail, password, setPassword,
-    error, loading, handleLogin,
-    needsReactivation, handleReactivate, cancelReactivation,
-  }
+  return { email, setEmail, password, setPassword, error, loading, handleLogin }
 }

@@ -66,7 +66,9 @@ export default function AddToWatchlistButton({ ticker }: Props) {
       // Add
       const { data } = await supabase
         .from('user_watchlist_assets')
-        .insert({ user_id: userId, asset_id: assetId })
+        // The ticker too, not only the asset link: readers that select the ticker
+        // column (the run's watchlist merge, Compare's suggestions) skipped rows without it.
+        .insert({ user_id: userId, asset_id: assetId, ticker: ticker.toUpperCase() })
         .select('id')
         .single()
       setIsWatched(true)

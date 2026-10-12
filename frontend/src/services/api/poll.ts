@@ -1,4 +1,5 @@
 import type { AnalysisStatus } from "../../types/analysisLifecycle";
+import { AnalysisAccessError } from "../../types/analysisLifecycle";
 
 export async function pollUntilComplete(
   runId: string,
@@ -11,7 +12,8 @@ export async function pollUntilComplete(
     let s: AnalysisStatus;
     try {
       s = await getStatus(runId);
-    } catch {
+    } catch (error) {
+      if (error instanceof AnalysisAccessError) throw error;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
       continue;
     }

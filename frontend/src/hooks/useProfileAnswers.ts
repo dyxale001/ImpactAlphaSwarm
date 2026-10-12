@@ -101,7 +101,6 @@ export function useProfileAnswers() {
       const payload: Record<string, unknown> = {
         user_id: profile.id,
         survey_answers: withHistory(stored, surveyPatch),
-        is_active: true,
         updated_at: new Date().toISOString(),
       };
       if (riskLabel) payload.risk_tolerance = riskLabel;
