@@ -1,9 +1,12 @@
-export const determinePsychometrics = (surveyAnswers: Record<string, string>) => {
+export const isRiskAnswer = (key: string) =>
+  key.startsWith('q_') && !['q_financial_knowledge_self', 'q_financial_math', 'q_inflation', 'q_diversification'].includes(key);
+
+export const psychometricBreakdown = (surveyAnswers: Record<string, string>) => {
   let riskToleranceScore = 0;
 
   // 1. Calculate Base Risk Tolerance (Questions 1 - 15)
   Object.keys(surveyAnswers).forEach((key) => {
-    if (key.startsWith('q_') && !['q_financial_knowledge_self', 'q_financial_math', 'q_inflation', 'q_diversification'].includes(key)) {
+    if (isRiskAnswer(key)) {
       const val = parseInt(surveyAnswers[key] || "0", 10);
       riskToleranceScore += val;
     }
@@ -15,13 +18,17 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   let capacityMultiplier = 1.0; 
 
   const age = surveyAnswers['demo_age'];
+  const beforeAge = capacityMultiplier;
   if (age === 'under_25' || age === '25_34') capacityMultiplier += 0.15; 
   if (age === '55_64') capacityMultiplier -= 0.15; 
   if (age === '65_74' || age === '75_over') capacityMultiplier -= 0.30; 
+  const ageAdjustment = capacityMultiplier - beforeAge;
 
   const income = surveyAnswers['demo_income'];
+  const beforeIncome = capacityMultiplier;
   if (income === 'tier_1') capacityMultiplier -= 0.15; 
   if (income === 'tier_4' || income === 'tier_5') capacityMultiplier += 0.10; 
+  const incomeAdjustment = capacityMultiplier - beforeIncome;
 
   // 3. Calculate Final Adjusted Score
   const finalRiskScore = baseTolerancePercentage * capacityMultiplier;
@@ -52,5 +59,17 @@ export const determinePsychometrics = (surveyAnswers: Record<string, string>) =>
   return { 
     calculatedExpertise, 
     riskTolerance,
+    riskToleranceScore,
+    baseTolerancePercentage,
+    ageAdjustment,
+    incomeAdjustment,
+    capacityMultiplier,
+    finalRiskScore,
   };
+};
+
+// Keep the original public result unchanged for onboarding and retakes.
+export const determinePsychometrics = (surveyAnswers: Record<string, string>) => {
+  const { calculatedExpertise, riskTolerance } = psychometricBreakdown(surveyAnswers);
+  return { calculatedExpertise, riskTolerance };
 };

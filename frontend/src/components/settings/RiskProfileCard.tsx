@@ -8,6 +8,7 @@ import { useFundMatches } from "../../hooks/useFundCatalogue";
 import type { useProfileAnswers } from "../../hooks/useProfileAnswers";
 import { SURVEY_QUESTIONS } from "../../utils/onboardingData";
 import { determinePsychometrics } from "../../utils/scoringEngine";
+import { riskProfileReasoning, RISK_REASONING_FALLBACK } from "../../utils/riskProfileReasoning";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
 import {
   RETAKE_STEPS,
@@ -80,6 +81,7 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
   const [step, setStep] = useState(0);
 
   const total = SURVEY_QUESTIONS.length;
+  const reasoning = riskProfileReasoning(profile.savedSurveyAnswers, riskLabel);
   const complete = answeredSurvey === total;
   const savedDate = formatSavedDate(lastSavedAt);
 
@@ -159,6 +161,26 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
         </dl>
       ) : (
         <p className="text-sm text-brand-muted-fg">{RISK_NOT_ANSWERED_LEAD}</p>
+      )}
+
+      {riskLabel && (
+        <details className="rounded-lg border border-brand-border/40 bg-forest-50 px-3 py-2.5 text-xs text-brand-fg">
+          <summary className="cursor-pointer font-bold text-brand-primary">Why this risk level?</summary>
+          <div className="mt-3 space-y-3 leading-relaxed">
+            {reasoning ? (
+              <>
+                <p>{reasoning.summary}</p>
+                <ul className="list-disc space-y-2 pl-4">
+                  {reasoning.highlights.map(item => (
+                    <li key={item.id}><span className="font-semibold">{item.title}:</span> “{item.answer}”</li>
+                  ))}
+                </ul>
+                <p className="text-brand-muted-fg">{reasoning.answerNote}</p>
+                <p>{reasoning.capacity}</p>
+              </>
+            ) : <p>{RISK_REASONING_FALLBACK}</p>}
+          </div>
+        </details>
       )}
 
       {/* ── The retake, in steps ── */}
