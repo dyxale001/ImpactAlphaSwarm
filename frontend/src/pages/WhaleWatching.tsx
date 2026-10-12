@@ -201,10 +201,11 @@ export default function WhaleWatchingPage() {
           <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
             {(
               [
-                { id: "insiders", label: "Insider Dealings", Icon: Waves },
+                // The same names the asset page's tabs and the AI summaries use.
+                { id: "insiders", label: "Insider Trading", Icon: Waves },
                 {
                   id: "institutions",
-                  label: "Institutional Owners",
+                  label: "Big Investors",
                   Icon: Building2,
                 },
               ] as const
@@ -225,7 +226,12 @@ export default function WhaleWatchingPage() {
           </div>
 
           {tickerTab === "insiders" ? (
-            <WhaleWatching ticker={ticker} variant="asset" showSummary />
+            <WhaleWatching
+              ticker={ticker}
+              variant="asset"
+              showTradeDate
+              showSummary
+            />
           ) : (
             <InstitutionalOwners ticker={ticker} variant="asset" showSummary />
           )}
@@ -322,7 +328,9 @@ export default function WhaleWatchingPage() {
                       <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
                       <p className="text-[11px] mt-2 font-semibold flex items-center gap-1.5 sm:mt-3">
                         <span className="text-brand-primary">
-                          {isLoading ? "Loading…" : `${assets.length} companies`}
+                          {isLoading
+                            ? "Loading…"
+                            : `${assets.length} ${assets.length === 1 ? "company" : "companies"}`}
                         </span>
                         {newCount > 0 && <NewBadge />}
                       </p>

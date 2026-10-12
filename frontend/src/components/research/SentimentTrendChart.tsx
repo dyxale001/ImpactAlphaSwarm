@@ -75,6 +75,13 @@ const WEEKEND_BAND = "rgba(255,255,255,0.055)";
 // itself. The extra lift is what makes it worth a second look.
 const HOLIDAY_BAND = "rgba(255,255,255,0.11)";
 
+// The selected day's column, washed in the line's own lime. The bar alone used to carry
+// the selection, so a day with no posts, which is exactly the day a reader clicks to ask
+// "why is this empty", showed no sign of being selected at all. Faint enough to stay
+// ground under the line, and it sits over any weekend or holiday wash rather than
+// replacing it, so a selected Saturday still reads as shut.
+const SELECTED_BAND = "rgba(199,242,105,0.13)";
+
 // The name written over the shut column. Dim enough to stay ground rather than joining
 // the series below it, bright enough to read against the card.
 const CLOSED_LABEL = "rgba(255,255,255,0.42)";
@@ -148,6 +155,8 @@ type PlottedPoint = SentimentHistoryPoint & {
   closedBand: number;
   /** Null on a trading day. Drives the wash, the label and the tooltip's badge. */
   closure: MarketClosure | null;
+  /** Whether this is the day the panel below the chart is describing. */
+  selected: boolean;
   newsScore?: number | null;
   newsCount?: number;
   /** Drawing only: the score, carried across shut days. Never shown as a value. */
@@ -182,21 +191,34 @@ function closedLabel(closure: MarketClosure, width: number): string | null {
 function ClosedBand(props: any) {
   const { x, y, width, height, payload } = props;
   const closure: MarketClosure | null = payload?.closure ?? null;
+  const selected = Boolean(payload?.selected);
   // Recharts wants an element back, never null.
-  if (!closure || !height || height <= 0) return <g />;
+  if ((!closure && !selected) || !height || height <= 0) return <g />;
 
-  const label = closedLabel(closure, width);
+  const label = closure ? closedLabel(closure, width) : null;
 
   return (
     <g>
-      <Rectangle
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        stroke="none"
-        fill={closure.kind === "holiday" ? HOLIDAY_BAND : WEEKEND_BAND}
-      />
+      {closure ? (
+        <Rectangle
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          stroke="none"
+          fill={closure.kind === "holiday" ? HOLIDAY_BAND : WEEKEND_BAND}
+        />
+      ) : null}
+      {selected ? (
+        <Rectangle
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          stroke="none"
+          fill={SELECTED_BAND}
+        />
+      ) : null}
       {label ? (
         <text
           x={x + width / 2}
@@ -488,10 +510,14 @@ export function SentimentTrendChart({
 
   const plotted: PlottedPoint[] = points.map((point, i) => {
     const closure = closures[i];
+    const selected = point.date === selectedDay;
     const base = {
       ...point,
       closure,
-      closedBand: closure ? volumeCeiling : 0,
+      selected,
+      // Full height on a shut day or the selected one, so the backdrop series draws a
+      // wash for either. Recharts skips a zero-height bar entirely.
+      closedBand: closure || selected ? volumeCeiling : 0,
       scoreLine: social.line[i],
       scoreLinks: social.links.map((link) => link[i]),
       newsLinks: news.links.map((link) => link[i]),

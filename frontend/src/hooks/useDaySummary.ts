@@ -1,5 +1,10 @@
-import { useState, useEffect, useRef } from "react";
 import { getDayDrivers, type DaySummaryResponse } from "../services/api/analysis";
+import { MINUTE } from "../utils/responseCache";
+import { useCachedFetch } from "./useCachedFetch";
+
+// How long today's paragraph is served before it is asked for again in the background.
+// The server rewrites it as the intraday ticks bring new articles, so this is short.
+const TODAY_FRESH_MS = 2 * MINUTE;
 
 // Fetches the generated paragraph for one day of the trend chart, "What's driving the
 // sentiment". Kept generic over the request it makes, since the retired day summary
@@ -7,74 +12,37 @@ import { getDayDrivers, type DaySummaryResponse } from "../services/api/analysis
 //
 // Generation is lazy on the server: the first request for a day pays for a short
 // completion, every request after that is an indexed read. This hook adds the other
-// half of that bargain, which is not asking twice. Clicking along a week and back is
-// the ordinary way to read this chart, and without a cache here the seventh click
-// would re-request the day the first click already has.
+// half of that bargain, which is not asking twice for something that cannot change.
 //
-// Cached in a ref rather than state on purpose. Writing to it must not schedule a
-// render, since the render it would schedule is the one that just read from it.
+// A SETTLED paragraph is kept for the visit, because it is final. Today's is kept too,
+// so returning to the Sentiment tab shows it at once, but only for a couple of minutes
+// before it is asked for again in the background and swapped for the server's latest.
+// An empty answer is not kept at all: it can mean a generation that failed or a day
+// whose news has not landed yet, and caching it would pin the panel to it.
+function freshFor(res: DaySummaryResponse): number {
+  if (!res.summary) return 0;
+  return res.is_final ? Infinity : TODAY_FRESH_MS;
+}
+
 function useDayParagraph(
+  kind: string,
   ticker: string | undefined,
   day: string | null,
   fetchParagraph: (ticker: string, day: string) => Promise<DaySummaryResponse>,
   errorMessage: string,
 ) {
-  const [summary, setSummary] = useState<DaySummaryResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cache = useRef(new Map<string, DaySummaryResponse>());
-
-  useEffect(() => {
-    if (!ticker || !day) {
-      setSummary(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const key = `${ticker}:${day}`;
-    const hit = cache.current.get(key);
-    if (hit) {
-      // Synchronously, with no loading state. A day already read must not flash a
-      // skeleton on the way back to text it already has.
-      setSummary(hit);
-      setError(null);
-      setIsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    fetchParagraph(ticker, day)
-      .then((res) => {
-        if (cancelled) return;
-        // A null summary is cached like any other answer. It means the day has nothing
-        // to say, which will still be true on the next click, and re-asking would put
-        // a generation attempt behind every visit to a quiet day.
-        cache.current.set(key, res);
-        setSummary(res);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        console.error("Error fetching day paragraph:", e);
-        setError(errorMessage);
-        setSummary(null);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ticker, day, fetchParagraph, errorMessage]);
-
-  return { summary, isLoading, error };
+  const { data, isLoading, error } = useCachedFetch(
+    ticker && day ? `day-${kind}:${ticker.toUpperCase()}:${day}` : null,
+    () => fetchParagraph(ticker as string, day as string),
+    freshFor,
+    errorMessage,
+  );
+  return { summary: data, isLoading, error };
 }
 
 export function useDayDrivers(ticker: string | undefined, day: string | null) {
   return useDayParagraph(
+    "drivers",
     ticker,
     day,
     getDayDrivers,

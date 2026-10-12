@@ -5,6 +5,7 @@ import { discoveryProvenance } from "../../utils/discovery";
 import { CONVERGENCE_DETAIL } from "../../data/signalCopy";
 import DualBar from "./DualBar";
 import AddToWatchlistButton from "./Addtowatchlistbutton";
+import { ListingLine } from "../research/ListingLine";
 
 /**
  * One asset the run scored but did not shortlist.
@@ -53,6 +54,11 @@ export default function ScoredAssetRow({
           <p className="text-sm font-mono text-primary mt-1">
             R {asset.currentPrice.toFixed(2)}
           </p>
+          <ListingLine
+            universe={asset.universe}
+            exchange={asset.exchange}
+            className="mt-2"
+          />
           <div className="flex flex-wrap gap-1.5 mt-2 empty:hidden">
             {asset.isDiscovered ? (
               <span

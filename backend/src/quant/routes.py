@@ -21,6 +21,7 @@ router = APIRouter()
 
 _history_instance = None
 _trace_instance = None
+_listing_instance = None
 
 
 def _history():
@@ -49,6 +50,16 @@ def _traces():
 
 		_trace_instance = QuantTraceService(history=_history())
 	return _trace_instance
+
+
+def _listings():
+	"""The exchange lookup, built once on first use so its day cache is shared."""
+	global _listing_instance
+	if _listing_instance is None:
+		from .listing import ListingService
+
+		_listing_instance = ListingService()
+	return _listing_instance
 
 
 def _check_horizon(horizon: str) -> str:
@@ -95,6 +106,22 @@ async def get_quant_history(ticker: str, horizon: str = "6M"):
 		logger.warning("Quant history failed for %s %s: %s", symbol, key, exc)
 		payload = service._empty(symbol, key)
 	return {**payload, "available": True}
+
+
+@router.get("/api/assets/{ticker}/listing")
+async def get_listing(ticker: str):
+	"""The exchange a ticker trades on, for the asset page header.
+
+	Always 200. A lookup that found nothing answers with blank fields, and the page shows
+	no exchange rather than an error.
+	"""
+	symbol = ticker.upper()
+	loop = asyncio.get_running_loop()
+	try:
+		return await loop.run_in_executor(None, _listings().listing, symbol)
+	except Exception as exc:
+		logger.warning("Listing failed for %s: %s", symbol, exc)
+		return {"ticker": symbol, "exchange": "", "exchange_name": ""}
 
 
 @router.get("/api/assets/{ticker}/quant-trace")

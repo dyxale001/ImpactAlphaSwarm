@@ -46,7 +46,14 @@ class WhaleConfig:
     # The fund-holdings aggregation is expensive to build, so cache it for a week.
     funds_ttl_days: int = 7
 
-    insider_max_transactions: int = 25
+    # The Insider trading tab shows the dealings that help a decision now: those traded
+    # in the last this many days, the same span for every company. It used to be the
+    # newest 25 rows, which was three days for a busy filer and seven months for a quiet
+    # one, and nothing on screen said which.
+    insider_window_days: int = 90
+    # A backstop on the rows kept inside the window, after sales made in batches are
+    # grouped. Hitting it is logged, because it would shorten the window again.
+    insider_max_transactions: int = 100
     institutional_max_holders: int = 15
     http_timeout: float = 10.0
 
@@ -78,7 +85,8 @@ class WhaleConfig:
             insider_ttl_hours=_env_int("WHALE_INSIDER_TTL_HOURS", 48),
             institutions_ttl_days=_env_int("WHALE_INSTITUTIONS_TTL_DAYS", 7),
             funds_ttl_days=_env_int("WHALE_FUNDS_TTL_DAYS", 7),
-            insider_max_transactions=_env_int("WHALE_INSIDER_MAX_TRANSACTIONS", 25),
+            insider_window_days=max(1, _env_int("WHALE_INSIDER_WINDOW_DAYS", 90)),
+            insider_max_transactions=max(1, _env_int("WHALE_INSIDER_MAX_TRANSACTIONS", 100)),
             institutional_max_holders=_env_int("WHALE_INSTITUTIONAL_MAX_HOLDERS", 15),
             http_timeout=_env_float("WHALE_HTTP_TIMEOUT", 10.0),
             institutions_trace_enabled=_env_bool("WHALE_INSTITUTIONS_TRACE_ENABLED", False),

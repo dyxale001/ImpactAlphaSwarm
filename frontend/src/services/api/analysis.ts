@@ -77,12 +77,19 @@ export interface WhaleTransactionDTO {
   transaction_date: string | null;
   filing_date: string | null;
   transaction_code?: string | null;
+  // How many filed batches this row sums: an insider selling in batches on one day is
+  // one row. Price is then their average.
+  lots?: number;
 }
 
 export interface WhaleActivityResponse {
   ticker: string;
   transactions: WhaleTransactionDTO[];
   source: string | null;
+  // The span the dealings cover: traded in the last this many days.
+  window_days?: number | null;
+  // Whether the tab's AI summary is switched on for this deployment.
+  summary_enabled?: boolean;
   cached?: boolean;
   fetched_at?: string | null;
 }
@@ -111,6 +118,8 @@ export interface InstitutionalOwnershipResponse {
   institutions_count: number | null;
   holders: InstitutionalHolderDTO[];
   source: string | null;
+  // Whether the tab's AI summary is switched on for this deployment.
+  summary_enabled?: boolean;
   cached?: boolean;
   fetched_at?: string | null;
 }
@@ -167,10 +176,14 @@ export interface FundPosition {
   pct_held: number | null;
   value: number | null;
   pct_change: number | null;
+  shares?: number | null;
 }
 
 export interface FundHolding {
   fund: string;
+  // The 13F filer names merged into this entry, when a firm files under several (Vanguard
+  // files as two). Absent for a fund that files under one name.
+  filers?: string[];
   total_value: number;
   // Plain-English blurb of who the fund is. Sourced from the backend so the
   // wording is editable without a frontend redeploy. May be absent on older
@@ -404,6 +417,22 @@ export async function getQuantHistory(ticker: string, horizon: QuantHorizon) {
   );
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<QuantHistoryResponse>;
+}
+
+export interface ListingResponse {
+  ticker: string;
+  /** yfinance's exchange code, e.g. "NMS", or "" when the lookup found nothing. */
+  exchange: string;
+  /** The same exchange as a reader would name it, e.g. "Nasdaq". */
+  exchange_name: string;
+}
+
+// The exchange a ticker trades on, for the asset page header. One light
+// lookup the backend holds for a day. Informational, so no auth token is needed.
+export async function getListing(ticker: string) {
+  const res = await fetch(`${BASE}/api/assets/${encodeURIComponent(ticker)}/listing`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ListingResponse>;
 }
 
 export interface QuantTraceResponse {
