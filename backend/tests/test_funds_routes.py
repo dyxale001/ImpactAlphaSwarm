@@ -52,7 +52,7 @@ MONEY_MARKET = {
     "yahoo_symbol": None,
     "asisa_geography": "South African",
     "asisa_asset_class": "Interest Bearing",
-    "asisa_category": "South African - Interest Bearing - Money Market",
+    "asisa_category": "South African - Interest Bearing - SA Money Market",
     "tfsa_eligible": False,
     "platforms": ["EasyEquities"],
     "curation_rule": "largest money market fund by fund size on the platform",
@@ -425,7 +425,7 @@ class TestMatches:
         body = client.get("/api/fund-catalogue/matches").json()
         reason = body["matches"][0]["reason"]
         assert "Alpha Collective Investments (RF) (Pty) Ltd" in reason
-        assert "South African - Interest Bearing - Money Market" in reason
+        assert "South African - Interest Bearing - SA Money Market" in reason
         assert "31 July 2026" in reason
         assert "This is information, not advice." in reason
 

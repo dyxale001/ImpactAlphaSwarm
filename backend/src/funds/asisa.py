@@ -73,11 +73,23 @@ class AsisaClassification:
     against the published standard before the copy review.
     """
 
-    def __init__(self, version: str, categories: tuple[AsisaCategory, ...]):
+    def __init__(
+        self,
+        version: str,
+        categories: tuple[AsisaCategory, ...],
+        former_names: dict[str, str] | None = None,
+    ):
         self.version = version
         self.categories = categories
         self._by_code = {c.code: c for c in categories}
         self._by_name = {c.name: c for c in categories}
+        # Names ASISA has since retired, keyed to the code that replaced them.
+        # Only ``resolve`` reads these: a sheet printed before a rename still
+        # names a real category, but what we store is always the current name.
+        self._former = {
+            _comparable_category(name): self._by_code[code]
+            for name, code in (former_names or {}).items()
+        }
 
     def by_code(self, code: str) -> AsisaCategory | None:
         return self._by_code.get(code)
@@ -108,6 +120,10 @@ class AsisaClassification:
         downstream can tell the two apart, so the fund was filed and matched
         under the nominal class for weeks.
 
+        A name ASISA has since retired resolves to the category that replaced
+        it — a money market sheet printed before the 2024 rename still says
+        "Money Market", and it is the same class.
+
         Returns None rather than a nearest guess: an unrecognised category is a
         curation decision, not a lookup failure, and the caller's job is to say
         so.
@@ -121,7 +137,7 @@ class AsisaClassification:
         for category in self.categories:
             if _comparable_category(category.name) == wanted:
                 return category
-        return None
+        return self._former.get(wanted)
 
     def names(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.categories)
@@ -145,12 +161,14 @@ class AsisaClassification:
 
 
 # ── their vocabulary: the classification, as published ──────────────────────
-# Mirrors the seed in migrations/024_funds.sql exactly. Add a category in both
-# places or the cross-check test fails, which is the intended tripwire.
+# Mirrors the seed across the migrations (024, then 025 and 037) exactly. Add a
+# category in both places or the cross-check test fails, which is the intended
+# tripwire.
 ASISA_VERSION = "2025-10-01"
 
 _CATEGORIES: tuple[AsisaCategory, ...] = (
-    AsisaCategory("sa_ib_money_market",  "South African", "Interest Bearing", "Money Market",  "South African - Interest Bearing - Money Market"),
+    # Renamed "SA Money Market" by ASISA; the slug predates the rename and stays.
+    AsisaCategory("sa_ib_money_market",  "South African", "Interest Bearing", "SA Money Market", "South African - Interest Bearing - SA Money Market"),
     AsisaCategory("sa_ib_short_term",    "South African", "Interest Bearing", "Short Term",    "South African - Interest Bearing - Short Term"),
     AsisaCategory("sa_ib_variable_term", "South African", "Interest Bearing", "Variable Term", "South African - Interest Bearing - Variable Term"),
     # Inflation-linked bonds are their own tier-3 class, and the omission was not
@@ -165,14 +183,28 @@ _CATEGORIES: tuple[AsisaCategory, ...] = (
     AsisaCategory("sa_ma_high_equity",   "South African", "Multi Asset",      "High Equity",   "South African - Multi Asset - High Equity"),
     AsisaCategory("sa_ma_flexible",      "South African", "Multi Asset",      "Flexible",      "South African - Multi Asset - Flexible"),
     AsisaCategory("sa_eq_general",       "South African", "Equity",           "SA General",    "South African - Equity - SA General"),
+    # Not a duplicate of the line above, despite the slugs. Since the 2024
+    # revision "SA General" means 100% South African and "General" allows the
+    # offshore share a South African portfolio may hold. Allan Gray Equity and
+    # Ninety One Equity print "General"; Ninety One was filed under SA General
+    # for want of this row.
+    AsisaCategory("sa_eq_general_offshore", "South African", "Equity",     "General",       "South African - Equity - General"),
     AsisaCategory("sa_re_general",       "South African", "Real Estate",      "General",       "South African - Real Estate - General"),
     AsisaCategory("gl_eq_general",       "Global",        "Equity",           "General",       "Global - Equity - General"),
+    # Added by the 2025 revision; the Satrix S&P 500 ETF is filed here.
+    AsisaCategory("gl_eq_us",            "Global",        "Equity",           "US",            "Global - Equity - US"),
+    # Single-theme or single-sector funds, e.g. the Satrix Nasdaq 100 ETF.
+    AsisaCategory("gl_eq_unclassified",  "Global",        "Equity",           "Unclassified",  "Global - Equity - Unclassified"),
     AsisaCategory("gl_ma_high_equity",   "Global",        "Multi Asset",      "High Equity",   "Global - Multi Asset - High Equity"),
     AsisaCategory("gl_re_general",       "Global",        "Real Estate",      "General",       "Global - Real Estate - General"),
     AsisaCategory("ww_ma_flexible",      "Worldwide",     "Multi Asset",      "Flexible",      "Worldwide - Multi Asset - Flexible"),
 )
 
-ASISA = AsisaClassification(ASISA_VERSION, _CATEGORIES)
+_FORMER_NAMES: dict[str, str] = {
+    "South African - Interest Bearing - Money Market": "sa_ib_money_market",
+}
+
+ASISA = AsisaClassification(ASISA_VERSION, _CATEGORIES, _FORMER_NAMES)
 
 
 # ── our policy: which categories each bracket surfaces ─────────────────────
@@ -207,6 +239,11 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
         # different proposition at the same risk label.
         "sa_eq_general",
         "gl_eq_general",
+        # Same terms as the two above: SA General without the 100%-local rule,
+        # and US-only rather than worldwide. Neither is a step up in risk; the
+        # S&P 500 trackers are what a moderate profile asks for by name.
+        "sa_eq_general_offshore",
+        "gl_eq_us",
     }),
     # Everything a moderate bracket covers, with the tracker restriction lifted,
     # plus the growth-oriented categories above it.
@@ -225,6 +262,11 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
         "sa_ib_variable_term_ilb",
         "sa_eq_general",
         "gl_eq_general",
+        "sa_eq_general_offshore",
+        "gl_eq_us",
+        # Aggressive only, and tracker or not: one theme or one sector is a
+        # concentration bet even when the fund tracks an index (Nasdaq 100).
+        "gl_eq_unclassified",
         "sa_ma_flexible",
         "gl_ma_high_equity",
         "ww_ma_flexible",
@@ -238,7 +280,7 @@ BRACKET_CATEGORIES: dict[str, frozenset[str]] = {
 # a condition.
 TRACKER_ONLY: dict[str, frozenset[str]] = {
     "Conservative": frozenset(),
-    "Moderate": frozenset({"sa_eq_general", "gl_eq_general"}),
+    "Moderate": frozenset({"sa_eq_general", "gl_eq_general", "sa_eq_general_offshore", "gl_eq_us"}),
     "Aggressive": frozenset(),
 }
 
