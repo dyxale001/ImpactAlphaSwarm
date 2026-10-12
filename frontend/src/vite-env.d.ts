@@ -17,6 +17,9 @@ interface ImportMetaEnv {
    *  own; its written comparison needs COMPARE_TRACE_ENABLED and hides without it,
    *  and its funds half needs VITE_FUNDS_ENABLED. */
   readonly VITE_COMPARE_ENABLED?: string
+  /** "true" shows the Market News page and its nav entry. Pairs with the
+   *  backend's MACRO_NEWS_ENABLED, which mounts the /api/macro it reads. */
+  readonly VITE_MACRO_NEWS_ENABLED?: string
 }
 
 interface ImportMeta {

@@ -35,6 +35,8 @@ import { MarketClock } from "../components/research/MarketClock";
 import { ListingLine } from "../components/research/ListingLine";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
+import StockMarketNewsTab from "../components/macroNews/StockMarketNewsTab";
+import { MACRO_NEWS_ENABLED } from "../utils/macroNewsFlags";
 import {
   newsDayIndex,
   newsDaysFromHistory,
@@ -227,10 +229,14 @@ const ANALYSIS_TABS = [
   "quant",
   "investors",
   "insiders",
+  "news",
 ] as const;
 type AnalysisTab = (typeof ANALYSIS_TABS)[number];
 
 function isAnalysisTab(value: string | null): value is AnalysisTab {
+  // "news" only exists while the Market News flag is on, so ?tab=news cannot open a
+  // tab that has no button.
+  if (value === "news" && !MACRO_NEWS_ENABLED) return false;
   return (ANALYSIS_TABS as readonly string[]).includes(value ?? "");
 }
 
@@ -253,6 +259,8 @@ function AnalysisTabs({
     { key: "quant", label: "Quant" },
     { key: "investors", label: "Big investors" },
     { key: "insiders", label: "Insider trading" },
+    // Sector-level news (D-223), behind the Market News flag like the page itself.
+    ...(MACRO_NEWS_ENABLED ? [{ key: "news" as const, label: "Market news" }] : []),
   ];
 
   return (
@@ -931,6 +939,10 @@ export default function AssetDetailsPage() {
           />
           <WhaleCaveat />
         </div>
+      )}
+
+      {recommendation && tab === "news" && MACRO_NEWS_ENABLED && (
+        <StockMarketNewsTab ticker={asset.ticker} />
       )}
 
       {recommendation && tab === "insiders" && (

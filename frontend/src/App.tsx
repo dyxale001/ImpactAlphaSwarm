@@ -27,6 +27,8 @@ import FundDetailPage from "./pages/FundDetail";
 import AdminFunds from "./pages/AdminFunds";
 import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
+import MarketNewsPage from "./pages/MarketNews";
+import { MACRO_NEWS_ENABLED } from "./utils/macroNewsFlags";
 import ComparePage from "./pages/Compare";
 import { COMPARE_ENABLED } from "./utils/compareFlags";
 import WatchlistPage from "./pages/Watchlist";
@@ -92,6 +94,8 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />{" "}
           {/* Changed from "/" to "/dashboard" */}
           <Route path="/assets" element={<AssetsPage />} />
+          {/* Market News (D-223). Unrouted unless the flag is set, like Funds. */}
+          {MACRO_NEWS_ENABLED && <Route path="/news" element={<MarketNewsPage />} />}
           {/* Funds catalogue. Unrouted unless the flag is set, so with it off
               the path is a 404 rather than a page that cannot load its data.
               The detail route is listed after the list route and is equally

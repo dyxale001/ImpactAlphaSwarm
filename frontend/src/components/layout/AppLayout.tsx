@@ -14,6 +14,7 @@ import {
   Settings,
   Waves,
   Landmark,
+  Newspaper,
   Columns2,
   Sparkles,
   Menu,
@@ -21,6 +22,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
+import { MACRO_NEWS_ENABLED } from "../../utils/macroNewsFlags";
 import { COMPARE_ENABLED } from "../../utils/compareFlags";
 
 export default function AppLayout() {
@@ -63,6 +65,7 @@ export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Stocks", path: "/assets", icon: CandlestickChart },
+    { name: "Market News", path: "/news", icon: Newspaper },
     { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Compare", path: "/compare", icon: Columns2 },
     { name: "Learning", path: "/learning", icon: BookOpen },
@@ -86,6 +89,7 @@ export default function AppLayout() {
       // allow-list to appear, and the page it links to needs the backend flag
       // as well, so nothing half-appears.
       (FUNDS_ENABLED && i.name === "Funds") ||
+      (MACRO_NEWS_ENABLED && i.name === "Market News") ||
       (COMPARE_ENABLED && i.name === "Compare")
   );
 
