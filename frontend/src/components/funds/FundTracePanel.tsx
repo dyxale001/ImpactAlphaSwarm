@@ -1,5 +1,6 @@
 import { BrainCircuit, Sparkles } from "lucide-react";
 import { useFundTrace } from "../../hooks/useFundTrace";
+import type { FundTraceResponse } from "../../services/api/fundCatalogue";
 import {
   FUND_TRACE_BADGE_MODEL,
   FUND_TRACE_BADGE_TEMPLATE,
@@ -29,8 +30,15 @@ import {
 // stands in. The text runs the full width of the card, and the card grows to
 // hold however much there is.
 
-export default function FundTracePanel({ fundId }: { fundId: string }) {
-  const { trace, isWriting, error, explain } = useFundTrace(fundId);
+export default function FundTracePanel({
+  fundId,
+  write,
+}: {
+  fundId: string;
+  /** Where the paragraph is written: the catalogue's endpoint unless given. */
+  write?: (fundId: string) => Promise<FundTraceResponse>;
+}) {
+  const { trace, isWriting, error, explain } = useFundTrace(fundId, write);
   // Only an answer saying the feature is off hides the panel.
   if (trace && !trace.available) return null;
 

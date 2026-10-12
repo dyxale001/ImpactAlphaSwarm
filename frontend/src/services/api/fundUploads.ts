@@ -7,6 +7,8 @@
  */
 
 import { supabase } from "../../lib/supabase";
+import type { ComparisonTraceResponse } from "./compare";
+import type { FundTraceResponse } from "./fundCatalogue";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -185,4 +187,23 @@ export async function getUploadedFund(id: string, fallback: string): Promise<Upl
 
 export async function deleteUploadedFund(id: string, fallback: string): Promise<void> {
   await send(`/${encodeURIComponent(id)}`, { method: "DELETE" }, fallback);
+}
+
+/** The fund page's reasoning trace for one of the reader's own funds, by its
+ *  upload id. The same answer shape as the catalogue's, so the same panel
+ *  shows it. */
+export async function explainUploadedFundTrace(uploadId: string): Promise<FundTraceResponse> {
+  const res = await send(`/${encodeURIComponent(uploadId)}/trace`, { method: "POST" }, "");
+  return res.json();
+}
+
+/** Compare's written comparison for a set holding one of the reader's own
+ *  funds (as `mine-<id>`). Written each time and never stored. */
+export async function explainComparisonWithUploads(fundIds: string[]): Promise<ComparisonTraceResponse> {
+  const res = await send(
+    "/compare",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fund_ids: fundIds }) },
+    "",
+  );
+  return res.json();
 }

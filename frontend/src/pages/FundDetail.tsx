@@ -177,7 +177,6 @@ export default function FundDetailPage() {
   // and the chart renders nothing when it is false — so a mislabelled fund
   // costs one wasted request, never a fabricated line.
   const { prices } = useFundPrices(fundId, fund?.vehicle === "etf");
-  const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading) {
     return (
@@ -210,6 +209,54 @@ export default function FundDetailPage() {
     );
   }
 
+  return (
+    <FundDetailView
+      fund={fund}
+      prices={prices}
+      // The reader's own explanation of this fund, above the tabs it explains.
+      // Only for a fund with a sheet on file: without one there is nothing
+      // dated to explain, and the page's notice already says so.
+      trace={fund.snapshot && fundId ? <FundTracePanel fundId={fundId} /> : null}
+      compareTo={COMPARE_ENABLED ? compareHref("funds", [fund.fund_id]) : null}
+      adminHref={isAdmin && fundId ? `/admin/funds/${fundId}` : null}
+    />
+  );
+}
+
+/**
+ * The fund page itself, for any fund in the catalogue's shape: the hero with
+ * its key facts, the reasoning trace, and the Overview / Figures / Document
+ * tabs. The catalogue's page and a reader's uploaded fund (UploadedFundDetail)
+ * both render it, so the two read as one kind of page; what differs is passed
+ * in rather than branched on inside.
+ */
+export function FundDetailView({
+  fund,
+  prices,
+  trace,
+  compareTo,
+  adminHref = null,
+  back,
+  badge,
+  provenance,
+  after,
+}: {
+  fund: CatalogueFundDetail;
+  prices: FundPrices | null;
+  /** The reasoning-trace panel above the tabs, or null. */
+  trace: React.ReactNode;
+  /** Where "Compare with…" goes, or null to leave it off. */
+  compareTo: string | null;
+  adminHref?: string | null;
+  back?: { to: string; label: string };
+  /** An extra chip beside the vehicle badge. */
+  badge?: React.ReactNode;
+  /** Replaces the hand-transcription note in "The document" tab. */
+  provenance?: React.ReactNode;
+  /** After the tabs, before the regulatory footer. */
+  after?: React.ReactNode;
+}) {
+  const [tab, setTab] = useState<TabKey>("overview");
   const snapshot = fund.snapshot;
   const asAt = formatAsAt(fund.as_of);
 
@@ -242,9 +289,9 @@ export default function FundDetailPage() {
 
   return (
     <Shell>
-      <BackLink />
+      <BackLink to={back?.to} label={back?.label} />
 
-      <Hero fund={fund} asAt={asAt} isAdmin={isAdmin} fundId={fundId} />
+      <Hero fund={fund} asAt={asAt} compareTo={compareTo} adminHref={adminHref} badge={badge} />
 
       {/* A fund with no sheet on file is not a thin page, it is a different
           statement, and it is made once at the top rather than implied by
@@ -253,10 +300,7 @@ export default function FundDetailPage() {
         <FundsNotice icon={FileText} title={DETAIL_NO_FACTSHEET_TITLE} body={DETAIL_NO_FACTSHEET} />
       )}
 
-      {/* The reader's own explanation of this fund, above the tabs it explains.
-          Only for a fund with a sheet on file: without one there is nothing
-          dated to explain, and the notice above already says so. */}
-      {snapshot && fundId && <FundTracePanel fundId={fundId} />}
+      {trace}
 
       {available.length > 1 && (
         <div
@@ -294,7 +338,9 @@ export default function FundDetailPage() {
         />
       )}
       {active === "figures" && <Figures fund={fund} asAt={asAt} prices={prices} />}
-      {active === "document" && <Document fund={fund} />}
+      {active === "document" && <Document fund={fund} provenance={provenance} />}
+
+      {after}
 
       {/* ── The statements the documents themselves require ──
           Outside the tabs, on every tab. A page listing what a fund costs and
@@ -314,7 +360,7 @@ export default function FundDetailPage() {
 
 /** Wider than the old `max-w-4xl`: three tiles across need the room, and the
  *  funds page this is reached from is `max-w-7xl`. */
-function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="animate-fade-up mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
       {children}
@@ -322,14 +368,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function BackLink() {
+export function BackLink({ to = "/funds", label = DETAIL_BACK }: { to?: string; label?: string }) {
   return (
     <Link
-      to="/funds"
+      to={to}
       className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-forest-500 transition-colors hover:text-brand-primary"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
-      {DETAIL_BACK}
+      {label}
     </Link>
   );
 }
@@ -350,15 +396,22 @@ function BackLink() {
 function Hero({
   fund,
   asAt,
-  isAdmin,
-  fundId,
+  compareTo,
+  adminHref,
+  badge,
 }: {
   fund: CatalogueFundDetail;
   asAt: string | null;
-  isAdmin: boolean;
-  fundId: string | undefined;
+  compareTo: string | null;
+  adminHref: string | null;
+  badge?: React.ReactNode;
 }) {
-  const tiers = splitAsisaCategory(fund.asisa_category);
+  const tiers = fund.asisa_category ? splitAsisaCategory(fund.asisa_category) : null;
+  // House and classification, whichever are known: a reader's uploaded fund
+  // may carry neither.
+  const classification = tiers
+    ? `${tiers.geography} · ${tiers.assetClass} · ${tiers.focus}`
+    : fund.asisa_category;
   // The dated document first; the manager's listing page is a fallback that
   // says so, because it lands on an index of hundreds rather than this fund.
   const factSheetUrl = fund.mdd_url ?? fund.mdd_page_url;
@@ -372,9 +425,12 @@ function Hero({
             tax-free eligibility alone. Regulation 28 is a published fact and
             lives with the other published facts, not up here twice. */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="chip bg-white/12 text-lime-100">
-            {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}
-          </span>
+          {badge}
+          {fund.vehicle && (
+            <span className="chip bg-white/12 text-lime-100">
+              {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}
+            </span>
+          )}
           {fund.is_index_tracker && (
             <span className="chip border border-dashed border-lime-100/40 text-lime-100">
               {TRACKER_BADGE}
@@ -393,14 +449,16 @@ function Hero({
             {/* The geography carries the weight: a reader cannot tell a South
                 African fund from a global one by its name, and the classification
                 is the only place this page says so. */}
-            <p className="text-sm font-semibold text-lime-100/85">
-              {fund.fund_house}
-              <span className="font-normal text-lime-100/65">
-                {tiers
-                  ? ` · ${tiers.geography} · ${tiers.assetClass} · ${tiers.focus}`
-                  : ` · ${fund.asisa_category}`}
-              </span>
-            </p>
+            {(fund.fund_house || classification) && (
+              <p className="text-sm font-semibold text-lime-100/85">
+                {fund.fund_house}
+                {classification && (
+                  <span className="font-normal text-lime-100/65">
+                    {fund.fund_house ? ` · ${classification}` : classification}
+                  </span>
+                )}
+              </p>
+            )}
 
             {fund.vehicle_note && (
               <p className="mt-1 max-w-[60ch] text-[13px] leading-relaxed text-lime-100/65">
@@ -411,7 +469,7 @@ function Hero({
             {/* The fact sheet is the page's source, so reading it is the main
                 action rather than a link in the footer strip. Compare sits
                 beside it in the stock page's words, set for the dark header. */}
-            {(factSheetUrl || COMPARE_ENABLED) && (
+            {(factSheetUrl || compareTo) && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {factSheetUrl && (
                   <a
@@ -424,9 +482,9 @@ function Hero({
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 )}
-                {COMPARE_ENABLED && (
+                {compareTo && (
                   <Link
-                    to={compareHref("funds", [fund.fund_id])}
+                    to={compareTo}
                     className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-lime-100/30 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:border-brand-accent/60 hover:bg-white/10 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
                   >
                     <Columns2 className="h-4 w-4 text-brand-accent" />
@@ -450,9 +508,9 @@ function Hero({
             </span>
           )}
           {fund.available_on && <span>{fund.available_on}</span>}
-          {isAdmin && (
+          {adminHref && (
             <Link
-              to={`/admin/funds/${fundId}`}
+              to={adminHref}
               className="inline-flex items-center gap-1 font-bold text-brand-accent hover:underline"
             >
               <Pencil className="h-3 w-3" />
@@ -815,7 +873,7 @@ function Figures({
 
 /* ── Panel three: where this came from ──────────────────────────────────── */
 
-function Document({ fund }: { fund: CatalogueFundDetail }) {
+function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?: React.ReactNode }) {
   const snapshot = fund.snapshot;
   const inception = formatAsAt(snapshot?.inception_date ?? null);
 
@@ -826,12 +884,12 @@ function Document({ fund }: { fund: CatalogueFundDetail }) {
           {/* The management company, not just the brand: it is the party that
               issues the fact sheet, and for a co-named boutique fund the two
               are different companies. */}
-          <Row label={DETAIL_MANCO_LABEL} value={fund.manco} />
-          <Row label={DETAIL_MANAGED_BY_LABEL} value={fund.fund_house} />
+          {fund.manco && <Row label={DETAIL_MANCO_LABEL} value={fund.manco} />}
+          {fund.fund_house && <Row label={DETAIL_MANAGED_BY_LABEL} value={fund.fund_house} />}
           {snapshot?.portfolio_manager && (
             <Row label={DETAIL_MANAGER_LABEL} value={snapshot.portfolio_manager} />
           )}
-          <Row label={DETAIL_ISIN_LABEL} value={fund.isin} mono />
+          {fund.isin && <Row label={DETAIL_ISIN_LABEL} value={fund.isin} mono />}
           {fund.jse_code && <Row label={DETAIL_JSE_LABEL} value={fund.jse_code} mono />}
           {snapshot?.benchmark && (
             <Row label={DETAIL_BENCHMARK_LABEL} value={snapshot.benchmark} />
@@ -869,10 +927,12 @@ function Document({ fund }: { fund: CatalogueFundDetail }) {
         </Tile>
       )}
 
-      <Tile span={SPAN.full} title={DETAIL_PROVENANCE_TITLE}>
-        <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_MANUAL}</p>
-        <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_GAPS}</p>
-      </Tile>
+      {provenance ?? (
+        <Tile span={SPAN.full} title={DETAIL_PROVENANCE_TITLE}>
+          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_MANUAL}</p>
+          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_GAPS}</p>
+        </Tile>
+      )}
     </div>
   );
 }

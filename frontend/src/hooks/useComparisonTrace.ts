@@ -7,6 +7,8 @@ import {
   type ComparisonTraceResponse,
 } from "../services/api/compare";
 import type { QuantHorizon } from "../data/quantExplainers";
+import { explainComparisonWithUploads } from "../services/api/fundUploads";
+import { uploadIdOf } from "../utils/fundUploads";
 
 // The written comparison over the picked stocks or funds: personal, and written on
 // request. Stocks are keyed on the price window as well; funds have none.
@@ -24,9 +26,32 @@ const SETTLE_MS = 600;
 
 export type TraceKind = "stocks" | "funds";
 
+/** A set holding one of the reader's uploaded funds is never stored, so there
+ *  is no saved paragraph to ask for: the panel opens on its button. */
+function nothingSaved(ids: string[]): Promise<ComparisonTraceResponse> {
+  return Promise.resolve({
+    fund_ids: ids,
+    horizon: "FUNDS",
+    available: true,
+    trace: null,
+    source: null,
+    model: null,
+    generated_at: null,
+    personal: false,
+    run_at: null,
+  });
+}
+
 function fetchers(kind: TraceKind, horizon: QuantHorizon | null) {
   return kind === "funds"
-    ? { saved: (ids: string[]) => getSavedFundComparison(ids), explain: (ids: string[]) => explainFundComparison(ids) }
+    ? {
+        // A comparison including an upload is written by the upload endpoint,
+        // which can read the reader's own fund; Compare's cannot, by design.
+        saved: (ids: string[]) =>
+          ids.some((id) => uploadIdOf(id)) ? nothingSaved(ids) : getSavedFundComparison(ids),
+        explain: (ids: string[]) =>
+          ids.some((id) => uploadIdOf(id)) ? explainComparisonWithUploads(ids) : explainFundComparison(ids),
+      }
     : {
         saved: (ids: string[]) => getSavedComparison(ids, horizon ?? "6M"),
         explain: (ids: string[]) => explainComparison(ids, horizon ?? "6M"),

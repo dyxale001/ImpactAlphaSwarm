@@ -19,8 +19,14 @@ import {
   reviewSections,
   setInput,
   undoField,
+  UPLOAD_COMPARE_PREFIX,
+  asCatalogueDetail,
+  asCatalogueFund,
+  uploadCompareId,
+  uploadIdOf,
 } from './fundUploads'
-import type { ReadField } from '../services/api/fundUploads'
+import { cleanId } from './compareUrl'
+import type { ReadField, UploadedFundDetail } from '../services/api/fundUploads'
 
 /**
  * The review screen's rules. The claim that matters most is the first one: a
@@ -228,6 +234,80 @@ describe('the field list matches the reader', () => {
       expect(meta.label).toBeTruthy()
       expect(meta.group).toBeTruthy()
     }
+  })
+})
+
+describe('an uploaded fund beside the catalogue', () => {
+  const UPLOAD_ID = '6f1c1a2e-0b7d-4a35-9d3e-2f9c0a1b2c3d'
+  const fund: UploadedFundDetail = {
+    id: UPLOAD_ID,
+    name: 'Private Balanced Fund (B)',
+    fund_house: null,
+    isin: null,
+    jse_code: null,
+    vehicle: 'unit_trust',
+    asisa_category: 'South African - Multi Asset - High Equity',
+    sheets: [
+      {
+        uploaded_fund_id: UPLOAD_ID,
+        as_of: '2026-08-31',
+        file_sha256: 'b',
+        figures: { ter: 0.95, tic: 1.1, risk_indicator_1to5: 4, risk_indicator_raw: 'Moderate to High', regulation_28: true },
+        provenance: {},
+        model: 'm',
+        prompt_version: '2',
+      },
+      {
+        uploaded_fund_id: UPLOAD_ID,
+        as_of: '2026-07-31',
+        file_sha256: 'a',
+        figures: {},
+        provenance: {},
+        model: 'm',
+        prompt_version: '2',
+      },
+    ],
+  }
+
+  it('is named mine-<id>, which Compare keeps and the backend reads', () => {
+    expect(uploadCompareId(UPLOAD_ID)).toBe(`mine-${UPLOAD_ID}`)
+    expect(uploadIdOf(`mine-${UPLOAD_ID}`)).toBe(UPLOAD_ID)
+    expect(uploadIdOf(UPLOAD_ID)).toBeNull()
+    expect(cleanId(uploadCompareId(UPLOAD_ID), 'funds')).toBe(`mine-${UPLOAD_ID}`)
+    const service = readFileSync(new URL('../../../backend/src/funds/upload_service.py', import.meta.url), 'utf-8')
+    expect(service).toContain(`UPLOAD_PREFIX = "${UPLOAD_COMPARE_PREFIX}"`)
+  })
+
+  it('reads as a catalogue fund page, newest sheet first', () => {
+    const shaped = asCatalogueDetail(fund)
+    expect(shaped.fund_id).toBe(`mine-${UPLOAD_ID}`)
+    expect(shaped.as_of).toBe('2026-08-31')
+    expect(shaped.ter).toBe(0.95)
+    expect(shaped.risk_level).toBe(4)
+    expect(shaped.snapshot?.regulation_28).toBe(true)
+    expect(shaped.snapshot?.risk_indicator_raw).toBe('Moderate to High')
+    expect(shaped.snapshot_history.map((s) => s.as_of)).toEqual(['2026-08-31', '2026-07-31'])
+    expect(shaped.asisa_geography).toBe('South African')
+    expect(shaped.asisa_asset_class).toBe('Multi Asset')
+    expect(shaped.disclaimer).toBeTruthy()
+    expect(shaped.not_licensed).toBeTruthy()
+    // Never shown as a catalogue curation or a match.
+    expect(shaped.why_this_appears).toBeNull()
+    expect(shaped.curation_rule).toBeNull()
+  })
+
+  it('says why a risk level is missing rather than borrowing the catalogue note', () => {
+    const offScale = { ...fund, sheets: [{ ...fund.sheets[0], figures: { risk_indicator_raw: '6/10 Moderate' } }] }
+    expect(asCatalogueDetail(offScale).risk_note).toContain('6/10 Moderate')
+    const none = { ...fund, sheets: [{ ...fund.sheets[0], figures: {} }] }
+    expect(asCatalogueDetail(none).risk_note).toBe(copy.DETAIL_RISK_NONE)
+    expect(asCatalogueDetail(fund).risk_note).toBeNull()
+  })
+
+  it('a fund with no sheet yet still has a shape', () => {
+    const bare = asCatalogueFund(fund, null)
+    expect(bare.has_factsheet).toBe(false)
+    expect(bare.ter).toBeNull()
   })
 })
 

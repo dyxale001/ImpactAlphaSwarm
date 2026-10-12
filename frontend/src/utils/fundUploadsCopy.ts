@@ -91,7 +91,6 @@ export const SAVED_WITH_NOTES = "Saved. A few figures are worth a second look:";
 export const UPLOADED_BADGE = "Uploaded by you";
 export const UPLOADED_AS_AT = "Fact sheet dated {date}";
 export const UPLOADED_OPEN = "Open";
-export const UPLOADED_SHEETS = "{count} fact sheets";
 
 export const DETAIL_BACK = "Back to my funds";
 export const DETAIL_NOT_FOUND_TITLE = "This fund is not in your list";
@@ -100,12 +99,9 @@ export const DETAIL_LOAD_FAILED = "This fund could not be loaded.";
 export const DETAIL_NOTICE =
   "Read from a fact sheet you uploaded, by AI, and checked by you. It is not part of the catalogue and was not " +
   "reviewed by anyone else; the fund's own fact sheet is the authoritative source.";
-export const DETAIL_FIGURES_TITLE = "Figures";
-export const DETAIL_WORDS_TITLE = "In the manager's words";
 export const DETAIL_SOURCES_TITLE = "Where each figure came from";
 export const DETAIL_SOURCES_LEAD =
   "Every saved figure, with the line it was read from and whether you accepted or typed it.";
-export const DETAIL_HISTORY_TITLE = "Fact sheets";
 export const DETAIL_DELETE = "Remove from my funds";
 export const DETAIL_DELETE_CONFIRM = "Remove {name} and all its fact sheets from your funds? This cannot be undone.";
 export const DETAIL_COLUMN_FIGURE = "Figure";
@@ -120,6 +116,16 @@ export const SOURCE_TYPED = "Typed by you; not on the sheet";
 export const SOURCE_CORRECTED = "Corrected by you; AI read {value}";
 export const SOURCE_CLEARED = "Left blank by you; AI read {value}";
 export const SOURCE_DERIVED = "Placed on the 1 to 5 scale from the risk rating";
+
+export const DETAIL_RISK_OFF_SCALE =
+  "The sheet's own rating, “{raw}”, is not one this app places on its 1 to 5 scale.";
+export const DETAIL_RISK_NONE = "The fact sheet you uploaded gives no risk rating.";
+export const DETAIL_NOT_MATCHED =
+  "Uploaded funds are never matched to a profile: only funds in the catalogue are.";
+export const DETAIL_PROVENANCE_TITLE = "Where this came from";
+export const DETAIL_PROVENANCE_UPLOADED =
+  "Read by AI from a fact sheet you uploaded, then checked by you. The PDF itself was not kept; " +
+  "each figure below shows the line it was read from.";
 
 export const VALUE_YES = "Yes";
 export const VALUE_NO = "No";
