@@ -13,6 +13,10 @@ interface ImportMetaEnv {
    *  the page needs the API the backend flag mounts, so setting one without the
    *  other gives either a hidden feature or a page that cannot load. */
   readonly VITE_FUNDS_ENABLED?: string
+  /** "true" shows the "My funds" tab on the Funds page, where a reader uploads a
+   *  fact sheet and checks what was read from it. Needs VITE_FUNDS_ENABLED and the
+   *  backend's FUND_UPLOADS_ENABLED. */
+  readonly VITE_FUND_UPLOADS_ENABLED?: string
   /** "true" shows the Compare page and its nav entry. Needs no backend flag of its
    *  own; its written comparison needs COMPARE_TRACE_ENABLED and hides without it,
    *  and its funds half needs VITE_FUNDS_ENABLED. */

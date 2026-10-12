@@ -9,3 +9,11 @@
  * the app does today. */
 export const FUNDS_ENABLED =
   (import.meta.env.VITE_FUNDS_ENABLED ?? "false") === "true";
+
+/** Show the "My funds" tab: a reader uploads a fact sheet, checks what was read
+ *  from it and keeps it in their own list.
+ *
+ * Needs FUNDS_ENABLED (it is a tab on that page) and the backend's
+ * FUND_UPLOADS_ENABLED, which mounts /api/fund-uploads. Off by default. */
+export const FUND_UPLOADS_ENABLED =
+  FUNDS_ENABLED && (import.meta.env.VITE_FUND_UPLOADS_ENABLED ?? "false") === "true";

@@ -24,9 +24,10 @@ import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import FundsPage from "./pages/Funds";
 import FundDetailPage from "./pages/FundDetail";
+import UploadedFundDetailPage from "./pages/UploadedFundDetail";
 import AdminFunds from "./pages/AdminFunds";
 import AdminFundEdit from "./pages/AdminFundEdit";
-import { FUNDS_ENABLED } from "./utils/fundsFlags";
+import { FUND_UPLOADS_ENABLED, FUNDS_ENABLED } from "./utils/fundsFlags";
 import MarketNewsPage from "./pages/MarketNews";
 import { MACRO_NEWS_ENABLED } from "./utils/macroNewsFlags";
 import ComparePage from "./pages/Compare";
@@ -102,6 +103,9 @@ export default function App() {
               gated, so a deep link cannot reach a page whose API is off. */}
           {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
           {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
+          {/* A reader's own uploaded fund. The literal "mine" segment outranks
+              ":fundId", so these never reach the catalogue page. */}
+          {FUND_UPLOADS_ENABLED && <Route path="/funds/mine/:uploadId" element={<UploadedFundDetailPage />} />}
           {COMPARE_ENABLED && <Route path="/compare" element={<ComparePage />} />}
           <Route path="/learning" element={<LearningPage />} />
           {/* Retired: it only ever rendered mock data (a hard-coded NVDA sentiment

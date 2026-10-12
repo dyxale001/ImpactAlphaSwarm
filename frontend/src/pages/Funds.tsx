@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ChevronDown,
@@ -17,8 +18,12 @@ import CategoryNavigator from "../components/funds/CategoryNavigator";
 import CompleteProfilePrompt from "../components/funds/CompleteProfilePrompt";
 import MatchInputs from "../components/funds/MatchInputs";
 import TiersMotif from "../components/funds/TiersMotif";
+import MyFundsPanel from "../components/funds/uploads/MyFundsPanel";
 import { useFundCatalogue, useFundCatalogueMeta, useFundMatches } from "../hooks/useFundCatalogue";
+import { useUploadedFunds } from "../hooks/useFundUploads";
 import { COMPARE_ENABLED } from "../utils/compareFlags";
+import { FUND_UPLOADS_ENABLED } from "../utils/fundsFlags";
+import { MY_FUNDS_TAB } from "../utils/fundUploadsCopy";
 import {
   BROWSE_LEAD,
   BROWSE_TITLE,
@@ -88,7 +93,14 @@ export default function FundsPage() {
   const meta = useFundCatalogueMeta();
   const { data, funds, isLoading, error } = useFundCatalogue(filters);
   const matchState = useFundMatches();
-  const [tab, setTab] = useState<"matched" | "browse">("matched");
+  // "?tab=mine" opens on the reader's own funds, which is where an uploaded
+  // fund's page links back to.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<"matched" | "browse" | "mine">(() =>
+    FUND_UPLOADS_ENABLED && searchParams.get("tab") === "mine" ? "mine" : "matched",
+  );
+  const uploads = useUploadedFunds(FUND_UPLOADS_ENABLED);
+  const categoryNames = useMemo(() => meta.meta?.categories.map((c) => c.name) ?? [], [meta.meta]);
 
   const filtersActive = Object.values(filters).some(
     (value) => value !== undefined && value !== "" && value !== false,
@@ -194,6 +206,16 @@ export default function FundsPage() {
           label={FUNDS_TAB_BROWSE}
           count={catalogueTotal}
         />
+        {FUND_UPLOADS_ENABLED && (
+          <TabButton
+            id="funds-tab-mine"
+            panel="funds-panel-mine"
+            selected={tab === "mine"}
+            onSelect={() => setTab("mine")}
+            label={MY_FUNDS_TAB}
+            count={uploads.isLoading ? null : uploads.funds.length}
+          />
+        )}
       </div>
 
       {tab === "matched" && (
@@ -354,11 +376,26 @@ export default function FundsPage() {
           </div>
         )}
       </section>
+
+      {/* ── The reader's own funds ──
+          Kept mounted while hidden, like the browse panel, so a review in
+          progress survives a look at the catalogue. */}
+      {FUND_UPLOADS_ENABLED && (
+        <section
+          id="funds-panel-mine"
+          role="tabpanel"
+          aria-labelledby="funds-tab-mine"
+          hidden={tab !== "mine"}
+          className="mt-5"
+        >
+          <MyFundsPanel uploads={uploads} categories={categoryNames} />
+        </section>
+      )}
     </div>
   );
 }
 
-/** One of the page's two tabs, with its count. A count still loading is left
+/** One of the page's tabs, with its count. A count still loading is left
  *  off rather than shown as a zero. */
 function TabButton({
   id,
