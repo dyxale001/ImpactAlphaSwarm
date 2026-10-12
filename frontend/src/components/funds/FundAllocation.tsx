@@ -1,5 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { DETAIL_ALLOCATION_TITLE } from "../../utils/fundsCopy";
+import { DETAIL_ALLOCATION_TITLE, sectionAsAt } from "../../utils/fundsCopy";
 
 /**
  * What the fund holds, as its own sheet breaks it down.
@@ -30,17 +30,24 @@ const SLICE_COLORS = [
 
 export default function FundAllocation({
   allocation,
+  asOf = null,
+  sheetAsOf = null,
   className = "",
 }: {
   allocation: Record<string, number> | null;
+  /** The date the sheet gives its allocation, when not its own. */
+  asOf?: string | null;
+  sheetAsOf?: string | null;
   className?: string;
 }) {
   const data = slices(allocation);
   if (data.length === 0) return null;
+  const dated = sectionAsAt(asOf, sheetAsOf);
 
   return (
     <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <h2 className="text-sm font-bold text-brand-primary">{DETAIL_ALLOCATION_TITLE}</h2>
+      {dated && <p className="text-[11px] font-semibold text-brand-secondary">{dated}</p>}
       <div className="flex flex-col items-center gap-4 xl:flex-row xl:items-start">
         <div className="h-36 w-36 shrink-0">
           <ResponsiveContainer width="100%" height="100%">

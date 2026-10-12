@@ -71,6 +71,11 @@ export interface FundSnapshot {
   asset_allocation: Record<string, number> | null;
   performance: Record<string, number> | null;
   top_holdings: Record<string, number> | null;
+  /** The date the holdings / allocation are as at when the sheet prints its own
+   *  — managers refresh holdings quarterly, so an August sheet often carries
+   *  "Holdings as at 30 June". Null means the sheet's own date (migration 038). */
+  holdings_as_of?: string | null;
+  allocation_as_of?: string | null;
   /** How the row got here — `manual` for everything transcribed by hand. */
   source: string | null;
   entered_by: string | null;

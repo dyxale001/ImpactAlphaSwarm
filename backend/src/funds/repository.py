@@ -49,7 +49,9 @@ SNAPSHOT_COLUMNS = (
     # so a column added to the table does not silently start reaching the page.
     "nav_cpu,nav_date,fee_period,inception_date,annual_management_fee,"
     "return_high_12m,return_low_12m,return_extremes_basis,risk_narrative,horizon_words,"
-    "portfolio_manager,regulation_28,income_distribution"
+    "portfolio_manager,regulation_28,income_distribution,"
+    # Migration 038: the date a section is as at when the sheet prints its own.
+    "holdings_as_of,allocation_as_of"
 )
 
 APPROVED = "approved"

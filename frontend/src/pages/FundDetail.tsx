@@ -510,8 +510,18 @@ function Overview({ fund, asAt }: { fund: CatalogueFundDetail; asAt: string | nu
         </Tile>
       )}
 
-      <FundAllocation allocation={snapshot?.asset_allocation ?? null} className={SPAN.half} />
-      <FundHoldings holdings={snapshot?.top_holdings ?? null} className={SPAN.half} />
+      <FundAllocation
+        allocation={snapshot?.asset_allocation ?? null}
+        asOf={snapshot?.allocation_as_of ?? null}
+        sheetAsOf={snapshot?.as_of ?? null}
+        className={SPAN.half}
+      />
+      <FundHoldings
+        holdings={snapshot?.top_holdings ?? null}
+        asOf={snapshot?.holdings_as_of ?? null}
+        sheetAsOf={snapshot?.as_of ?? null}
+        className={SPAN.half}
+      />
 
       {/* ── The manager's own prose, quoted and attributed ──
           Three cards said the same kind of thing in the same voice; together

@@ -254,6 +254,12 @@ the fund's edit screen afterwards and put them in there:
       only if the sheet states Regulation 28 compliance. Recorded and displayed,
       and deliberately not used for matching.
 
+  holdings date (holdings_as_of), allocation date (allocation_as_of)
+      NO box today - give them for my notes. Only when the sheet prints the
+      section with its OWN date, which managers often do quarterly: an August
+      sheet headed "HOLDINGS As at 30 Jun 2026" has holdings_as_of = 2026-06-30.
+      Leave them out when the section carries no date or the sheet's own date.
+
   minimum lump sum (min_lump_sum), minimum monthly amount (min_debit_order)
       NO box anywhere in the app today. Give them if the sheet states them, as
       rand figures, and I will keep them in my notes.

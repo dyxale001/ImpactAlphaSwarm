@@ -2,6 +2,7 @@ import {
   DETAIL_HOLDINGS_LEAD,
   DETAIL_HOLDINGS_NOTE,
   DETAIL_HOLDINGS_TITLE,
+  sectionAsAt,
 } from "../../utils/fundsCopy";
 
 /**
@@ -34,13 +35,20 @@ import {
  */
 export default function FundHoldings({
   holdings,
+  asOf = null,
+  sheetAsOf = null,
   className = "",
 }: {
   holdings: Record<string, number> | null;
+  /** The date the sheet gives its holdings, when not its own (quarterly tables). */
+  asOf?: string | null;
+  sheetAsOf?: string | null;
   className?: string;
 }) {
   const rows = positions(holdings);
   if (rows.length === 0) return null;
+  // Quarterly holdings on a monthly sheet: say so, or June reads as August.
+  const dated = sectionAsAt(asOf, sheetAsOf);
 
   // The leader sets the scale. Guarded against a zero so a sheet that printed
   // all-zero shares cannot divide by it.
@@ -50,6 +58,7 @@ export default function FundHoldings({
     <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
       <h2 className="text-sm font-bold text-brand-primary">{DETAIL_HOLDINGS_TITLE}</h2>
       <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_HOLDINGS_LEAD}</p>
+      {dated && <p className="text-[11px] font-semibold text-brand-secondary">{dated}</p>}
 
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (

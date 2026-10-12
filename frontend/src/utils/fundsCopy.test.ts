@@ -13,6 +13,7 @@ import {
   formatFundSize,
   formatMinTerm,
   formatPercent,
+  sectionAsAt,
   splitAsisaCategory,
 } from './fundsCopy'
 import { SOFT_STALE_DAYS, STALE_DAYS } from '../components/funds/StalenessChip'
@@ -134,6 +135,18 @@ describe('formatAsAt', () => {
   it('is null when there is no date', () => {
     expect(formatAsAt(null)).toBeNull()
     expect(formatAsAt('')).toBeNull()
+  })
+})
+
+describe('sectionAsAt', () => {
+  it('dates a section the sheet dates separately', () => {
+    // Quarterly holdings on a monthly sheet must not read as the sheet's month.
+    expect(sectionAsAt('2026-06-30', '2026-08-31')).toBe('As at 30 June 2026')
+  })
+
+  it('adds nothing when the section shares the sheet date or has none', () => {
+    expect(sectionAsAt('2026-08-31', '2026-08-31')).toBeNull()
+    expect(sectionAsAt(null, '2026-08-31')).toBeNull()
   })
 })
 

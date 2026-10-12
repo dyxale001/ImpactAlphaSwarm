@@ -377,7 +377,7 @@ export const DETAIL_HOLDINGS_LEAD =
   "The biggest positions this sheet lists, as a share of the fund.";
 
 export const DETAIL_HOLDINGS_NOTE =
-  "The largest holdings the sheet prints, not the whole portfolio, and as at the date on it.";
+  "The largest holdings the sheet prints, not the whole portfolio, and as at the date shown.";
 
 /* ── What it takes to start ───────────────────────────────────────────────
  *
@@ -850,6 +850,17 @@ export function formatAsAt(value: string | null | undefined): string | null {
   const name = months[Number(month) - 1];
   if (!name) return value;
   return `${Number(day)} ${name} ${year}`;
+}
+
+/** "As at 30 June 2026", for a section the sheet dates separately from itself.
+ *  Null when the section shares the sheet's date, so the page adds nothing. */
+export function sectionAsAt(
+  sectionDate: string | null | undefined,
+  sheetDate: string | null | undefined,
+): string | null {
+  if (!sectionDate || sectionDate === sheetDate) return null;
+  const formatted = formatAsAt(sectionDate);
+  return formatted ? `As at ${formatted}` : null;
 }
 
 /** The stated minimum term, in words. */

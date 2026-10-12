@@ -67,7 +67,7 @@ NUMERIC_COLUMNS = (
 BOOLEAN_COLUMNS = ("is_index_tracker", "tfsa_eligible")
 # Date columns on a snapshot. `as_of` is not here: it is required, so a blank is
 # an error the validators must report rather than a None to write.
-SNAPSHOT_DATE_COLUMNS = ("nav_date", "inception_date")
+SNAPSHOT_DATE_COLUMNS = ("nav_date", "inception_date", "holdings_as_of", "allocation_as_of")
 # Free text a sheet may simply not print. Blank means absent, not empty string —
 # an empty string reads as "the manager published nothing here", which is a
 # different claim from "we have not recorded it".
