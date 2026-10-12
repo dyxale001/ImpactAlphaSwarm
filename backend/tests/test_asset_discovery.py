@@ -988,10 +988,25 @@ class TestSeedScorer:
         assert [r["ticker"] for r in ad.SeedScorer.active_seeds(rows)] == ["AAPL"]
 
 
+class FakeExchangeFiller:
+    """Stands in for src.quant.listing.ExchangeFiller: no database, no Yahoo."""
+
+    def __init__(self, stored=None, unknown=None, fail=False):
+        self.result = {"stored": stored or {}, "unknown": unknown or []}
+        self.fail = fail
+        self.calls = 0
+
+    def fill(self):
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("supabase is down")
+        return self.result
+
+
 class TestExecuteScoresSeeds:
     """The nightly pass end to end, with the database and network faked."""
 
-    def run(self, monkeypatch, pool_rows, seed_scorer, dry_run=False):
+    def run(self, monkeypatch, pool_rows, seed_scorer, dry_run=False, exchange_filler=None):
         import src.utils.supabase_client as sc
 
         written = {"seed": [], "discovered": []}
@@ -1008,6 +1023,7 @@ class TestExecuteScoresSeeds:
             funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
             classifier=ClassificationChain(classifiers=[]),
             seed_scorer=seed_scorer,
+            exchange_filler=exchange_filler or FakeExchangeFiller(),
         )
         return run.execute(dry_run=dry_run), written
 
@@ -1025,6 +1041,26 @@ class TestExecuteScoresSeeds:
         summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(), dry_run=True)
         assert written["seed"] == []
         assert "AAPL" in summary["seed_scores"]
+
+    def test_the_pass_stores_missing_exchanges(self, monkeypatch):
+        filler = FakeExchangeFiller(stored={"NEWB": "Nasdaq"}, unknown=["ODD"])
+        summary, _ = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(),
+                              exchange_filler=filler)
+        assert filler.calls == 1
+        assert summary["exchanges_stored"] == 1
+        assert summary["exchanges_unknown"] == ["ODD"]
+
+    def test_a_dry_run_stores_no_exchanges(self, monkeypatch):
+        filler = FakeExchangeFiller()
+        self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(), dry_run=True,
+                 exchange_filler=filler)
+        assert filler.calls == 0
+
+    def test_a_failed_exchange_fill_does_not_fail_the_pass(self, monkeypatch):
+        summary, written = self.run(monkeypatch, [a_seed_row("AAPL")], self.a_seed_scorer(),
+                                    exchange_filler=FakeExchangeFiller(fail=True))
+        assert summary["exchanges_stored"] == 0
+        assert summary["seeds_scored"] == 1 and written["seed"]
 
     def test_a_trending_seed_does_not_take_a_new_name_place(self, monkeypatch):
         import src.utils.supabase_client as sc
@@ -1051,6 +1087,7 @@ class TestExecuteScoresSeeds:
             funnel=ValidationFunnel(gates=[], finnhub=FakeFinnhub()),
             classifier=ClassificationChain(classifiers=[PinnedClassifier(pins)], refiners=[]),
             seed_scorer=self.a_seed_scorer(),
+            exchange_filler=FakeExchangeFiller(),
         )
         summary = run.execute()
         finance = summary["universes"]["Finance"]

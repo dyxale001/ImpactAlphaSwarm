@@ -199,11 +199,12 @@ class SocialDayBuilder:
 		out = []
 		for post, item in ranked:
 			post = dict(post)
-			post["rank"] = round(
-				abs(float(item.get("sentiment_raw") or 0.0))
-				* max(0.0, float(item.get("weight") or 1.0)),
-				4,
-			)
+			weight = max(0.0, float(item.get("weight") or 1.0))
+			post["rank"] = round(abs(float(item.get("sentiment_raw") or 0.0)) * weight, 4)
+			# Kept so the share of the day's score can be worked out when the row is read.
+			# The influence the payload stamps here is a share of THIS sample only, and
+			# a run or a tick adds a sample of a few new posts to a day of hundreds.
+			post["weight"] = round(weight, 4)
 			out.append(post)
 		return out
 
@@ -234,7 +235,7 @@ class SocialDailyRepository:
 	MARK_COLUMNS = "ticker, as_of_night, last_message_id"
 	READ_COLUMNS = (
 		"ticker, as_of_night, social_sentiment_score, post_count, bullish_posts, "
-		"bearish_posts, last_message_id, top_posts, summary"
+		"bearish_posts, last_message_id, top_posts, summary, weight_sum"
 	)
 	CHUNK_SIZE = 100
 
@@ -496,6 +497,51 @@ class SocialHistory:
 			"post_count": row.get("post_count") or 0,
 			"bullish": row.get("bullish_posts") or 0,
 			"bearish": row.get("bearish_posts") or 0,
-			"top_posts": row.get("top_posts") or [],
+			"top_posts": SocialHistory._day_shares(
+				row.get("top_posts") or [], row.get("weight_sum")
+			),
 			"summary": row.get("summary"),
 		}
+
+	@staticmethod
+	def _day_shares(posts: list[dict[str, Any]], weight_sum: Any) -> list[dict[str, Any]]:
+		"""Each post's influence as its share of the WHOLE day's score.
+
+		The influence stamped on a post when it was written is its share of the sample
+		it arrived in. A day is the sum of many samples (the nightly, refreshes, two ticks),
+		so a post from a ten post tick claimed ten per cent of a day of three hundred. The
+		day's score is its weighted mean over every post, so a post's real share is its
+		weight over the day's total weight.
+
+		Posts stored before the weight was kept recover it from their rank, which is
+		``abs(raw) * weight``. A neutral post has a rank of zero and gives nothing back to
+		recover from, so its share is unknown and comes back as null, which the page
+		simply does not show, rather than as a figure that is wrong.
+		"""
+		try:
+			total = float(weight_sum or 0.0)
+		except (TypeError, ValueError):
+			total = 0.0
+
+		out = []
+		for post in posts:
+			post = dict(post)
+			weight = SocialHistory._post_weight(post)
+			post["influence"] = (
+				round(weight / total * 100, 1) if total > 0 and weight is not None else None
+			)
+			out.append(post)
+		return out
+
+	@staticmethod
+	def _post_weight(post: dict[str, Any]) -> float | None:
+		if isinstance(post.get("weight"), (int, float)):
+			return float(post["weight"])
+		try:
+			rank = float(post.get("rank"))
+			raw = float(post.get("sentiment_score")) / 50.0 - 1.0
+		except (TypeError, ValueError):
+			return None
+		if abs(raw) < 0.01:
+			return None
+		return rank / abs(raw)
