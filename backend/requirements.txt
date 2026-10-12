@@ -46,3 +46,10 @@ supabase
 fastapi
 gunicorn
 uvicorn[standard]
+
+# Fact-sheet uploads: Gemini on Vertex AI reads an uploaded sheet (google-genai),
+# pypdf checks each quoted line against the PDF's own text, and FastAPI needs
+# python-multipart to accept a file upload.
+google-genai==2.29.0
+pypdf==6.17.0
+python-multipart==0.0.32

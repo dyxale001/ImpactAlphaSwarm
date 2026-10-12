@@ -1,0 +1,3 @@
+# Cached Gemini readings and accuracy reports: local only, never committed.
+*
+!.gitignore
