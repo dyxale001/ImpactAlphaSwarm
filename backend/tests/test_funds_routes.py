@@ -435,6 +435,14 @@ class TestMatches:
         assert "31 July 2026" in reason
         assert "This is information, not advice." in reason
 
+    def test_a_match_carries_the_figures_a_browse_card_shows(self, client):
+        # The fund card is one shape on both halves of the page, so a match
+        # states fund size and distributions as the catalogue does.
+        body = client.get("/api/fund-catalogue/matches").json()
+        match = next(m for m in body["matches"] if m["name"] == "Alpha Money Market Fund")
+        assert match["fund_size_zar"] == 12000000000
+        assert match["distribution_frequency"] == "Monthly"
+
     def test_every_match_links_the_fact_sheet_it_cites(self, client):
         # The reason sentence names a fact sheet by date. Before this, a matched
         # card carried no URL at all, so the citation could not be opened.

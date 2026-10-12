@@ -5,12 +5,11 @@ does the same for discovery and ranking), so a module either exists in the serve
 app or it does not. Both flags default OFF: merging this feature changes no
 behaviour until an environment sets them.
 
-The two flags are separate because the catalogue and the generated prose carry
-different risks. ``FUNDS_ENABLED`` mounts the router and the page — inert data
-served from published fact sheets. ``FUND_TRACES_ENABLED`` turns on the
-model-written explanation, which cannot ship before its guards and the copy
-review are in place. The catalogue is useful without it: version one renders a
-templated "Why this appears" built from the snapshot's own fields.
+``FUNDS_ENABLED`` mounts the router and the page — inert data served from
+published fact sheets — and everything on it, the fund page's reasoning trace
+included: that paragraph ships behind its own guards and template fallback
+rather than a flag (see trace.py). ``FUND_TRACES_ENABLED`` was reserved for
+model-written fund prose and is no longer read.
 """
 
 import os
@@ -31,9 +30,9 @@ def _flag(name: str, default: str = "false") -> bool:
 # catalogue renders a page that says nothing.
 FUNDS_ENABLED = _flag("FUNDS_ENABLED")
 
-# Model-written fund explanations. Off by default and gated separately from the
-# catalogue: it must not flip before the forbidden-term and number-grounding
-# guards are proven, and before the copy has been reviewed.
+# Reserved for model-written fund explanations. Nothing reads it: the fund
+# page's reasoning trace (trace.py) is on wherever the catalogue is, behind its
+# guards and its template fallback, and needs no flag.
 FUND_TRACES_ENABLED = _flag("FUND_TRACES_ENABLED")
 
 # Private Supabase Storage bucket holding one PDF per fact-sheet snapshot at

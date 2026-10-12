@@ -191,7 +191,7 @@ export const MATCHED_SECTION_TITLE =
 export const MATCH_INPUTS_TITLE = "What this list is filtered on";
 
 export const MATCH_INPUTS_LEAD =
-  "Three of your answers decide which funds appear above, weighed against the risk label each manager publishes. Nothing else from your account is used.";
+  "Three of your answers decide which funds appear in this list, weighed against the risk label each manager publishes. Nothing else from your account is used.";
 
 export const MATCH_INPUT_RISK_LABEL = "Your risk profile";
 export const MATCH_INPUT_HORIZON_LABEL = "When you need the money";
@@ -266,13 +266,6 @@ export const MIN_TERM_LABEL = "Minimum term stated";
 export const TFSA_BADGE = "Tax-free eligible";
 
 export const TRACKER_BADGE = "Index tracker";
-
-/** The reason sentence's own heading, which the card omitted.
- *
- *  It is the tallest and most variable block on a matched card and it sat there
- *  unlabelled, so it read as prose about the fund rather than as the answer to
- *  the question the section poses. The wording is the design note's own. */
-export const WHY_APPEARS_LABEL = "Why this appears";
 
 /** Follows a charge figure: "1.79% a year". Was inline in the card, which put
  *  it outside the scan. */
@@ -566,7 +559,6 @@ export function allStrings(): string[] {
     SHOW_ALL_ACTION,
     SHOW_FEWER_ACTION,
     FUNDS_HEADER_EYEBROW,
-    WHY_APPEARS_LABEL,
     COST_PER_YEAR,
     FUND_SIZE_LABEL,
     DISTRIBUTIONS_LABEL,
@@ -699,6 +691,23 @@ export function allStrings(): string[] {
     ...FUND_ABOUT_WAYFINDING.flatMap((item) => [item.title, item.body]),
     FUND_ABOUT_FOOTER,
     FUND_ABOUT_DONE,
+    FUNDS_TABS_LABEL,
+    FUNDS_TAB_MATCHED,
+    FUNDS_TAB_BROWSE,
+    // The fund page's reasoning trace panel.
+    FUND_TRACE_TITLE,
+    FUND_TRACE_LABEL,
+    FUND_TRACE_INVITE,
+    FUND_TRACE_BUTTON,
+    FUND_TRACE_WRITING,
+    FUND_TRACE_BADGE_MODEL,
+    FUND_TRACE_BADGE_TEMPLATE,
+    FUND_TRACE_MODEL_NOTE,
+    FUND_TRACE_TEMPLATE_NOTE,
+    FUND_TRACE_DISCLOSURE,
+    FUND_TRACE_DISCLOSURE_NO_PROFILE,
+    FUND_TRACE_EMPTY,
+    FUND_TRACE_FAILED,
     ...Object.values(VEHICLE_LABEL),
     // Sentences a formatter builds are shipped copy too, so they are scanned
     // rather than trusted for being generated. Every accepted value is listed:
@@ -1133,3 +1142,34 @@ export const FUND_ABOUT_WAYFINDING = [
 export const FUND_ABOUT_FOOTER =
   "AlphaSwarm is not a licensed financial services provider and does not give advice. The page informs; the decision stays with you.";
 export const FUND_ABOUT_DONE = "Got it";
+
+// ── one fund's reasoning trace ─────────────────────────────────────────────
+// The panel above the fund page's tabs. Personal and written on request, like
+// the Compare page's paragraph: what the fund is on its fact sheet, and whether
+// it is among the reader's matches and why (D-218).
+
+export const FUND_TRACE_TITLE = "This fund and your profile";
+export const FUND_TRACE_LABEL = "Reasoning trace";
+export const FUND_TRACE_INVITE =
+  "Get a short explanation of this fund in plain words: what it is, what it costs and how its manager rates its risk, and whether it is among the funds matched to your profile, and why.";
+export const FUND_TRACE_BUTTON = "Explain this fund";
+export const FUND_TRACE_WRITING = "Writing your explanation…";
+export const FUND_TRACE_BADGE_MODEL = "AI written, checked";
+export const FUND_TRACE_BADGE_TEMPLATE = "From template";
+export const FUND_TRACE_MODEL_NOTE =
+  "Written by a language model from this fund's fact sheet and your profile answers, then checked: every number in it appears in those figures, and any wording that gives advice or says the fund fits you fails it.";
+export const FUND_TRACE_TEMPLATE_NOTE =
+  "The model could not be used just now, so this paragraph was assembled from the same figures by a fixed template.";
+export const FUND_TRACE_DISCLOSURE =
+  "Written from this fund's fact sheet and your profile answers. Whether a fund is among your matches comes from fixed rules over its published labels, not from the AI, and is not a judgement about the fund.";
+export const FUND_TRACE_DISCLOSURE_NO_PROFILE =
+  "Written from this fund's fact sheet. Complete your risk profile to see whether it is among your matches.";
+export const FUND_TRACE_EMPTY =
+  "An explanation could not be written for this fund just now. The tabs below still show every figure.";
+export const FUND_TRACE_FAILED = "Unable to write the explanation. Try again in a moment.";
+
+// ── the funds page's two tabs ──────────────────────────────────────────────
+
+export const FUNDS_TABS_LABEL = "Funds sections";
+export const FUNDS_TAB_MATCHED = "Matched to your profile";
+export const FUNDS_TAB_BROWSE = "Browse every category";

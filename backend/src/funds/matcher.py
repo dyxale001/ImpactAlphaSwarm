@@ -409,4 +409,6 @@ def _to_result(candidate: FundCandidate, state: MatchState) -> MatchResult:
         tfsa_eligible=bool(fund.get("tfsa_eligible")),
         is_index_tracker=bool(fund.get("is_index_tracker")),
         rules_applied=state.rules_applied,
+        fund_size_zar=as_number(snap.get("fund_size_zar")),
+        distribution_frequency=snap.get("distribution_frequency"),
     )

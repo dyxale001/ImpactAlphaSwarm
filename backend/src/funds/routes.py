@@ -17,6 +17,7 @@ the matcher or the copy module, where it can be tested without HTTP.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
@@ -36,6 +37,8 @@ class BracketPreviewIn(BaseModel):
 
     risk_tolerance: str
     goals: Optional[dict[str, str]] = None
+
+logger = logging.getLogger("funds")
 
 router = APIRouter(prefix="/api/fund-catalogue", tags=["fund-catalogue"])
 
@@ -140,6 +143,58 @@ def fund_prices(fund_id: str, service: FundCatalogueService = Depends(get_servic
     if prices is None:
         raise HTTPException(status_code=404, detail="Fund not found")
     return prices
+
+
+# ── one fund's reasoning trace ──────────────────────────────────────────────
+# Personal (it says whether the fund is among the reader's matches, and why), so
+# the reader is taken from their token. One verb: the button posts, a fresh
+# paragraph comes back, and nothing is stored or read back.
+
+_trace_service = None
+
+
+def get_trace_service():
+    """The trace service, built once on first use, over the catalogue service."""
+    global _trace_service
+    if _trace_service is None:
+        from .trace import FundTraceService
+
+        _trace_service = FundTraceService(funds=get_service())
+    return _trace_service
+
+
+@router.post("/{fund_id}/trace")
+async def explain_fund(
+    fund_id: str,
+    user_id: str = Depends(current_user_id),
+    service=Depends(get_trace_service),
+):
+    """Writes the reader's paragraph about this fund now."""
+    import asyncio
+
+    found = service.valid(fund_id)
+    if found is None:
+        raise HTTPException(status_code=400, detail="Not a fund id")
+    quiet = {
+        "fund_id": found,
+        "available": service.enabled,
+        "trace": None,
+        "source": None,
+        "model": None,
+        "generated_at": None,
+        "personal": False,
+    }
+    if not service.enabled:
+        return quiet
+    loop = asyncio.get_running_loop()
+    try:
+        point = await loop.run_in_executor(None, service.explain, user_id, found)
+    except Exception as exc:  # the service never raises; this is belt and braces
+        logger.warning("Fund trace failed for %s: %s", found, exc)
+        point = None
+    if point is None:
+        return quiet
+    return {"fund_id": found, "available": True, **point}
 
 
 # Declared last: a literal path must be registered before the parameterised one,

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import FundTracePanel from "../components/funds/FundTracePanel";
 import RiskScale from "../components/funds/RiskScale";
 import StalenessChip from "../components/funds/StalenessChip";
 import FundsNotice from "../components/funds/FundsNotice";
@@ -251,6 +252,11 @@ export default function FundDetailPage() {
       {!snapshot && (
         <FundsNotice icon={FileText} title={DETAIL_NO_FACTSHEET_TITLE} body={DETAIL_NO_FACTSHEET} />
       )}
+
+      {/* The reader's own explanation of this fund, above the tabs it explains.
+          Only for a fund with a sheet on file: without one there is nothing
+          dated to explain, and the notice above already says so. */}
+      {snapshot && fundId && <FundTracePanel fundId={fundId} />}
 
       {available.length > 1 && (
         <div

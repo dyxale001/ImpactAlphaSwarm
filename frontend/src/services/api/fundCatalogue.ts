@@ -225,6 +225,9 @@ export interface FundMatch {
   tfsa_eligible: boolean;
   is_index_tracker: boolean;
   rules_applied: string[];
+  /** Carried so a matched card states the same figures as a browse card. */
+  fund_size_zar: number | null;
+  distribution_frequency: string | null;
   /** The sentence naming who classified the fund, as what, when, and which of
    *  the user's own answers the filter used. Rendered on the server so the
    *  wording is reviewed in one place. */
@@ -340,4 +343,31 @@ export async function getFundMatches() {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<FundMatchesResponse>;
+}
+
+/** One fund's reasoning trace for the signed-in reader: what the fund is on its
+ *  fact sheet, and whether it is among their matches and why. */
+export interface FundTraceResponse {
+  fund_id: string;
+  /** False when the deployment has not switched the feature on. */
+  available: boolean;
+  /** The paragraph, or null when one could not be written. */
+  trace: string | null;
+  source: "model" | "template" | null;
+  model: string | null;
+  generated_at: string | null;
+  /** Whether it explains the reader's own match (false with no profile on file). */
+  personal: boolean;
+}
+
+/** Writes the reader's paragraph about this fund now. What the button calls.
+ *  Nothing is stored, so there is nothing to read back on a later visit. */
+export async function explainFundTrace(fundId: string) {
+  const token = await getToken();
+  const res = await fetch(`${BASE}/api/fund-catalogue/${encodeURIComponent(fundId)}/trace`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<FundTraceResponse>;
 }

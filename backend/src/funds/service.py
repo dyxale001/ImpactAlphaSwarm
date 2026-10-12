@@ -272,6 +272,8 @@ class FundCatalogueService:
             "tfsa_eligible": match.tfsa_eligible,
             "is_index_tracker": match.is_index_tracker,
             "rules_applied": list(match.rules_applied),
+            "fund_size_zar": match.fund_size_zar,
+            "distribution_frequency": match.distribution_frequency,
             "reason": self.reason.render(match, profile, today=self.clock()),
         }
 
