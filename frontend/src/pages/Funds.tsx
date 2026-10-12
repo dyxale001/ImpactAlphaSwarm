@@ -22,13 +22,11 @@ import { COMPARE_ENABLED } from "../utils/compareFlags";
 import {
   BROWSE_LEAD,
   BROWSE_TITLE,
-  CIS_DISCLAIMER,
   EMPTY_CATALOGUE,
   EMPTY_CATALOGUE_TITLE,
   EMPTY_FILTERED,
   EMPTY_FILTERED_TITLE,
   FILTER_CLEAR_ALL,
-  FOOTER_NOT_LICENSED,
   FUND_ABOUT_BUTTON,
   FUNDS_HEADER_EYEBROW,
   FUNDS_HEADER_STRIP,
@@ -78,14 +76,6 @@ const BROWSE_ID = "browse-funds";
  *
  * Why each fund matched is no longer printed on its card. It is explained on
  * the fund's own page, in the reasoning trace that reads the reader's answers.
- *
- * The footer carries three things that are not decoration: how the list was
- * chosen, what this page does not cover, and the statement that the product is
- * not licensed to advise. The first pre-empts "why these funds", and the other
- * two are the honest limits of a catalogue transcribed from published
- * documents. It renders whether or not the catalogue request succeeded, which
- * it did not used to: gated on the response, a failed fetch took the
- * not-licensed statement off the page along with the funds.
  *
  * Reached only when VITE_FUNDS_ENABLED is set. Its data needs the backend's own
  * flag as well, so the two are set together.
@@ -364,26 +354,6 @@ export default function FundsPage() {
           </div>
         )}
       </section>
-
-      {/* ── What this page is, and is not ──
-          Never gated on the response. The two paragraphs that describe the
-          catalogue drop out with it; the two that describe the product do not,
-          because a page that lists funds without saying it is not licensed to
-          advise on them is the one state this footer exists to prevent. */}
-      <footer className="soft-card mt-6 flex flex-col gap-3 p-5">
-        {data && (
-          <>
-            <p className="text-xs leading-relaxed text-forest-600">{data.inclusion_rule}</p>
-            <p className="text-xs leading-relaxed text-forest-600">{data.not_covered}</p>
-          </>
-        )}
-        <p className="text-xs leading-relaxed text-forest-500">
-          {data?.disclaimer ?? CIS_DISCLAIMER}
-        </p>
-        <p className="border-t border-brand-border/40 pt-3 text-xs leading-relaxed text-forest-500">
-          {data?.not_licensed ?? FOOTER_NOT_LICENSED}
-        </p>
-      </footer>
     </div>
   );
 }
