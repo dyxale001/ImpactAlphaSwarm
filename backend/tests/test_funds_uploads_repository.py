@@ -58,6 +58,13 @@ class TestEveryQueryIsTheReadersOwn:
         r.find_by_isin(USER, "ZAE000165205")
         assert owner_filtered(client, "uploaded_funds")
 
+    def test_finding_by_name_only_among_funds_without_an_isin(self):
+        r, client = repo()
+        r.find_by_name(USER, "Allan Gray Balanced Fund")
+        assert owner_filtered(client, "uploaded_funds")
+        assert ("name", "Allan Gray Balanced Fund") in client.filters_on("uploaded_funds")
+        assert ("is_", ("isin", "null"), {}) in client.calls_on("uploaded_funds")
+
     def test_updating(self):
         r, client = repo()
         r.update_fund(USER, "f1", {"name": "A fund"})

@@ -186,6 +186,25 @@ class UploadedFundRepository(Repository):
             print(f"Error finding an uploaded fund by ISIN: {e}")
             return None
 
+    def find_by_name(self, user_id: str, name: str) -> Optional[dict[str, Any]]:
+        """This reader's fund with this exact name and no ISIN. Many sheets print
+        no ISIN (no Allan Gray sheet does), and next month's sheet for one of
+        them should extend the fund rather than add a second entry."""
+        try:
+            rows = (
+                self.table()
+                .select(FUND_COLUMNS)
+                .eq("user_id", user_id)
+                .eq("name", name)
+                .is_("isin", "null")
+                .limit(1)
+                .execute()
+            ).data or []
+            return rows[0] if rows else None
+        except Exception as e:
+            print(f"Error finding an uploaded fund by name: {e}")
+            return None
+
     def create_fund(self, user_id: str, identity: dict[str, Any]) -> dict[str, Any]:
         payload = {k: identity.get(k) for k in IDENTITY_FIELDS}
         payload["user_id"] = user_id

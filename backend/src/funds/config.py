@@ -52,3 +52,20 @@ MDD_SIGNED_URL_TTL_SECONDS = int(os.getenv("FUNDS_MDD_URL_TTL", "3600"))
 # exists so a future platform with a real minimum needs a value here rather than
 # a new rule in the matcher.
 PLATFORM_MIN_DEBIT_ORDER: float | None = None
+
+# Mounts /api/fund-uploads: a reader uploads a fact sheet, Gemini reads it
+# (reading.py), they review every figure and save it to their own list
+# (migration 039). Off by default like every flag here, and only read when
+# FUNDS_ENABLED is on too, since an uploaded fund is shown on the Funds page.
+# Needs GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION and FUND_EXTRACT_MODEL.
+FUND_UPLOADS_ENABLED = _flag("FUND_UPLOADS_ENABLED")
+
+# A fact sheet is a two-to-four page PDF of well under a megabyte; the limits
+# leave room for a long one and refuse anything that is plainly something else
+# before it costs a model call.
+FUND_UPLOAD_MAX_BYTES = int(os.getenv("FUND_UPLOAD_MAX_BYTES", str(10 * 1024 * 1024)))
+FUND_UPLOAD_MAX_PAGES = int(os.getenv("FUND_UPLOAD_MAX_PAGES", "10"))
+
+# Uploads per reader in any 24 hours, cached or not. About 2 US cents each, so
+# the limit is less about cost than about one account hammering the endpoint.
+FUND_UPLOADS_PER_DAY = int(os.getenv("FUND_UPLOADS_PER_DAY", "10"))

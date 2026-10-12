@@ -225,6 +225,15 @@ if FUNDS_ENABLED:
     else:
         logger.warning("FUNDS_ENABLED is set but the funds admin did not mount")
 
+    # A reader's own fact sheets, read by Gemini and saved after their review
+    # (migration 039). Its own flag on top of this one: it costs a model call
+    # per upload and needs the Vertex AI settings.
+    from src.funds.config import FUND_UPLOADS_ENABLED  # noqa: E402
+    from src.funds.upload_routes import mount_fund_uploads  # noqa: E402
+
+    if mount_fund_uploads(app, enabled=FUND_UPLOADS_ENABLED):
+        logger.info("Fact sheet uploads mounted at /api/fund-uploads")
+
 
 # Macro / current-affairs news (D-223), behind its own flag. Needs migration 031 and
 # the Jev key (TYPESAFE_API_KEY_OPENROUTER) in the environment before it is switched on.
