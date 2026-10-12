@@ -21,7 +21,6 @@ export interface UserAnalysis {
    *  is what shows them the starter-deck picker. */
   dashboard_layout?: unknown;
 
-  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 }
