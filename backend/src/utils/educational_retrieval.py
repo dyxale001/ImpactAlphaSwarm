@@ -1117,7 +1117,8 @@ _BROAD_BEGINNER_PATTERN = re.compile(
     r"i don'?t know (anything |much )?about investing|"
     r"what should i learn first|"
     r"(common|key|basic|main) investing concepts|"
-    r"investing concepts)\b",
+    r"investing concepts|"
+    r"what is investing|what'?s investing|what does investing mean)\b",
     re.IGNORECASE,
 )
 

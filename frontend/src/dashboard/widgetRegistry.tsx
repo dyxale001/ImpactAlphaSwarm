@@ -18,10 +18,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type {
+  DashboardLayout,
   WidgetProps,
   WidgetSize,
   WidgetSpecMap,
 } from "./layoutSchema";
+import { LAYOUT_VERSION, newInstanceId } from "./layoutSchema";
 import {
   ShortlistWidget,
   AlsoScoredWidget,
@@ -323,6 +325,24 @@ const BY_ID = new Map(WIDGETS.map((w) => [w.id, w]));
 
 export function widgetById(id: string): WidgetDef | undefined {
   return BY_ID.get(id);
+}
+
+/** A sensible default board for a brand-new user: their shortlist and their
+ *  watchlist first (both wide), then run status, read-next and learning
+ *  progress together as a row of three small widgets — one from each major
+ *  group, so the dashboard isn't empty on day one, arranged so same-sized
+ *  cards sit next to each other instead of scattered. */
+const STARTER_WIDGET_IDS = ["top-pick", "watchlist", "run-status", "learning-next", "learning-progress"];
+
+export function starterLayout(): DashboardLayout {
+  return {
+    version: LAYOUT_VERSION,
+    widgets: STARTER_WIDGET_IDS.filter((id) => BY_ID.has(id)).map((id) => ({
+      id,
+      instanceId: newInstanceId(id),
+      size: BY_ID.get(id)!.defaultSize,
+    })),
+  };
 }
 
 /** The shape parseLayout validates against. Derived rather than maintained, so

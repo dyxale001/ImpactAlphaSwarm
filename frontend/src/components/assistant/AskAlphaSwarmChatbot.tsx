@@ -4,6 +4,17 @@ import { Sparkles, X, Send, Loader2 } from 'lucide-react'
 import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
 import AskAnswerCard from '../ask/AskAnswerCard'
+import AskScopeTooltip from '../ask/AskScopeTooltip'
+
+// Mirrors the backend's own _ASK_REDIRECT_SUGGESTIONS (api.py) — same
+// three example questions shown wherever Ask AlphaSwarm has nothing to
+// show yet, so a new user sees one consistent set of starting points
+// rather than a different list depending on which entry point they used.
+const SUGGESTED_QUESTIONS = [
+  'Compare AAPL and GOOGL',
+  'Tell me about NVDA',
+  'How does AlphaSwarm work?',
+]
 
 /**
  * Global floating Ask AlphaSwarm assistant, mounted once at the layout
@@ -82,7 +93,7 @@ export default function AskAlphaSwarmChatbot() {
         <div
           role="dialog"
           aria-label="Ask AlphaSwarm assistant"
-          className="mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border border-brand-border/60 bg-brand-card shadow-2xl overflow-hidden"
+          className="mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20 overflow-hidden"
           style={{ animation: 'slide-up 0.2s ease-out forwards' }}
         >
           {/* Header */}
@@ -115,12 +126,24 @@ export default function AskAlphaSwarmChatbot() {
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
-              <div className="h-full flex flex-col items-center justify-center text-center gap-2 py-6">
+              <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
                 <Sparkles className="w-6 h-6 text-brand-primary" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
                 </p>
+                <div className="flex flex-col items-center gap-1.5 w-full pt-1">
+                  {SUGGESTED_QUESTIONS.map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => ask(q)}
+                      className="w-full text-center px-3 py-2 rounded-lg border border-brand-primary bg-brand-primary text-xs text-white hover:brightness-110 transition-all"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <>
@@ -162,6 +185,9 @@ export default function AskAlphaSwarmChatbot() {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </form>
+          <div className="flex items-center justify-center pb-2 px-3 shrink-0">
+            <AskScopeTooltip />
+          </div>
         </div>
       )}
 
@@ -172,7 +198,7 @@ export default function AskAlphaSwarmChatbot() {
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
         >
           {open ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>

@@ -3,16 +3,11 @@ import {
   Eye,
   RefreshCw,
   ArrowUpDown,
-  TrendingUp,
-  Search,
-  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import { useWatchlistData, type SortOption } from "../hooks/useWatchlistData";
-import { useAskAlphaSwarm } from "../hooks/useAskAlphaSwarm";
 import WatchlistSearch from "../components/watchlist/WatchlistSearch";
-import AskAlphaSwarm from "../components/watchlist/AskAlphaSwarm";
 import WatchedAssetCard from "../components/watchlist/WatchedAssetCard";
-import TopPickRow from "../components/watchlist/TopPickRow";
 import WatchlistSkeleton from "../components/watchlist/WatchlistSkeleton";
 import RadarMotif from "../components/watchlist/RadarMotif";
 import { SECTOR_COLOURS } from "../utils/sectorColours";
@@ -21,9 +16,6 @@ import { SECTOR_COLOURS } from "../utils/sectorColours";
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function WatchlistPage() {
   const {
-    topPicks,
-    allRanked,
-    showAllRanked,
     watchedAssets,
     displayedAssets,
     loading,
@@ -44,26 +36,12 @@ export default function WatchlistPage() {
   } = useWatchlistData();
 
   const [showSortMenu, setShowSortMenu] = useState(false);
-  // Session-scoped, same reasoning as useAskAlphaSwarm's history persistence:
-  // this page unmounts on route navigation, so plain useState reset the tab
-  // choice back to 'ticker' every time the user came back. sessionStorage
-  // survives that unmount/remount within the same browser tab.
-  const [searchMode, setSearchMode] = useState<"ticker" | "ask">(() => {
-    try {
-      const stored = window.sessionStorage.getItem("watchlist.searchMode");
-      return stored === "ask" ? "ask" : "ticker";
-    } catch {
-      return "ticker";
-    }
-  });
+  const [confirmation, setConfirmation] = useState<string | null>(null);
   useEffect(() => {
-    try {
-      window.sessionStorage.setItem("watchlist.searchMode", searchMode);
-    } catch {
-      // best-effort (private browsing / storage disabled)
-    }
-  }, [searchMode]);
-  const ask = useAskAlphaSwarm();
+    if (!confirmation) return;
+    const timer = setTimeout(() => setConfirmation(null), 3000);
+    return () => clearTimeout(timer);
+  }, [confirmation]);
 
   const sortLabels: Record<SortOption, string> = {
     added: "Recently added",
@@ -107,53 +85,18 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      {/* ── Search + Browse ─────────────────────────────────────────── */}
+      {/* ── Search ──────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSearchMode("ticker")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-              searchMode === "ticker"
-                ? "border-brand-primary/50 bg-brand-primary/10 text-brand-primary"
-                : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
-            }`}
-          >
-            <Search className="w-3.5 h-3.5" />
-            Search by ticker
-          </button>
-          <button
-            type="button"
-            onClick={() => setSearchMode("ask")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-              searchMode === "ask"
-                ? "border-brand-primary/50 bg-brand-primary/10 text-brand-primary"
-                : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Ask AlphaSwarm
-          </button>
-        </div>
-
-        {searchMode === "ticker" ? (
-          <WatchlistSearch
-            search={search}
-            setSearch={setSearch}
-            searchResults={searchResults}
-            searchLoading={searchLoading}
-            onAdd={addToWatchlist}
-          />
-        ) : (
-          <AskAlphaSwarm
-            query={ask.query}
-            setQuery={ask.setQuery}
-            result={ask.turns.length > 0 ? ask.turns[ask.turns.length - 1].result : null}
-            loading={ask.loading}
-            error={ask.error}
-            onAsk={ask.ask}
-          />
-        )}
+        <WatchlistSearch
+          search={search}
+          setSearch={setSearch}
+          searchResults={searchResults}
+          searchLoading={searchLoading}
+          onAdd={async (result) => {
+            await addToWatchlist(result);
+            setConfirmation(`${result.ticker} added to your watchlist.`);
+          }}
+        />
       </div>
 
       {/* ── Error ───────────────────────────────────────────────────── */}
@@ -163,30 +106,15 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* ── From Your Latest Analysis ────────────────────────────────── */}
-      {topPicks.length > 0 && (
-        <section style={{ animation: "slide-up 0.35s ease-out forwards" }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-brand-primary" />
-              <h2 className="text-sm font-semibold text-brand-fg">
-                From Your Latest Analysis
-              </h2>
-              <span className="chip bg-brand-primary/10 text-brand-primary text-[10px]">
-                Top {topPicks.length}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            {(showAllRanked ? allRanked : topPicks).map((pick, i) => (
-              <TopPickRow key={pick.asset_id} pick={pick} index={i} />
-            ))}
-          </div>
-        </section>
+      {/* ── Confirmation ────────────────────────────────────────────── */}
+      {confirmation && (
+        <div className="flex items-center gap-2 p-4 rounded-lg bg-semantic-success/10 border border-semantic-success/20 text-semantic-success text-sm">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {confirmation}
+        </div>
       )}
 
-      {/* ── Your Library ─────────────────────────────────────────────── */}
+      {/* ── Watchlist ─────────────────────────────────────────────── */}
       {(watchedAssets.length > 0 || loading) && (
         <section>
           {/* Section header + controls */}
@@ -194,7 +122,7 @@ export default function WatchlistPage() {
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-brand-muted-fg" />
               <h2 className="text-sm font-semibold text-brand-fg">
-                Your Library
+                Watchlist
               </h2>
               {watchedAssets.length > 0 && (
                 <span className="chip bg-brand-border/30 text-brand-muted-fg text-[10px]">
@@ -323,7 +251,10 @@ export default function WatchlistPage() {
                 <WatchedAssetCard
                   key={asset.id}
                   asset={asset}
-                  onRemove={removeFromWatchlist}
+                  onRemove={async (id) => {
+                    await removeFromWatchlist(id);
+                    setConfirmation(`${asset.ticker} removed from your watchlist.`);
+                  }}
                   isRemoving={removing.has(asset.id)}
                 />
               ))}
