@@ -413,4 +413,10 @@ class TestTheFlag:
 
     def test_on_serves_the_routes(self):
         _, paths = loaded_with({"FUNDS_ENABLED": "true", "FUND_UPLOADS_ENABLED": "true"})
-        assert paths == ["/api/fund-uploads", "/api/fund-uploads/read", "/api/fund-uploads/{fund_id}"]
+        assert paths == [
+            "/api/fund-uploads",
+            "/api/fund-uploads/compare",
+            "/api/fund-uploads/read",
+            "/api/fund-uploads/{fund_id}",
+            "/api/fund-uploads/{fund_id}/trace",
+        ]

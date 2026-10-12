@@ -9,6 +9,8 @@ comes from their token (``current_user_id``), never from a parameter.
     GET    /api/fund-uploads        the reader's funds, each with its newest sheet
     GET    /api/fund-uploads/{id}   one of them, with every sheet
     DELETE /api/fund-uploads/{id}   remove it and its sheets
+    POST   /api/fund-uploads/{id}/trace   the fund page's paragraph, written now
+    POST   /api/fund-uploads/compare      a written comparison including one of them
 
 Handlers stay thin; the rules are in upload_service.py. The database-only
 handlers are plain ``def`` so FastAPI runs them off the event loop; the read is
@@ -54,8 +56,45 @@ class SaveIn(BaseModel):
     fund_house: Optional[str] = Field(None, max_length=200)
 
 
+class CompareIn(BaseModel):
+    """Two or three fund ids: catalogue ids and ``mine-<id>`` uploads."""
+
+    fund_ids: list[str] = Field(..., max_length=10)
+
+
 def _raise(error: UploadError):
     raise HTTPException(status_code=error.status, detail=error.detail)
+
+
+# Declared before the "/{fund_id}" routes, so "compare" is never read as an id.
+@router.post("/compare")
+async def compare_with_uploads(
+    body: CompareIn,
+    user_id: str = Depends(current_user_id),
+    service: FactSheetUploadService = Depends(get_upload_service),
+):
+    """Compare's written comparison, for a set holding one of the reader's own
+    funds. Written each time (it is never stored), so the model call runs off
+    the event loop."""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, service.compare, user_id, body.fund_ids)
+    except UploadError as e:
+        _raise(e)
+
+
+@router.post("/{fund_id}/trace")
+async def explain_uploaded_fund(
+    fund_id: str,
+    user_id: str = Depends(current_user_id),
+    service: FactSheetUploadService = Depends(get_upload_service),
+):
+    """The fund page's reasoning trace for one of the reader's own funds."""
+    loop = asyncio.get_running_loop()
+    point = await loop.run_in_executor(None, service.trace, user_id, fund_id)
+    if point is None:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    return point
 
 
 @router.post("/read")

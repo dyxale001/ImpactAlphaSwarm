@@ -38,7 +38,7 @@ import logging
 import re
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from src.compare.config import CompareConfig
 from src.compare.funds_trace import (
@@ -58,7 +58,7 @@ from src.compare.funds_trace import (
 )
 from src.utils.llm_client import GroqClient
 
-from .models import FundCandidate
+from .models import FundCandidate, MatchOutcome, Profile
 from .risk_scale import ceiling_for
 from .validators import as_number
 
@@ -66,6 +66,10 @@ logger = logging.getLogger("funds")
 
 #: The horizon column's value for one fund's own paragraph.
 FUND_HORIZON = "FUND"
+
+#: How a fund is placed against the reader's matches: ``placing_for`` for a
+#: catalogue fund; the upload code passes its own for a fund a reader uploaded.
+Placer = Callable[[FundCandidate, Profile, MatchOutcome, datetime.date], FundPlacing]
 
 #: How many allocation rows the paragraph is given. Enough to say what the fund is
 #: mostly made of; every row would invite the model to list them.
@@ -147,10 +151,13 @@ class FundTraceFactsBlock:
         f = evidence.fund
         lines = [
             f"=== {f.label} ===",
-            f"- {f.name}, {VEHICLE_WORDS.get(f.vehicle, 'a fund')} from {f.fund_house}",
+            f"- {f.name}, {VEHICLE_WORDS.get(f.vehicle, 'a fund')}" + (f" from {f.fund_house}" if f.fund_house else ""),
             f"- ASISA category: {f.category}",
             (
-                f"- Index tracker, following {f.benchmark}"
+                # Not known for an uploaded fund: name the benchmark, claim no style.
+                (f"- Benchmark: {f.benchmark}" if f.benchmark else "- Management style: not stated")
+                if f.is_index_tracker is None
+                else f"- Index tracker, following {f.benchmark}"
                 if f.is_index_tracker and f.benchmark
                 else "- Index tracker"
                 if f.is_index_tracker
@@ -180,7 +187,8 @@ class FundTraceFactsBlock:
         )
         if f.min_term_years is not None:
             lines.append(f"- Suggested minimum term: {_trim(f.min_term_years)} years")
-        lines.append(f"- Tax-free account eligible: {'yes' if f.tfsa_eligible else 'no'}")
+        if f.tfsa_eligible is not None:
+            lines.append(f"- Tax-free account eligible: {'yes' if f.tfsa_eligible else 'no'}")
         if f.regulation_28 is not None:
             lines.append(f"- Regulation 28 compliant: {'yes' if f.regulation_28 else 'no'}")
         if evidence.distribution:
@@ -232,7 +240,13 @@ class FundTraceFactsBlock:
         if yours.tfsa:
             lines.append(
                 "- Beside the reader's answers: they chose a tax-free account, and this fund "
-                + ("is eligible for one" if f.tfsa_eligible else "is not eligible for one")
+                + (
+                    "is eligible for one"
+                    if f.tfsa_eligible
+                    else "is not eligible for one"
+                    if f.tfsa_eligible is False
+                    else "has no stated eligibility for one on the fact sheet the reader uploaded"
+                )
             )
         if yours.purpose == "income":
             lines.append(
@@ -289,7 +303,9 @@ class FundTraceTemplate:
     def render(self, evidence: FundTraceEvidence) -> str:
         f = evidence.fund
         managed = (
-            f"that tracks {f.benchmark}"
+            (f"measured against {f.benchmark}" if f.benchmark else "")
+            if f.is_index_tracker is None
+            else f"that tracks {f.benchmark}"
             if f.is_index_tracker and f.benchmark
             else "that tracks an index"
             if f.is_index_tracker
@@ -297,7 +313,8 @@ class FundTraceTemplate:
             if f.benchmark
             else "that is actively managed"
         )
-        sentences = [f"{f.label} is {VEHICLE_WORDS.get(f.vehicle, 'a fund')} in {f.category} {managed}."]
+        opening = " ".join(p for p in (f"{f.label} is {VEHICLE_WORDS.get(f.vehicle, 'a fund')} in {f.category}", managed) if p)
+        sentences = [f"{opening}."]
         if evidence.allocation:
             parts = [f"{name.lower()} at {_trim(share, 1)} percent" for name, share in evidence.allocation[:2]]
             sentences.append(f"Its largest parts are {' and '.join(parts)}.")
@@ -431,8 +448,28 @@ class FundTraceService:
             found = self.valid(fund_id)
             if found is None:
                 return None
-            evidence = self.evidence(user_id, found)
-            if evidence is None or not evidence.has_evidence:
+            candidate = self._candidate(found)
+            if candidate is None:
+                return None
+            return self.explain_candidate(user_id, candidate)
+        except Exception as e:
+            logger.warning("Fund trace failed for %s: %s", fund_id, e)
+            return None
+
+    def explain_candidate(
+        self, user_id: str, candidate: FundCandidate, place: Placer = placing_for
+    ) -> dict[str, Any] | None:
+        """The same paragraph for a fund the caller has already loaded, placed by
+        ``place``. The seam a reader's uploaded fund comes through: the upload
+        code builds the candidate and says how it is placed (it is never matched,
+        not being in the catalogue), and this module never learns uploads exist.
+        Never raises."""
+        if not self.enabled:
+            return None
+        found = str(candidate.fund.get("id") or "")
+        try:
+            evidence = self.evidence_for(user_id, candidate, place)
+            if not evidence.has_evidence:
                 return None
             text = self.generator.generate(evidence) if self._spend(user_id) else None  # type: ignore[arg-type]
             source = "model"
@@ -449,13 +486,19 @@ class FundTraceService:
                 "personal": evidence.yours is not None,
             }
         except Exception as e:
-            logger.warning("Fund trace failed for %s: %s", fund_id, e)
+            logger.warning("Fund trace failed for %s: %s", found, e)
             return None
 
     def evidence(self, user_id: str, fund_id: str) -> FundTraceEvidence | None:
         candidate = self._candidate(fund_id)
         if candidate is None:
             return None
+        return self.evidence_for(user_id, candidate)
+
+    def evidence_for(
+        self, user_id: str, candidate: FundCandidate, place: Placer = placing_for
+    ) -> FundTraceEvidence:
+        fund_id = str(candidate.fund.get("id") or "")
         profile = self.funds.profiles.profile(user_id)
         yours = None
         if profile is not None:
@@ -469,7 +512,7 @@ class FundTraceService:
                 purpose=goals.purpose if goals else None,
                 tfsa=bool(goals and goals.account_type == "tfsa"),
                 fallback_risk_only=profile.fallback_risk_only,
-                placings={fund_id: placing_for(candidate, profile, outcome, today)},
+                placings={fund_id: place(candidate, profile, outcome, today)},
             )
         facts = FundFacts.from_candidate(candidate)
         # The JSE code where there is one, else the name without its share class.

@@ -42,6 +42,8 @@ from .reading import (
     SheetReading,
     coerce,
 )
+from .models import FundCandidate
+from .risk_scale import ceiling_for, within_ceiling
 from .risk_scale import normalize as risk_level_of
 from .uploads import UploadedFundRepository
 from .validators import IsinValidator, Problem, snapshot_validators
@@ -133,6 +135,8 @@ class FactSheetUploadService:
         max_bytes: int = config.FUND_UPLOAD_MAX_BYTES,
         max_pages: int = config.FUND_UPLOAD_MAX_PAGES,
         per_day: int = config.FUND_UPLOADS_PER_DAY,
+        traces: Any = None,
+        comparisons: Any = None,
     ):
         self.repository = repository or UploadedFundRepository()
         self.reader = reader or GeminiFactsheetReader()
@@ -141,6 +145,26 @@ class FactSheetUploadService:
         self.max_bytes = max_bytes
         self.max_pages = max_pages
         self.per_day = per_day
+        self._traces = traces
+        self._comparisons = comparisons
+
+    @property
+    def traces(self):
+        """The fund page's trace service, built on first use."""
+        if self._traces is None:
+            from .trace import FundTraceService
+
+            self._traces = FundTraceService()
+        return self._traces
+
+    @property
+    def comparisons(self):
+        """Compare's fund comparison service, built on first use."""
+        if self._comparisons is None:
+            from src.compare.funds_trace import FundComparisonService
+
+            self._comparisons = FundComparisonService()
+        return self._comparisons
 
     # ── step 1: read ────────────────────────────────────────────────────────
 
@@ -457,6 +481,76 @@ class FactSheetUploadService:
             problems += IsinValidator().check({"isin": values["isin"]})
         return problems
 
+    # ── the reasoning trace and Compare ─────────────────────────────────────
+
+    def candidate(self, user_id: str, fund_id: str) -> Optional[FundCandidate]:
+        """One of this reader's funds, shaped like a catalogue fund so the fund
+        trace and Compare can read it. Its id carries UPLOAD_PREFIX, so it can
+        never be mistaken for a catalogue fund in a comparison.
+
+        Tax-free eligibility and index tracking are set to None, meaning not
+        known: no fact sheet states either as a field, and the paragraphs say
+        nothing either way rather than "not eligible" or "actively managed"."""
+        fund = self.get_fund(user_id, fund_id)
+        if fund is None:
+            return None
+        sheets = fund.get("sheets") or []
+        sheet = sheets[0] if sheets else None
+        record = {
+            "id": f"{UPLOAD_PREFIX}{fund['id']}",
+            "name": fund.get("name") or "",
+            "fund_house": fund.get("fund_house") or "",
+            "vehicle": fund.get("vehicle") or "",
+            "jse_code": fund.get("jse_code"),
+            "isin": fund.get("isin"),
+            "asisa_category": fund.get("asisa_category") or "",
+            "tfsa_eligible": None,
+            "is_index_tracker": None,
+        }
+        snapshot = {**(sheet.get("figures") or {}), "as_of": sheet.get("as_of")} if sheet else None
+        return FundCandidate(fund=record, snapshot=snapshot)
+
+    def trace(self, user_id: str, fund_id: str) -> Optional[dict[str, Any]]:
+        """The fund page's paragraph for one of this reader's funds: what its
+        sheet says, and, against their profile, that it is not matched (it is
+        not in the catalogue) and where its risk rating sits. None when there is
+        no such fund of theirs; the trace service never raises."""
+        candidate = self.candidate(user_id, fund_id)
+        if candidate is None:
+            return None
+        point = self.traces.explain_candidate(user_id, candidate, place=upload_placing)
+        return {"fund_id": candidate.fund["id"], "available": self.traces.enabled, **(point or _QUIET)}
+
+    def compare(self, user_id: str, fund_ids: Iterable[str]) -> dict[str, Any]:
+        """A written comparison of two or three funds, one or more of them this
+        reader's own. Written every time and never stored. Catalogue funds are
+        placed by the matcher as on Compare; uploaded ones by ``upload_placing``."""
+        ids = list(dict.fromkeys(str(i).strip() for i in fund_ids if str(i).strip()))
+        service = self.comparisons
+        config = service.config
+        if not config.min_tickers <= len(ids) <= config.max_tickers:
+            raise UploadError(400, f"Compare {config.min_tickers} to {config.max_tickers} funds.")
+        mine = [i for i in ids if i.startswith(UPLOAD_PREFIX)]
+        if not mine:
+            raise UploadError(400, "None of these is one of your uploaded funds; use Compare's own comparison.")
+
+        loaded: dict[str, FundCandidate] = {}
+        for raw in mine:
+            candidate = self.candidate(user_id, raw[len(UPLOAD_PREFIX):])
+            if candidate is None:
+                raise UploadError(404, "One of these funds is not in your list.")
+            loaded[raw] = candidate
+        others = [i for i in ids if i not in loaded]
+        if others:
+            catalogue = service.catalogue_candidates(others)
+            if catalogue is None:
+                raise UploadError(404, "One of these funds is not in the catalogue.")
+            loaded.update(zip(others, catalogue))
+
+        quiet = {"fund_ids": ids, "horizon": "FUNDS", "available": service.enabled, **_QUIET, "run_at": None}
+        point = service.explain_candidates(user_id, [loaded[i] for i in ids], place=_placing_for_mixed)
+        return {**quiet, **(point or {}), "fund_ids": ids, "available": service.enabled}
+
     # ── a reader's list ─────────────────────────────────────────────────────
 
     def list_funds(self, user_id: str) -> list[dict[str, Any]]:
@@ -473,6 +567,43 @@ class FactSheetUploadService:
             return False
         self.repository.delete_fund(user_id, fund_id)
         return True
+
+
+#: How an uploaded fund is named wherever it sits beside catalogue funds: in a
+#: Compare link, a comparison's fund ids and a paragraph's facts. A catalogue id
+#: is a bare UUID, so the two can never collide.
+UPLOAD_PREFIX = "mine-"
+
+#: What a paragraph request answers when nothing could be written.
+_QUIET: dict[str, Any] = {"trace": None, "source": None, "model": None, "generated_at": None, "personal": False}
+
+
+def upload_placing(candidate: FundCandidate, profile: Any, outcome: Any, today: Any):
+    """Where a reader's own fund sits against their matches: never among them,
+    because only catalogue funds are matched (D-153), with its risk rating set
+    beside the profile's limit by the same fixed rule the matcher uses. The
+    model is handed this sentence; it never decides it."""
+    from src.compare.funds_trace import FundPlacing
+
+    because = "it is a fund you uploaded, and only catalogue funds are matched to a profile"
+    level = candidate.risk_level
+    if level is not None:
+        ceiling = ceiling_for(profile.risk_tolerance)
+        side = "within" if within_ceiling(level, profile.risk_tolerance) else "above"
+        because += (
+            f"; its manager rates it {level} of 5, {side} the {ceiling} of 5 "
+            f"your {profile.risk_tolerance} profile allows"
+        )
+    return FundPlacing(False, because)
+
+
+def _placing_for_mixed(candidate: FundCandidate, profile: Any, outcome: Any, today: Any):
+    """A comparison's placings: the matcher's for catalogue funds, ours for uploads."""
+    from src.compare.funds_trace import placing_for
+
+    if str(candidate.fund.get("id") or "").startswith(UPLOAD_PREFIX):
+        return upload_placing(candidate, profile, outcome, today)
+    return placing_for(candidate, profile, outcome, today)
 
 
 def _is_uuid(value: str) -> bool:

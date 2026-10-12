@@ -101,6 +101,19 @@ def _spell(value: Any) -> str:
 
 # ── evidence ─────────────────────────────────────────────────────────────────
 
+def _known(fund: dict[str, Any], key: str) -> bool | None:
+    """A yes/no about a fund, or None when the fund record says it is not known.
+
+    Only an explicit None means unknown. A catalogue row always carries the
+    column, and a record that leaves the key out reads as False, as it always
+    has; a reader's uploaded fund sets None, because no fact sheet states
+    tax-free eligibility or index tracking as a field and a paragraph must not
+    claim either way for it."""
+    if key in fund and fund[key] is None:
+        return None
+    return bool(fund.get(key))
+
+
 @dataclass(frozen=True)
 class FundFacts:
     """One fund's fact sheet, as much of it as the paragraph may use."""
@@ -112,13 +125,16 @@ class FundFacts:
     vehicle: str
     fund_house: str
     category: str
-    is_index_tracker: bool
+    #: None when not known: see ``_known``.
+    is_index_tracker: bool | None
     benchmark: str | None
     risk_level: int | None
     risk_label: str | None
     ter: float | None
     min_term_years: float | None
-    tfsa_eligible: bool
+    #: None when the fund record does not say: a catalogue fund always does, a
+    #: fund a reader uploaded does not (no sheet states it as a field).
+    tfsa_eligible: bool | None
     regulation_28: bool | None
     as_of: str | None
     performance: dict[str, float] = field(default_factory=dict)
@@ -140,13 +156,13 @@ class FundFacts:
             vehicle=fund.get("vehicle") or "",
             fund_house=fund.get("fund_house") or "",
             category=fund.get("asisa_category") or "",
-            is_index_tracker=bool(fund.get("is_index_tracker")),
+            is_index_tracker=_known(fund, "is_index_tracker"),
             benchmark=snap.get("benchmark"),
             risk_level=level,
             risk_label=snap.get("risk_indicator_raw") or label_for(level),
             ter=as_number(snap.get("ter")),
             min_term_years=as_number(snap.get("recommended_min_term_years")),
-            tfsa_eligible=bool(fund.get("tfsa_eligible")),
+            tfsa_eligible=_known(fund, "tfsa_eligible"),
             regulation_28=snap.get("regulation_28"),
             as_of=str(snap.get("as_of"))[:10] if snap.get("as_of") else None,
             performance=performance,
@@ -283,10 +299,13 @@ class FundFactsBlock:
         for f in evidence.funds:
             lines = [
                 f"=== {f.label} ===",
-                f"- {f.name}, {VEHICLE_WORDS.get(f.vehicle, 'a fund')} from {f.fund_house}",
+                f"- {f.name}, {VEHICLE_WORDS.get(f.vehicle, 'a fund')}" + (f" from {f.fund_house}" if f.fund_house else ""),
                 f"- ASISA category: {f.category}",
                 (
-                    f"- Index tracker, following {f.benchmark}"
+                    # Not known for an uploaded fund: name the benchmark, claim no style.
+                    (f"- Benchmark: {f.benchmark}" if f.benchmark else "- Management style: not stated")
+                    if f.is_index_tracker is None
+                    else f"- Index tracker, following {f.benchmark}"
                     if f.is_index_tracker and f.benchmark
                     else "- Index tracker"
                     if f.is_index_tracker
@@ -304,7 +323,8 @@ class FundFactsBlock:
                 lines.append(f"- Total expense ratio (TER): {_trim(f.ter)} percent a year")
             if f.min_term_years is not None:
                 lines.append(f"- Suggested minimum term: {_trim(f.min_term_years)} years")
-            lines.append(f"- Tax-free account eligible: {'yes' if f.tfsa_eligible else 'no'}")
+            if f.tfsa_eligible is not None:
+                lines.append(f"- Tax-free account eligible: {'yes' if f.tfsa_eligible else 'no'}")
             if f.regulation_28 is not None:
                 lines.append(f"- Regulation 28 compliant: {'yes' if f.regulation_28 else 'no'}")
             if periods:
@@ -457,7 +477,8 @@ class FundComparisonTemplate:
         sentences: list[str] = []
         for f in evidence.funds:
             parts = [f"{f.label} is {VEHICLE_WORDS.get(f.vehicle, 'a fund')} in {f.category}"]
-            parts.append("that tracks an index" if f.is_index_tracker else "that is actively managed")
+            if f.is_index_tracker is not None:
+                parts.append("that tracks an index" if f.is_index_tracker else "that is actively managed")
             sentence = " ".join(parts)
             details = []
             if f.risk_level is not None:
@@ -665,6 +686,45 @@ class FundComparisonService:
         candidates = self._candidates(ids)
         if candidates is None:
             return None
+        return self.evidence_for(user_id, candidates)
+
+    def catalogue_candidates(self, ids: Iterable[str]) -> list[FundCandidate] | None:
+        """Catalogue funds by id, in order, or None if any is not one."""
+        return self._candidates(normalise_fund_ids(ids))
+
+    def explain_candidates(self, user_id: str, candidates: list[FundCandidate], place: Any = None) -> dict[str, Any] | None:
+        """A fresh comparison of funds the caller has already loaded, placed by
+        ``place`` (``placing_for`` when not given). Written every time and never
+        stored: the seam a comparison that includes a reader's uploaded fund
+        comes through, and a reader's own fund is theirs, not this store's.
+        Spend-limited like ``explain``. Never raises."""
+        if not self.enabled:
+            return None
+        try:
+            if not self.config.min_tickers <= len(candidates) <= self.config.max_tickers:
+                return None
+            evidence, freshness = self.evidence_for(user_id, candidates, place or placing_for)
+            if not evidence.has_evidence:
+                return None
+            text = self.generator.generate(evidence) if self._spend(user_id, self._today().isoformat()) else None
+            source = "model"
+            if not text:
+                text = self.template.render(evidence)
+                source = "template"
+            return self._point({
+                "trace": text,
+                "source": source,
+                "model": self.generator.model if source == "model" else None,
+                "windows": freshness,
+                "generated_at": self._now().isoformat(),
+            })
+        except Exception as e:
+            logger.warning("Fund comparison of loaded funds failed: %s", e)
+            return None
+
+    def evidence_for(
+        self, user_id: str, candidates: list[FundCandidate], place: Any = placing_for
+    ) -> tuple[FundComparisonEvidence, str]:
         profile = self.funds.profiles.profile(user_id)
         yours = None
         if profile is not None:
@@ -678,7 +738,7 @@ class FundComparisonService:
                 purpose=goals.purpose if goals else None,
                 tfsa=bool(goals and goals.account_type == "tfsa"),
                 fallback_risk_only=profile.fallback_risk_only,
-                placings={str(c.fund.get("id")): placing_for(c, profile, outcome, today) for c in candidates},
+                placings={str(c.fund.get("id")): place(c, profile, outcome, today) for c in candidates},
             )
         evidence = FundComparisonEvidence(funds=tuple(FundFacts.from_candidate(c) for c in candidates), yours=yours)
         return evidence, freshness_key(candidates, profile)
