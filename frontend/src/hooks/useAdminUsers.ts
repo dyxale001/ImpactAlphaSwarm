@@ -24,7 +24,7 @@ export function useAdminUsers() {
       supabase
         .from("user_analysis")
         .select(
-          "user_id, investment_universe, ai_derived_expertise, risk_tolerance, capital",
+          "user_id, investment_universe, ai_derived_expertise, risk_tolerance",
         ),
     ]);
 

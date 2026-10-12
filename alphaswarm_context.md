@@ -55,7 +55,7 @@ Designed for accessibility across all devices, prioritizing a sleek, data-rich u
 
 ### Core Use Cases
 1. **Register/Authenticate User:** Users create profiles mapping to a Supabase UUID.
-2. **Configure Risk Profile:** Users define their investment capital, sector universe, and risk appetite (Conservative, Moderate, Aggressive).
+2. **Configure Risk Profile:** Users define their sector universe and risk appetite (Conservative, Moderate, Aggressive).
 3. **Request Asset Analysis:** User enters a ticker; Orchestrator triggers agents to fetch and synthesize data.
 4. **View Asset Analysis:** System displays asset scores, rankings, reasoning traces, and hype check alerts.
 5. **View AI Reasoning Trace:** User drills down into the precise logic, viewing the top influential sources and technical metric breakdowns.
