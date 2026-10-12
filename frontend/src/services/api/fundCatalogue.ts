@@ -137,6 +137,14 @@ export interface FundSnapshot {
   income_distribution: Record<string, number> | null;
 }
 
+/** One row of "Why this appears": the section's lead-in as its label, and the
+ *  rest of its sentence. */
+export interface FundWhyPart {
+  key: string;
+  label: string;
+  text: string;
+}
+
 /** One fund, its newest fact sheet, and the dates it has been published on. */
 export interface CatalogueFundDetail extends CatalogueFund {
   snapshot: FundSnapshot | null;
@@ -150,6 +158,9 @@ export interface CatalogueFundDetail extends CatalogueFund {
   /** The templated sentence saying who classified this fund, as what, and when.
    *  Null when no fact sheet is on file, because there is then nothing to say. */
   why_this_appears: string | null;
+  /** The same sentences as labelled rows, for the page's layout. Null when the
+   *  paragraph is the unavailable notice, or from a backend that predates it. */
+  why_parts?: FundWhyPart[] | null;
   disclaimer: string;
   not_licensed: string;
 }

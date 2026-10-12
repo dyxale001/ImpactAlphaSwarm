@@ -1,5 +1,9 @@
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import { DETAIL_PERFORMANCE_NOTE, DETAIL_PERFORMANCE_TITLE } from "../../utils/fundsCopy";
+import {
+  DETAIL_PERFORMANCE_NOTE,
+  DETAIL_PERFORMANCE_TITLE,
+  formatPeriod,
+} from "../../utils/fundsCopy";
 
 /**
  * The returns the manager publishes, for the periods its own sheet prints.
@@ -34,34 +38,41 @@ const PERIOD_ORDER = ["10y", "5y", "3y", "1y", "inception"];
 export default function FundPerformance({
   performance,
   asAt,
+  inceptionDate = null,
   className = "",
 }: {
   performance: Record<string, number> | null;
   asAt: string | null;
+  /** Names the since-inception bar by its year rather than by the sheet's code. */
+  inceptionDate?: string | null;
   className?: string;
 }) {
-  const entries = periods(performance);
+  const entries = periods(performance).map((entry) => ({
+    ...entry,
+    label: formatPeriod(entry.period, inceptionDate),
+  }));
   if (entries.length === 0) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-bold text-brand-primary">{DETAIL_PERFORMANCE_TITLE}</h2>
-        {asAt && <span className="text-[11px] text-brand-secondary/70">to {asAt}</span>}
+        <h2 className="text-base font-bold text-brand-primary">{DETAIL_PERFORMANCE_TITLE}</h2>
+        {asAt && <span className="text-xs text-forest-500">to {asAt}</span>}
       </div>
 
-      <div className="h-40 w-full">
+      <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={entries} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
             <XAxis
-              dataKey="period"
-              tick={{ fontSize: 11, fill: "rgba(0,0,0,0.55)" }}
+              dataKey="label"
+              interval={0}
+              tick={{ fontSize: 12, fontWeight: 600, fill: "#3e6258" }}
               tickLine={false}
               axisLine={false}
             />
             {/* Zero is always in view, so a negative period is visibly negative. */}
             <YAxis hide domain={[(min: number) => Math.min(0, min), "auto"]} />
-            <Bar dataKey="value" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={72} isAnimationActive={false}>
               {entries.map((entry) => (
                 <Cell key={entry.period} fill={entry.value < 0 ? NEGATIVE : POSITIVE} />
               ))}
@@ -69,14 +80,14 @@ export default function FundPerformance({
                 dataKey="value"
                 position="top"
                 formatter={(value: unknown) => `${Number(value)}%`}
-                style={{ fontSize: 11, fill: "rgba(0,0,0,0.65)" }}
+                style={{ fontSize: 13, fontWeight: 700, fill: "#1b3530" }}
               />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">
+      <p className="mt-auto text-xs leading-relaxed text-forest-500">
         {DETAIL_PERFORMANCE_NOTE}
       </p>
     </section>

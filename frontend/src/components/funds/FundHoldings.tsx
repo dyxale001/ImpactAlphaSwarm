@@ -55,22 +55,26 @@ export default function FundHoldings({
   const largest = Math.max(...rows.map((row) => row.share), 0) || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
-      <h2 className="text-sm font-bold text-brand-primary">{DETAIL_HOLDINGS_TITLE}</h2>
-      <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_HOLDINGS_LEAD}</p>
-      {dated && <p className="text-[11px] font-semibold text-brand-secondary">{dated}</p>}
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+      <h2 className="text-base font-bold text-brand-primary">{DETAIL_HOLDINGS_TITLE}</h2>
+      <p className="text-xs leading-relaxed text-forest-500">{DETAIL_HOLDINGS_LEAD}</p>
+      {dated && (
+        <p className="w-fit rounded-full bg-forest-50 px-2 py-0.5 text-[11px] font-bold text-forest-500">
+          {dated}
+        </p>
+      )}
 
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (
           <li key={row.name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-            <span className="min-w-0 truncate text-[11.5px] text-brand-secondary" title={row.name}>
+            <span className="min-w-0 truncate text-[13px] text-forest-900" title={row.name}>
               {row.name}
             </span>
-            <span className="text-[11.5px] font-semibold tabular-nums text-brand-primary">
+            <span className="text-[13px] font-bold tabular-nums text-brand-primary">
               {formatShare(row.share)}
             </span>
             <span
-              className="col-span-2 h-1 overflow-hidden rounded-full bg-brand-border/25"
+              className="col-span-2 h-1 overflow-hidden rounded-full bg-forest-900/5"
               aria-hidden="true"
             >
               <span
@@ -82,7 +86,7 @@ export default function FundHoldings({
         ))}
       </ul>
 
-      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">
+      <p className="mt-auto text-xs leading-relaxed text-forest-500">
         {DETAIL_HOLDINGS_NOTE}
       </p>
     </section>

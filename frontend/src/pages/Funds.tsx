@@ -1,5 +1,14 @@
-import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, Landmark, Layers, Search, SlidersHorizontal } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Info,
+  Landmark,
+  Layers,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
+import AboutFundModal from "../components/funds/AboutFundModal";
 import FundCard from "../components/funds/FundCard";
 import FundFilters from "../components/funds/FundFilters";
 import FundsNotice from "../components/funds/FundsNotice";
@@ -9,6 +18,7 @@ import CompleteProfilePrompt from "../components/funds/CompleteProfilePrompt";
 import MatchInputs from "../components/funds/MatchInputs";
 import TiersMotif from "../components/funds/TiersMotif";
 import { useFundCatalogue, useFundCatalogueMeta, useFundMatches } from "../hooks/useFundCatalogue";
+import { COMPARE_ENABLED } from "../utils/compareFlags";
 import {
   BROWSE_LEAD,
   BROWSE_TITLE,
@@ -19,6 +29,7 @@ import {
   EMPTY_FILTERED_TITLE,
   FILTER_CLEAR_ALL,
   FOOTER_NOT_LICENSED,
+  FUND_ABOUT_BUTTON,
   FUNDS_HEADER_EYEBROW,
   FUNDS_HEADER_STRIP,
   FUNDS_PAGE_LEAD,
@@ -81,6 +92,8 @@ const BROWSE_ID = "browse-funds";
 export default function FundsPage() {
   const [filters, setFilters] = useState<CatalogueFilters>({});
   const [showAll, setShowAll] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const closeAbout = useCallback(() => setShowAbout(false), []);
   const meta = useFundCatalogueMeta();
   const { data, funds, isLoading, error } = useFundCatalogue(filters);
   const matchState = useFundMatches();
@@ -145,8 +158,21 @@ export default function FundsPage() {
           <p className="mt-3 max-w-2xl text-xs leading-relaxed text-brand-bg/60">
             {meta.meta?.header.strip ?? FUNDS_HEADER_STRIP}
           </p>
+          {/* The same About pill as Compare and Market News, opening this page's
+              explainer. */}
+          <button
+            type="button"
+            onClick={() => setShowAbout(true)}
+            aria-haspopup="dialog"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden />
+            {FUND_ABOUT_BUTTON}
+          </button>
         </div>
       </div>
+
+      <AboutFundModal open={showAbout} onClose={closeAbout} compareEnabled={COMPARE_ENABLED} />
 
       {/* ── What the match is filtered on ──
           Under the header on purpose: the reader meets the answers before the

@@ -325,12 +325,39 @@ class ExplanationBuilder:
 
     def build(self, ctx: ExplanationContext) -> str:
         """The explanation, or the unavailable notice if it cannot be trusted."""
-        rendered = [section.render(ctx) for section in self.sections]
-        text = " ".join(part.strip() for part in rendered if part and part.strip())
-        if not text:
+        rendered = self._rendered(ctx)
+        if rendered is None:
             return copytext.EXPLANATION_UNAVAILABLE
+        return " ".join(text for _name, text in rendered)
+
+    def build_parts(self, ctx: ExplanationContext) -> list[dict[str, str]] | None:
+        """The same explanation as labelled rows, for the fund page.
+
+        Guarded as one text, exactly as ``build`` is, so a row can never pass
+        that the paragraph would have failed. None when there is nothing to
+        show or the guard rejected it; the page then falls back to the
+        paragraph, which carries the unavailable notice.
+        """
+        rendered = self._rendered(ctx)
+        if rendered is None:
+            return None
+        return [
+            {"key": name, "label": label, "text": body}
+            for name, text in rendered
+            for label, body in [_split_lead_in(name, text)]
+        ]
+
+    def _rendered(self, ctx: ExplanationContext) -> list[tuple[str, str]] | None:
+        """Each section's sentence with its name, or None if none may be shown."""
+        rendered = []
+        for section in self.sections:
+            text = section.render(ctx)
+            if text and text.strip():
+                rendered.append((section.name, text.strip()))
+        if not rendered:
+            return None
         try:
-            self.guard.check(text, ctx)
+            self.guard.check(" ".join(text for _name, text in rendered), ctx)
         except CopyViolation as violation:
             # Logged loudly: this means a template or a model produced something
             # that must not be shown, and somebody needs to know which.
@@ -339,8 +366,22 @@ class ExplanationBuilder:
                 ctx.fund.get("isin") or ctx.fund.get("id"),
                 violation,
             )
-            return copytext.EXPLANATION_UNAVAILABLE
-        return text
+            return None
+        return rendered
+
+
+def _split_lead_in(name: str, text: str) -> tuple[str, str]:
+    """A section's label and its sentence with the label's words taken off.
+
+    "What it costs: a total expense ratio of 1.46% a year." becomes the label
+    "What it costs" and "A total expense ratio of 1.46% a year.". A sentence
+    that does not open with its label (the distribution one) keeps every word.
+    """
+    label = copytext.WHY_LABELS.get(name, name)
+    if not text.startswith(label):
+        return label, text
+    body = text[len(label):].lstrip(" ,:")
+    return label, body[:1].upper() + body[1:]
 
 
 class ReasonSentence:

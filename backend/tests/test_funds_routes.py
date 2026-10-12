@@ -402,6 +402,12 @@ class TestFundDetail:
         assert "0.58" in why  # the published total charge
         assert "31 July 2026" in why
 
+    def test_the_explanation_also_comes_as_labelled_rows(self, client):
+        body = client.get("/api/fund-catalogue/f-mm").json()
+        parts = body["why_parts"]
+        assert parts and all(set(part) == {"key", "label", "text"} for part in parts)
+        assert any(part["label"] == "What it costs" and "0.58" in part["text"] for part in parts)
+
     def test_availability_is_stated_as_a_fact(self, client):
         body = client.get("/api/fund-catalogue/f-mm").json()
         assert body["available_on"] == "Available on EasyEquities."

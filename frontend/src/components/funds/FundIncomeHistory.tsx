@@ -28,20 +28,25 @@ export default function FundIncomeHistory({
   const entries = months(distributions);
   if (entries.length === 0) return null;
 
+  const largest = Math.max(...entries.map((entry) => entry.cents), 0);
+
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
-      <h2 className="text-sm font-bold text-brand-primary">{DETAIL_INCOME_TITLE}</h2>
-      <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_INCOME_LEAD}</p>
-      <ul className="space-y-1.5">
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+      <h2 className="text-base font-bold text-brand-primary">{DETAIL_INCOME_TITLE}</h2>
+      <p className="text-xs leading-relaxed text-forest-500">{DETAIL_INCOME_LEAD}</p>
+      {/* A bar per payment, scaled to the largest, so a reader sees whether the
+          income has been steady without comparing decimals down a column. */}
+      <ul className="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-x-3.5 gap-y-3 text-[13px]">
         {entries.map((entry) => (
-          <li
-            key={entry.month}
-            className="flex items-center justify-between gap-3 border-b border-brand-border/30 pb-1.5 text-xs last:border-0"
-          >
-            <span className="text-brand-secondary">
-              {formatDistributionMonth(entry.month)}
+          <li key={entry.month} className="contents">
+            <span className="text-forest-900">{formatDistributionMonth(entry.month)}</span>
+            <span className="h-2 overflow-hidden rounded-full bg-forest-900/5" aria-hidden="true">
+              <span
+                className="block h-full rounded-full bg-forest-500"
+                style={{ width: `${largest > 0 ? (Math.max(entry.cents, 0) / largest) * 100 : 0}%` }}
+              />
             </span>
-            <span className="font-semibold text-brand-primary">
+            <span className="text-right font-bold tabular-nums text-brand-primary">
               {entry.cents.toFixed(2)}c
             </span>
           </li>

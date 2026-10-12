@@ -46,25 +46,26 @@ export default function FundSwings({
   if (!strongest && !weakest) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
-      <h2 className="text-sm font-bold text-brand-primary">{DETAIL_SWINGS_TITLE}</h2>
-      <p className="text-xs leading-relaxed text-brand-secondary/80">{DETAIL_SWINGS_LEAD}</p>
-      <dl className="grid grid-cols-1 gap-3">
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+      <h2 className="text-base font-bold text-brand-primary">{DETAIL_SWINGS_TITLE}</h2>
+      <p className="text-xs leading-relaxed text-forest-500">{DETAIL_SWINGS_LEAD}</p>
+      {/* Side by side, without a box each: two figures in one card do not need
+          a card of their own, and the boxes made the tile the only one on the
+          page drawing borders inside borders. */}
+      <dl className="grid grid-cols-2 gap-4">
         {strongest && (
-          <div className="rounded-xl border border-brand-border/40 p-3">
-            <dt className="text-[11px] uppercase tracking-wide text-brand-secondary/70">
-              {DETAIL_SWINGS_HIGH_LABEL}
-            </dt>
-            <dd className="mt-1 text-lg font-bold text-brand-primary">{strongest}</dd>
+          <div>
+            <dt className="text-xs font-semibold text-forest-500">{DETAIL_SWINGS_HIGH_LABEL}</dt>
+            <dd className="mt-1 text-[28px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
+              {strongest}
+            </dd>
           </div>
         )}
         {weakest && (
-          <div className="rounded-xl border border-brand-border/40 p-3">
-            <dt className="text-[11px] uppercase tracking-wide text-brand-secondary/70">
-              {DETAIL_SWINGS_LOW_LABEL}
-            </dt>
+          <div>
+            <dt className="text-xs font-semibold text-forest-500">{DETAIL_SWINGS_LOW_LABEL}</dt>
             <dd
-              className={`mt-1 text-lg font-bold ${
+              className={`mt-1 text-[28px] font-extrabold leading-none tracking-[-0.02em] tabular-nums ${
                 (low ?? 0) < 0 ? "text-[#c0705f]" : "text-brand-primary"
               }`}
             >
@@ -73,8 +74,43 @@ export default function FundSwings({
           </div>
         )}
       </dl>
-      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">{note}</p>
+      {high != null && low != null && <SwingRange high={high} low={low} />}
+      <p className="mt-auto text-xs leading-relaxed text-forest-500">{note}</p>
     </section>
+  );
+}
+
+/** The two years as one range with zero marked, so a reader sees how much of
+ *  the spread is below zero. Drawn only when both ends were published. */
+function SwingRange({ high, low }: { high: number; low: number }) {
+  const floor = Math.min(low, 0);
+  const span = Math.max(high, 0) - floor;
+  if (span <= 0) return null;
+  const zero = ((0 - floor) / span) * 100;
+  return (
+    <div className="relative h-9" aria-hidden="true">
+      <span className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-forest-900/5" />
+      {zero > 0 && (
+        <span
+          className="absolute left-0 top-1.5 h-2 rounded-l-full bg-[#c0705f]/45"
+          style={{ width: `${zero}%` }}
+        />
+      )}
+      <span
+        className="absolute right-0 top-1.5 h-2 rounded-r-full bg-forest-500/55"
+        style={{ left: `${zero}%` }}
+      />
+      <span
+        className="absolute top-0 h-5 w-0.5 -translate-x-1/2 bg-forest-900"
+        style={{ left: `${zero}%` }}
+      />
+      <span
+        className="absolute top-5 -translate-x-1/2 text-[11px] font-bold text-forest-900"
+        style={{ left: `${zero}%` }}
+      >
+        0%
+      </span>
+    </div>
   );
 }
 

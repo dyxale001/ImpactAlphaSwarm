@@ -115,6 +115,14 @@ class FundCatalogueService:
             if snapshot
             else None
         )
+        # The same sentences as labelled rows, which is how the page lays them out.
+        detail["why_parts"] = (
+            self.builder.build_parts(
+                ExplanationContext(fund=fund, snapshot=snapshot, today=self.clock())
+            )
+            if snapshot
+            else None
+        )
         detail["disclaimer"] = copytext.CIS_DISCLAIMER
         detail["not_licensed"] = copytext.FOOTER_NOT_LICENSED
         return detail

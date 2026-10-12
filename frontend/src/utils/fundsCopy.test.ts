@@ -12,6 +12,7 @@ import {
   formatFundCount,
   formatFundSize,
   formatMinTerm,
+  formatPeriod,
   formatPercent,
   sectionAsAt,
   splitAsisaCategory,
@@ -166,6 +167,25 @@ describe('formatMinTerm', () => {
     // Silence is not a claim, and the card omits the line.
     expect(formatMinTerm(null)).toBeNull()
     expect(formatMinTerm(0)).toBeNull()
+  })
+})
+
+describe('formatPeriod', () => {
+  it('names a fixed period in words', () => {
+    expect(formatPeriod('10y')).toBe('10 years')
+    expect(formatPeriod('1y')).toBe('1 year')
+  })
+
+  it('names the since-inception period by the year the fund started', () => {
+    expect(formatPeriod('inception', '1996-04-15')).toBe('Since 1996')
+  })
+
+  it('says "since launch" when the sheet gives no start date', () => {
+    expect(formatPeriod('inception', null)).toBe(copy.PERIOD_SINCE_LAUNCH)
+  })
+
+  it('shows a code it does not know as stored rather than guessing', () => {
+    expect(formatPeriod('ytd')).toBe('ytd')
   })
 })
 
