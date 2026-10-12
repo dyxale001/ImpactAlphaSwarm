@@ -67,6 +67,21 @@ ALLOWED_HOSTS: tuple[str, ...] = (
     "wealth.momentum.co.za",
     "allangray.co.za",
     "www.allangray.co.za",
+    # Added 2026-10-12 with the refreshed catalogue: the managers its funds'
+    # sheets come from, each the host the sheet was actually read from.
+    "ninetyone.com",
+    "www.sygnia.co.za",
+    "www.mandg.co.za",
+    "foord.co.za",
+    "download.psg.co.za",
+    "truffle.co.za",
+    "www.nedgroupinvestments.com",
+    "assetmanagement.10x.co.za",
+    "1nvest.literaturehub.co.za",
+    # ⚠ Contentful's shared CDN, where 10X serves its unit trust sheets. Unlike
+    # every other entry it is not the manager's own host, so it admits any PDF any
+    # Contentful customer publishes; the %PDF and size checks still apply.
+    "assets.ctfassets.net",
 )
 
 # Generous for a fact sheet (they run 100KB-1MB) and far below anything that

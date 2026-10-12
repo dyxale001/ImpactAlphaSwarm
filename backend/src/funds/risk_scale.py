@@ -77,6 +77,13 @@ _RISK_ALIASES: dict[str, int] = {
     "medium to high": 4,
     "mod to high": 4,
     "moderately high": 4,
+    # The same steps written without a separator, as Satrix's unit trust sheets
+    # ("Moderate Aggressive"), Truffle's, and Sygnia's ("Low Medium", "Medium
+    # High") print them. Collapsing only turns a dash into "to", so a bare space
+    # read as no rating on six funds in the October 2026 batch.
+    "moderate aggressive": 4,
+    "low medium": 2,
+    "medium high": 4,
     "high": 5,
     "very high": 5,
     "aggressive": 5,

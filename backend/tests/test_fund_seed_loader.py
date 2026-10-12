@@ -43,7 +43,7 @@ from src.funds.validators import (  # noqa: E402
 
 DATA_DIR = BACKEND_ROOT / "data" / "funds"
 LOADER = BACKEND_ROOT / "scripts" / "load_fund_seed.py"
-TODAY = date(2026, 9, 4)
+TODAY = date(2026, 10, 12)
 
 
 def read(path: Path) -> list[dict[str, str]]:
@@ -228,16 +228,16 @@ class TestMapValidation:
     def test_the_high_equity_balanced_fund_reaches_a_long_horizon_growth_profile(
         self, fund_rows, snapshot_rows
     ):
-        # Its own sheet: SA Multi Asset High Equity, Moderate-High risk, five
-        # years minimum. So it belongs to someone with appetite and time.
+        # Its own sheet: SA Multi Asset High Equity, Moderate risk, five years
+        # minimum. So it belongs to someone with appetite and time.
         outcome = FundMatcher(clock=lambda: TODAY).match(
             profile("Aggressive", purpose="growth", horizon_target_year=2033),
             candidates(fund_rows, snapshot_rows),
         )
-        assert "FR Best Blend Balanced Fund (C)" in {m.name for m in outcome.matches}
+        assert "Coronation Balanced Plus Fund (P)" in {m.name for m in outcome.matches}
 
     def test_the_same_fund_is_not_shown_to_a_cautious_saver(self, fund_rows, snapshot_rows):
-        # A Moderate-High label cannot clear a conservative ceiling of 2. The
+        # A Moderate label cannot clear a conservative ceiling of 2. The
         # assertion is about this fund rather than an empty result: a cautious
         # saver should see the money market fund, and once one was seeded an
         # "empty" assertion started testing the wrong thing.
@@ -245,7 +245,7 @@ class TestMapValidation:
             profile("Conservative", purpose="emergency_fund", horizon_target_year=2028),
             candidates(fund_rows, snapshot_rows),
         )
-        assert "FR Best Blend Balanced Fund (C)" not in {m.name for m in outcome.matches}
+        assert "Coronation Balanced Plus Fund (P)" not in {m.name for m in outcome.matches}
 
     def test_the_same_fund_is_not_shown_on_a_short_horizon(self, fund_rows, snapshot_rows):
         # Its sheet asks for five years; eighteen months is not five years.
@@ -253,11 +253,13 @@ class TestMapValidation:
             profile("Aggressive", purpose="growth", horizon_target_year=2027),
             candidates(fund_rows, snapshot_rows),
         )
-        assert "FR Best Blend Balanced Fund (C)" not in {m.name for m in outcome.matches}
+        assert "Coronation Balanced Plus Fund (P)" not in {m.name for m in outcome.matches}
 
     def test_a_fund_with_no_published_rating_never_matches(self, fund_rows, snapshot_rows):
-        # Harvard House prints a continuous gradient with no named steps, so no
-        # level is recorded and no profile can be compared against it.
+        # Allan Gray's sheets publish no risk rating at all, not even a graphic,
+        # so no level is recorded and no profile can be compared against it.
+        # (Harvard House, a continuous gradient with no named steps, was the
+        # example until the October 2026 catalogue refresh retired it.)
         #
         # This test used to name the Satrix 40 ETF, on the belief that ETF sheets
         # generally publish no rating. That was wrong: Satrix does publish one,
@@ -269,7 +271,7 @@ class TestMapValidation:
                 profile(risk, purpose="growth", horizon_target_year=2035),
                 candidates(fund_rows, snapshot_rows),
             )
-            assert "Harvard House FR Property Fund (A)" not in {m.name for m in outcome.matches}, risk
+            assert "Allan Gray Balanced Fund (C)" not in {m.name for m in outcome.matches}, risk
 
     def test_a_cautious_saver_has_something_to_see(self, fund_rows, snapshot_rows):
         # The panel's own worked example, and the case the equity side of the

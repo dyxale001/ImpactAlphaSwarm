@@ -347,7 +347,7 @@ class TestTheSeedCarriesTheCommonCore:
             )
         }
         # The four funds whose Minimum Disclosure Document is readable locally.
-        for isin in ("ZAE000240123", "ZAE000240131", "ZAE000027108", "ZAE000188538"):
+        for isin in ("ZAE000240123", "ZAE000240131", "ZAE000027108", "ZAE000126033"):
             row = rows[isin]
             assert row["nav_cpu"], isin
             assert row["nav_date"], isin

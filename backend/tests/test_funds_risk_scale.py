@@ -79,6 +79,12 @@ class TestNormalisingPublishedLabels:
             ("Moderate-Aggressive", 4),
             ("MODERATE-AGGRESSIVE", 4),
             ("Aggressive", 5),
+            # The same steps with a space and no separator: Satrix's unit
+            # trusts and Truffle print "Moderate Aggressive", Sygnia prints
+            # "Low Medium" and "Medium High".
+            ("Moderate Aggressive", 4),
+            ("Low Medium", 2),
+            ("Medium High", 4),
         ],
     )
     def test_published_wordings_map_to_the_scale(self, raw, expected):
