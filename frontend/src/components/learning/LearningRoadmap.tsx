@@ -189,7 +189,7 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
                 </ol>
                 {otherLevelArticles.length > 0 && (
                   <details className="journey-advanced rounded-2xl border border-brand-border/60 bg-brand-bg p-4">
-                    <summary className="cursor-pointer text-sm font-medium text-brand-muted-fg">Explore other levels ({otherLevelArticles.length})</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-black">Explore other levels ({otherLevelArticles.length})</summary>
                     <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">Lessons at other difficulty levels, for a refresher or a new challenge. Explore whenever you’re curious.</p>
                     <ol className="mt-4 grid min-w-0 list-none gap-3 p-0">
                       {otherLevelArticles.map((article, index) => renderLesson(article, index, true))}
