@@ -2,7 +2,7 @@ import { useState } from 'react';
 import CompoundInterestCalculator from './CompoundInterestCalculator';
 import InvestmentGoalPlanner from './InvestmentGoalPlanner';
 
-export default function InvestmentPlanner() {
+export default function InvestmentPlanner({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
   const [mode, setMode] = useState<'growth' | 'goal'>('growth');
 
   return (
@@ -12,8 +12,8 @@ export default function InvestmentPlanner() {
         <button type="button" aria-pressed={mode === 'growth'} aria-controls="investment-mode-growth" onClick={() => setMode('growth')} className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold ${mode === 'growth' ? 'bg-brand-primary text-brand-bg' : 'border border-brand-border bg-brand-card text-brand-primary hover:bg-brand-primary/5'}`}>Project Growth</button>
         <button type="button" aria-pressed={mode === 'goal'} aria-controls="investment-mode-goal" onClick={() => setMode('goal')} className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold ${mode === 'goal' ? 'bg-brand-primary text-brand-bg' : 'border border-brand-border bg-brand-card text-brand-primary hover:bg-brand-primary/5'}`}>Plan a Goal</button>
       </div>
-      <div id="investment-mode-growth" hidden={mode !== 'growth'}><CompoundInterestCalculator /></div>
-      <div id="investment-mode-goal" hidden={mode !== 'goal'}><InvestmentGoalPlanner /></div>
+      <div id="investment-mode-growth" hidden={mode !== 'growth'}><CompoundInterestCalculator inflationRate={inflationRate} onInflationChange={onInflationChange} /></div>
+      <div id="investment-mode-goal" hidden={mode !== 'goal'}><InvestmentGoalPlanner inflationRate={inflationRate} onInflationChange={onInflationChange} /></div>
     </section>
   );
 }

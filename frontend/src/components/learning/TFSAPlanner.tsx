@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PurchasingPower from './PurchasingPower';
 import { Sprout } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { calculateTFSAPlan, southAfricanDate, tfsaTaxYear, TFSA_RULES } from '../../utils/tfsaPlanner';
@@ -15,7 +16,7 @@ const fields = [
   { key: 'years', label: 'Investment period (years)', hint: 'From the planning month; current rules are held constant for illustration.', min: 1, max: 60, step: 1 },
 ] as const;
 
-export default function TFSAPlanner() {
+export default function TFSAPlanner({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
   const [inputs, setInputs] = useState(() => ({ priorLifetimeContributions: '0', currentYearContributions: '0', currentValue: '0', monthlyContribution: '1000', annualRate: '7', years: '20', referenceDate: southAfricanDate(new Date()) }));
   const values = { priorLifetimeContributions: Number(inputs.priorLifetimeContributions), currentYearContributions: Number(inputs.currentYearContributions), currentValue: Number(inputs.currentValue), monthlyContribution: Number(inputs.monthlyContribution), annualRate: Number(inputs.annualRate), years: Number(inputs.years), referenceDate: inputs.referenceDate };
   const errors = fields.map(field => {
@@ -88,6 +89,7 @@ export default function TFSAPlanner() {
             <div className="min-w-0 space-y-3 rounded-3xl bg-brand-primary p-5 text-brand-bg sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-widest text-brand-bg/75">Illustrative future account value</p>
               <p className="break-words text-3xl font-semibold text-brand-accent">{currency.format(result.projection.projectedValue)}</p>
+
               <dl className="space-y-3 text-sm">
                 <div><dt className="text-brand-bg/70">Future contributions</dt><dd className="break-words font-semibold">{currency.format(result.plannedFutureContributions)}</dd></div>
                 <div><dt className="text-brand-bg/70">Future investment growth</dt><dd className="break-words font-semibold">{currency.format(result.projection.investmentGrowth)}</dd></div>
@@ -97,6 +99,7 @@ export default function TFSAPlanner() {
           </> : <p className="rounded-2xl bg-brand-bg p-5 text-sm text-brand-muted-fg">Complete the inputs with valid values to see your allowances and projection.</p>}
         </div>
       </div>
+      {result && <PurchasingPower futureValue={result.projection.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.currentValue} monthlyContribution={values.monthlyContribution} tfsa scheduleAvailable={values.referenceDate === southAfricanDate(new Date())} />}
       {result && <div className="min-w-0 space-y-3 border-t border-brand-border pt-6">
         <h4 className="font-semibold text-brand-fg">Account value and future deposits</h4>
         <div className="h-72 w-full min-w-0 sm:h-80" role="img" aria-label={`Illustrative account value after ${values.years} years: ${currency.format(result.projection.projectedValue)}. Future contributions: ${currency.format(result.plannedFutureContributions)}.`}>
@@ -117,7 +120,7 @@ export default function TFSAPlanner() {
       <div className="space-y-2 rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">
         <p>Contribution limits apply across all your TFSAs, not to market value. Growth can take account value above {currency.format(TFSA_RULES.lifetimeLimit)} without using more contribution room. Unused annual allowance does not carry forward. Withdrawals do not restore room: reinvested money counts as another contribution.</p>
         <p>Current SARS rules impose a {TFSA_RULES.excessContributionTaxRate * 100}% tax on excess contributions. This planner flags excess amounts, but does not calculate your tax liability.</p>
-        <p>Rules effective 1 March 2026; future rules may change. Projections assume a constant nominal return, monthly compounding, reinvested growth and month-end deposits. They exclude fees, tax and inflation. Educational illustration, not personalised tax advice. <a href={TFSA_RULES.sourceUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-primary underline underline-offset-4">Read the SARS TFSA guidance</a>.</p>
+        <p>Rules effective 1 March 2026; future rules may change. Projections assume a constant nominal return, monthly compounding, reinvested growth and month-end deposits. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Educational illustration, not personalised tax advice. <a href={TFSA_RULES.sourceUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-primary underline underline-offset-4">Read the SARS TFSA guidance</a>.</p>
       </div>
     </section>
   );

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   CandlestickChart,
   BookOpen,
+  Calculator,
   Eye,
   LineChart,
   Terminal,
@@ -70,6 +71,7 @@ export default function AppLayout() {
     { name: "Funds", path: "/funds", icon: Landmark },
     { name: "Compare", path: "/compare", icon: Columns2 },
     { name: "Learning", path: "/learning", icon: BookOpen },
+    { name: "Financial Tools", path: "/financial-tools", icon: Calculator },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
@@ -85,6 +87,7 @@ export default function AppLayout() {
       i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
+      i.name === "Financial Tools" ||
       i.name === "Settings" ||
       // Behind the flag: the entry has to be in both the list above and this
       // allow-list to appear, and the page it links to needs the backend flag

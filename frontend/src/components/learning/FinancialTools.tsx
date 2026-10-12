@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Calculator } from 'lucide-react';
 import InvestmentPlanner from './InvestmentPlanner';
 import TFSAPlanner from './TFSAPlanner';
+import { DEFAULT_INFLATION_RATE } from '../../utils/purchasingPower';
 
 export default function FinancialTools() {
+  const [inflationRate, setInflationRate] = useState(DEFAULT_INFLATION_RATE);
   const [selectedTool, setSelectedTool] = useState<'investment' | 'tfsa'>('investment');
   return (
     <div className="space-y-6">
@@ -16,8 +18,8 @@ export default function FinancialTools() {
         <button type="button" aria-pressed={selectedTool === 'investment'} aria-controls="tool-investment" onClick={() => setSelectedTool('investment')} className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold ${selectedTool === 'investment' ? 'bg-brand-primary text-brand-bg' : 'border border-brand-border bg-brand-card text-brand-primary hover:bg-brand-primary/5'}`}>Investment Growth &amp; Goal Planner</button>
         <button type="button" aria-pressed={selectedTool === 'tfsa'} aria-controls="tool-tfsa" onClick={() => setSelectedTool('tfsa')} className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold ${selectedTool === 'tfsa' ? 'bg-brand-primary text-brand-bg' : 'border border-brand-border bg-brand-card text-brand-primary hover:bg-brand-primary/5'}`}>TFSA Planner</button>
       </div>
-      <div id="tool-investment" hidden={selectedTool !== 'investment'}><InvestmentPlanner /></div>
-      <div id="tool-tfsa" hidden={selectedTool !== 'tfsa'}><TFSAPlanner /></div>
+      <div id="tool-investment" hidden={selectedTool !== 'investment'}><InvestmentPlanner inflationRate={inflationRate} onInflationChange={setInflationRate} /></div>
+      <div id="tool-tfsa" hidden={selectedTool !== 'tfsa'}><TFSAPlanner inflationRate={inflationRate} onInflationChange={setInflationRate} /></div>
     </div>
   );
 }

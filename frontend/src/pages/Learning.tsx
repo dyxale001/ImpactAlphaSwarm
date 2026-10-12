@@ -6,7 +6,7 @@ import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
-import FinancialTools from "../components/learning/FinancialTools";
+import { Link, useNavigate } from "react-router-dom";
 import LearningRoadmap from "../components/learning/LearningRoadmap";
 import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
@@ -104,12 +104,13 @@ class LearningCentreSearchEngine {
   }
 }
 
-const learningTabs = ["roadmap", "library", "tools"] as const;
-const learningTabLabels = { roadmap: "My Roadmap", library: "Library", tools: "Financial Tools" };
+const learningTabs = ["roadmap", "library"] as const;
+const learningTabLabels = { roadmap: "My Roadmap", library: "Library" };
 
 const learningCentreSearchEngine = new LearningCentreSearchEngine();
 
 export default function LearningPage() {
+  const navigate = useNavigate();
   const { session, profile, analysis, isProfileLoading, fetchProfile } = useAuthStore();
   const userId = profile?.id ?? session?.user?.id ?? null;
 
@@ -413,10 +414,7 @@ export default function LearningPage() {
             dataAvailable={loadWarnings.length === 0 && !isProfileLoading}
             onOpenArticle={setSelectedArticle}
             onStartQuiz={handleTakeQuiz}
-            onOpenFinancialTools={() => {
-              setActiveTab("tools");
-              document.getElementById("learning-tab-tools")?.focus();
-            }}
+            onOpenFinancialTools={() => navigate("/financial-tools")}
           />
         </div>
 
@@ -549,9 +547,7 @@ export default function LearningPage() {
           )}
         </div>
         </div>
-        <div id="learning-panel-tools" role="tabpanel" aria-labelledby="learning-tab-tools" hidden={activeTab !== "tools"} tabIndex={0}>
-          <FinancialTools />
-        </div>
+        <Link to="/financial-tools" className="inline-block text-sm font-semibold text-brand-primary underline underline-offset-4">Explore Financial Tools</Link>
       </div>
 
       <ArticleViewerModal
