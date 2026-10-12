@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
+import AnalysisCompletionNotification from "../AnalysisCompletionNotification";
 import { readLastHubPage } from "../../utils/lastHubPage";
 import { useAuthStore } from "../../store/authStore";
 import { useSignOut } from "../../hooks/useSignOut";
@@ -232,6 +233,7 @@ export default function AppLayout() {
       </main>
 
       <AskAlphaSwarmChatbot />
+      <AnalysisCompletionNotification />
     </div>
   );
 }
