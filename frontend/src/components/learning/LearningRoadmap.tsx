@@ -38,7 +38,11 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
     return <div className="glass-card rounded-2xl p-6 text-brand-muted-fg">Your roadmap will appear when learning articles are available.</div>;
   }
 
-  const milestone = deriveNextBadgeMilestone({ badges, earnedBadgeIds, categories, progress, xp, recommended, calculateArticleXp });
+  const milestone = deriveNextBadgeMilestone({ badges, earnedBadgeIds, categories, progress, xp, recommended, calculateArticleXp: difficulty => {
+    try { return calculateArticleXp(difficulty); }
+    // Existing milestone logic omits XP lesson estimates when configuration is unavailable.
+    catch { return NaN; }
+  } });
   const earnedCount = badges.filter(badge => earnedBadgeIds.has(badge.id)).length;
   const percentage = Math.round(completedCount / articles.length * 100);
   const level = expertise ? expertise[0].toUpperCase() + expertise.slice(1) : "Not yet set";
@@ -77,7 +81,7 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
                 </div>
               </section>
             )}
-            <p className="text-xs leading-relaxed text-brand-muted-fg">Read a lesson, then take its quiz at the bottom of the article. Pass with 80% or higher to complete it and earn XP. Reading alone does not mark a lesson complete.</p>
+            <p className="text-xs leading-relaxed text-brand-muted-fg">Read a lesson, then take its quiz at the bottom of the article. Pass with 75% or higher to complete it and earn XP. Reading alone does not mark a lesson complete.</p>
           </div>
         </div>
       </section>
@@ -185,7 +189,7 @@ export default function LearningRoadmap({ categories, progress, expertise, dataA
                 </ol>
                 {otherLevelArticles.length > 0 && (
                   <details className="journey-advanced rounded-2xl border border-brand-border/60 bg-brand-bg p-4">
-                    <summary className="cursor-pointer text-sm font-medium text-brand-muted-fg">Explore other levels ({otherLevelArticles.length})</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-black">Explore other levels ({otherLevelArticles.length})</summary>
                     <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">Lessons at other difficulty levels, for a refresher or a new challenge. Explore whenever you’re curious.</p>
                     <ol className="mt-4 grid min-w-0 list-none gap-3 p-0">
                       {otherLevelArticles.map((article, index) => renderLesson(article, index, true))}

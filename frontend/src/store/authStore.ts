@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Session, User } from '@supabase/supabase-js'
 import { UserProfile, UserAnalysis } from '../types/auth'
 import { fetchUserProfileData } from '../services/supabase/authService'
+import { supabase } from '../lib/supabase'
 
 const RECOVERY_KEY = 'password-recovery-pending'
 
@@ -93,6 +94,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
           const result = await fetchUserProfileData(userId)
           if (!isCurrent()) return
           if (result.error) throw result.error
+          if (result.profile && result.profile.is_active !== true) {
+            get().setSession(null)
+            void supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+            return
+          }
           set({ profile: result.profile, analysis: result.analysis, hasResolvedProfile: true })
         } catch (error: unknown) {
           if (isCurrent()) set({ profileError:

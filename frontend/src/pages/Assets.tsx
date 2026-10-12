@@ -80,8 +80,8 @@ export default function AssetsPage() {
     latestRunCreatedAt,
     recommendations,
     refreshRecommendations,
-    // The whole ranked feed, not the dashboard's five. The page's own subtitle
-    // promises everything the committee ranked, and a run scores about thirty.
+    // Read the whole ranked feed, as the Dashboard data provider also does.
+    // This page separates the top five into cards and the remaining assets into rows.
   } = useDashboardStats({ limit: null });
 
   // Ranks 2 to 5: shortlisted, shown as cards alongside the hero at rank 1.
@@ -339,7 +339,7 @@ export default function AssetsPage() {
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
-              Personalized Recommendations
+              Personalised Asset Analysis
             </p>
             <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
               <CandlestickChart className="w-7 h-7 shrink-0 text-brand-accent" />
@@ -615,7 +615,7 @@ export default function AssetsPage() {
       <div>
         {filteredRecs.length === 0 ? (
           <div className="glass-card p-6 text-center text-sm text-primary">
-            No recommendations available right now.
+            No analysis results available right now.
           </div>
         ) : (
           <div className="bento-grid">

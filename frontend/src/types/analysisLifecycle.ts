@@ -1,5 +1,7 @@
 export type AnalysisLoadingStage = "preparing" | "processing" | "results";
 
+export class AnalysisAccessError extends Error {}
+
 export type AnalysisProgress = {
   phase: "initializing" | "analysis" | "synthesis" | "output" | "complete";
   message: string;

@@ -843,7 +843,7 @@ class OutputPhase(Phase):
     def run(self, state: AnalysisState) -> dict[str, Any]:
         update_ai_run_progress(
             state["run_id"],
-            {"phase": "output", "message": "Ranking opportunities and preparing recommendations", "active": []},
+            {"phase": "output", "message": "Ranking assets and preparing analysis results", "active": []},
         )
         print("- Phase 4: Formatting output with reasoning traces...")
 

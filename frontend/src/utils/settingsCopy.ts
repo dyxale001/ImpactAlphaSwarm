@@ -103,8 +103,8 @@ export const PASSWORD_CARD_TITLE = "Password";
 export const PASSWORD_CARD_LEAD = "Used to sign in. Changing it signs out no other device.";
 export const DEACTIVATE_CARD_TITLE = "Deactivate account";
 export const DEACTIVATE_CARD_LEAD =
-  "Hides your account and signs you out straight away. Your data is kept, and signing back in reactivates it.";
-export const DEACTIVATE_CONSEQUENCE = "Reversible by signing back in.";
+  "Deactivates your account and signs you out. Your data is kept. Only an administrator can reactivate your account.";
+export const DEACTIVATE_CONSEQUENCE = "You cannot sign back in until an administrator reactivates your account.";
 export const DEACTIVATE_ACTION = "Deactivate my account";
 export const DEACTIVATE_CONFIRM = "Yes, deactivate my account";
 export const DEACTIVATE_KEEP = "Keep my account";

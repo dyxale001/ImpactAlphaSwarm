@@ -9,7 +9,7 @@ export default function HoldingsList({ holdings }: { holdings: any[] }) {
         <div className="text-center py-10 space-y-3">
           <p className="text-sm text-brand-muted-fg">You haven't placed any trades yet.</p>
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-brand-primary hover:underline">
-            Browse recommendations <ArrowUpRight className="w-3.5 h-3.5" />
+            Browse ranked assets <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

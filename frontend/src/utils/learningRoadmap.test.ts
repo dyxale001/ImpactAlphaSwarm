@@ -4,7 +4,7 @@ import type { LearningArticle, LearningCategory, LearningProgress } from "../typ
 
 const article = (id: string, difficulty_level: LearningArticle["difficulty_level"]): LearningArticle => ({
   id, difficulty_level, title: id, category_id: "category", slug: id,
-  summary: "", content: "", created_at: "2026-01-01", questions: [],
+  summary: "", content: "", display_order: 1, created_at: "2026-01-01", questions: [],
 });
 const first = article("first", "BEGINNER");
 const middle = article("middle", "INTERMEDIATE");

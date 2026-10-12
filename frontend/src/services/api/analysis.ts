@@ -1,6 +1,7 @@
 import { supabase } from "../../lib/supabase";
 import type { SocialPost } from "../../components/research/SocialPosts";
 import type { NewsArticle } from "../../components/research/NewsArticles";
+import { AnalysisAccessError } from "../../types/analysisLifecycle";
 import type { AnalysisStatus } from "../../types/analysisLifecycle";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -45,13 +46,22 @@ export async function startAnalysis(payload: {
 }
 
 export async function getStatus(runId: string) {
-  const res = await fetch(`${BASE}/api/analysis/status/${runId}`);
+  const token = await getToken();
+  if (!token) throw new AnalysisAccessError("Please sign in again.");
+  const res = await fetch(`${BASE}/api/analysis/status/${runId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if ([401, 403, 404].includes(res.status)) throw new AnalysisAccessError("Analysis access is unavailable. Please contact an administrator.");
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<AnalysisStatus>;
 }
 
 export async function getResult(runId: string) {
-  const res = await fetch(`${BASE}/api/analysis/result/${runId}`);
+  const token = await getToken();
+  if (!token) throw new AnalysisAccessError("Please sign in again.");
+  const res = await fetch(`${BASE}/api/analysis/result/${runId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -221,21 +231,26 @@ export async function deactivateOwnAccount() {
   return res.json();
 }
 
-export async function reactivateOwnAccount() {
+export async function setAdminUserStatus(userId: string, isActive: boolean): Promise<void> {
   const token = await getToken();
-  if (!token) throw new Error("No auth token");
-
-  const res = await fetch(`${BASE}/api/account/reactivate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  if (!token) throw new Error("Please sign in again.");
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/admin/toggle-user-status`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, is_active: isActive }),
+    });
+  } catch {
+    throw new Error("Account status could not be confirmed. Refresh the user list and retry the intended action.");
+  }
+  const result = await res.json().catch(() => null);
+  if (!res.ok || result?.ok !== true || result?.is_active !== isActive) {
+    throw new Error(typeof result?.detail === "string" ? result.detail
+      : "Account status could not be confirmed. Refresh the user list and retry the intended action.");
+  }
 }
+
 export interface SentimentHistoryPoint {
   date: string;
   /** 0-100, or null on a day with no posts. Null is a gap, not a zero. */

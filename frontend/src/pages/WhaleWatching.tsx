@@ -124,7 +124,7 @@ export default function WhaleWatchingPage() {
           <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
             Follow the big money: insider dealings, the institutions and funds
             that own each stock, and what the largest investors are buying.
-            Informational only; this never affects your recommendations.
+            Informational only; this never affects your asset rankings.
           </p>
         </div>
       </div>

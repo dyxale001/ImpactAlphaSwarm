@@ -45,7 +45,7 @@ import { deriveNextBadgeMilestone } from "./learningBadgeMilestones";
 import type { LearningArticle, LearningCategory, LearningProgress } from "../types/learning";
 const lessons: LearningArticle[] = ["a", "b", "c", "d"].map(id => ({
   id, title: id, slug: id, category_id: "category", summary: "", content: "",
-  difficulty_level: "BEGINNER", created_at: "", questions: [], quiz_question_count: 1,
+  difficulty_level: "BEGINNER", display_order: 1, created_at: "", questions: [], quiz_question_count: 1,
 }));
 const categories: LearningCategory[] = [{ id: "category", name: "Sample Category", slug: "sample", description: "", created_at: "", display_order: 0, articles: lessons }];
 const input = (badges: LearningBadge[]) => ({ badges, earnedBadgeIds: new Set<string>(), categories,
@@ -69,10 +69,10 @@ describe("single next milestone", () => {
     args.recommended = lessons[3];
     expect(deriveNextBadgeMilestone(args)?.estimatedLessons).toBe(2);
   });
-  it.each([0, undefined])("prefers articles when an upcoming quiz count is %s", count => {
+  it.each([0, undefined])("skips unavailable quizzes when estimating XP (count %s)", count => {
     const args = input([badge("article", "3"), badge("xp", "20", "XP_REACHED")]);
     args.categories = [{ ...categories[0], articles: [{ ...lessons[0], quiz_question_count: count }, ...lessons.slice(1)] }];
-    expect(deriveNextBadgeMilestone(args)?.badge.id).toBe("article");
+    expect(deriveNextBadgeMilestone(args)?.badge.id).toBe("xp");
   });
   it("falls back to articles for unreachable XP or invalid XP rules", () => {
     const args = input([badge("article", "2"), badge("xp", "900", "XP_REACHED")]);
@@ -80,10 +80,9 @@ describe("single next milestone", () => {
     args.calculateArticleXp = () => NaN;
     expect(deriveNextBadgeMilestone(args)?.badge.id).toBe("article");
   });
-  it("uses XP without an estimate if no article candidate remains", () => {
+  it("excludes unreachable XP and selects an achievable category", () => {
     const result = deriveNextBadgeMilestone(input([badge("xp", "900", "XP_REACHED"), badge("category", "sample", "CATEGORY_COMPLETED")]));
-    expect(result).toMatchObject({ badge: { id: "xp" }, remaining: 900 });
-    expect(result?.estimatedLessons).toBeUndefined();
+    expect(result).toMatchObject({ badge: { id: "category" }, remaining: 4, estimatedLessons: 4 });
   });
   it("excludes earned and satisfied-but-unawarded candidates", () => {
     const args = input([badge("met", "10", "XP_REACHED"), badge("earned", "30", "XP_REACHED"), badge("future", "60", "XP_REACHED")]);
@@ -103,6 +102,43 @@ describe("single next milestone", () => {
     expect(deriveNextBadgeMilestone(input([badge("bad", "2abc"), badge("unknown", "2", "NEW_TYPE"), badge("category", "missing", "CATEGORY_COMPLETED")]))).toBeUndefined();
     const args = input([badge("category", "sample", "CATEGORY_COMPLETED")]);
     args.earnedBadgeIds.add("category");
+    expect(deriveNextBadgeMilestone(args)).toBeUndefined();
+  });
+});
+
+
+describe("achievable closest milestones", () => {
+  it("excludes article thresholds beyond remaining available lessons", () => {
+    expect(deriveNextBadgeMilestone(input([badge("too-many", "5")]))).toBeUndefined();
+  });
+  it("keeps deleted-article completions in historical numeric progress", () => {
+    const args = input([badge("articles", "5")]);
+    args.progress.deleted = { id: "old", user_id: "u", article_id: "deleted", status: "COMPLETED", quiz_score: 100 };
+    expect(deriveNextBadgeMilestone(args)).toMatchObject({ current: 1, remaining: 4 });
+  });
+  it("compares category badges from every category with numeric badges", () => {
+    const args = input([badge("articles", "3"), badge("xp", "60", "XP_REACHED"), badge("category", "other", "CATEGORY_COMPLETED")]);
+    args.categories = [...categories, { ...categories[0], id: "other", slug: "other", name: "Other", articles: [{ ...lessons[0], id: "other-lesson" }] }];
+    expect(deriveNextBadgeMilestone(args)).toMatchObject({ badge: { id: "category" }, estimatedLessons: 1 });
+  });
+  it("excludes category badges with an unfinished lesson lacking a quiz", () => {
+    const args = input([badge("category", "sample", "CATEGORY_COMPLETED")]);
+    args.categories = [{ ...categories[0], articles: [{ ...lessons[0], quiz_question_count: 0 }] }];
+    expect(deriveNextBadgeMilestone(args)).toBeUndefined();
+  });
+  it("breaks cross-type and same-type ties independently of input order", () => {
+    const records = [badge("category", "sample", "CATEGORY_COMPLETED"), badge("xp", "80", "XP_REACHED"), badge("z", "4"), badge("a", "4")];
+    expect(deriveNextBadgeMilestone(input(records))?.badge.id).toBe("a");
+    expect(deriveNextBadgeMilestone(input([...records].reverse()))?.badge.id).toBe("a");
+  });
+  it("omits XP with unknown configuration but keeps achievable category goals", () => {
+    const args = input([badge("xp", "20", "XP_REACHED"), badge("category", "sample", "CATEGORY_COMPLETED")]);
+    args.calculateArticleXp = () => { throw new Error("unavailable"); };
+    expect(deriveNextBadgeMilestone(args)?.badge.id).toBe("category");
+  });
+  it("counts zero-XP quizzes as lessons without inventing XP", () => {
+    const args = input([badge("xp", "1", "XP_REACHED")]);
+    args.calculateArticleXp = () => 0;
     expect(deriveNextBadgeMilestone(args)).toBeUndefined();
   });
 });

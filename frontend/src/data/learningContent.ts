@@ -6,6 +6,7 @@ export type LearningArticle = {
   summary: string;
   content: string;
   difficulty_level: string;
+  display_order: number;
   created_at: string;
 };
 

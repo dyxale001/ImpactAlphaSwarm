@@ -41,50 +41,61 @@ export type NextBadgeMilestone = {
   estimatedLessons?: number;
 };
 
-/** Estimates assume first-time quiz passes, using the supplied existing XP rule. */
+/** Distances assume first-time passes of currently available quizzes. */
 export function deriveNextBadgeMilestone({ badges, earnedBadgeIds, categories, progress, xp, recommended, calculateArticleXp }: NextMilestoneInput): NextBadgeMilestone | undefined {
+  // Historical completions still count, even when their articles were deleted.
   const completed = Object.values(progress).filter(entry => entry?.status === "COMPLETED").length;
-  const articleCandidate = deriveNumericBadgeMilestones(badges, "ARTICLES_COMPLETED", completed, earnedBadgeIds).find(m => m.next);
-  const xpCandidate = deriveNumericBadgeMilestones(badges, "XP_REACHED", xp, earnedBadgeIds).find(m => m.next);
-  let xpLessons: number | undefined;
-  if (xpCandidate) {
-    const articles = categories.flatMap(category => category.articles);
-    const start = articles.findIndex(article => article.id === recommended?.id);
-    if (start >= 0) {
-      const upcoming = [...articles.slice(start), ...articles.slice(0, start)]
-        .filter(article => progress[article.id]?.status !== "COMPLETED");
-      let expectedXp = 0;
-      for (let index = 0; index < upcoming.length; index++) {
-        const article = upcoming[index];
-        const award = calculateArticleXp(article.difficulty_level);
-        // Unknown/unavailable quizzes or XP prevent a reliable estimate along this path.
-        if (!(article.quiz_question_count && article.quiz_question_count > 0) || !Number.isFinite(award) || award <= 0) break;
-        expectedXp += award;
-        if (expectedXp >= xpCandidate.remaining) {
-          xpLessons = index + 1;
-          break;
-        }
-      }
+  const articles = categories.flatMap(category => category.articles);
+  const start = Math.max(0, articles.findIndex(article => article.id === recommended?.id));
+  const isUnfinished = (article: LearningArticle) => progress[article.id]?.status !== "COMPLETED";
+  const hasQuiz = (article: LearningArticle) => Number.isInteger(article.quiz_question_count) &&
+    (article.quiz_question_count ?? 0) > 0;
+  const upcoming = [...articles.slice(start), ...articles.slice(0, start)]
+    .filter(article => isUnfinished(article) && hasQuiz(article));
+  const candidates: Array<NextBadgeMilestone & { priority: number }> = [];
+
+  for (const milestone of deriveNumericBadgeMilestones(badges, "ARTICLES_COMPLETED", completed, earnedBadgeIds)) {
+    if (milestone.earned || milestone.satisfied || milestone.remaining > upcoming.length) continue;
+    candidates.push({ badge: milestone.badge, current: completed, target: milestone.threshold,
+      remaining: milestone.remaining, unit: "lessons", estimatedLessons: milestone.remaining, priority: 0 });
+  }
+
+  // Unknown XP makes an accurate lesson-distance comparison impossible.
+  const awards = upcoming.map(article => {
+    try { return calculateArticleXp(article.difficulty_level); }
+    catch { return NaN; }
+  });
+  if (awards.every(award => Number.isSafeInteger(award) && award >= 0)) {
+    for (const milestone of deriveNumericBadgeMilestones(badges, "XP_REACHED", xp, earnedBadgeIds)) {
+      if (milestone.earned || milestone.satisfied) continue;
+      let potentialXp = 0;
+      const index = awards.findIndex(award => {
+        potentialXp += award;
+        return potentialXp >= milestone.remaining;
+      });
+      if (index < 0) continue;
+      candidates.push({ badge: milestone.badge, current: xp, target: milestone.threshold,
+        remaining: milestone.remaining, unit: "XP", estimatedLessons: index + 1, priority: 1 });
     }
   }
-  if (articleCandidate && (!xpCandidate || xpLessons === undefined || articleCandidate.remaining <= xpLessons)) {
-    return { badge: articleCandidate.badge, current: completed, target: articleCandidate.threshold,
-      remaining: articleCandidate.remaining, unit: "lessons", estimatedLessons: articleCandidate.remaining };
-  }
-  if (xpCandidate) {
-    return { badge: xpCandidate.badge, current: xp, target: xpCandidate.threshold,
-      remaining: xpCandidate.remaining, unit: "XP", estimatedLessons: xpLessons };
-  }
-  const category = categories.find(category => category.articles.some(article => article.id === recommended?.id));
-  if (!category || !category.articles.length) return undefined;
-  const categoryCompleted = category.articles.filter(article => progress[article.id]?.status === "COMPLETED").length;
-  if (categoryCompleted === category.articles.length) return undefined;
+
   const normalize = (value: string) => value.trim().toLowerCase();
-  const categoryBadge = badges.filter(badge => !earnedBadgeIds.has(badge.id) &&
-    badge.criteria_type.toUpperCase() === "CATEGORY_COMPLETED" &&
-    [category.name, category.slug].some(name => normalize(name) === normalize(badge.criteria_value)))
-    .sort((a, b) => a.id.localeCompare(b.id))[0];
-  if (!categoryBadge) return undefined;
-  return { badge: categoryBadge, current: categoryCompleted, target: category.articles.length,
-    remaining: category.articles.length - categoryCompleted, unit: "lessons" };
+  for (const badge of badges) {
+    if (earnedBadgeIds.has(badge.id) || badge.criteria_type.toUpperCase() !== "CATEGORY_COMPLETED") continue;
+    for (const category of categories) {
+      if (!category.articles.length || ![category.name, category.slug].some(value => normalize(value) === normalize(badge.criteria_value))) continue;
+      const unfinished = category.articles.filter(isUnfinished);
+      if (!unfinished.length || !unfinished.every(hasQuiz)) continue;
+      candidates.push({ badge, current: category.articles.length - unfinished.length,
+        target: category.articles.length, remaining: unfinished.length, unit: "lessons",
+        estimatedLessons: unfinished.length, priority: 2 });
+    }
+  }
+
+  const selected = candidates.sort((a, b) =>
+    a.estimatedLessons! - b.estimatedLessons! || a.priority - b.priority ||
+    a.target - b.target || a.badge.id.localeCompare(b.badge.id))[0];
+  if (!selected) return undefined;
+  const { priority: _priority, ...milestone } = selected;
+  return milestone;
 }

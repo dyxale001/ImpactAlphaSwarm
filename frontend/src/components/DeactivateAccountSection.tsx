@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
 import { deactivateOwnAccount } from '../services/api/analysis'
 import SettingsCard from './settings/SettingsCard'
 import { DangerButton, DangerOutlineButton, TextButton } from './settings/SettingsButtons'
@@ -15,7 +16,7 @@ import {
 
 /**
  * Deactivate, never delete: the account is hidden and the login blocked, the
- * data kept, and signing back in reverses it. The confirmation is inline
+ * data kept, and only an administrator can reactivate it. The confirmation is inline
  * rather than a browser dialog so the card can say, in its own words, exactly
  * what is about to happen.
  */
@@ -29,12 +30,16 @@ export default function DeactivateAccountSection() {
     setError(null)
     try {
       await deactivateOwnAccount()
-      await supabase.auth.signOut()
-      window.location.href = '/'
     } catch (err: any) {
       setError(err?.message ?? 'Could not deactivate the account. Please try again.')
       setLoading(false)
+      return
+    } finally {
+      // Clear access even after partial failure; Auth may already have been banned.
+      useAuthStore.getState().setSession(null)
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
     }
+    window.location.href = '/'
   }
 
   return (
