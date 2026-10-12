@@ -22,13 +22,17 @@ export default function ProtectedRoute() {
   }
 
 
-  if (!hasResolvedProfile) {
+  if (!hasResolvedProfile || profileError) {
     return <div className="flex h-screen items-center justify-center bg-brand-bg text-brand-fg">
       <div role="alert">
         <p>{profileError || 'Unable to load your profile.'}</p>
         <button onClick={() => void fetchProfile(session.user.id)}>Try again</button>
       </div>
     </div>
+  }
+
+  if (profile && profile.is_active !== true) {
+    return <Navigate to="/login" replace />
   }
 
   if (!profile && location.pathname !== '/onboarding') {
