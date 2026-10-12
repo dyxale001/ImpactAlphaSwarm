@@ -31,7 +31,6 @@ import MarketNewsPage from "./pages/MarketNews";
 import { MACRO_NEWS_ENABLED } from "./utils/macroNewsFlags";
 import ComparePage from "./pages/Compare";
 import { COMPARE_ENABLED } from "./utils/compareFlags";
-import ResearchPage from "./pages/Research";
 import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
 import PortfolioPage from "./pages/Portfolio";
@@ -46,11 +45,11 @@ import WhaleWatchingPage from "./pages/WhaleWatching";
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { session, isLoading, isProfileLoading, isRecovery } = useAuthStore();
+  const { session, profile, isLoading, isProfileLoading, isRecovery } = useAuthStore();
   if (isLoading || isProfileLoading) return null;
   // A pending recovery session must still be able to reach the login page,
   // otherwise abandoning a reset would bounce the user into the app.
-  if (session && !isRecovery) return <Navigate to="/dashboard" replace />;
+  if (session && !isRecovery && (!profile || profile.is_active === true)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 

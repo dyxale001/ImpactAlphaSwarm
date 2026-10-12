@@ -16,7 +16,8 @@ export function useAuth() {
         if (event === 'SIGNED_OUT') setRecovery(false)
         setSession(session)
         if (session?.user) {
-          void fetchProfile(session.user.id)
+          // Auth calls during profile validation must run outside this callback.
+          window.setTimeout(() => void fetchProfile(session.user.id), 0)
         }
       }
     )

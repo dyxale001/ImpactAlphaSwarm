@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import type { AskTurn } from '../../services/ask/types'
 
 interface Props {
@@ -31,10 +30,7 @@ function sourceLabel(source: string): string {
 }
 
 export default function AskAnswerCard({ turn, onSuggestionClick }: Props) {
-  const [showData, setShowData] = useState(false)
   const { question, result } = turn
-
-  const hasDataToShow = !result.is_blocked && result.data && Object.keys(result.data).length > 0
 
   return (
     <div className="space-y-2.5" style={{ animation: 'slide-up 0.3s ease-out forwards' }}>
@@ -69,26 +65,6 @@ export default function AskAnswerCard({ turn, onSuggestionClick }: Props) {
               Source: {sourceLabel(result.source)}
             </p>
           )
-        )}
-
-        {hasDataToShow && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowData(v => !v)}
-              className="flex items-center gap-1 text-xs text-brand-primary hover:underline font-semibold"
-            >
-              {showData
-                ? <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                : <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />}
-              <span>Data used</span>
-            </button>
-            {showData && (
-              <pre className="mt-2 p-3 rounded-lg bg-brand-bg/50 border border-brand-border/40 text-[11px] text-brand-muted-fg overflow-x-auto">
-                {JSON.stringify(result.data, null, 2)}
-              </pre>
-            )}
-          </div>
         )}
 
         {result.redirect_suggestions.length > 0 && (

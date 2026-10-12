@@ -88,7 +88,7 @@ export default function SetupGuide({
         <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-brand-muted-fg">
           {allDone
             ? "That is everything. Customise is always in the banner above when you want to change it again."
-            : "Your dashboard starts empty on purpose, so it only ever holds what you put there. Five steps, and each one ticks itself off as you do it."}
+            : "Your dashboard starts with a few widgets to get you going, and it's yours to rearrange from there. Five steps, and each one ticks itself off as you do it."}
         </p>
       </div>
 

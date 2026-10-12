@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react'
 import { Search, Loader2, Sparkles } from 'lucide-react'
 import AskInfoTooltip from './AskInfoTooltip'
+import AskScopeTooltip from './AskScopeTooltip'
 
 interface Props {
   query: string
@@ -46,6 +47,8 @@ export default function AskComposer({ query, setQuery, loading, onAsk }: Props) 
         <p className="text-[10px] text-brand-muted-fg/70 text-center">
           Financial information for educational purposes only · Not personalised financial advice
         </p>
+        <span className="text-brand-muted-fg/40 text-[10px]">·</span>
+        <AskScopeTooltip />
         <span className="text-brand-muted-fg/40 text-[10px]">·</span>
         <AskInfoTooltip />
       </div>

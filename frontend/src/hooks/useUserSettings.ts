@@ -165,7 +165,6 @@ export const useUserSettings = () => {
           {
             user_id: profile.id,
             ...patch,
-            is_active: true,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id' }

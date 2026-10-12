@@ -35,7 +35,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     id: "add",
     title: "Add your first widget",
     detail:
-      "Press Add a widget and pick one from the library. They are grouped by where the data comes from.",
+      "Press “Add a widget” and pick one from the library. They are grouped by where the data comes from.",
   },
   {
     id: "resize",
