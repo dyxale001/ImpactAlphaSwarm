@@ -1,6 +1,7 @@
-import { useEffect, useMemo, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, CandlestickChart, Columns2 } from "lucide-react";
+import { Building2, CandlestickChart, Columns2, Info } from "lucide-react";
+import AboutCompareModal from "../components/compare/AboutCompareModal";
 import CompareMotif from "../components/compare/CompareMotif";
 import ComparePicks, { type Pick } from "../components/compare/ComparePicks";
 import StockComparison from "../components/compare/StockComparison";
@@ -22,6 +23,7 @@ import {
 } from "../utils/compareUrl";
 import type { QuantHorizon } from "../data/quantExplainers";
 import {
+  ABOUT_BUTTON,
   COMPARE_EYEBROW,
   COMPARE_LEAD,
   COMPARE_TITLE,
@@ -61,6 +63,8 @@ export default function ComparePage() {
   const [params, setParams] = useSearchParams();
   const state = parseCompareParams(params);
   const kind: CompareKind = FUNDS_ENABLED ? state.kind : "stocks";
+  const [showAbout, setShowAbout] = useState(false);
+  const closeAbout = useCallback(() => setShowAbout(false), []);
 
   // Registered as a hub, so a stock page opened from a column's ticker says
   // "Back to Compare" and returns to this exact comparison.
@@ -94,8 +98,20 @@ export default function ComparePage() {
             {COMPARE_TITLE}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">{COMPARE_LEAD}</p>
+          {/* The same About pill as Market News, opening this page's explainer. */}
+          <button
+            type="button"
+            onClick={() => setShowAbout(true)}
+            aria-haspopup="dialog"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden />
+            {ABOUT_BUTTON}
+          </button>
         </div>
       </div>
+
+      <AboutCompareModal open={showAbout} onClose={closeAbout} fundsEnabled={FUNDS_ENABLED} />
 
       {/* ── What kind. The price window lives on the Overview chart it changes. ── */}
       {FUNDS_ENABLED && (

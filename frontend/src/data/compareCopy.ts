@@ -173,3 +173,124 @@ export const fundDateWarning = (days: number) =>
   `These fact sheets are about ${Math.round(days / 30)} month${Math.round(days / 30) === 1 ? "" : "s"} apart, so their figures end on different dates and do not cover exactly the same period.`;
 export const FUNDS_DISCLAIMER =
   "Figures are transcribed from each manager's published fact sheet. AlphaSwarm is not a licensed financial services provider and does not advise; the order of the columns is the order you picked them in.";
+
+// ── about this page ────────────────────────────────────────────────────────
+// The "How Compare works" dialog behind the header's About button, written for
+// someone new to investing (D-203's explanation with every analytic output), the
+// way Market News explains itself.
+
+export const ABOUT_BUTTON = "About this page";
+export const ABOUT_EYEBROW = "About this page";
+export const ABOUT_TITLE = "How Compare works";
+export const ABOUT_INTRO =
+  "Two stocks can look alike on their own pages and turn out quite different side by side, or the other way round. Compare lines up two or three stocks, or two or three funds, in one table, marks where they differ most, and says what each difference describes. It never tells you which one to choose.";
+
+export const ABOUT_STEPS_TITLE = "What happens when you compare";
+export const ABOUT_STEPS = [
+  {
+    key: "pick",
+    title: "Pick",
+    body: "Choose two or three stocks, or two or three funds. Search by name, or browse your watchlist, every sector, or the funds matched to your profile.",
+  },
+  {
+    key: "line",
+    title: "Line up",
+    body: "Each figure gets one row with a column per pick, all over the same price window, so you read across instead of flicking between pages.",
+  },
+  {
+    key: "mark",
+    title: "Mark",
+    body: "A line under each row says what it means. The row where the stocks differ most is tagged, and rows where they are nearly the same say so.",
+  },
+  {
+    key: "explain",
+    title: "Explain",
+    body: "Ask for a written comparison and a short explanation is written for you from the figures on the page, then checked before you see it.",
+  },
+] as const;
+
+export const ABOUT_EXAMPLE_TITLE = "Why it compares change, not price";
+export const ABOUT_EXAMPLE_LABEL = "An illustration, not real stocks";
+export const ABOUT_EXAMPLE_VIEWS = { price: "Share price", change: "Change" } as const;
+/** Two made-up stocks over the same window: one cheap share, one expensive one. */
+export const ABOUT_EXAMPLE_STOCKS = [
+  { name: "Stock A", start: 40, end: 46 },
+  { name: "Stock B", start: 800, end: 840 },
+] as const;
+export const ABOUT_EXAMPLE_PRICE_READ =
+  "Stock B's share costs about 18 times as much, so its bar dwarfs Stock A's. That says nothing about how big either company is, or how far either price moved.";
+export const ABOUT_EXAMPLE_CHANGE_READ =
+  "Started from the same line, Stock A rose 15% and Stock B rose 5%. This is what the chart and the Change row show: how far each moved, whatever its price.";
+
+export const ABOUT_MARKS_TITLE = "Reading the tags";
+export const ABOUT_MARKS = [
+  {
+    kind: "differs",
+    label: DIFFERS_MOST,
+    body: "The one row with the biggest gap, measured against each figure's own scale, so 10 points of change and 10 points of RSI are not treated alike. It says where they differ, not which side is preferable.",
+  },
+  {
+    kind: "alike",
+    label: ALIKE,
+    body: "The figures are within a hair of each other, such as 2 points of change. Worth knowing when you expected a difference.",
+  },
+  {
+    kind: "alike",
+    label: SAME,
+    body: "Shared facts that match exactly, such as both stocks being in the same sector or on the same exchange.",
+  },
+] as const;
+
+export const ABOUT_MEANS_TITLE = "What a comparison tells you";
+export const ABOUT_MEANS_LABEL = "It tells you";
+export const ABOUT_MEANS = [
+  "Where these picks differ, on the same figures over the same window.",
+  "What each gap describes, in a line under its row.",
+  "Under Your analysis, where your own latest run placed each stock.",
+];
+export const ABOUT_NOT_MEANS_LABEL = "It doesn't tell you";
+export const ABOUT_NOT_MEANS = [
+  "That one is better, or a better buy.",
+  "What any price will do next.",
+  "Anything by its column order: that is the order you picked them in.",
+];
+export const ABOUT_PAST_NOTE =
+  "Prices, tone and fund returns all describe the past. Two picks that moved together before can part ways.";
+
+export const ABOUT_TRACE_TITLE = "The written comparison";
+export const ABOUT_TRACE_BADGE = "Written for you";
+export const ABOUT_TRACE_BODY =
+  "Explain this comparison writes a short paragraph when you ask. For stocks it covers where their prices differ and why your latest analysis placed them where it did; for funds, how their fact sheets differ and why each one is or isn't among the funds matched to your profile. Before you see it, it is checked: every number in it has to appear in the figures on the page, and any verdict, advice or suitability wording fails the check. Fund matches come from fixed rules, not AI; the paragraph only explains them.";
+
+export const ABOUT_WAYFINDING_TITLE = "Finding your way around";
+export const ABOUT_WAYFINDING = [
+  {
+    key: "overview",
+    title: TAB_OVERVIEW,
+    body: "Each stock's latest price, the change chart over 1M to 5Y, and the measured rows: change, largest fall, volatility and RSI.",
+  },
+  {
+    key: "tone",
+    title: TAB_TONE,
+    body: "What news and social posts said about each stock over the last 7 days, day by day. Tone is what people said, not what the price will do.",
+  },
+  {
+    key: "yours",
+    title: TAB_YOURS,
+    body: "Each stock's place, signals and scorecard from your latest completed run. A stock that wasn't in it says so, and can go on your watchlist for the next one.",
+  },
+  {
+    key: "funds",
+    title: KIND_LABELS.funds,
+    body: "What each fund is, its yearly cost on R10,000, its risk label and time horizon, past returns over the periods every fund reports, and what it holds.",
+  },
+  {
+    key: "share",
+    title: "Share it",
+    body: "The comparison lives in the page's address, so a copied link opens it as you see it and Back undoes your last pick. Compare with… on any stock or fund page starts one for you.",
+  },
+] as const;
+
+export const ABOUT_FOOTER =
+  "Compare describes and explains; it doesn't advise. Nothing on this page is a suggestion to buy, sell or hold.";
+export const ABOUT_DONE = "Got it";
