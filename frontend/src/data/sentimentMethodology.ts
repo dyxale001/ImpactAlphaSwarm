@@ -34,33 +34,75 @@ export const SOCIAL_HISTORY_DAYS = 7;
 export type NewsTier = {
   tier: 1 | 2 | 3;
   label: string;
+  // Every publisher in the tier, as backend/src/utils/ss_sources.py lists them.
   examples: string;
   // Fixed cross-tier share of the news sub-score (renormalized over tiers present).
   sharePct: number;
-  // Tailwind classes for the tier badge, matching the asset details page.
-  badgeCls: string;
 };
 
+// Badge colours come from tierMeta (components/research/sentimentDisplay.ts), the
+// same pills the article lists use, so a tier looks the same everywhere.
 export const NEWS_TIERS: NewsTier[] = [
   {
     tier: 1,
-    label: "Newswires & papers of record",
-    examples: "Reuters, Bloomberg, WSJ, FT, CNBC, AP",
+    label: "News wires and papers of record",
+    examples:
+      "Reuters, Bloomberg, The Wall Street Journal, Financial Times, Associated Press, CNBC, MarketWatch, Barron's, The Economist, Morningstar",
     sharePct: 60,
-    badgeCls: "bg-emerald-500/10 text-emerald-600",
   },
   {
     tier: 2,
     label: "Reputable secondary outlets",
-    examples: "Yahoo Finance, Forbes, Business Insider",
+    examples: "Yahoo Finance, Forbes, Investor's Business Daily, Business Insider",
     sharePct: 30,
-    badgeCls: "bg-amber-500/10 text-amber-600",
   },
   {
     tier: 3,
-    label: "Crowd-sourced analysis",
+    label: "Contributor analysis",
     examples: "Seeking Alpha, The Motley Fool",
     sharePct: 10,
-    badgeCls: "bg-slate-400/15 text-slate-500",
   },
+];
+
+// The most articles one stock keeps from a single news fetch, most reliable first.
+// Mirrors FinnhubSource's limit.
+export const NEWS_MAX_ARTICLES = 30;
+
+// How many items per source per run also get the Google Cloud NLP reading. Mirrors
+// GCP_SENTIMENT_TOP_N.
+export const GCP_TOP_N = 10;
+
+// The score a post gets when its author tagged it Bullish or Bearish themselves:
+// MentionScorer.DECLARED_SENTIMENT_SIGNED (0.6) on the 0 to 100 scale.
+export const DECLARED_BULLISH_SCORE = 80;
+export const DECLARED_BEARISH_SCORE = 20;
+
+// Where one item's label flips: a signed score of 0.05 either side of neutral
+// (PayloadBuilder.NEUTRAL_BAND), on the 0 to 100 scale. itemLean uses the same cut.
+export const ITEM_POSITIVE_FROM = 52.5;
+export const ITEM_NEGATIVE_FROM = 47.5;
+
+// The most an engaged post can count for, as a multiple of a post nobody reacted to.
+// Mirrors STOCKTWITS_ENGAGEMENT_CAP.
+export const ENGAGEMENT_CAP = 8;
+
+// What a stored day keeps for reading back: SOCIAL_DAY_TOP_POSTS and
+// NEWS_DAY_TOP_ARTICLES.
+export const DAY_TOP_POSTS = 15;
+export const DAY_TOP_ARTICLES = 8;
+
+// The words the card puts on a whole score, for whole numbers. sentimentVerdict
+// (components/research/sentimentDisplay.ts) is the rule; a test checks every score
+// from 0 to 100 against this table so the explanation cannot drift from the label.
+export const VERDICT_BANDS: {
+  label: string;
+  tone: "positive" | "neutral" | "negative";
+  from: number;
+  to: number;
+}[] = [
+  { label: "Strongly positive", tone: "positive", from: 70, to: 100 },
+  { label: "Positive", tone: "positive", from: 55, to: 69 },
+  { label: "Neutral", tone: "neutral", from: 46, to: 54 },
+  { label: "Negative", tone: "negative", from: 31, to: 45 },
+  { label: "Strongly negative", tone: "negative", from: 0, to: 30 },
 ];

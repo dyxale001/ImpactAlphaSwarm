@@ -26,6 +26,11 @@ export type NewsDay = {
    *  `articles`: a stored day keeps only its most influential few, so counting the
    *  list would under-report a busy day to the tooltip. */
   count: number;
+  /** The day's positive and negative article totals, over every article that day,
+   *  for the same reason as `count`: the carried list is only the top few, so
+   *  counting labels in it under-reports a busy day. */
+  bullish: number;
+  bearish: number;
   /** That day's articles, most influential first. */
   articles: NewsArticle[];
 };
@@ -81,6 +86,9 @@ export function newsDayIndex(
       date,
       score: weightedScore(sorted),
       count: sorted.length,
+      // The run's article list is uncapped, so here the labels ARE the full day.
+      bullish: sorted.filter((a) => a.sentiment === "Positive").length,
+      bearish: sorted.filter((a) => a.sentiment === "Negative").length,
       articles: sorted,
     });
   }
@@ -111,6 +119,8 @@ export function newsDaysFromHistory(
       date: point.date,
       score: point.news_score ?? null,
       count: point.news_count,
+      bullish: point.news_bullish ?? 0,
+      bearish: point.news_bearish ?? 0,
       articles: point.top_articles ?? [],
     });
   }

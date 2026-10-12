@@ -110,16 +110,7 @@ export default function Login() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="mx-1 flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Password</label>
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-xs font-semibold text-forest-700 hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <label className={AUTH_LABEL}>Password</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -142,6 +133,15 @@ export default function Login() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            {/* Under the box rather than beside the label, where it is met at the
+                moment a password will not come to mind. */}
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="mr-1 self-end text-xs font-semibold text-forest-700 hover:underline"
+            >
+              Forgot password?
+            </button>
           </div>
 
           <button type="submit" disabled={loading} className={`${AUTH_SUBMIT} mt-1 disabled:opacity-70`}>

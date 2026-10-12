@@ -571,5 +571,19 @@ class TestSentimentHistoryRepository:
     def test_both_tables_empty_is_unknown_not_a_guess(self):
         assert SentimentHistoryRepository(FakeClient()).last_updated() is None
 
+    def test_rows_that_hold_nothing_never_move_the_stamp(self):
+        """A seed that walks a ticker and finds nothing still writes a row to record the
+        walk, and opening a made-up ticker's chart triggers exactly that. Bookkeeping is
+        not sentiment arriving, so only rows with posts or articles may set the time."""
+        client = FakeClient()
+        SentimentHistoryRepository(client).last_updated()
+        filters = [
+            (q.table_name, a) for q in client.executed for name, a, _k in q.calls if name == "gt"
+        ]
+        assert filters == [
+            ("social_sentiment_daily", ("post_count", 0)),
+            ("news_sentiment_daily", ("article_count", 0)),
+        ]
+
     def test_a_failed_read_degrades_to_unknown(self):
         assert SentimentHistoryRepository(FakeClient(raises=True)).last_updated() is None

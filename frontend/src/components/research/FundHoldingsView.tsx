@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTopFunds } from "../../hooks/useTopFunds";
 import type { FundHolding } from "../../services/api/analysis";
+import { formatPct, formatUsd, topTenIn } from "./whaleFormat";
 
 // "Top Funds" tab — the largest fund holders across all tracked companies,
 // ranked by what they hold. Clicking one opens its positions.
@@ -28,26 +29,9 @@ const INITIAL_FUNDS = 15;
 // close to 60.
 const INITIAL_POSITIONS = 24;
 
-function fmtMoney(v: number | null): string {
-  if (v == null) return "—";
-  const a = Math.abs(v);
-  if (a >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-  if (a >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${v.toFixed(0)}`;
-}
-
-function fmtPct(v: number | null): string {
-  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
-}
-
 // Fallback for older cached payloads that predate the backend `description` field.
 const FUND_BLURB_FALLBACK =
   "An institutional investment firm that buys and holds shares in companies on behalf of its clients.";
-
-function companies(n: number): string {
-  return `${n} ${n === 1 ? "company" : "companies"}`;
-}
 
 // 13F filings are quarterly and land up to 45 days after quarter-end, so fund
 // holdings are always a lagging snapshot. Kept to one line: it appeared on both
@@ -101,9 +85,9 @@ function FundRow({
 
       <div className="text-right shrink-0">
         <p className="text-sm font-mono font-semibold text-brand-primary">
-          {fmtMoney(fund.total_value)}
+          {formatUsd(fund.total_value)}
         </p>
-        <p className="text-[11px] text-brand-muted-fg">{companies(count)}</p>
+        <p className="text-[11px] text-brand-muted-fg">{topTenIn(count)}</p>
       </div>
 
       <ChevronRight className="w-4 h-4 shrink-0 text-brand-muted-fg group-hover:text-brand-primary transition-colors" />
@@ -147,11 +131,11 @@ function PositionRow({
           )}
         </p>
         <p className="text-[11px] text-brand-muted-fg">
-          {fmtPct(p.pct_held)} of company
+          {formatPct(p.pct_held)} of company
         </p>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-sm font-mono text-brand-fg">{fmtMoney(p.value)}</p>
+        <p className="text-sm font-mono text-brand-fg">{formatUsd(p.value)}</p>
         {p.pct_change != null && p.pct_change !== 0 && (
           <p
             className={`text-[11px] font-mono flex items-center justify-end gap-0.5 ${
@@ -228,11 +212,22 @@ export function FundHoldingsDetail({
           {fund.description || FUND_BLURB_FALLBACK}
         </p>
 
+        {/* A firm that files under several names is shown once, and says so, so
+            the merged figures can be checked against each company's own list. */}
+        {fund.filers && fund.filers.length > 1 && (
+          <p className="text-xs text-brand-muted-fg leading-relaxed">
+            Reports to the SEC under {fund.filers.length} names, combined here:{" "}
+            {fund.filers.join(" and ")}.
+          </p>
+        )}
+
         {/* The numbers that were previously scattered between the header and a
-            line above the list, gathered into one strip. */}
+            line above the list, gathered into one strip. Labelled as top 10
+            holdings: each company's list stops at its ten largest holders, so a
+            fund's smaller stakes are not counted. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatTile label="Held here" value={fmtMoney(fund.total_value)} />
-          <StatTile label="Companies" value={String(count)} />
+          <StatTile label="Top 10 holdings" value={formatUsd(fund.total_value)} />
+          <StatTile label="Top 10 holder in" value={String(count)} />
           <StatTile label="Added" value={String(addedCount)} />
           <StatTile label="Trimmed" value={String(reducedCount)} />
         </div>
@@ -241,7 +236,7 @@ export function FundHoldingsDetail({
       <div className="space-y-2">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <p className="text-[10px] uppercase tracking-widest text-brand-primary font-semibold">
-            Holdings in companies we cover
+            Companies where it is a top 10 holder
           </p>
           <p className="text-[11px] text-brand-muted-fg">
             largest first · added and trimmed since the last filing
@@ -319,7 +314,8 @@ export default function FundHoldingsView({
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <p className="text-sm text-brand-muted-fg max-w-xl">
           The largest fund holders across the companies we cover, ranked by what
-          they hold here. Pick one to see where it is most invested.
+          they hold where they are one of a company's ten largest holders. Pick
+          one to see where it is most invested.
         </p>
         <p className="text-[11px] text-brand-muted-fg shrink-0">
           {funds.length} funds

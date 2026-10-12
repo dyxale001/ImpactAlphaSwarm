@@ -10,10 +10,12 @@ need ``run_in_executor``.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import math
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
@@ -48,6 +50,119 @@ class BlockingSource(WhaleSource, ABC):
     @abstractmethod
     def fetch_blocking(self, symbol: str) -> Any:
         """The blocking call. Never invoke directly from async code."""
+
+
+class InsiderWindow:
+    """The span of insider dealings the tab shows: traded in the last ``days`` days.
+
+    Dated by the trade, falling back to the filing when Finnhub has no trade date. Used
+    when parsing a fetch and again when serving the cache, so a dealing ages out of the
+    tab on the day it leaves the window rather than at the next refetch.
+    """
+
+    def __init__(self, days: int, today: Optional[datetime.date] = None):
+        self.days = max(1, int(days))
+        self.today = today or datetime.datetime.now(datetime.timezone.utc).date()
+
+    @property
+    def start(self) -> datetime.date:
+        return self.today - datetime.timedelta(days=self.days)
+
+    @staticmethod
+    def _day(value: Any) -> Optional[datetime.date]:
+        try:
+            return datetime.date.fromisoformat(str(value)[:10]) if value else None
+        except ValueError:
+            return None
+
+    def contains(self, transaction_date: Any, filing_date: Any = None) -> bool:
+        day = self._day(transaction_date) or self._day(filing_date)
+        return day is not None and day >= self.start
+
+    def keep(self, transactions: list[dict]) -> list[dict]:
+        return [
+            t for t in transactions
+            if self.contains(t.get("transaction_date"), t.get("filing_date"))
+        ]
+
+
+@dataclass
+class InsiderDealing:
+    """One insider's dealing of one kind on one day, summed over the batches it was
+    filed in. ``lots`` says how many batches; the price is their average."""
+
+    name: str
+    type: str
+    code: Optional[str]
+    transaction_date: Optional[str]
+    filing_date: Optional[str]
+    shares: float
+    cost: float
+    priced: bool
+    single_price: Any
+    lots: int = 1
+
+    @property
+    def key(self) -> tuple:
+        return (self.name, self.transaction_date, self.code, self.type)
+
+    @classmethod
+    def from_row(cls, row: dict) -> "InsiderDealing":
+        change = row.get("change") or 0
+        shares = abs(change)
+        price = row.get("transactionPrice")
+        return cls(
+            name=row.get("name") or "Unknown insider",
+            type="buy" if change > 0 else "sell",
+            code=row.get("transactionCode"),
+            transaction_date=row.get("transactionDate"),
+            filing_date=row.get("filingDate"),
+            shares=shares,
+            cost=shares * price if price else 0.0,
+            priced=bool(price),
+            single_price=price,
+        )
+
+    def merge(self, other: "InsiderDealing") -> "InsiderDealing":
+        """This dealing with another batch of the same one added. A batch with no
+        price leaves the total unpriced rather than understated."""
+        self.shares += other.shares
+        self.cost += other.cost
+        self.priced = self.priced and other.priced
+        self.lots += other.lots
+        self.filing_date = max(self.filing_date or "", other.filing_date or "") or None
+        return self
+
+    #: The codes whose price is a market price. A grant's is zero and an exercise's is
+    #: the strike: Musk's exercise of 304 million options at $23.34 read as a $7.1B
+    #: purchase. Tax withholding and gifts are not a trade either, so only these are
+    #: given a price and a dollar value, as the tab's "What the labels mean" says.
+    MARKET_CODES = ("P", "S")
+
+    @property
+    def at_market(self) -> bool:
+        return (self.code or "").strip().upper() in self.MARKET_CODES
+
+    def as_dict(self) -> dict:
+        price = value = None
+        if self.at_market:
+            if self.lots == 1:
+                price = self.single_price
+            elif self.priced and self.shares:
+                price = round(self.cost / self.shares, 2)
+            value = round(self.cost, 2) if self.priced and self.cost else None
+        return {
+            "name": self.name,
+            "type": self.type,
+            "shares": int(self.shares) if float(self.shares).is_integer() else self.shares,
+            "price": price,
+            "value": value,
+            "transaction_date": self.transaction_date,
+            "filing_date": self.filing_date,
+            "transaction_code": self.code,
+            "lots": self.lots,
+            "role": None,
+        }
 
 
 class FinnhubInsiderSource(WhaleSource):
@@ -104,28 +219,40 @@ class FinnhubInsiderSource(WhaleSource):
 
         return {"transactions": transactions, "source": "Finnhub"}
 
-    def _parse(self, payload: dict) -> list[dict]:
-        transactions = []
-        for row in payload.get("data") or []:
-            change = row.get("change") or 0
-            if change == 0: 
-                continue
-            shares = abs(change)
-            price = row.get("transactionPrice")
-            transactions.append({
-                "name": row.get("name") or "Unknown insider",
-                "type": "buy" if change > 0 else "sell",
-                "shares": shares,
-                "price": price,
-                "value": round(shares * price, 2) if price else None,
-                "transaction_date": row.get("transactionDate"),
-                "filing_date": row.get("filingDate"),
-                "transaction_code": row.get("transactionCode"),
-                "role": None,
-            })
+    def _parse(self, payload: dict, window: Optional["InsiderWindow"] = None) -> list[dict]:
+        """The dealings inside the window, one row per insider, day, code and direction.
 
-        transactions.sort(key=lambda t: t.get("filing_date") or "", reverse=True)
-        return transactions[: self.config.insider_max_transactions]
+        Derivative rows are dropped: they are the options side of an exercise, so one
+        exercise used to show as a sale of options and a purchase of shares. An insider
+        selling in batches files one row per batch, and those are summed into one, so a
+        busy filer's list stays readable and every dealing in the window still counts.
+        """
+        window = window or InsiderWindow(self.config.insider_window_days)
+        groups: dict[tuple, InsiderDealing] = {}
+        for row in payload.get("data") or []:
+            if row.get("isDerivative"):
+                continue
+            change = row.get("change") or 0
+            if change == 0:
+                continue
+            if not window.contains(row.get("transactionDate"), row.get("filingDate")):
+                continue
+            dealing = InsiderDealing.from_row(row)
+            existing = groups.get(dealing.key)
+            groups[dealing.key] = existing.merge(dealing) if existing else dealing
+
+        transactions = [d.as_dict() for d in groups.values()]
+        transactions.sort(
+            key=lambda t: (t.get("filing_date") or "", t.get("transaction_date") or ""),
+            reverse=True,
+        )
+        cap = self.config.insider_max_transactions
+        if len(transactions) > cap:
+            logger.warning(
+                "Insider dealings capped at %d of %d inside the %d day window",
+                cap, len(transactions), window.days,
+            )
+        return transactions[:cap]
 
     @staticmethod
     def api_key() -> str:
@@ -145,7 +272,8 @@ class YFinanceInstitutionalSource(BlockingSource):
             f = float(value)
         except (TypeError, ValueError):
             return None
-        return None if math.isnan(f) else f
+        # Infinity as well as NaN: either would make the response fail to encode as JSON.
+        return f if math.isfinite(f) else None
 
     def fetch_blocking(self, symbol: str) -> dict:
         payload = {

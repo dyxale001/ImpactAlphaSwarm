@@ -22,14 +22,40 @@ export function tierMeta(tier: number | null | undefined): {
   }
 }
 
-// Styling for a per-item sentiment score badge (0-100). Colour tracks the same
-// positive / neutral / negative thresholds used to label each article or post.
-export function scoreMeta(score: number | null | undefined): {
+export type ItemLean = "Positive" | "Neutral" | "Negative";
+
+// Which way ONE article or post leans: the label the backend gave it. That label is
+// what the Positive / Neutral / Negative filters sort by and what the day's bullish
+// and bearish totals count, so every per-item mark (the badge colour, the Bullish
+// tag) reads it rather than re-cutting the score on its own. They used to cut at
+// 45 / 55 while the label cuts at 47.5 / 52.5, so a post scoring 53 sat under the
+// Positive filter in a grey "Neutral" badge.
+//
+// An item without a label falls back to the backend's own cut, a signed score of
+// 0.05 either side of neutral, which is 52.5 / 47.5 on this scale.
+export function itemLean(
+  sentiment: string | null | undefined,
+  score: number | null | undefined,
+): ItemLean | null {
+  if (sentiment === "Positive" || sentiment === "Neutral" || sentiment === "Negative") {
+    return sentiment;
+  }
+  if (score == null) return null;
+  if (score >= 52.5) return "Positive";
+  if (score <= 47.5) return "Negative";
+  return "Neutral";
+}
+
+// Styling for a per-item sentiment score badge (0-100), coloured by the item's lean.
+export function scoreMeta(
+  score: number | null | undefined,
+  sentiment?: string | null,
+): {
   cls: string;
 } {
-  if (score == null) return { cls: "bg-slate-400/15 text-slate-500" };
-  if (score >= 55) return { cls: "bg-emerald-500/10 text-emerald-600" };
-  if (score <= 45) return { cls: "bg-rose-500/10 text-rose-600" };
+  const lean = itemLean(sentiment, score);
+  if (lean === "Positive") return { cls: "bg-emerald-500/10 text-emerald-600" };
+  if (lean === "Negative") return { cls: "bg-rose-500/10 text-rose-600" };
   return { cls: "bg-slate-400/15 text-slate-500" };
 }
 
@@ -40,9 +66,11 @@ export type SentimentTone = "positive" | "neutral" | "negative";
 // "62 / 100" answers almost nothing a reader arrives with. The meaningful point on
 // this scale is 50, not 0, so whether 62 is good is genuinely unclear unless you
 // already know that, and a bar filling 62% of its track actively suggests the wrong
-// mental model. The bands extend the same 45 / 55 split scoreMeta uses for per-item
-// badges, so an article badge and a headline verdict can never disagree about which
-// side of neutral something sits.
+// mental model.
+//
+// This is for AGGREGATE scores (a day, a sub-score, the blend) and matches the bands
+// the backend writes into its paragraphs (day_summary.SCORE_BANDS). A single item's
+// lean is a different question with a tighter cut, answered by itemLean above.
 export function sentimentVerdict(score: number | null | undefined): {
   label: string;
   tone: SentimentTone;
