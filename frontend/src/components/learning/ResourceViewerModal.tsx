@@ -1,4 +1,5 @@
 import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
+import LearningVideo from "./LearningVideo";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const scrollbarStyles = `
@@ -94,6 +95,9 @@ flex-col
 
           <div className="article-viewer-scrollbar overflow-y-auto px-6 py-7">
             <div className="mx-auto max-w-3xl space-y-8 text-brand-fg">
+              <h1 className="text-2xl font-semibold">{article.title}</h1>
+              <p className="text-sm text-brand-muted-fg">{article.summary}</p>
+              <LearningVideo url={article.video_url} />
               <MarkdownRenderer content={article.content} />
               <section className="space-y-3 rounded-2xl border border-brand-border/60 bg-brand-bg/70 p-5">
                 <h2 className="text-lg font-semibold text-brand-fg">

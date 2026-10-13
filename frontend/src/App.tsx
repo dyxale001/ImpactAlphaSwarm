@@ -35,6 +35,7 @@ import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
 import PortfolioPage from "./pages/Portfolio";
 import LearningPage from "./pages/Learning";
+import FinancialToolsPage from "./pages/FinancialTools";
 import AssetDetailsPage from "./pages/AssetDetailsPage";
 import NewsSentimentPage from "./pages/NewsSentimentPage";
 import SocialSentimentPage from "./pages/SocialSentimentPage";
@@ -104,6 +105,7 @@ export default function App() {
           {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
           {COMPARE_ENABLED && <Route path="/compare" element={<ComparePage />} />}
           <Route path="/learning" element={<LearningPage />} />
+          <Route path="/financial-tools" element={<FinancialToolsPage />} />
           {/* Retired: it only ever rendered mock data (a hard-coded NVDA sentiment
               report), which a reader could not tell from the real thing. Kept as a
               redirect so an old bookmark lands somewhere real. */}

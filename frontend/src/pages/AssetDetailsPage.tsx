@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
@@ -631,6 +632,8 @@ export default function AssetDetailsPage() {
             </Link>
           )}
         </div>
+
+        <LearnMore context={`stock.${tab}`} />
 
         {recommendation ? (
           <AnalysisTabs

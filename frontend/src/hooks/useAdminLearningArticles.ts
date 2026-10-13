@@ -1,3 +1,5 @@
+import { normalizeLearningTags } from '../data/learningContexts';
+import { learningVideoEmbed } from '../utils/learningVideo';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type {
@@ -6,6 +8,8 @@ import type {
 } from "../data/learningContent";
 
 export type LearningArticleFormValues = {
+  tags: string[];
+  video_url: string;
   title: string;
   slug: string;
   summary: string;
@@ -16,6 +20,8 @@ export type LearningArticleFormValues = {
 };
 
 const emptyFormValues: LearningArticleFormValues = {
+  tags: [],
+  video_url: "",
   title: "",
   slug: "",
   summary: "",
@@ -38,7 +44,7 @@ export class LearningArticleAdminRepository {
       this.client
         .from("learning_articles")
         .select(
-          "id, category_id, title, slug, summary, content, difficulty_level, display_order, created_at",
+          "id, category_id, title, slug, summary, content, tags, video_url, difficulty_level, display_order, created_at",
         )
         .order("created_at", { ascending: false }),
     ]);
@@ -85,12 +91,15 @@ export class LearningArticleAdminRepository {
   }
 
   async createArticle(values: LearningArticleFormValues) {
+    if (values.video_url?.trim() && !learningVideoEmbed(values.video_url)) throw new Error("Use a supported HTTPS YouTube or Vimeo video URL.");
     const displayOrder = await this.resolveDisplayOrder(values);
     const { error } = await this.client.from("learning_articles").insert({
       title: values.title,
       slug: values.slug,
       summary: values.summary,
       content: values.content,
+      tags: normalizeLearningTags(values.tags),
+      video_url: values.video_url?.trim() || null,
       category_id: values.category_id,
       difficulty_level: values.difficulty_level,
       display_order: displayOrder,
@@ -102,6 +111,7 @@ export class LearningArticleAdminRepository {
   }
 
   async updateArticle(id: string, values: LearningArticleFormValues) {
+    if (values.video_url?.trim() && !learningVideoEmbed(values.video_url)) throw new Error("Use a supported HTTPS YouTube or Vimeo video URL.");
     const displayOrder = await this.resolveDisplayOrder(values);
     const { error } = await this.client
       .from("learning_articles")
@@ -110,6 +120,8 @@ export class LearningArticleAdminRepository {
         slug: values.slug,
         summary: values.summary,
         content: values.content,
+        tags: normalizeLearningTags(values.tags),
+        video_url: values.video_url?.trim() || null,
         category_id: values.category_id,
         difficulty_level: values.difficulty_level,
         display_order: displayOrder,

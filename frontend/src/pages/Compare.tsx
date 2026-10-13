@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Building2, CandlestickChart, Columns2, Info } from "lucide-react";
@@ -114,6 +115,8 @@ export default function ComparePage() {
       <AboutCompareModal open={showAbout} onClose={closeAbout} fundsEnabled={FUNDS_ENABLED} />
 
       {/* ── What kind. The price window lives on the Overview chart it changes. ── */}
+      <LearnMore context={`compare.${kind}`} />
+
       {FUNDS_ENABLED && (
         <Tabs
           label="What to compare"
