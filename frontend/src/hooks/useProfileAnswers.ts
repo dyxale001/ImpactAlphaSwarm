@@ -142,6 +142,7 @@ export function useProfileAnswers() {
 
   return {
     riskLabel: (analysis?.risk_tolerance as string | undefined) ?? null,
+    savedSurveyAnswers: analysis?.survey_answers,
     surveyAnswers,
     goalAnswers,
     setSurveyAnswer,
