@@ -263,7 +263,9 @@ export default function MarketNewsPage() {
           </div>
         </div>
       </div>
-      <LearnMore context="news" />
+      {/* The page spaces its sections with their own top margin rather than a
+          column gap, so the card needs one too, as on the Funds page. */}
+      <LearnMore context="news" className="mt-6" />
 
       <AboutMarketNewsModal open={showAbout} onClose={closeAbout} threshold={feed?.threshold ?? 0.6} />
 
