@@ -34,7 +34,7 @@ export const RISK_CARD_LEAD =
   "Worked out from your questionnaire answers, not chosen directly. It sets the highest published risk level a fund can carry and still be matched to you.";
 export const RISK_CARD_CHIP = "Derived from answers";
 export const RISK_RATING_LABEL = "Rating";
-export const RISK_CEILING_LABEL = "Ceiling on the manager's five-step scale";
+export const RISK_CEILING_LABEL = "Maximum fund risk level for your matches";
 export const RISK_ANSWERED_LABEL = "Based on answers saved";
 export const RISK_QUESTIONS_LABEL = "Questions answered";
 export const RISK_CONSEQUENCE =

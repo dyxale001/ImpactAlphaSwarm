@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { settingsPath } from "../utils/settingsTabs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -102,6 +103,7 @@ export default function DashboardPage() {
                 }
           }
         />
+      <LearnMore context="dashboard" />
 
         {saveError && !isEditing ? (
           <div className="rounded-lg border border-semantic-danger/20 bg-semantic-danger/10 p-4 text-sm text-semantic-danger">

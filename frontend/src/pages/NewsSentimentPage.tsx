@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Newspaper } from "lucide-react";
@@ -125,6 +126,7 @@ export default function NewsSentimentPage() {
         subtitle={`How coverage of ${tickerLabel} moved over the last ${SOCIAL_HISTORY_DAYS} days.`}
         backHref={`/asset/${tickerLabel}?tab=sentiment`}
       />
+      <LearnMore context="stock.news-sentiment" />
 
       <SentimentTrendChart
         points={newsPoints}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PurchasingPower from './PurchasingPower';
 import { Target } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { calculateInvestmentGoal } from '../../utils/investmentGoal';
@@ -7,13 +8,13 @@ import { MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
 const currency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
 const compactCurrency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', notation: 'compact', maximumFractionDigits: 1 });
 const fields = [
-  { key: 'targetValue', label: 'Target investment value (R)', min: 0.01, max: MAX_INVESTMENT_AMOUNT, step: 0.01 },
+  { key: 'targetValue', label: 'Target value at the end of your plan (R)', min: 0.01, max: MAX_INVESTMENT_AMOUNT, step: 0.01 },
   { key: 'currentInvestment', label: 'Current investment (R)', min: 0, max: MAX_INVESTMENT_AMOUNT, step: 0.01 },
   { key: 'annualRate', label: 'Expected annual return (%)', min: 0, max: 30, step: 0.1 },
   { key: 'years', label: 'Time horizon (years)', min: 1, max: 60, step: 1 },
 ] as const;
 
-export default function InvestmentGoalPlanner() {
+export default function InvestmentGoalPlanner({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
   const [inputs, setInputs] = useState({ targetValue: '1000000', currentInvestment: '10000', annualRate: '7', years: '20' });
   const values = { targetValue: Number(inputs.targetValue), currentInvestment: Number(inputs.currentInvestment), annualRate: Number(inputs.annualRate), years: Number(inputs.years) };
   const errors = fields.map(field => {
@@ -58,6 +59,7 @@ export default function InvestmentGoalPlanner() {
           {result ? <>
             <p className="break-words text-3xl font-semibold tracking-tight text-brand-accent sm:text-4xl">{result.monthlyContribution > 0 && result.monthlyContribution < 0.01 ? `Less than ${currency.format(0.01)}` : currency.format(result.monthlyContribution)}</p>
             <p className="text-sm leading-relaxed text-brand-bg/85">{result.achievableWithoutContributions ? 'Your current investment alone is projected to meet or exceed the target under these assumptions.' : `Approximately this amount each month could target ${currency.format(result.targetValue)} in ${values.years} years.`}</p>
+
             <dl className="space-y-4 border-t border-white/15 pt-5 text-sm">
               <div><dt className="text-brand-bg/70">Total future contributions</dt><dd className="break-words font-semibold">{currency.format(result.futureContributions)}</dd></div>
               <div><dt className="text-brand-bg/70">Estimated investment growth</dt><dd className="break-words font-semibold">{currency.format(result.investmentGrowth)}</dd></div>
@@ -65,6 +67,7 @@ export default function InvestmentGoalPlanner() {
           </> : <p className="text-sm">Complete the inputs with valid values to see your plan.</p>}
         </div>
       </div>
+      {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.currentInvestment} monthlyContribution={result.monthlyContribution} targetValue={result.targetValue} />}
       {result && <div className="min-w-0 space-y-3 border-t border-brand-border pt-6">
         <h4 className="font-semibold text-brand-fg">Your path toward the target</h4>
         <div className="h-72 w-full min-w-0 sm:h-80" role="img" aria-label={`Projected final value ${currency.format(result.projectedValue)} toward a target of ${currency.format(result.targetValue)}.`}>
@@ -82,7 +85,7 @@ export default function InvestmentGoalPlanner() {
         </div>
       </div>}
       <p className="text-sm leading-relaxed text-brand-muted-fg">Try increasing the time horizon or starting investment and watch the required monthly amount change. A higher assumed return can reduce that amount, but does not make the outcome more certain.</p>
-      <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Excludes fees, tax and inflation. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p>
+      <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p>
     </section>
   );
 }

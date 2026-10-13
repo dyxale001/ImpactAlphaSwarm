@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -179,6 +180,7 @@ export default function FundsPage() {
           </button>
         </div>
       </div>
+      <LearnMore context="funds" className="mt-6" />
 
       <AboutFundModal open={showAbout} onClose={closeAbout} compareEnabled={COMPARE_ENABLED} />
 

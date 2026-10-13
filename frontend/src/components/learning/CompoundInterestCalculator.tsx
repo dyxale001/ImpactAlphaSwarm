@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PurchasingPower from './PurchasingPower';
 import { Leaf, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { calculateCompoundInterest, MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
@@ -12,7 +13,7 @@ const fields = [
   { key: 'years', label: 'Investment period (years)', min: 1, max: 60, step: '1' },
 ] as const;
 
-export default function CompoundInterestCalculator() {
+export default function CompoundInterestCalculator({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
   const [inputs, setInputs] = useState({ initialInvestment: '10000', monthlyContribution: '1000', annualRate: '7', years: '20' });
   const values = { initialInvestment: Number(inputs.initialInvestment), monthlyContribution: Number(inputs.monthlyContribution), annualRate: Number(inputs.annualRate), years: Number(inputs.years) };
   const errors = fields.map(field => {
@@ -70,6 +71,7 @@ export default function CompoundInterestCalculator() {
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-bg/75">Projected Value</p>
           {result ? <>
             <p className="break-words text-3xl font-semibold tracking-tight text-brand-accent sm:text-4xl">{currency.format(result.projectedValue)}</p>
+
             <p className="text-sm text-brand-bg/75">After {values.years} {values.years === 1 ? 'year' : 'years'}</p>
             <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-5 sm:grid-cols-2">
               <div><dt className="text-xs text-brand-bg/70">Total Contributed</dt><dd className="mt-1 break-words text-lg font-semibold">{currency.format(result.totalContributed)}</dd></div>
@@ -79,6 +81,7 @@ export default function CompoundInterestCalculator() {
           </> : <p className="text-sm text-brand-bg/85">Complete the inputs with valid values to see your projection.</p>}
         </div>
       </div>
+      {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.initialInvestment} monthlyContribution={values.monthlyContribution} />}
       <div className="min-w-0 space-y-3 border-t border-brand-border pt-6">
         <h4 className="font-semibold text-brand-fg">Your growth over time</h4>
         {result ? <div className="h-72 w-full min-w-0 sm:h-80" role="img" aria-label={`Illustrative growth over ${values.years} years: ${currency.format(result.projectedValue)} projected value, including ${currency.format(result.totalContributed)} contributed.`}>
@@ -95,7 +98,7 @@ export default function CompoundInterestCalculator() {
           </ResponsiveContainer>
         </div> : <p className="py-8 text-sm text-brand-muted-fg">Your chart will appear when all inputs are valid.</p>}
         <p className="text-sm leading-relaxed text-brand-muted-fg">Contributions show the money you put in. The gap to projected value shows investment growth, including growth on earlier returns.</p>
-        <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Excludes fees, tax and inflation. Actual investment returns will vary.</p>
+        <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Actual investment returns will vary.</p>
       </div>
     </section>
   );

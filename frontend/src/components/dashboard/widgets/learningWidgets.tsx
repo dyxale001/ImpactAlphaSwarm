@@ -156,14 +156,12 @@ export function LearningNextWidget() {
         ) : null}
       </div>
 
-      {/* The learning page opens an article in a modal keyed off its own state,
-          so there is no deep link to one. Sending the reader to the centre is
-          the honest version of this until there is. */}
+      {/* Open the same article and preserve its quiz/progress identity. */}
       <Link
-        to="/learning"
+        to={`/learning?article=${encodeURIComponent(nextArticle.id)}`}
         className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
       >
-        Open the learning centre →
+        Read this lesson →
       </Link>
     </div>
   );

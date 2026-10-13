@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Info, Newspaper } from "lucide-react";
@@ -262,6 +263,7 @@ export default function MarketNewsPage() {
           </div>
         </div>
       </div>
+      <LearnMore context="news" />
 
       <AboutMarketNewsModal open={showAbout} onClose={closeAbout} threshold={feed?.threshold ?? 0.6} />
 

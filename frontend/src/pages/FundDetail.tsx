@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -292,6 +293,7 @@ export function FundDetailView({
       <BackLink to={back?.to} label={back?.label} />
 
       <Hero fund={fund} asAt={asAt} compareTo={compareTo} adminHref={adminHref} badge={badge} />
+      <LearnMore context={`fund.${active}`} />
 
       {/* A fund with no sheet on file is not a thin page, it is a different
           statement, and it is made once at the top rather than implied by

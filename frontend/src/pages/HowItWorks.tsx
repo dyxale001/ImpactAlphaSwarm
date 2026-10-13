@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -72,6 +73,7 @@ export default function HowItWorks() {
           )}
         </p>
       </div>
+      <LearnMore context="stock.methodology" />
 
       {/* Ordering first: it is the question users are actually asking when they
           tap through from a card. */}

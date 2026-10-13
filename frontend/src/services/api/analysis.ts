@@ -3,6 +3,8 @@ import type { SocialPost } from "../../components/research/SocialPosts";
 import type { NewsArticle } from "../../components/research/NewsArticles";
 import { AnalysisAccessError } from "../../types/analysisLifecycle";
 import type { AnalysisStatus } from "../../types/analysisLifecycle";
+import { checkAnalysisCompletion, useAnalysisNotifications } from "../../store/analysisNotifications";
+import { useAuthStore } from "../../store/authStore";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -26,7 +28,9 @@ export async function startAnalysis(payload: {
   risk_tolerance?: string;
   expertise_level?: string;
 }) {
-  const token = await getToken();
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const userId = data?.session?.user?.id;
   console.log("Token from session:", token ? "✓ exists" : "✗ null");
 
   if (!token) {
@@ -42,18 +46,44 @@ export async function startAnalysis(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<StartAnalysisResponse>;
+  const started = await res.json() as StartAnalysisResponse;
+  if (userId && useAuthStore.getState().user?.id === userId) {
+    useAnalysisNotifications.getState().register(userId, started.run_id);
+    // Pin this execution promptly, including runs that finish before navigation.
+    await checkRegisteredExecution(userId, started.run_id);
+  }
+  return started;
 }
 
-export async function getStatus(runId: string) {
+async function checkRegisteredExecution(userId: string, runId: string) {
+  try {
+    const status = await getStatus(runId, true);
+    const state = useAnalysisNotifications.getState();
+    if (state.userId === userId && state.pending?.runId === runId && !state.pending.createdAt) {
+      await checkAnalysisCompletion(userId, async () => status, async () => ({ top_5: [] }));
+    }
+  } catch { /* Registration survives transient failures; the monitor retries. */ }
+}
+
+let statusCache: { token: string; runId: string; at: number; value: Promise<AnalysisStatus> } | null = null;
+export async function getStatus(runId: string, fresh = false) {
   const token = await getToken();
   if (!token) throw new AnalysisAccessError("Please sign in again.");
-  const res = await fetch(`${BASE}/api/analysis/status/${runId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if ([401, 403, 404].includes(res.status)) throw new AnalysisAccessError("Analysis access is unavailable. Please contact an administrator.");
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<AnalysisStatus>;
+  // Share short-lived reads with the existing loading screen and refresh pollers.
+  if (!fresh && statusCache?.token === token && statusCache.runId === runId && Date.now() - statusCache.at < 2000) return statusCache.value;
+  const value = (async () => {
+    const res = await fetch(`${BASE}/api/analysis/status/${runId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if ([401, 403, 404].includes(res.status)) throw new AnalysisAccessError("Analysis access is unavailable. Please contact an administrator.");
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<AnalysisStatus>;
+  })();
+  statusCache = { token, runId, at: Date.now(), value };
+  try { return await value; } catch (error) {
+    if (statusCache?.value === value) statusCache = null;
+    throw error;
+  }
 }
 
 export async function getResult(runId: string) {
