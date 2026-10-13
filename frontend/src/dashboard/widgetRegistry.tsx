@@ -8,6 +8,7 @@ import {
   Clock,
   Eye,
   Gauge,
+  Globe,
   Landmark,
   LineChart,
   MessageCircle,
@@ -50,7 +51,13 @@ import {
   LearningNextWidget,
 } from "../components/dashboard/widgets/learningWidgets";
 import { FundBracketWidget } from "../components/dashboard/widgets/fundWidgets";
+import {
+  LatestHeadlinesWidget,
+  MarketWideNewsWidget,
+  SectorNewsWidget,
+} from "../components/dashboard/widgets/macroNewsWidgets";
 import { FUNDS_ENABLED } from "../utils/fundsFlags";
+import { MACRO_NEWS_ENABLED } from "../utils/macroNewsFlags";
 
 // The widget library: the single place a widget is declared.
 //
@@ -68,6 +75,7 @@ export type WidgetGroup =
   | "Quant"
   | "Whales"
   | "Funds"
+  | "Market news"
   | "Learning";
 
 // Funds is the one group behind a flag. The same VITE_FUNDS_ENABLED that mounts
@@ -82,6 +90,8 @@ export const WIDGET_GROUPS: WidgetGroup[] = [
   "Quant",
   "Whales",
   ...(FUNDS_ENABLED ? (["Funds"] as WidgetGroup[]) : []),
+  // Behind VITE_MACRO_NEWS_ENABLED, like the page, for the same reason as Funds.
+  ...(MACRO_NEWS_ENABLED ? (["Market news"] as WidgetGroup[]) : []),
   "Learning",
 ];
 
@@ -294,6 +304,45 @@ export const WIDGETS: WidgetDef[] = [
           sizes: ALL,
           defaultSize: "medium",
           Component: FundBracketWidget,
+        } satisfies WidgetDef,
+      ]
+    : []),
+
+  // ── Market news ────────────────────────────────────────────────────────
+  // The Market News page's feed on the board: what the week adds up to for
+  // the whole market and for one sector, and the latest headlines. Relevance
+  // only, as on the page; none of it feeds the rankings.
+  ...(MACRO_NEWS_ENABLED
+    ? [
+        {
+          id: "news-market-wide",
+          title: "Market-wide news",
+          blurb: "The AI overview of this week's rates, trade, oil and other market-wide news, with the top stories.",
+          icon: Globe,
+          group: "Market news",
+          sizes: ALL,
+          defaultSize: "medium",
+          Component: MarketWideNewsWidget,
+        } satisfies WidgetDef,
+        {
+          id: "news-sector",
+          title: "Sector news",
+          blurb: "One sector's week in the news, starting with one you chose; add more for other sectors.",
+          icon: Newspaper,
+          group: "Market news",
+          sizes: ALL,
+          defaultSize: "medium",
+          Component: SectorNewsWidget,
+        } satisfies WidgetDef,
+        {
+          id: "news-latest",
+          title: "Latest headlines",
+          blurb: "The newest stories tagged to any sector, each labelled with the one it touches most.",
+          icon: Clock,
+          group: "Market news",
+          sizes: ALL,
+          defaultSize: "small",
+          Component: LatestHeadlinesWidget,
         } satisfies WidgetDef,
       ]
     : []),
