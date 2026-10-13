@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useState } from "react";
 import { AlertTriangle, ArrowLeft, Columns2, ExternalLink, FileText, Pencil, Search } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
@@ -232,6 +233,7 @@ export default function FundDetailPage() {
       <BackLink />
 
       <Hero fund={fund} asAt={asAt} isAdmin={isAdmin} fundId={fundId} />
+      <LearnMore context={`fund.${active}`} />
 
       {/* A fund with no sheet on file is not a thin page, it is a different
           statement, and it is made once at the top rather than implied by

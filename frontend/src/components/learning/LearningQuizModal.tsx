@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -38,6 +38,8 @@ export default function LearningQuizModal({
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState<LearningQuizResult | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const attemptRevision = useRef(0);
+  const pendingSubmission = useRef<number | null>(null);
 
   const currentQuestion = questions[currentQuestionIndex];
   const answeredQuestionCount = useMemo(
@@ -47,6 +49,8 @@ export default function LearningQuizModal({
 
   useEffect(() => {
     let cancelled = false;
+    const revision = ++attemptRevision.current;
+    pendingSubmission.current = null;
 
     setCurrentQuestionIndex(0);
     setSelectedAnswers({});
@@ -80,6 +84,7 @@ export default function LearningQuizModal({
 
     return () => {
       cancelled = true;
+      if (attemptRevision.current === revision) attemptRevision.current++;
     };
   }, [article.id, reloadKey]);
 
@@ -103,6 +108,9 @@ export default function LearningQuizModal({
   };
 
   const handleSubmit = async () => {
+    const revision = attemptRevision.current;
+    if (pendingSubmission.current === revision) return;
+    const isCurrentAttempt = () => attemptRevision.current === revision;
     const unansweredQuestions = questions.filter(
       (question) => !selectedAnswers[question.id],
     );
@@ -112,18 +120,22 @@ export default function LearningQuizModal({
       return;
     }
 
+    pendingSubmission.current = revision;
     setIsSubmitting(true);
     setErrorMessage("");
 
     try {
       const submissionResult = await onSubmitQuiz(selectedAnswers, questions);
-      setResult(submissionResult);
+      if (isCurrentAttempt()) setResult(submissionResult);
     } catch (error) {
-      setErrorMessage(
+      if (isCurrentAttempt()) setErrorMessage(
         error instanceof Error ? error.message : "Failed to submit quiz.",
       );
     } finally {
-      setIsSubmitting(false);
+      if (isCurrentAttempt()) {
+        pendingSubmission.current = null;
+        setIsSubmitting(false);
+      }
     }
   };
 

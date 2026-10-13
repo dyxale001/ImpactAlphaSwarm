@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import {
   Waves,
@@ -128,6 +129,7 @@ export default function WhaleWatchingPage() {
           </p>
         </div>
       </div>
+      <LearnMore context="whales" />
 
       {/* Tabs and search share a row, so search sits with the content it
           filters rather than competing with the header. */}

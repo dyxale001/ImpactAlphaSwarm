@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useCallback } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useAuthStore } from "../store/authStore"
@@ -81,6 +82,11 @@ export default function SettingsPage() {
         onSignOut={() => void handleSignOut()}
       />
 
+      {tab !== "account" && <LearnMore context={tab === "profile" ? "settings.risk" : "settings.sectors"} topics={tab === "profile" ? [
+        { context: "settings.risk", label: "Risk Profile" }, { context: "settings.goals", label: "Investment Goals" },
+      ] : [
+        { context: "settings.sectors", label: "Investment Sectors" }, { context: "settings.expertise", label: "Expertise" },
+      ]} />}
       <SettingsTabs active={tab} onChange={setTab} />
 
       <div

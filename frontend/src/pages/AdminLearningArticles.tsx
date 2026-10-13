@@ -110,6 +110,8 @@ export default function AdminLearningArticles() {
         slug: article.slug,
         summary: article.summary,
         content: article.content,
+        tags: article.tags ?? [],
+        video_url: article.video_url ?? "",
         category_id: article.category_id,
         difficulty_level: article.difficulty_level,
         display_order: String(article.display_order),

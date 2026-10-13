@@ -1,3 +1,4 @@
+import { articleLinkParams, resolveArticle } from '../utils/learningArticleLinks';
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Search, X } from "lucide-react";
 
@@ -6,7 +7,7 @@ import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import LearningRoadmap from "../components/learning/LearningRoadmap";
 import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
@@ -111,16 +112,13 @@ const learningCentreSearchEngine = new LearningCentreSearchEngine();
 
 export default function LearningPage() {
   const navigate = useNavigate();
+  const [articleParams, setArticleParams] = useSearchParams();
   const { session, profile, analysis, isProfileLoading, fetchProfile } = useAuthStore();
   const userId = profile?.id ?? session?.user?.id ?? null;
 
   const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [activeTab, setActiveTab] = useState<(typeof learningTabs)[number]>("roadmap");
   const [search, setSearch] = useState("");
-  const [selectedArticle, setSelectedArticle] =
-    useState<LearningArticle | null>(null);
-  const [selectedQuizArticle, setSelectedQuizArticle] =
-    useState<LearningArticle | null>(null);
   const [progressByArticleId, setProgressByArticleId] = useState<
     Record<string, LearningProgress | undefined>
   >({});
@@ -133,6 +131,11 @@ export default function LearningPage() {
     articleId: string;
     result: LearningQuizResult;
   } | null>(null);
+
+  // The URL owns the visible lesson/quiz; there is no second modal selection state.
+  const resolvedArticle = resolveArticle(categories.flatMap(category => category.articles), articleParams);
+  const selectedQuizArticle = articleParams.get("quiz") === "1" ? resolvedArticle : null;
+  const selectedArticle = selectedQuizArticle ? null : resolvedArticle;
 
   useEffect(() => {
     let cancelled = false;
@@ -238,8 +241,9 @@ export default function LearningPage() {
     progressByArticleId[articleId]?.quiz_score ?? null;
 
   const handleTakeQuiz = (article: LearningArticle) => {
-    setSelectedArticle(null);
-    setSelectedQuizArticle(article);
+    const next = articleLinkParams(articleParams, String(article.id));
+    next.set("quiz", "1");
+    setArticleParams(next, { replace: true });
   };
 
   const handleSubmitQuiz = async (
@@ -274,7 +278,7 @@ export default function LearningPage() {
     return submissionResult;
   };
 
-  const handleCloseQuizModal = () => {
+  const syncPendingQuiz = () => {
     if (pendingQuizSync && userId) {
       const { articleId, result } = pendingQuizSync;
 
@@ -317,8 +321,24 @@ export default function LearningPage() {
       setPendingQuizSync(null);
     }
 
-    setSelectedQuizArticle(null);
   };
+
+  const handleCloseQuizModal = () => {
+    syncPendingQuiz();
+    setArticleParams(articleLinkParams(articleParams, null), { replace: true });
+  };
+
+  const requestedArticleId = articleParams.get("article");
+  useEffect(() => {
+    // Preserve the existing result synchronization when browser navigation closes a quiz.
+    if (pendingQuizSync && selectedQuizArticle?.id !== pendingQuizSync.articleId) syncPendingQuiz();
+  });
+  function openArticle(article: LearningArticle) {
+    setArticleParams(articleLinkParams(articleParams, String(article.id)));
+  }
+  function closeArticle() {
+    setArticleParams(articleLinkParams(articleParams, null), { replace: true });
+  }
 
   if (loading) {
     return <LearningCenterSkeleton />;
@@ -412,7 +432,7 @@ export default function LearningPage() {
             progress={progressByArticleId}
             expertise={analysis?.user_id === userId ? analysis.ai_derived_expertise : undefined}
             dataAvailable={loadWarnings.length === 0 && !isProfileLoading}
-            onOpenArticle={setSelectedArticle}
+            onOpenArticle={openArticle}
             onStartQuiz={handleTakeQuiz}
             onOpenFinancialTools={() => navigate("/financial-tools")}
           />
@@ -475,7 +495,7 @@ export default function LearningPage() {
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => {
                                 setSearch(article.title);
-                                setSelectedArticle(article);
+                                openArticle(article);
                               }}
                               className="rounded-full border border-brand-border bg-brand-bg/70 px-2.5 py-1 text-[11px] font-semibold text-brand-primary transition-colors hover:bg-brand-bg"
                             >
@@ -538,7 +558,7 @@ export default function LearningPage() {
               <LearningCategorySection
                 key={category.id}
                 category={category}
-                onOpenArticle={setSelectedArticle}
+                onOpenArticle={openArticle}
                 onTakeQuiz={handleTakeQuiz}
                 getArticleQuizScore={getArticleQuizScore}
                 getArticleQuizStatus={(articleId) => progressByArticleId[articleId]?.status}
@@ -550,17 +570,19 @@ export default function LearningPage() {
         <Link to="/financial-tools" className="inline-block text-sm font-semibold text-brand-primary underline underline-offset-4">Explore Financial Tools</Link>
       </div>
 
+      {requestedArticleId && !resolveArticle(categories.flatMap(category => category.articles), articleParams) && !loading && <p role="status" className="text-sm text-brand-muted-fg">This learning article is unavailable. <button onClick={closeArticle} className="underline">Return to Learning Centre</button></p>}
       <ArticleViewerModal
         article={selectedQuizArticle ? null : selectedArticle}
         onStartQuiz={handleTakeQuiz}
         quizStatus={
           selectedArticle ? progressByArticleId[selectedArticle.id]?.status : undefined
         }
-        onClose={() => setSelectedArticle(null)}
+        onClose={closeArticle}
       />
 
       {selectedQuizArticle ? (
         <LearningQuizModal
+          key={selectedQuizArticle.id}
           article={selectedQuizArticle}
           onClose={handleCloseQuizModal}
           onSubmitQuiz={handleSubmitQuiz}

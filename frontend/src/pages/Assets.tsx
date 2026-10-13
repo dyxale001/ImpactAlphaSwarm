@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import type {
   AnalysisLoadingStage,
   AnalysisProgress,
@@ -450,6 +451,7 @@ export default function AssetsPage() {
           </div>
         </div>
       </div>
+      <LearnMore context="stocks" />
 
       <div
         className={

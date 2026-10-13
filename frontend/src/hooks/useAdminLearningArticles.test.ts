@@ -32,6 +32,7 @@ vi.mock("../lib/supabase", () => ({ supabase: {
 
 import { LearningArticleAdminRepository, type LearningArticleFormValues } from "./useAdminLearningArticles";
 const values: LearningArticleFormValues = {
+  tags: [], video_url: "",
   title: "New lesson", slug: "new-lesson", summary: "Summary", content: "Content",
   category_id: "category", difficulty_level: "BEGINNER", display_order: "",
 };
@@ -42,7 +43,7 @@ describe("new article positions", () => {
   it("starts at one in an empty category", async () => {
     await new LearningArticleAdminRepository().createArticle(values);
     expect(db.category).toBe("category");
-    expect(db.inserted).toEqual({ ...values, display_order: 1 });
+    expect(db.inserted).toEqual({ ...values, video_url: null, display_order: 1 });
   });
 
   it("appends after the category's highest position", async () => {
@@ -102,4 +103,26 @@ describe("admin article ordering", () => {
     expect(db.inserted).toBeNull();
     expect(db.updated).toBeNull();
   });
+});
+
+describe('article contextual metadata', () => {
+  it('saves normalized controlled tags and video', async () => {
+    await new LearningArticleAdminRepository().createArticle({ ...values, tags: [' STOCKS ', 'stocks', 'quant-analysis'], video_url: 'https://youtu.be/dQw4w9WgXcQ' });
+    expect(db.inserted?.tags).toEqual(['stocks', 'quant-analysis']);
+    expect(db.inserted?.video_url).toBe('https://youtu.be/dQw4w9WgXcQ');
+  });
+  it('removes tags and videos during editing', async () => {
+    await new LearningArticleAdminRepository().updateArticle('1', { ...values, tags: [], video_url: '' });
+    expect(db.updated?.tags).toEqual([]); expect(db.updated?.video_url).toBeNull();
+  });
+  it('rejects unsupported video before writing', async () => {
+    await expect(new LearningArticleAdminRepository().createArticle({ ...values, video_url: 'https://evil.test/video' })).rejects.toThrow('supported HTTPS');
+  });
+});
+
+it('reloads article tags and optional video metadata for editing', async () => {
+  db.articles = [{ id: '1', category_id: 'category', tags: ['tfsa-planning'], video_url: 'https://vimeo.com/123', display_order: 1, created_at: '2026-10-13' }];
+  const result = await new LearningArticleAdminRepository().fetchArticles();
+  expect(result.articles[0].tags).toEqual(['tfsa-planning']);
+  expect(result.articles[0].video_url).toBe('https://vimeo.com/123');
 });
