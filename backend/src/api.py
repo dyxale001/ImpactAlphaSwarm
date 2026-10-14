@@ -2035,7 +2035,12 @@ _ASK_WATCHLIST_SCOPE_PATTERN = re.compile(
 _ASK_RUN_SCOPE_PATTERN = re.compile(
     r"\btop\s+(?:pick|picks|asset|assets|stock|stocks|recommendation|recommendations)\b|"
     r"\bshortlist\b|\brecommend\w*\b|\branked?\b|\branking\b|\bscored\b|"
-    r"\blatest\s+(?:run|analysis)\b|\banalysis\s+run\b",
+    r"\blatest\s+(?:run|analysis)\b|\banalysis\s+run\b|"
+    # "my results" / "these results" means what the RUN produced. Without
+    # this, "compare the stocks in my results" matched neither scope, so
+    # both lists were handed over and the answer described the watchlist —
+    # the one list the question was not about.
+    r"\bresults?\b|\bmy\s+scores\b",
     re.IGNORECASE,
 )
 
@@ -2631,26 +2636,56 @@ def _resolve_fund(query: str) -> Optional[dict]:
     # captures it, and a pure-digit token (a share-class/index number, not
     # an ordinary short word) gets a flat weight high enough to decide a
     # tie on its own rather than being discarded by the length filter.
+    # Third bug in this matcher, same family as the other two: plurals.
+    # "Tell me about coronations funds" returned the Foord Flexible Fund OF
+    # FUNDS — "funds" was not in the generic-word list (only the singular
+    # "fund" was), so it scored against Foord's name, while "coronations"
+    # failed to match "Coronation" because the comparison is exact. A
+    # question naming one fund house came back with another's product.
+    # Both halves are fixed here: the generic words cover their plurals,
+    # and a query word is matched in singular form as well as as typed.
+    generic = {"fund", "funds", "trust", "trusts", "unit", "units", "etf", "etfs"}
     q_words = set(re.findall(r"\b[a-z0-9]+\b", query.lower()))
-    best_funds: list[dict] = []
-    best_score = 0
+    for word in list(q_words):
+        if len(word) > 4 and word.endswith("s"):
+            q_words.add(word[:-1])
+
+    # Scored on what matched, then tie-broken on what did NOT.
+    #
+    # Fourth bug in this matcher, surfaced when the catalogue grew from 11
+    # funds to 54: scoring purely on matched words is recall-only, so
+    # "satrix 40 etf" tied "Satrix 40 ETF" with "Satrix RAFI 40 ETF" —
+    # identical matches — and the tie made it refuse a fund the user had
+    # named exactly. A name carrying significant words the question never
+    # mentioned is a weaker match than one where everything lines up, so
+    # unmatched significant words break the tie. A genuine ambiguity (two
+    # names equally close in both directions) still refuses.
+    scored: list[tuple[int, int, dict]] = []
     for fund in funds:
         score = 0
+        unmatched = 0
         for word in re.findall(r"\b[a-z0-9]+\b", (fund.get("name") or "").lower()):
             if word.isdigit():
                 if word in q_words:
                     score += 20
+                else:
+                    unmatched += 1
                 continue
-            if word in _NAME_STOPWORDS or word in ("fund", "trust", "unit", "etf") or len(word) < 4:
+            if word in _NAME_STOPWORDS or word in generic or len(word) < 4:
                 continue
             if word in q_words:
                 score += len(word)
-        if score == 0:
-            continue
-        if score > best_score:
-            best_funds, best_score = [fund], score
-        elif score == best_score:
-            best_funds.append(fund)
+            else:
+                unmatched += 1
+        if score > 0:
+            scored.append((score, unmatched, fund))
+
+    if not scored:
+        return None
+    best_score = max(s for s, _u, _f in scored)
+    finalists = [(u, f) for s, u, f in scored if s == best_score]
+    fewest_unmatched = min(u for u, _f in finalists)
+    best_funds = [f for u, f in finalists if u == fewest_unmatched]
 
     if len(best_funds) == 1:
         return best_funds[0]
@@ -2745,6 +2780,24 @@ def _build_ask_reference_pattern():
 
 
 _ASK_REFERENCE_PATTERN = _build_ask_reference_pattern()
+
+# "what does X mean / indicate / tell me", "is that high / low / good" —
+# asking for a reading to be INTERPRETED rather than looked up. Paired with
+# _ASK_BARE_FIGURE_RE below so a question built around a figure just quoted
+# ("what does 0.37 indicate") is recognised as the follow-up it is, even
+# with no pronoun and no metric word in it.
+_ASK_VALUE_INTERPRETATION_PATTERN = re.compile(
+    r"\bwhat\s+does\b.*\b(?:mean|indicate|imply|suggest|tell|signify|show)\b|"
+    r"\bwhat'?s\s+that\s+mean\b|"
+    r"\bis\s+(?:that|this|it)?\s*(?:a\s+)?(?:high|low|good|bad|strong|weak|normal|typical)\b|"
+    r"\bhow\s+(?:high|low|good|bad)\s+is\b|"
+    r"\bis\s+\d",
+    re.IGNORECASE,
+)
+
+# A bare figure in the query: "0.37", "52", "1.89", "3,954.70". Excludes a
+# year-shaped token so "what happened in 2024" is not read as a reading.
+_ASK_BARE_FIGURE_RE = re.compile(r"(?<![\w.])(?!(?:19|20)\d{2}(?![\d.]))\d+(?:[.,]\d+)*(?![\w])")
 
 # "and the other 4?", "what about the rest?", "the remaining ones" — group/
 # plural follow-up wording that means "everything EXCEPT the one just
@@ -2903,7 +2956,44 @@ def _resolve_conversational_reference(
     if not context:
         return query, None, None, None
 
-    if not _ASK_REFERENCE_PATTERN.search(query) and not _ASK_COMPARISON_TRIGGER_PATTERN.search(query):
+    # A follow-up does not have to contain a pronoun.
+    #
+    # Root-cause bug this fixes: the gate below only let a query through if
+    # it carried referring or comparison wording, so a question that is
+    # unmistakably about the answer just given — but phrased without a
+    # pronoun — had context withheld from it:
+    #
+    #   "Tell me about NVDA"              -> volatility 0.37 stated
+    #   "what does volatility of 0.37 mean" -> no "it"/"that", so NVDA was
+    #       dropped and the generic textbook definition of volatility came
+    #       back instead of what 0.37 means FOR NVDA
+    #   "what does 0.37 indicate"         -> no metric word either, so it
+    #       dead-ended in "I don't have enough verified information"
+    #
+    # The signal is a FIGURE in the question, not a metric name. That
+    # distinction matters: "What is beta?" names a metric but asks what the
+    # concept means, and binding it to whatever asset happens to be active
+    # would answer a question the user did not ask (there is a standing test
+    # for exactly that). "What does volatility of 0.37 mean" quotes a
+    # reading, and a reading only exists because it was just stated — so it
+    # is a follow-up about that value whether or not a pronoun appears.
+    #
+    # Qualifies only when an active asset exists to refer to, and the query
+    # carries a bare figure plus either a metric name or interpretation
+    # phrasing. A first message with no context is untouched.
+    metric_in_query = _extract_metric_from_query(query)
+    implicit_metric_reference = bool(
+        context.active_asset
+        and not explicit_asset
+        and _ASK_BARE_FIGURE_RE.search(query)
+        and (metric_in_query or _ASK_VALUE_INTERPRETATION_PATTERN.search(query))
+    )
+
+    if (
+        not _ASK_REFERENCE_PATTERN.search(query)
+        and not _ASK_COMPARISON_TRIGGER_PATTERN.search(query)
+        and not implicit_metric_reference
+    ):
         # No referring OR comparison wording at all — the query stands
         # entirely on its own (e.g. "What is the JSE?"). Context must never
         # be attached to a question that didn't ask for it. Comparison

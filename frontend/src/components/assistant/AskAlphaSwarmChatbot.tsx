@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Sparkles, X, Send, Loader2 } from 'lucide-react'
+import { X, Send, Loader2 } from 'lucide-react'
+import askBot from '../../assets/ask-alphaswarm-bot.png'
 import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
 import AskAnswerCard from '../ask/AskAnswerCard'
@@ -99,7 +100,7 @@ export default function AskAlphaSwarmChatbot() {
           {/* Header */}
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-brand-border/50 bg-brand-bg/40 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-4 h-4 shrink-0 text-brand-primary" />
+              <img src={askBot} alt="" aria-hidden="true" className="w-5 h-5 shrink-0 object-contain" />
               <p className="text-sm font-bold text-brand-fg truncate">Ask AlphaSwarm</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -127,7 +128,7 @@ export default function AskAlphaSwarmChatbot() {
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
-                <Sparkles className="w-6 h-6 text-brand-primary" />
+                <img src={askBot} alt="" aria-hidden="true" className="w-12 h-12 object-contain" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
@@ -200,7 +201,9 @@ export default function AskAlphaSwarmChatbot() {
           aria-expanded={open}
           className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
         >
-          {open ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />}
+          {open
+            ? <X className="w-5 h-5 sm:w-6 sm:h-6" />
+            : <img src={askBot} alt="" aria-hidden="true" className="w-8 h-8 sm:w-9 sm:h-9 object-contain" />}
         </button>
         {!open && (
           <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-2 z-50">

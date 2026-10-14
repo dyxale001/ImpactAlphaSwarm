@@ -97,6 +97,15 @@ FIXTURE_FUNDS = [
     {"id": "f7", "name": "Satrix MSCI World Feeder ETF", "jse_code": "STXWDM", "manco": "Satrix", "asisa_category": "Equity - General", "tfsa_eligible": True},
     {"id": "f8", "name": "Sygnia Itrix Top 40 ETF", "jse_code": "SYG40", "manco": "Sygnia", "asisa_category": "Equity - SA General", "tfsa_eligible": True},
     {"id": "f9", "name": "Sygnia Itrix MSCI World Index ETF", "jse_code": "SYGWD", "manco": "Sygnia", "asisa_category": "Equity - General", "tfsa_eligible": True},
+    # Same family AND same number as f6: distinguished only by one extra
+    # word the user would not say if they meant the plain one. Scoring on
+    # matched words alone ties these, and the tie made it refuse a fund
+    # that had been named exactly.
+    {"id": "f10", "name": "Satrix RAFI 40 ETF", "jse_code": "STXRAF", "manco": "Satrix", "asisa_category": "Equity - SA General", "tfsa_eligible": True},
+    # A name built out of the generic words themselves. "funds" was not in
+    # the generic list (only "fund"), so "coronations funds" scored against
+    # THIS fund and answered a Coronation question with a Foord one.
+    {"id": "f11", "name": "Foord Flexible Fund of Funds (A)", "jse_code": None, "manco": "Foord", "asisa_category": "Multi Asset - Flexible", "tfsa_eligible": False},
 ]
 
 
@@ -432,6 +441,36 @@ def test_fund_resolves_within_its_own_family(_frozen_funds, query, expected):
     assert resolved["name"] == expected, f"{query!r} -> {resolved['name']}, expected {expected}"
 
 
+def test_an_exact_name_beats_a_longer_sibling_that_contains_it(_frozen_funds):
+    """"satrix 40 etf" names one fund exactly. "Satrix RAFI 40 ETF" matches
+    the same words and adds one the user never said, so it is the weaker
+    match — scoring on matched words alone tied them and refused."""
+    resolved = api._resolve_fund("tell me about satrix 40 etf")
+    assert resolved is not None and resolved["name"] == "Satrix 40 ETF"
+
+    rafi = api._resolve_fund("tell me about satrix rafi 40 etf")
+    assert rafi is not None and rafi["name"] == "Satrix RAFI 40 ETF"
+
+
+def test_a_plural_fund_house_never_resolves_to_another_house(_frozen_funds):
+    """Regression: "coronations funds" returned the Foord Flexible Fund OF
+    FUNDS. "funds" was generic vocabulary scoring against Foord's name,
+    while "coronations" failed to match "Coronation" because the comparison
+    was exact. Ambiguous between Coronation's own funds is the right
+    answer; another house's fund never is."""
+    resolved = api._resolve_fund("Tell me abouT coronations funds")
+    assert resolved is None or "Coronation" in resolved["name"], (
+        f"a Coronation question resolved to {resolved['name']!r}"
+    )
+
+
+def test_a_plural_fund_name_still_matches_its_singular(_frozen_funds):
+    """"coronations balanced plus" should reach the same fund as
+    "coronation balanced plus"."""
+    resolved = api._resolve_fund("tell me about coronations balanced plus fund")
+    assert resolved is not None and resolved["name"] == "Coronation Balanced Plus Fund (A)"
+
+
 def test_a_bare_family_name_refuses_rather_than_picking_a_sibling(_frozen_funds):
     """'Coronation' alone matches two funds equally. Picking either would be
     wrong half the time."""
@@ -657,6 +696,55 @@ def test_an_unattributable_rank_claim_is_skipped_not_guessed():
         "AAPL and MA both rank in the top five.", comparison_assets=assets,
     )
     assert result.valid, result.violations
+
+
+# ── 10a. A follow-up need not contain a pronoun ──────────────────────────
+# Regression from a real conversation: after "Tell me about NVDA" stated a
+# volatility of 0.37, "what does volatility of 0.37 mean" returned the
+# generic textbook definition (NVDA was dropped, because the query has no
+# "it"/"that" in it) and "what does 0.37 indicate" failed outright with "I
+# don't have enough verified information".
+
+IMPLICIT_FOLLOWUPS = [
+    "what does volatility of 0.37 mean",   # metric named, no pronoun
+    "what does 0.37 indicate",             # bare figure, no metric word
+    "is 52 high?",                         # bare figure, interpretation
+    "what does that tell me",              # pronoun (already worked)
+]
+
+
+@pytest.mark.parametrize("query", IMPLICIT_FOLLOWUPS)
+def test_a_followup_resolves_to_the_asset_under_discussion(query):
+    context = api.AskContext(
+        active_asset="NVDA", recent_metric="volatility",
+        previous_intent="ANALYSIS_EXPLANATION",
+    )
+    _effective, clarification, asset, _metric = api._resolve_conversational_reference(query, context)
+    assert clarification is None, f"{query!r} asked for clarification instead of using context"
+    assert asset == "NVDA", f"{query!r} lost the asset under discussion (got {asset})"
+
+
+COLD_DEFINITIONS = [
+    "what is volatility",
+    "what does volatility mean",
+    "what is beta",
+    "explain RSI",
+]
+
+
+@pytest.mark.parametrize("query", COLD_DEFINITIONS)
+def test_a_cold_definition_question_is_not_given_context_it_never_asked_for(query):
+    """The other side of the line: with no conversation behind it, a
+    definition question must still get the plain definition."""
+    _effective, _clar, asset, _metric = api._resolve_conversational_reference(query, None)
+    assert asset is None, f"{query!r} was wrongly bound to an asset"
+
+
+def test_a_year_is_not_mistaken_for_a_reading():
+    """"what happened in 2024" is not a question about a metric value."""
+    assert not api._ASK_BARE_FIGURE_RE.search("what happened in 2024")
+    assert api._ASK_BARE_FIGURE_RE.search("what does 0.37 indicate")
+    assert api._ASK_BARE_FIGURE_RE.search("is 52 high?")
 
 
 # ── 11. Provenance ───────────────────────────────────────────────────────
