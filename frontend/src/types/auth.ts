@@ -14,8 +14,6 @@ export interface UserAnalysis {
   investment_universe: string[];
   survey_answers: any;
   ai_derived_expertise?: "novice" | "intermediate" | "advanced";
-  // No longer collected at onboarding — present only on legacy rows
-  capital?: number | string | null;
   risk_tolerance: string;
   /** The personalised dashboard: which widgets, in what order, at what size.
    *  Free-form jsonb, so it is parsed rather than trusted (see
@@ -23,7 +21,6 @@ export interface UserAnalysis {
    *  is what shows them the starter-deck picker. */
   dashboard_layout?: unknown;
 
-  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -34,6 +31,5 @@ export type AdminUserView = UserProfile & {
     | "investment_universe"
     | "ai_derived_expertise"
     | "risk_tolerance"
-    | "capital"
   > | null;
 };

@@ -10,12 +10,6 @@ import type {
   LearningQuizResult,
 } from "../../types/learning";
 
-const ARTICLE_XP: Record<LearningDifficultyLevel, number> = {
-  BEGINNER: 50,
-  INTERMEDIATE: 100,
-  ADVANCED: 150,
-};
-
 type LearningCentreCategoryRow = Omit<LearningCategory, "articles"> & {
   articles?: Array<
     Omit<LearningArticle, "questions"> & {
@@ -55,10 +49,6 @@ type SubmitLearningQuizInput = {
 export class LearningQuizEngine {
   static normalizeText(value: string) {
     return value.trim().toLowerCase();
-  }
-
-  static calculateArticleXp(difficultyLevel: LearningDifficultyLevel) {
-    return ARTICLE_XP[difficultyLevel] ?? 0;
   }
 
   static calculateQuizScore(
@@ -160,6 +150,38 @@ export class LearningQuizEngine {
 }
 
 export class LearningCentreRepository {
+  private difficultyXp: Record<LearningDifficultyLevel, number> | null = null;
+
+  async fetchDifficultyXp() {
+    // Clear stale configuration first: a failed refresh must never reuse old XP.
+    this.difficultyXp = null;
+    const { data, error } = await supabase
+      .from("learning_difficulty_xp")
+      .select("difficulty_level, xp");
+    if (error) throw new Error(`Learning XP configuration could not be loaded: ${error.message}`);
+    const mapping: Partial<Record<LearningDifficultyLevel, number>> = {};
+    const levels: LearningDifficultyLevel[] = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
+    for (const row of data ?? []) {
+      const level = row.difficulty_level as LearningDifficultyLevel;
+      if (!levels.includes(level) || mapping[level] !== undefined ||
+          !Number.isInteger(row.xp) || row.xp < 0 || row.xp > 2147483647) {
+        throw new Error("Learning XP configuration contains an invalid entry.");
+      }
+      mapping[level] = row.xp;
+    }
+    if (levels.some(level => mapping[level] === undefined)) {
+      throw new Error("Learning XP configuration is incomplete.");
+    }
+    this.difficultyXp = mapping as Record<LearningDifficultyLevel, number>;
+    return this.difficultyXp;
+  }
+
+  calculateArticleXp(difficultyLevel: LearningDifficultyLevel) {
+    const xp = this.difficultyXp?.[difficultyLevel];
+    if (xp === undefined) throw new Error("Learning XP configuration is unavailable. Please reload before submitting a quiz.");
+    return xp;
+  }
+
   private static sortLearningContent(
     categories: LearningCentreCategoryRow[],
   ): LearningCategory[] {
@@ -169,7 +191,9 @@ export class LearningCentreRepository {
         ...category,
         articles: [...(category.articles ?? [])]
           .sort((left, right) =>
-            left.created_at.localeCompare(right.created_at),
+            left.display_order - right.display_order ||
+            Date.parse(left.created_at) - Date.parse(right.created_at) ||
+            Number(left.id) - Number(right.id),
           )
           .map(({ quiz_questions, ...article }) => ({
             ...article,
@@ -187,6 +211,7 @@ export class LearningCentreRepository {
   }
 
   async fetchLearningCentreData() {
+    await this.fetchDifficultyXp();
     const { data, error } = await supabase
       .from("learning_categories")
       .select(
@@ -371,7 +396,7 @@ export class LearningCentreRepository {
       questions,
       selectedAnswers,
     );
-    const passed = score >= 80;
+    const passed = score >= 75;
     const previousProgress = progressByArticleId[article.id];
     const previouslyCompleted = previousProgress?.status === "COMPLETED";
     const previousQuizScore = previousProgress?.quiz_score ?? null;
@@ -382,6 +407,15 @@ export class LearningCentreRepository {
       : passed
         ? "COMPLETED"
         : "IN_PROGRESS";
+
+    // Resolve configuration before any writes; failure cannot complete an article without XP.
+    const difficultyXp = await this.fetchDifficultyXp();
+    const firstCompletionXp = passed && !previouslyCompleted
+      ? difficultyXp[article.difficulty_level]
+      : 0;
+    if (firstCompletionXp === undefined) {
+      throw new Error("Learning XP configuration is unavailable for this article's difficulty.");
+    }
 
     const progressPayload = {
       user_id: userId,
@@ -420,18 +454,21 @@ export class LearningCentreRepository {
     let xpEarned = 0;
 
     if (passed && !previouslyCompleted) {
-      xpEarned = LearningQuizEngine.calculateArticleXp(
-        article.difficulty_level,
-      );
+      xpEarned = firstCompletionXp;
       updatedLearningXp += xpEarned;
 
-      const { error: xpError } = await supabase
+      const { data: savedXpRows, error: xpError } = await supabase
         .from("users")
         .update({ learning_xp: updatedLearningXp })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id, learning_xp");
 
       if (xpError) {
         throw new Error(`Failed to update learning XP: ${xpError.message}`);
+      }
+      if (savedXpRows?.length !== 1 || savedXpRows[0].id !== userId ||
+          savedXpRows[0].learning_xp == null || Number(savedXpRows[0].learning_xp) !== updatedLearningXp) {
+        throw new Error("Could not confirm that your learning XP was saved. Please reload to check your balance; XP has not been confirmed.");
       }
     }
 
@@ -540,7 +577,7 @@ export class LearningCentreRepository {
 export const learningCentreRepository = new LearningCentreRepository();
 
 export function calculateArticleXp(difficultyLevel: LearningDifficultyLevel) {
-  return LearningQuizEngine.calculateArticleXp(difficultyLevel);
+  return learningCentreRepository.calculateArticleXp(difficultyLevel);
 }
 
 export function calculateQuizScore(

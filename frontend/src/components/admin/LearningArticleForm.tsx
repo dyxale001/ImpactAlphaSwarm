@@ -1,3 +1,6 @@
+import { LEARNING_TAGS } from '../../data/learningContexts';
+import { learningVideoEmbed } from '../../utils/learningVideo';
+import LearningVideo from '../learning/LearningVideo';
 import { useState, type FormEvent } from "react";
 import { Eye, PencilLine, Save, RotateCcw } from "lucide-react";
 import MarkdownRenderer from "../learning/MarkdownRenderer";
@@ -133,6 +136,41 @@ export default function LearningArticleForm({
             </select>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label htmlFor="article-display-order" className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
+              Order within category
+            </label>
+            <input
+              id="article-display-order"
+              type="number"
+              min="1"
+              max="2147483647"
+              step="1"
+              value={values.display_order}
+              onChange={(event) => onChange("display_order", event.target.value)}
+              placeholder="Append to end"
+              aria-describedby="article-display-order-help"
+              className="bg-brand-bg border border-brand-border text-brand-fg p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            />
+            <p id="article-display-order-help" className="text-xs text-brand-muted-fg">
+              Leave blank to append to the selected category. Changing category resets this field.
+              Equal positions are ordered by creation date, then article ID if dates also match.
+            </p>
+          </div>
+
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-brand-fg">Related pages and features</legend>
+            <div className="grid gap-2 sm:grid-cols-2">{Object.entries(LEARNING_TAGS).map(([tag, label]) => <label key={tag} className="flex items-center gap-2 text-sm text-brand-fg">
+              <input type="checkbox" checked={(values.tags ?? []).includes(tag)} onChange={event => onChange("tags", event.target.checked ? [...(values.tags ?? []), tag] : (values.tags ?? []).filter(value => value !== tag))} />{label}
+            </label>)}</div>
+          </fieldset>
+          <div className="space-y-2">
+            <label htmlFor="learning-video" className="block text-sm font-semibold text-brand-fg">Educational video URL (optional)</label>
+            <input id="learning-video" type="url" value={values.video_url ?? ''} onChange={event => onChange("video_url", event.target.value)} aria-describedby="learning-video-help" className="w-full rounded-lg border border-brand-border bg-brand-bg p-3 text-brand-fg" />
+            <p id="learning-video-help" className="text-xs text-brand-muted-fg">Use an HTTPS YouTube watch, shortened, Shorts or embed link, or a public Vimeo video link. Clear this field to remove the video.</p>
+            {values.video_url?.trim() && !learningVideoEmbed(values.video_url) && <p role="alert" className="text-xs text-semantic-danger">Unsupported video URL. Use a valid YouTube or Vimeo link.</p>}
+            <LearningVideo url={values.video_url} />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"

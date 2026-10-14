@@ -1,5 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { dealingFigures, filingAge } from "./whaleFormat";
+import {
+  dealingFigures,
+  filingAge,
+  formatPct,
+  formatUsd,
+  isOpenMarket,
+  topTenIn,
+} from "./whaleFormat";
+
+describe("topTenIn", () => {
+  it("says the count is only where the fund is a top 10 holder", () => {
+    expect(topTenIn(96)).toBe("Top 10 holder in 96 companies");
+    expect(topTenIn(1)).toBe("Top 10 holder in 1 company");
+  });
+});
+
+describe("formatUsd", () => {
+  it("reaches trillions, so a fund total never reads $3393.4B", () => {
+    expect(formatUsd(3_393_400_000_000)).toBe("$3.4T");
+    expect(formatUsd(445_243_045_171)).toBe("$445.2B");
+    expect(formatUsd(2_600_000)).toBe("$2.6M");
+    expect(formatUsd(450_000)).toBe("$450K");
+    expect(formatUsd(null)).toBe("—");
+  });
+});
+
+describe("formatPct", () => {
+  it("reads the endpoints' fractions as percentages", () => {
+    expect(formatPct(0.6632)).toBe("66.3%");
+    expect(formatPct(0.0797)).toBe("8.0%");
+    expect(formatPct(null)).toBe("—");
+  });
+});
+
+describe("isOpenMarket", () => {
+  it("is true only for open-market purchases and sales", () => {
+    expect(isOpenMarket("P")).toBe(true);
+    expect(isOpenMarket(" s ")).toBe(true);
+    for (const code of ["A", "M", "F", "G", "D", "C", null, undefined]) {
+      expect(isOpenMarket(code)).toBe(false);
+    }
+  });
+});
 
 describe("filingAge", () => {
   const now = new Date("2026-09-30T12:00:00Z");

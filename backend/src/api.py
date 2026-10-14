@@ -69,6 +69,7 @@ _social_history_instance = None
 _social_backfiller_instance = None
 _news_history_instance = None
 _social_ticker_instance = None
+_news_ticker_instance = None
 _day_summaries_instance = None
 _day_drivers_instance = None
 
@@ -126,6 +127,17 @@ def _social_ticker():
     return _social_ticker_instance
 
 
+def _news_ticker():
+    """The intraday news top-up, built once on first use. Shares the news history reader,
+    so it writes through the same guarded merge the nightly does."""
+    global _news_ticker_instance
+    if _news_ticker_instance is None:
+        from src.utils.ns_tick import NewsTicker
+
+        _news_ticker_instance = NewsTicker(history=_news_history())
+    return _news_ticker_instance
+
+
 def _day_summaries():
     """The generated day summaries, built once on first use.
 
@@ -177,6 +189,12 @@ from src.quant.routes import mount_quant_routes  # noqa: E402
 
 mount_quant_routes(app)
 
+# The Compare page's written comparison, built on the quant window service above. Mounted
+# the same way and for the same reason: off, it answers `available: false`.
+from src.compare.routes import mount_compare_routes  # noqa: E402
+
+mount_compare_routes(app)
+
 # --- Funds catalogue ----------------------------------------------------------
 # South African unit trusts and JSE-listed ETFs, matched to the onboarding
 # profile from published fact sheets. Off unless FUNDS_ENABLED is set: with the
@@ -206,6 +224,19 @@ if FUNDS_ENABLED:
         logger.info("Funds catalogue admin mounted at /api/admin/fund-catalogue")
     else:
         logger.warning("FUNDS_ENABLED is set but the funds admin did not mount")
+
+
+# Macro / current-affairs news (D-223), behind its own flag. Needs migration 031 and
+# the Jev key (TYPESAFE_API_KEY_OPENROUTER) in the environment before it is switched on.
+from src.macro.config import MACRO_NEWS_ENABLED  # noqa: E402
+
+if MACRO_NEWS_ENABLED:
+    from src.macro.routes import mount_macro_news  # noqa: E402
+
+    if mount_macro_news(app):
+        logger.info("Macro news mounted at /api/macro")
+    else:
+        logger.warning("MACRO_NEWS_ENABLED is set but macro news did not mount")
 
 
 # --- Orphaned-run guard -------------------------------------------------------
@@ -355,28 +386,7 @@ async def start_analysis(
     req: StartAnalysisRequest,
     authorization: Optional[str] = Header(None),
 ):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-
-    token = authorization.split(" ", 1)[-1]
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/auth/v1/user",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "apikey": SUPABASE_SERVICE_ROLE_KEY
-            },
-            timeout=10.0
-        )
-    if resp.status_code != 200:
-        logger.warning("Supabase token validation failed: %s", resp.text)
-        raise HTTPException(status_code=401, detail="Invalid Supabase token")
-
-    user_info = resp.json() or {}
-    user_id = user_info.get("id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Unable to determine user id from token")
+    user_id = await _get_user_id_from_bearer(authorization)
 
     # Claim the run atomically. If an analysis is already in flight for this user,
     # return THAT run instead of starting a second pipeline: the frontend polls
@@ -427,8 +437,9 @@ async def start_analysis(
 
 
 @app.get("/api/analysis/status/{run_id}")
-async def analysis_status(run_id: str):
-    resp = supabase.table("ai_runs").select("id, status, created_at, progress").eq("id", run_id).execute()
+async def analysis_status(run_id: str, authorization: Optional[str] = Header(None)):
+    user_id = await _get_user_id_from_bearer(authorization)
+    resp = supabase.table("ai_runs").select("id, status, created_at, progress").eq("id", run_id).eq("user_id", user_id).execute()
     data = resp.data or []
     if not data:
         raise HTTPException(status_code=404, detail="run not found")
@@ -455,7 +466,11 @@ async def analysis_status(run_id: str):
 
 
 @app.get("/api/analysis/result/{run_id}")
-async def analysis_result(run_id: str):
+async def analysis_result(run_id: str, authorization: Optional[str] = Header(None)):
+    user_id = await _get_user_id_from_bearer(authorization)
+    run = supabase.table("ai_runs").select("id").eq("id", run_id).eq("user_id", user_id).maybe_single().execute().data
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
     recs = supabase.table("ai_recommendation").select("*").eq("run_id", run_id).order("rank", desc=False).limit(5).execute()
     rec_rows = recs.data or []
     if not rec_rows:
@@ -6032,20 +6047,36 @@ async def get_sentiment_history(ticker: str, days: int = 7):
     # Scheduled, not awaited. create_task queues the walk on the event loop and this
     # handler returns immediately; the loop only picks the task up once the response is
     # on its way, which is the same fire and forget shape start_analysis uses.
+    #
+    # Only for something shaped like a ticker. The endpoint is unauthenticated, and
+    # without this any string at all started a StockTwits walk on the limiter the runs
+    # share and left a "walked" row behind for it.
     seeding = False
     try:
         backfiller = _social_backfiller()
-        if backfiller.enabled:
+        if backfiller.enabled and _SEEDABLE_TICKER_RE.fullmatch(symbol):
             walked = await loop.run_in_executor(
                 None, backfiller.history.is_seeded, symbol
             )
             if not walked:
-                asyncio.create_task(_seed_job(symbol))
+                task = asyncio.create_task(_seed_job(symbol))
+                # The event loop keeps only a weak reference to a task, so one nobody
+                # holds can be collected part way through its walk.
+                _SEED_TASKS.add(task)
+                task.add_done_callback(_SEED_TASKS.discard)
                 seeding = True
     except Exception as exc:
         logger.info("Seed check failed for %s: %s", symbol, exc)
 
     return {"ticker": symbol, "points": points, "seeding": seeding}
+
+
+#: What a lazy seed will walk: a US listing's symbol, optionally with a class suffix
+#: (BRK.B, BF-B). Everything else gets its stored history and no walk.
+_SEEDABLE_TICKER_RE = re.compile(r"[A-Z]{1,5}(?:[.\-][A-Z]{1,2})?")
+
+#: Seed tasks in flight, held so they are not collected before they finish.
+_SEED_TASKS: set = set()
 
 
 async def _seed_job(symbol: str) -> None:
@@ -6161,6 +6192,14 @@ async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
 
     Overlapping anything else is harmless. This writes only social_sentiment_daily, through
     the same accumulate RPC a run uses, which merges under a row lock.
+
+    The same pass also tops up the news (src/utils/ns_tick.py) when NEWS_TICK_ENABLED is
+    on, so "What's driving the sentiment" has today's articles to explain during the
+    session rather than only after the nightly. The two halves run side by side, since
+    they wait on different services with separate rate limits, and each fails on its own:
+    a Finnhub outage never costs the social top-up, nor the reverse. The social summary
+    keeps its top level keys so the scheduler's view of it is unchanged; the news summary
+    sits under "news".
     """
     if not DAILY_RUN_SECRET:
         raise HTTPException(status_code=503, detail="Tick not configured")
@@ -6180,12 +6219,20 @@ async def social_tick(x_daily_run_secret: Optional[str] = Header(None)):
         logger.warning("Tick could not list recently ranked tickers: %s", exc)
         return {"ok": False, "error": str(exc), "walked": 0}
 
-    try:
-        summary = await loop.run_in_executor(None, _social_ticker().tick, tickers, None)
-        return {"ok": True, **summary}
-    except Exception as exc:
-        logger.warning("Tick failed: %s", exc)
-        return {"ok": False, "error": str(exc), "walked": 0}
+    social, news = await asyncio.gather(
+        loop.run_in_executor(None, _social_ticker().tick, tickers, None),
+        loop.run_in_executor(None, _news_ticker().tick, tickers, None),
+        return_exceptions=True,
+    )
+
+    if isinstance(news, BaseException):
+        logger.warning("News tick failed: %s", news)
+        news = {"enabled": True, "error": str(news)}
+
+    if isinstance(social, BaseException):
+        logger.warning("Tick failed: %s", social)
+        return {"ok": False, "error": str(social), "walked": 0, "news": news}
+    return {"ok": True, **social, "news": news}
 
 
 @app.post("/api/sentiment/summaries")
@@ -6416,6 +6463,13 @@ async def _get_user_id_from_bearer(authorization: Optional[str]) -> str:
     user_id = user_info.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Unable to determine user id")
+    try:
+        profile = supabase.table("users").select("is_active").eq("id", user_id).maybe_single().execute().data
+    except Exception:
+        logger.exception("Could not verify active account %s", user_id)
+        raise HTTPException(status_code=502, detail="Could not verify account status. Please retry.")
+    if not profile or profile.get("is_active") is not True:
+        raise HTTPException(status_code=403, detail="This account is deactivated. Contact an administrator to reactivate it.")
     return user_id
 
 async def _require_admin(requester_id: str):
@@ -6461,68 +6515,90 @@ async def reset_user_password(
     return {"ok": True, "message": f"Password reset email sent to {req.email}"}
 
 
+async def _change_account_status(user_id: str, is_active: bool) -> None:
+    """Auth and profiles are separate systems: confirm both before reporting success.
+
+    Ban first when deactivating; lift the ban last when activating. A failed
+    operation may need administrator reconciliation, so never hide partial failure.
+    """
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    }
+    stage = "profile update" if is_active else "Auth ban"
+
+    def update_profile():
+        rows = supabase.table("users").update({"is_active": is_active}).eq("id", user_id).execute().data
+        if not rows or len(rows) != 1 or rows[0].get("id") != user_id or rows[0].get("is_active") is not is_active:
+            raise ValueError("Profile update was not confirmed")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            if is_active:
+                update_profile()
+                stage = "Auth unban"
+            resp = await client.put(
+                f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
+                headers=headers,
+                json={"ban_duration": "none" if is_active else "876600h"},
+                timeout=10.0,
+            )
+            if resp.status_code not in (200, 201):
+                raise ValueError(f"Auth update returned HTTP {resp.status_code}")
+            # The Auth update returns the updated user; no separate lookup is needed.
+            account = resp.json()
+            if not isinstance(account, dict) or account.get("id") != user_id:
+                raise ValueError("Auth returned an unexpected account")
+            banned_until = account.get("banned_until")
+            banned = False
+            if banned_until is not None and banned_until != "":
+                expires = datetime.datetime.fromisoformat(banned_until.replace("Z", "+00:00"))
+                if expires.tzinfo is None:
+                    raise ValueError("Ban timestamp has no timezone")
+                banned = expires > datetime.datetime.now(datetime.timezone.utc)
+            if banned == is_active:
+                raise ValueError("Auth did not confirm the requested ban status")
+            if not is_active:
+                stage = "profile update after Auth ban"
+                update_profile()
+    except Exception as exc:
+        logger.exception("Account status change failed for %s at %s", user_id, stage)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Account status change could not be confirmed ({stage}). "
+                   "Auth and profile status may differ. Contact an administrator to verify or retry the intended action.",
+        ) from exc
+
+
 @app.post("/api/admin/toggle-user-status")
 async def toggle_user_status(
     req: ToggleUserStatusRequest,
     authorization: Optional[str] = Header(None),
 ):
-    """Activate or deactivate a user account (admin only).
-
-    Requires the `users` table to have an `is_active BOOLEAN DEFAULT TRUE` column.
-    Run migration first: ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
-    """
+    """Activate or deactivate another account (admin only)."""
     requester_id = await _get_user_id_from_bearer(authorization)
     await _require_admin(requester_id)
 
     if req.user_id == requester_id:
         raise HTTPException(status_code=400, detail="Cannot modify your own account status")
 
-    # Ban/unban in Supabase Auth so the user cannot log in when inactive.
-    # ban_duration="none" lifts the ban; a large duration effectively bans permanently.
-    ban_duration = "none" if req.is_active else "876600h"
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.put(
-            f"{SUPABASE_URL}/auth/v1/admin/users/{req.user_id}",
-            headers={
-                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-                "apikey": SUPABASE_SERVICE_ROLE_KEY,
-                "Content-Type": "application/json",
-            },
-            json={"ban_duration": ban_duration},
-            timeout=10.0,
-        )
-
-    if resp.status_code not in (200, 201):
-        logger.warning("Supabase ban toggle failed for %s: %s", req.user_id, resp.text)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to update auth status: {resp.text}",
-        )
-
-    # Mirror the status in our own users table for easy querying.
-    supabase.table("users").update({"is_active": req.is_active}).eq("id", req.user_id).execute()
+    await _change_account_status(req.user_id, req.is_active)
 
     action = "activated" if req.is_active else "deactivated"
     return {"ok": True, "is_active": req.is_active, "message": f"User {action} successfully"}
 
 @app.post("/api/account/deactivate")
 async def deactivate_own_account(authorization: Optional[str] = Header(None)):
-    """Soft-deactivate: flags the account inactive but does NOT ban in Supabase
-    Auth, so the user can sign in again to reactivate. Admin deactivation
-    (toggle-user-status) applies a hard Auth ban and is not self-reversible."""
+    """Ban sign-in and deactivate the profile; only an admin may restore access."""
     user_id = await _get_user_id_from_bearer(authorization)
-    supabase.table("users").update({"is_active": False}).eq("id", user_id).execute()
+    await _change_account_status(user_id, False)
     return {"ok": True, "message": "Account deactivated"}
 
 
 @app.post("/api/account/reactivate")
-async def reactivate_own_account(authorization: Optional[str] = Header(None)):
-    """Reactivate a soft-deactivated account. Fails for admin-banned accounts,
-    since those users can't obtain a valid token in the first place."""
-    user_id = await _get_user_id_from_bearer(authorization)
-    supabase.table("users").update({"is_active": True}).eq("id", user_id).execute()
-    return {"ok": True, "message": "Account reactivated"}
+async def reactivate_own_account():
+    """Retired self-service endpoint. Admins use toggle-user-status instead."""
+    raise HTTPException(status_code=403, detail="Only an administrator may reactivate an account.")
 
 @app.post("/api/admin/delete-user")
 async def delete_user_admin(
@@ -6911,7 +6987,7 @@ async def admin_reports_assets(range: str = "30d", limit: int = 10, authorizatio
             "most_analyzed_definition": (
                 "Number of completed analysis runs that scored this asset "
                 "(one ai_recommendation row per asset per completed run) — "
-                "not views, clicks, or recommendation rank."
+                "not views, clicks, or asset rank."
             ),
         }
     except Exception as e:

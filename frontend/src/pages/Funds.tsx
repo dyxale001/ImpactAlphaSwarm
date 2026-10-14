@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, Landmark, Layers, Search, SlidersHorizontal } from "lucide-react";
 import FundCard from "../components/funds/FundCard";
@@ -147,6 +148,7 @@ export default function FundsPage() {
           </p>
         </div>
       </div>
+      <LearnMore context="funds" className="mt-6" />
 
       {/* ── What the match is filtered on ──
           Under the header on purpose: the reader meets the answers before the

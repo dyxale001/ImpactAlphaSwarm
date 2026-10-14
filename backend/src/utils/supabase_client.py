@@ -508,6 +508,37 @@ class AssetRepository(Repository):
             return {}
         return {r["ticker"]: r["universe"] for r in rows if r.get("ticker")}
 
+    def tickers_missing_exchange(self) -> Optional[List[str]]:
+        """Active tickers whose exchange has not been looked up yet (migration 032).
+
+        None when the read failed, so the backfill can tell "nothing to do" from "could
+        not look", which is what a missing column looks like before the migration runs.
+        """
+        try:
+            rows = (
+                self.table()
+                .select("ticker")
+                .eq("is_active", True)
+                .is_("exchange", "null")
+                .order("ticker")
+                .execute()
+                .data
+                or []
+            )
+        except Exception as e:
+            print(f"Could not read assets missing an exchange: {e}")
+            return None
+        return [r["ticker"] for r in rows if r.get("ticker")]
+
+    def set_exchange(self, ticker: str, exchange: str) -> bool:
+        """Store a ticker's exchange. False when the write failed."""
+        try:
+            self.table().update({"exchange": exchange}).eq("ticker", ticker).execute()
+            return True
+        except Exception as e:
+            print(f"Could not store the exchange for {ticker}: {e}")
+            return False
+
 
 # How long a run may sit in 'running' before it is presumed abandoned and may be
 # claimed by a new one. Mirrors api.STALE_RUN_MINUTES, which heals such rows.
@@ -716,7 +747,7 @@ class RecommendationRepository(Repository):
         try:
             resp = (
                 self.table()
-                .select("news_articles,news_count,news_sentiment_score,news_bullish,news_bearish")
+                .select("news_articles,news_count,news_sentiment_score,news_bullish,news_bearish,created_at")
                 .eq("asset_id", asset_id)
                 .gt("news_count", 0)
                 .order("created_at", desc=True)
@@ -1192,7 +1223,11 @@ class SentimentHistoryRepository(Repository):
     from "how did the ranking go", and the tables are a different concern.
     """
 
-    TABLES = ("social_sentiment_daily", "news_sentiment_daily")
+    #: Each table, with the count column that says a row actually holds something.
+    TABLES = (
+        ("social_sentiment_daily", "post_count"),
+        ("news_sentiment_daily", "article_count"),
+    )
 
     def last_updated(self) -> Optional[str]:
         """When sentiment data was last written, across every ticker.
@@ -1209,15 +1244,22 @@ class SentimentHistoryRepository(Repository):
         identically to this one on any deployment with more than a handful of users, for the
         cost of a second parameter and a join this page does not otherwise need.
 
+        Only rows that hold something count. A seed that walks a ticker and finds nothing
+        still writes a row, to record that it was walked, and that bookkeeping is not
+        sentiment arriving. Without this filter, opening the chart for a ticker nobody posts
+        about, or for a string that is not a ticker at all, moved every user's "Sentiment
+        updated" to just now.
+
         Returns ``None`` on any failure or when both tables are empty, which the caller shows
         as "unknown" rather than a wrong guess.
         """
         try:
             latest: Optional[str] = None
-            for table in self.TABLES:
+            for table, count_column in self.TABLES:
                 rows = (
                     self.table(table)
                     .select("updated_at")
+                    .gt(count_column, 0)
                     .order("updated_at", desc=True)
                     .limit(1)
                     .execute()

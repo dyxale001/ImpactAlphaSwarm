@@ -15,6 +15,7 @@ import RecommendationCard from "../RecommendationCard";
 import ScoredAssetRow from "../ScoredAssetRow";
 import SignalScorecard from "../SignalScorecard";
 import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { ListingLine } from "../../research/ListingLine";
 
 // Widgets over the latest AI run. All three read the one shared feed from
 // DashboardDataContext rather than fetching their own, so a dashboard carrying
@@ -126,6 +127,8 @@ function TopPickHero({
               R {topPick.currentPrice.toFixed(2)}
             </div>
           </Link>
+
+          <ListingLine universe={topPick.universe} exchange={topPick.exchange} onDark />
 
           {topPick.isDiscovered ? (
             <span

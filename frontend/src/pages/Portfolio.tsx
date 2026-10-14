@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { ExternalLink, PieChart, RotateCcw } from "lucide-react";
 import { PORTFOLIO_HISTORY, MOCK_RECOMMENDATIONS } from "../data/mockData";
@@ -31,6 +32,7 @@ export default function PortfolioPage() {
           </button>
         )}
       </div>
+      <LearnMore context="portfolio" />
 
       <PortfolioSummary cash={cash} investedValue={investedValue} totalValue={totalValue} totalReturn={totalReturn} />
       <HoldingsList holdings={holdingsList} />
@@ -58,7 +60,7 @@ export default function PortfolioPage() {
       {/* Suggested Allocation */}
       <div className="glass-card p-6" style={{ animation: "slide-up 0.6s ease-out forwards" }}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg flex items-center gap-2 mb-4">
-          <PieChart className="w-4 h-4" /> AI Suggested Allocation
+          <PieChart className="w-4 h-4" /> Example Allocation (Demo Data)
         </h2>
         <div className="space-y-3">
           {MOCK_RECOMMENDATIONS.map((asset) => (

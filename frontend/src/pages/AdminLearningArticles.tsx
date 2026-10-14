@@ -110,8 +110,11 @@ export default function AdminLearningArticles() {
         slug: article.slug,
         summary: article.summary,
         content: article.content,
+        tags: article.tags ?? [],
+        video_url: article.video_url ?? "",
         category_id: article.category_id,
         difficulty_level: article.difficulty_level,
+        display_order: String(article.display_order),
       },
     });
     setFormError(null);
@@ -127,6 +130,8 @@ export default function AdminLearningArticles() {
       values: {
         ...current.values,
         [field]: value,
+        ...(field === "category_id" && value !== current.values.category_id
+          ? { display_order: "" } : {}),
       },
     }));
   };
@@ -252,6 +257,9 @@ export default function AdminLearningArticles() {
                     Category
                   </th>
                   <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
+                    Order
+                  </th>
+                  <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
                     Difficulty
                   </th>
                   <th className="p-5 text-xs font-semibold text-brand-muted-fg uppercase tracking-wider">
@@ -281,6 +289,9 @@ export default function AdminLearningArticles() {
                       </td>
                       <td className="p-5 align-top text-sm text-brand-fg">
                         {category?.name ?? "Unassigned"}
+                      </td>
+                      <td className="p-5 align-top text-sm text-brand-fg">
+                        {article.display_order}
                       </td>
                       <td className="p-5 align-top text-sm text-brand-fg">
                         <span className="inline-flex rounded-full border border-brand-border bg-brand-bg/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
@@ -320,7 +331,7 @@ export default function AdminLearningArticles() {
                 {filteredArticles.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="p-8 text-center text-brand-muted-fg"
                     >
                       No articles match the current filter.

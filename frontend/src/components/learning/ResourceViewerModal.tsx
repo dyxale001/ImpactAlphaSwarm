@@ -1,4 +1,5 @@
 import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
+import LearningVideo from "./LearningVideo";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const scrollbarStyles = `
@@ -73,19 +74,19 @@ flex
 flex-col
 "
         >
-          <div className="border-b border-brand-border/60 bg-brand-bg/70 px-6 py-5">
+          <div className="border-b border-brand-accent/40 bg-brand-primary px-6 py-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 space-y-3">
-                <span className="inline-flex items-center rounded-full border border-brand-primary/15 bg-brand-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-primary">
+                <span className="inline-flex items-center rounded-full bg-brand-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-primary">
                   Learning Article
                 </span>
-                <div className="inline-flex rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
+                <div className="inline-flex rounded-full border border-brand-accent/40 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-bg">
                   {article.difficulty_level}
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="rounded-full border border-brand-border/60 bg-brand-card px-3 py-1.5 text-sm text-brand-muted-fg shadow-sm transition-colors hover:bg-brand-bg hover:text-brand-fg"
+                className="rounded-full border border-brand-bg/30 bg-white/10 px-3 py-1.5 text-sm text-brand-bg transition-colors hover:bg-brand-accent hover:text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
               >
                 Close
               </button>
@@ -94,6 +95,9 @@ flex-col
 
           <div className="article-viewer-scrollbar overflow-y-auto px-6 py-7">
             <div className="mx-auto max-w-3xl space-y-8 text-brand-fg">
+              <h1 className="text-2xl font-semibold">{article.title}</h1>
+              <p className="text-sm text-brand-muted-fg">{article.summary}</p>
+              <LearningVideo url={article.video_url} />
               <MarkdownRenderer content={article.content} />
               <section className="space-y-3 rounded-2xl border border-brand-border/60 bg-brand-bg/70 p-5">
                 <h2 className="text-lg font-semibold text-brand-fg">

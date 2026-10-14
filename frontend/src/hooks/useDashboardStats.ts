@@ -23,6 +23,10 @@ export interface AssetRecommendation {
   rank: number;
   isDiscovered: boolean;
   discoverySources: string[] | null;
+  /** The universe the asset belongs to, or null for an uncategorised row. */
+  universe: string | null;
+  /** Where it trades, e.g. "Nasdaq" (migration 032). "" until the nightly fill reaches it. */
+  exchange: string;
   // Unified ranking v2 terms (migration 010). Null on legacy rows and whenever the
   // backend ranking is disabled, which is what the legacy display falls back on.
   signalStrength: number | null;
@@ -50,8 +54,8 @@ export interface DashboardStatsOptions {
   limit?: number | null;
 }
 
-/** Defaults to five, so the dashboard keeps its top five by calling this with no
- * arguments. The assets page passes `limit: null` to read everything the run
+/** Defaults to five when no limit is supplied. Both the Dashboard data provider
+ * and the Stocks page pass `limit: null` to read everything the run
  * scored. A run scores about thirty tickers, well inside PostgREST's default page
  * size, so the uncapped read needs no pagination. */
 export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
@@ -96,7 +100,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
         setAnalysisProgressExecutionIdentity(null);
         setLatestRunCreatedAt(null);
         setRecommendationError(
-          "Unable to load dashboard data until your profile is available.",
+          "Unable to load analysis data until your profile is available.",
         );
         return;
       }
@@ -204,7 +208,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
         ? await supabase
             .from("assets")
             .select(
-              "id, ticker, name, origin, discovery_sources, first_discovered_at",
+              "id, ticker, name, origin, discovery_sources, first_discovered_at, universe, exchange",
             )
             .in("id", assetIds)
         : { data: [], error: null };
@@ -247,6 +251,8 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
             isDiscovered: isRecentlyDiscovered(asset ?? {}),
             discoverySources:
               (asset?.discovery_sources as string[] | null) ?? null,
+            universe: asset?.universe ?? null,
+            exchange: asset?.exchange ?? "",
             signalStrength: rec.signal_strength ?? null,
             signalDirection: rec.signal_direction ?? null,
             convergence: rec.convergence ?? null,
@@ -269,7 +275,7 @@ export function useDashboardStats({ limit = 5 }: DashboardStatsOptions = {}) {
       setRecs([]);
       setLatestRunCreatedAt(null);
       setRecommendationError(
-        "We couldn't load your dashboard recommendations right now.",
+        "We couldn't load your analysis data right now.",
       );
     } finally {
       setIsLoadingRecs(false);

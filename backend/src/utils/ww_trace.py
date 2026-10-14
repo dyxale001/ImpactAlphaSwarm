@@ -51,7 +51,7 @@ logger = logging.getLogger("alpha-api")
 
 #: Bumped whenever the prompt or the facts change shape, so every stored trace is
 #: rewritten once rather than left describing the old facts in the old way.
-TRACE_VERSION = 3
+TRACE_VERSION = 4
 
 #: How the last sentence must open. It tells the reader what they can do with this when
 #: making their own decision (PlainMeaning.next_step), never what to do with the shares.
@@ -421,10 +421,7 @@ class InstitutionalEvidence:
         if self.is_large:
             if pct < LARGE_INSIDER_CEILING:
                 return f"normal, as under {trim(LARGE_INSIDER_CEILING)} percent is usual at this size"
-            return (
-                f"higher than the under {trim(LARGE_INSIDER_CEILING)} percent usual at this size,"
-                " often a founder or family stake"
-            )
+            return f"higher than the under {trim(LARGE_INSIDER_CEILING)} percent usual at this size"
         return (
             f"common in smaller companies, where founder stakes above"
             f" {trim(SMALL_INSIDER_COMMON)} percent are usual"
@@ -665,10 +662,10 @@ class PlainMeaning:
         if evidence.is_large:
             if pct < LARGE_INSIDER_CEILING:
                 return "they own only a tiny slice, which is normal when a company is this big."
-            return (
-                "they still own a noticeable slice, which is unusual at this size and often"
-                " means a founder or family is still involved."
-            )
+            # Says what the figure is and stops. It used to add "often means a founder or
+            # family is still involved", which told readers Apple (1.65 percent) had one.
+            # The figure cannot say who the insiders are.
+            return "they own a noticeable slice, more than is usual for a company this big."
         slice_ = insider_slice_in_words(pct)
         if pct >= SMALL_INSIDER_COMMON and evidence.size_band is not None:
             return f"they own {slice_}, which is common in smaller, founder led companies."

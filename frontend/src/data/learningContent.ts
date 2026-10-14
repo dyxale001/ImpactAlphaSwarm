@@ -5,7 +5,10 @@ export type LearningArticle = {
   slug: string;
   summary: string;
   content: string;
+  tags?: string[] | null;
+  video_url?: string | null;
   difficulty_level: string;
+  display_order: number;
   created_at: string;
 };
 

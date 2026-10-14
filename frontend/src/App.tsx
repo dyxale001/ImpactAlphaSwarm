@@ -27,11 +27,15 @@ import FundDetailPage from "./pages/FundDetail";
 import AdminFunds from "./pages/AdminFunds";
 import AdminFundEdit from "./pages/AdminFundEdit";
 import { FUNDS_ENABLED } from "./utils/fundsFlags";
-import ResearchPage from "./pages/Research";
+import MarketNewsPage from "./pages/MarketNews";
+import { MACRO_NEWS_ENABLED } from "./utils/macroNewsFlags";
+import ComparePage from "./pages/Compare";
+import { COMPARE_ENABLED } from "./utils/compareFlags";
 import WatchlistPage from "./pages/Watchlist";
 import AskAlphaSwarmPage from "./pages/Ask";
 import PortfolioPage from "./pages/Portfolio";
 import LearningPage from "./pages/Learning";
+import FinancialToolsPage from "./pages/FinancialTools";
 import AssetDetailsPage from "./pages/AssetDetailsPage";
 import NewsSentimentPage from "./pages/NewsSentimentPage";
 import SocialSentimentPage from "./pages/SocialSentimentPage";
@@ -42,11 +46,11 @@ import WhaleWatchingPage from "./pages/WhaleWatching";
 
 // A wrapper to prevent logged-in users from seeing the landing/auth pages
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { session, isLoading, isProfileLoading, isRecovery } = useAuthStore();
+  const { session, profile, isLoading, isProfileLoading, isRecovery } = useAuthStore();
   if (isLoading || isProfileLoading) return null;
   // A pending recovery session must still be able to reach the login page,
   // otherwise abandoning a reset would bounce the user into the app.
-  if (session && !isRecovery) return <Navigate to="/dashboard" replace />;
+  if (session && !isRecovery && (!profile || profile.is_active === true)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -91,14 +95,21 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />{" "}
           {/* Changed from "/" to "/dashboard" */}
           <Route path="/assets" element={<AssetsPage />} />
+          {/* Market News (D-223). Unrouted unless the flag is set, like Funds. */}
+          {MACRO_NEWS_ENABLED && <Route path="/news" element={<MarketNewsPage />} />}
           {/* Funds catalogue. Unrouted unless the flag is set, so with it off
               the path is a 404 rather than a page that cannot load its data.
               The detail route is listed after the list route and is equally
               gated, so a deep link cannot reach a page whose API is off. */}
           {FUNDS_ENABLED && <Route path="/funds" element={<FundsPage />} />}
           {FUNDS_ENABLED && <Route path="/funds/:fundId" element={<FundDetailPage />} />}
+          {COMPARE_ENABLED && <Route path="/compare" element={<ComparePage />} />}
           <Route path="/learning" element={<LearningPage />} />
-          <Route path="/research" element={<ResearchPage />} />
+          <Route path="/financial-tools" element={<FinancialToolsPage />} />
+          {/* Retired: it only ever rendered mock data (a hard-coded NVDA sentiment
+              report), which a reader could not tell from the real thing. Kept as a
+              redirect so an old bookmark lands somewhere real. */}
+          <Route path="/research" element={<Navigate to="/dashboard" replace />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/ask" element={<AskAlphaSwarmPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />

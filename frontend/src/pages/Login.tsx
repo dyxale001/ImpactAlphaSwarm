@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useLogin } from '../hooks/useLogin'
-import { ArrowRight, ShieldAlert, Eye, EyeOff, RotateCcw } from 'lucide-react'
+import { ArrowRight, ShieldAlert, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import ForgotPasswordModal from '../components/ForgotPasswordModal'
 import AuthLayout, { authInputClass, AUTH_LABEL, AUTH_SUBMIT } from '../components/AuthLayout'
@@ -23,7 +23,6 @@ export default function Login() {
     email, setEmail,
     password, setPassword,
     error, loading, handleLogin,
-    needsReactivation, handleReactivate, cancelReactivation,
   } = useLogin()
 
   const [showPassword, setShowPassword] = useState(false)
@@ -33,53 +32,6 @@ export default function Login() {
     <AuthLayout view="login">
       {showForgotPassword && <ForgotPasswordModal onClose={() => setShowForgotPassword(false)} />}
 
-      {needsReactivation ? (
-        /* ── Reactivation prompt ─────────────────────────────────── */
-        <div className="animate-fade-up flex flex-col gap-6 rounded-2xl bg-white p-7 shadow-md">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-forest-700/30 bg-forest-700/10">
-            <RotateCcw className="h-6 w-6 text-forest-700" />
-          </div>
-
-          <div className="text-center">
-            <h1 className="mb-2 text-2xl font-medium tracking-tight text-forest-700">Welcome back</h1>
-            <p className="text-sm leading-relaxed text-muted">
-              This account is currently deactivated. Reactivate it to continue where you left off.
-            </p>
-          </div>
-
-          {error && (
-            <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm font-medium text-danger">
-              <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
-              <span className="leading-relaxed">{error}</span>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3">
-            <button type="button" onClick={handleReactivate} disabled={loading} className={`${AUTH_SUBMIT} disabled:opacity-70`}>
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <Spinner />
-                  Reactivating...
-                </span>
-              ) : (
-                <>
-                  Reactivate my account <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={cancelReactivation}
-              disabled={loading}
-              className="w-full rounded-full border border-forest-900/14 py-3 text-sm font-semibold text-muted transition-colors hover:border-forest-900/28 hover:text-forest-900 disabled:opacity-50"
-            >
-              Cancel and sign out
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* ── Login form ──────────────────────────────────────────── */
         <form onSubmit={handleLogin} className="animate-fade-up flex flex-col gap-6">
           <div>
             <p className="mb-2.5 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Welcome Back</p>
@@ -110,16 +62,7 @@ export default function Login() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="mx-1 flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Password</label>
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-xs font-semibold text-forest-700 hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <label className={AUTH_LABEL}>Password</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -142,6 +85,15 @@ export default function Login() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            {/* Under the box rather than beside the label, where it is met at the
+                moment a password will not come to mind. */}
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="mr-1 self-end text-xs font-semibold text-forest-700 hover:underline"
+            >
+              Forgot password?
+            </button>
           </div>
 
           <button type="submit" disabled={loading} className={`${AUTH_SUBMIT} mt-1 disabled:opacity-70`}>
@@ -165,7 +117,6 @@ export default function Login() {
             </Link>
           </p>
         </form>
-      )}
     </AuthLayout>
   )
 }

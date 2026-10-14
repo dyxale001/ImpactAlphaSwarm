@@ -1,7 +1,10 @@
 import { supabase } from "../../lib/supabase";
 import type { SocialPost } from "../../components/research/SocialPosts";
 import type { NewsArticle } from "../../components/research/NewsArticles";
+import { AnalysisAccessError } from "../../types/analysisLifecycle";
 import type { AnalysisStatus } from "../../types/analysisLifecycle";
+import { checkAnalysisCompletion, useAnalysisNotifications } from "../../store/analysisNotifications";
+import { useAuthStore } from "../../store/authStore";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -25,7 +28,9 @@ export async function startAnalysis(payload: {
   risk_tolerance?: string;
   expertise_level?: string;
 }) {
-  const token = await getToken();
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const userId = data?.session?.user?.id;
   console.log("Token from session:", token ? "✓ exists" : "✗ null");
 
   if (!token) {
@@ -41,17 +46,52 @@ export async function startAnalysis(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<StartAnalysisResponse>;
+  const started = await res.json() as StartAnalysisResponse;
+  if (userId && useAuthStore.getState().user?.id === userId) {
+    useAnalysisNotifications.getState().register(userId, started.run_id);
+    // Pin this execution promptly, including runs that finish before navigation.
+    await checkRegisteredExecution(userId, started.run_id);
+  }
+  return started;
 }
 
-export async function getStatus(runId: string) {
-  const res = await fetch(`${BASE}/api/analysis/status/${runId}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<AnalysisStatus>;
+async function checkRegisteredExecution(userId: string, runId: string) {
+  try {
+    const status = await getStatus(runId, true);
+    const state = useAnalysisNotifications.getState();
+    if (state.userId === userId && state.pending?.runId === runId && !state.pending.createdAt) {
+      await checkAnalysisCompletion(userId, async () => status, async () => ({ top_5: [] }));
+    }
+  } catch { /* Registration survives transient failures; the monitor retries. */ }
+}
+
+let statusCache: { token: string; runId: string; at: number; value: Promise<AnalysisStatus> } | null = null;
+export async function getStatus(runId: string, fresh = false) {
+  const token = await getToken();
+  if (!token) throw new AnalysisAccessError("Please sign in again.");
+  // Share short-lived reads with the existing loading screen and refresh pollers.
+  if (!fresh && statusCache?.token === token && statusCache.runId === runId && Date.now() - statusCache.at < 2000) return statusCache.value;
+  const value = (async () => {
+    const res = await fetch(`${BASE}/api/analysis/status/${runId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if ([401, 403, 404].includes(res.status)) throw new AnalysisAccessError("Analysis access is unavailable. Please contact an administrator.");
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<AnalysisStatus>;
+  })();
+  statusCache = { token, runId, at: Date.now(), value };
+  try { return await value; } catch (error) {
+    if (statusCache?.value === value) statusCache = null;
+    throw error;
+  }
 }
 
 export async function getResult(runId: string) {
-  const res = await fetch(`${BASE}/api/analysis/result/${runId}`);
+  const token = await getToken();
+  if (!token) throw new AnalysisAccessError("Please sign in again.");
+  const res = await fetch(`${BASE}/api/analysis/result/${runId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -77,12 +117,19 @@ export interface WhaleTransactionDTO {
   transaction_date: string | null;
   filing_date: string | null;
   transaction_code?: string | null;
+  // How many filed batches this row sums: an insider selling in batches on one day is
+  // one row. Price is then their average.
+  lots?: number;
 }
 
 export interface WhaleActivityResponse {
   ticker: string;
   transactions: WhaleTransactionDTO[];
   source: string | null;
+  // The span the dealings cover: traded in the last this many days.
+  window_days?: number | null;
+  // Whether the tab's AI summary is switched on for this deployment.
+  summary_enabled?: boolean;
   cached?: boolean;
   fetched_at?: string | null;
 }
@@ -111,6 +158,8 @@ export interface InstitutionalOwnershipResponse {
   institutions_count: number | null;
   holders: InstitutionalHolderDTO[];
   source: string | null;
+  // Whether the tab's AI summary is switched on for this deployment.
+  summary_enabled?: boolean;
   cached?: boolean;
   fetched_at?: string | null;
 }
@@ -167,10 +216,14 @@ export interface FundPosition {
   pct_held: number | null;
   value: number | null;
   pct_change: number | null;
+  shares?: number | null;
 }
 
 export interface FundHolding {
   fund: string;
+  // The 13F filer names merged into this entry, when a firm files under several (Vanguard
+  // files as two). Absent for a fund that files under one name.
+  filers?: string[];
   total_value: number;
   // Plain-English blurb of who the fund is. Sourced from the backend so the
   // wording is editable without a frontend redeploy. May be absent on older
@@ -208,21 +261,26 @@ export async function deactivateOwnAccount() {
   return res.json();
 }
 
-export async function reactivateOwnAccount() {
+export async function setAdminUserStatus(userId: string, isActive: boolean): Promise<void> {
   const token = await getToken();
-  if (!token) throw new Error("No auth token");
-
-  const res = await fetch(`${BASE}/api/account/reactivate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  if (!token) throw new Error("Please sign in again.");
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/admin/toggle-user-status`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, is_active: isActive }),
+    });
+  } catch {
+    throw new Error("Account status could not be confirmed. Refresh the user list and retry the intended action.");
+  }
+  const result = await res.json().catch(() => null);
+  if (!res.ok || result?.ok !== true || result?.is_active !== isActive) {
+    throw new Error(typeof result?.detail === "string" ? result.detail
+      : "Account status could not be confirmed. Refresh the user list and retry the intended action.");
+  }
 }
+
 export interface SentimentHistoryPoint {
   date: string;
   /** 0-100, or null on a day with no posts. Null is a gap, not a zero. */
@@ -404,6 +462,22 @@ export async function getQuantHistory(ticker: string, horizon: QuantHorizon) {
   );
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<QuantHistoryResponse>;
+}
+
+export interface ListingResponse {
+  ticker: string;
+  /** yfinance's exchange code, e.g. "NMS", or "" when the lookup found nothing. */
+  exchange: string;
+  /** The same exchange as a reader would name it, e.g. "Nasdaq". */
+  exchange_name: string;
+}
+
+// The exchange a ticker trades on, for the asset page header. One light
+// lookup the backend holds for a day. Informational, so no auth token is needed.
+export async function getListing(ticker: string) {
+  const res = await fetch(`${BASE}/api/assets/${encodeURIComponent(ticker)}/listing`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ListingResponse>;
 }
 
 export interface QuantTraceResponse {

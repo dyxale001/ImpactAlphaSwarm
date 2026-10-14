@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Newspaper } from "lucide-react";
@@ -8,7 +9,7 @@ import {
   type NewsArticle,
 } from "../components/research/NewsArticles";
 import { SentimentTrendChart } from "../components/research/SentimentTrendChart";
-import { dayLabel } from "../components/research/sentimentDays";
+import { dayLabel, dayPhrase } from "../components/research/sentimentDays";
 import {
   newsDayIndex,
   newsDaysFromHistory,
@@ -125,6 +126,7 @@ export default function NewsSentimentPage() {
         subtitle={`How coverage of ${tickerLabel} moved over the last ${SOCIAL_HISTORY_DAYS} days.`}
         backHref={`/asset/${tickerLabel}?tab=sentiment`}
       />
+      <LearnMore context="stock.news-sentiment" />
 
       <SentimentTrendChart
         points={newsPoints}
@@ -157,8 +159,11 @@ export default function NewsSentimentPage() {
                   ? `${dayTotal} (top ${dayArticles.length} shown)`
                   : dayTotal,
               },
-              { label: "Positive", value: bucketCounts.Positive },
-              { label: "Negative", value: bucketCounts.Negative },
+              // The day's totals, beside a day total. Counting labels in the listed
+              // articles counted only the top few, so a busy day read "Articles 20,
+              // Positive 5" when twelve were positive.
+              { label: "Positive", value: dayNews?.bullish ?? bucketCounts.Positive },
+              { label: "Negative", value: dayNews?.bearish ?? bucketCounts.Negative },
             ]}
           />
 
@@ -211,7 +216,9 @@ export default function NewsSentimentPage() {
               </div>
               {shown.length === 0 ? (
                 <p className="text-sm text-brand-muted-fg italic">
-                  No articles match the selected filters.
+                  {dayArticles.length === 0
+                    ? `No articles ${activeDay ? dayPhrase(activeDay) : "on this day"}.`
+                    : "No articles match the selected filters."}
                 </p>
               ) : (
                 <SourceList nested>

@@ -1165,7 +1165,9 @@ class DiscoveryRun:
         scorer: DiscoveryScorer | None = None,
         hysteresis: HysteresisPolicy | None = None,
         seed_scorer: SeedScorer | None = None,
+        exchange_filler: Any = None,
     ):
+        self._exchange_filler = exchange_filler
         self.sources = sources if sources is not None else SourceFactory.from_config()
         self.funnel = funnel or ValidationFunnel()
         self.classifier = classifier or ClassificationChain()
@@ -1174,6 +1176,15 @@ class DiscoveryRun:
         self.seed_scorer = seed_scorer or SeedScorer(
             finnhub=self.funnel.finnhub, scorer=self.scorer
         )
+
+    @property
+    def exchange_filler(self):
+        """Built on first use, so a dry run or a test never constructs the real one."""
+        if self._exchange_filler is None:
+            from ..quant.listing import ExchangeFiller
+
+            self._exchange_filler = ExchangeFiller()
+        return self._exchange_filler
 
     def gather(self) -> CandidatePool:
         """Stage 1: merge every source into a deduped pool, recording provenance."""
@@ -1344,6 +1355,20 @@ class DiscoveryRun:
         except Exception as exc:
             logger.warning("Discovery: seed scoring failed, seeds keep their last score: %s", exc)
             summary["seeds_scored"] = 0
+
+        # The exchange shown on asset pages and cards (migration 032), for any active row
+        # still without one: tonight's new entrants, and seeds added by hand. Fenced
+        # like seed scoring: a row left empty is tried again tomorrow, and the page
+        # falls back to a live lookup meanwhile.
+        if not dry_run:
+            try:
+                filled = self.exchange_filler.fill()
+                summary["exchanges_stored"] = len(filled["stored"])
+                if filled["unknown"]:
+                    summary["exchanges_unknown"] = filled["unknown"]
+            except Exception as exc:
+                logger.warning("Discovery: exchange fill failed, rows retry tomorrow: %s", exc)
+                summary["exchanges_stored"] = 0
 
         summary["total_candidates"] = len(pool.candidates)
         summary["validated"] = len(survivors)

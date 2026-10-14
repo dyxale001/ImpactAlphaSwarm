@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { AdminUserView } from "../types/auth";
+import { setAdminUserStatus } from "../services/api/analysis";
 
 export function useAdminUsers() {
   const [users, setUsers] = useState<AdminUserView[]>([]);
@@ -24,7 +25,7 @@ export function useAdminUsers() {
       supabase
         .from("user_analysis")
         .select(
-          "user_id, investment_universe, ai_derived_expertise, risk_tolerance, capital",
+          "user_id, investment_universe, ai_derived_expertise, risk_tolerance",
         ),
     ]);
 
@@ -143,15 +144,7 @@ export function useAdminUsers() {
     isActive: boolean,
   ): Promise<boolean> => {
     try {
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ is_active: isActive })
-        .eq("id", userId);
-
-      if (updateError) {
-        console.error("Failed to update user status:", updateError);
-        throw updateError;
-      }
+      await setAdminUserStatus(userId, isActive);
 
       setUsers((current) =>
         current.map((u) =>

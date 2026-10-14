@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
+import AnalysisCompletionNotification from "../AnalysisCompletionNotification";
 import { readLastHubPage } from "../../utils/lastHubPage";
 import { useAuthStore } from "../../store/authStore";
 import { useSignOut } from "../../hooks/useSignOut";
@@ -8,19 +9,23 @@ import {
   LayoutDashboard,
   CandlestickChart,
   BookOpen,
-  Search,
+  Calculator,
   Eye,
   LineChart,
   Terminal,
   Settings,
   Waves,
   Landmark,
+  Newspaper,
+  Columns2,
   Sparkles,
   Menu,
   X,
   LogOut,
 } from "lucide-react";
 import { FUNDS_ENABLED } from "../../utils/fundsFlags";
+import { MACRO_NEWS_ENABLED } from "../../utils/macroNewsFlags";
+import { COMPARE_ENABLED } from "../../utils/compareFlags";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,9 +67,11 @@ export default function AppLayout() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Stocks", path: "/assets", icon: CandlestickChart },
+    { name: "Market News", path: "/news", icon: Newspaper },
     { name: "Funds", path: "/funds", icon: Landmark },
+    { name: "Compare", path: "/compare", icon: Columns2 },
     { name: "Learning", path: "/learning", icon: BookOpen },
-    { name: "Research", path: "/research", icon: Search },
+    { name: "Financial Tools", path: "/financial-tools", icon: Calculator },
     { name: "Watchlist", path: "/watchlist", icon: Eye },
     { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
     { name: "Portfolio", path: "/portfolio", icon: LineChart },
@@ -80,11 +87,14 @@ export default function AppLayout() {
       i.name === "Ask AlphaSwarm" ||
       i.name === "Whale Watching" ||
       i.name === "Learning" ||
+      i.name === "Financial Tools" ||
       i.name === "Settings" ||
       // Behind the flag: the entry has to be in both the list above and this
       // allow-list to appear, and the page it links to needs the backend flag
       // as well, so nothing half-appears.
-      (FUNDS_ENABLED && i.name === "Funds")
+      (FUNDS_ENABLED && i.name === "Funds") ||
+      (MACRO_NEWS_ENABLED && i.name === "Market News") ||
+      (COMPARE_ENABLED && i.name === "Compare")
   );
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
@@ -226,6 +236,7 @@ export default function AppLayout() {
       </main>
 
       <AskAlphaSwarmChatbot />
+      <AnalysisCompletionNotification />
     </div>
   );
 }

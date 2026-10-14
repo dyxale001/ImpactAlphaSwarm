@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -61,7 +62,7 @@ export default function HowItWorks() {
             </>
           ) : (
             <>
-              Every recommendation combines two independent engines: a{" "}
+              Each asset analysis combines two independent engines: a{" "}
               <span className="font-semibold text-brand-fg">Sentiment</span>{" "}
               signal (what people and the press are saying) and a{" "}
               <span className="font-semibold text-brand-fg">Quantitative</span>{" "}
@@ -72,6 +73,7 @@ export default function HowItWorks() {
           )}
         </p>
       </div>
+      <LearnMore context="stock.methodology" />
 
       {/* Ordering first: it is the question users are actually asking when they
           tap through from a card. */}

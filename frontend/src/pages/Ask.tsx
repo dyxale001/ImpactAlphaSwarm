@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useEffect, useRef } from 'react'
 import { Sparkles, Loader2 } from 'lucide-react'
 import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
@@ -37,6 +38,8 @@ export default function AskAlphaSwarmPage() {
           </button>
         )}
       </div>
+
+      {!hasHistory && !loading && <LearnMore context="ask" />}
 
       {/* Landing or conversation */}
       <div className="flex-1 space-y-6">

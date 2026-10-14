@@ -1,3 +1,4 @@
+import LearnMore from '../components/learning/LearnMore';
 import { useState, useEffect } from "react";
 import {
   Eye,
@@ -84,6 +85,7 @@ export default function WatchlistPage() {
           </button>
         </div>
       </div>
+      <LearnMore context="watchlist" />
 
       {/* ── Search ──────────────────────────────────────────────────── */}
       <div className="space-y-4">

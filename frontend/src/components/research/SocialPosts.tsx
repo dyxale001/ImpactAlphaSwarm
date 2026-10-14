@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import PostText from "./PostText";
 import SentimentSignals from "./SentimentSignals";
+import { itemLean } from "./sentimentDisplay";
 import { dayLabel as formatDayLabel } from "./sentimentDays";
 
 export type SocialPost = {
@@ -22,7 +23,10 @@ export type SocialPost = {
   replies?: number;
   sentiment?: string;
   sentiment_score?: number; // 0-100, this post's own text sentiment
-  influence?: number; // % of the social score this post drives (recency)
+  // % of the score this post drives. On a stored day it is the share of that WHOLE day,
+  // worked out when the row is read; null when a post stored before weights were kept
+  // gives nothing to work it out from.
+  influence?: number | null;
 };
 
 // Highest-influence first; items without an influence value sink to the end.
@@ -45,21 +49,26 @@ function avatarHue(seed: string): number {
   return h;
 }
 
-// StockTwits posts carry an explicit Bullish / Bearish tag; ours is inferred from
-// the post's own text sentiment on the same 45 / 55 split the rest of the page uses.
-function bullBearTag(score?: number): {
+// The post's lean as a Bullish / Bearish / Neutral tag. Read through itemLean, the one
+// rule every per-item mark shares, so the tag, the badge colour and the filter the
+// post sits under can never disagree.
+export function bullBearTag(
+  sentiment?: string,
+  score?: number,
+): {
   label: string;
   cls: string;
   Icon: React.ComponentType<{ className?: string }> | null;
 } | null {
-  if (score == null) return null;
-  if (score >= 55)
+  const lean = itemLean(sentiment, score);
+  if (lean === null) return null;
+  if (lean === "Positive")
     return {
       label: "Bullish",
       cls: "bg-emerald-500/12 text-emerald-600",
       Icon: TrendingUp,
     };
-  if (score <= 45)
+  if (lean === "Negative")
     return {
       label: "Bearish",
       cls: "bg-rose-500/12 text-rose-600",
@@ -139,7 +148,7 @@ export function SocialPostRow({
           <span className="min-w-0 truncate">
             {p.author ? `@${p.author}` : "StockTwits"}
           </span>
-          <SentimentSignals score={p.sentiment_score} influence={p.influence} />
+          <SentimentSignals score={p.sentiment_score} sentiment={p.sentiment} influence={p.influence} />
           <EngagementStat icon={Heart} count={p.likes} label="likes" />
           <EngagementStat
             icon={MessageSquare}
@@ -157,7 +166,7 @@ export function SocialPostRow({
 
   const handle = p.author ? `@${p.author}` : "StockTwits";
   const when = formatWhen(p.date);
-  const tag = bullBearTag(p.sentiment_score);
+  const tag = bullBearTag(p.sentiment, p.sentiment_score);
   const hue = avatarHue(p.author || "stocktwits");
 
   return linkWrap(

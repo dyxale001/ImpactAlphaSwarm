@@ -182,6 +182,40 @@ class NewsDailyRepository:
 				logger.warning("News daily upsert failed (%d rows): %s", len(chunk), e)
 		return written
 
+	def read_article_scores(
+		self, tickers: list[str], since: datetime.date
+	) -> dict[str, dict[str, float]]:
+		"""Each ticker's stored article scores by URL, across every day since ``since``.
+
+		One read for a whole batch. The news tick uses it to reuse a score instead of
+		paying GCP for the same article again. Returns ``{}`` on failure, which costs
+		units but never data.
+		"""
+		if not tickers:
+			return {}
+		try:
+			res = (
+				self._client()
+				.table(self.TABLE)
+				.select("ticker, top_articles")
+				.in_("ticker", [t.upper() for t in tickers])
+				.gte("as_of_day", since.isoformat())
+				.execute()
+			)
+		except Exception as e:
+			logger.info("News article score read failed for %d tickers: %s", len(tickers), e)
+			return {}
+
+		scores: dict[str, dict[str, float]] = {}
+		for row in res.data or []:
+			by_url = scores.setdefault(str(row.get("ticker") or "").upper(), {})
+			for article in row.get("top_articles") or []:
+				url = article.get("url") if isinstance(article, dict) else None
+				score = article.get("sentiment_score") if isinstance(article, dict) else None
+				if url and isinstance(score, (int, float)):
+					by_url[url] = float(score)
+		return scores
+
 	def read_history(self, ticker: str, since: datetime.date) -> list[dict[str, Any]]:
 		"""One ticker's stored days, oldest first."""
 		try:

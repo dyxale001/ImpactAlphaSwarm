@@ -12,7 +12,7 @@ import { LearningNextWidget, LearningProgressWidget } from "../components/dashbo
 
 const articles = (["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const).map((difficulty_level, i): LearningArticle => ({
   id: String(i), category_id: "category", title: `Lesson ${i}`, slug: String(i),
-  summary: "Summary", content: "", difficulty_level, created_at: "2026-01-01", questions: [],
+  summary: "Summary", content: "", display_order: i + 1, difficulty_level, created_at: "2026-01-01", questions: [],
 }));
 function data(statuses: LearningProgress["status"][] = []): LearningData {
   return {

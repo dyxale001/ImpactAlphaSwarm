@@ -1,3 +1,5 @@
+import { normalizeLearningTags } from '../data/learningContexts';
+import { learningVideoEmbed } from '../utils/learningVideo';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type {
@@ -6,21 +8,27 @@ import type {
 } from "../data/learningContent";
 
 export type LearningArticleFormValues = {
+  tags: string[];
+  video_url: string;
   title: string;
   slug: string;
   summary: string;
   content: string;
   category_id: string;
   difficulty_level: string;
+  display_order: string;
 };
 
 const emptyFormValues: LearningArticleFormValues = {
+  tags: [],
+  video_url: "",
   title: "",
   slug: "",
   summary: "",
   content: "",
   category_id: "",
   difficulty_level: "",
+  display_order: "",
 };
 
 export class LearningArticleAdminRepository {
@@ -36,7 +44,7 @@ export class LearningArticleAdminRepository {
       this.client
         .from("learning_articles")
         .select(
-          "id, category_id, title, slug, summary, content, difficulty_level, created_at",
+          "id, category_id, title, slug, summary, content, tags, video_url, difficulty_level, display_order, created_at",
         )
         .order("created_at", { ascending: false }),
     ]);
@@ -49,20 +57,52 @@ export class LearningArticleAdminRepository {
       throw new Error(articlesResult.error.message);
     }
 
-    return {
-      categories: (categoriesResult.data ?? []) as LearningCategory[],
-      articles: (articlesResult.data ?? []) as LearningArticle[],
-    };
+    const categories = (categoriesResult.data ?? []) as LearningCategory[];
+    const categoryOrder = new Map(categories.map(category => [category.id, category.display_order]));
+    const articles = ((articlesResult.data ?? []) as LearningArticle[]).sort((a, b) =>
+      (categoryOrder.get(a.category_id) ?? Number.MAX_SAFE_INTEGER) -
+        (categoryOrder.get(b.category_id) ?? Number.MAX_SAFE_INTEGER) ||
+      a.display_order - b.display_order ||
+      Date.parse(a.created_at) - Date.parse(b.created_at) || Number(a.id) - Number(b.id));
+    return { categories, articles };
+  }
+
+  private async resolveDisplayOrder(values: LearningArticleFormValues) {
+    if (values.display_order.trim() !== "") {
+      const position = Number(values.display_order);
+      if (!/^\d+$/.test(values.display_order.trim()) || !Number.isInteger(position) ||
+          position < 1 || position > 2147483647) {
+        throw new Error("Order within category must be a positive integer.");
+      }
+      return position;
+    }
+    const { data: positions, error: positionError } = await this.client
+      .from("learning_articles")
+      .select("display_order")
+      .eq("category_id", values.category_id)
+      .order("display_order", { ascending: false })
+      .limit(1);
+    if (positionError) throw new Error(positionError.message);
+    const position = (positions?.[0]?.display_order ?? 0) + 1;
+    if (!Number.isInteger(position) || position < 1 || position > 2147483647) {
+      throw new Error("Unable to assign a valid order within category.");
+    }
+    return position;
   }
 
   async createArticle(values: LearningArticleFormValues) {
+    if (values.video_url?.trim() && !learningVideoEmbed(values.video_url)) throw new Error("Use a supported HTTPS YouTube or Vimeo video URL.");
+    const displayOrder = await this.resolveDisplayOrder(values);
     const { error } = await this.client.from("learning_articles").insert({
       title: values.title,
       slug: values.slug,
       summary: values.summary,
       content: values.content,
+      tags: normalizeLearningTags(values.tags),
+      video_url: values.video_url?.trim() || null,
       category_id: values.category_id,
       difficulty_level: values.difficulty_level,
+      display_order: displayOrder,
     });
 
     if (error) {
@@ -71,6 +111,8 @@ export class LearningArticleAdminRepository {
   }
 
   async updateArticle(id: string, values: LearningArticleFormValues) {
+    if (values.video_url?.trim() && !learningVideoEmbed(values.video_url)) throw new Error("Use a supported HTTPS YouTube or Vimeo video URL.");
+    const displayOrder = await this.resolveDisplayOrder(values);
     const { error } = await this.client
       .from("learning_articles")
       .update({
@@ -78,8 +120,11 @@ export class LearningArticleAdminRepository {
         slug: values.slug,
         summary: values.summary,
         content: values.content,
+        tags: normalizeLearningTags(values.tags),
+        video_url: values.video_url?.trim() || null,
         category_id: values.category_id,
         difficulty_level: values.difficulty_level,
+        display_order: displayOrder,
       })
       .eq("id", id);
 
