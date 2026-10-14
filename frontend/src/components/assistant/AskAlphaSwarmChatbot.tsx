@@ -144,9 +144,9 @@ export default function AskAlphaSwarmChatbot() {
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
                 <span
                   aria-hidden="true"
-                  className="flex h-10 w-14 items-center justify-center rounded-xl bg-brand-primary font-mono text-xl font-bold leading-none text-brand-accent"
+                  className="flex h-11 w-16 items-center justify-center rounded-xl bg-brand-primary font-mono text-2xl font-bold leading-none tracking-tighter text-brand-accent"
                 >
-                  &gt;_
+                  <span className="-translate-y-[0.1em]">&gt;_</span>
                 </span>
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
@@ -222,7 +222,16 @@ export default function AskAlphaSwarmChatbot() {
         >
           {open
             ? <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            : <span aria-hidden="true" className="font-mono text-lg sm:text-xl font-bold leading-none tracking-tight">&gt;_</span>}
+            : <span
+                aria-hidden="true"
+                /* -translate-y: the underscore hangs below the baseline while
+                   ">" sits mid-height, so centring the TEXT BOX leaves the
+                   visible ink about 0.1em low. Nudged up to centre the ink
+                   rather than the box. */
+                className="font-mono text-2xl sm:text-3xl font-bold leading-none tracking-tighter -translate-y-[0.1em]"
+              >
+                &gt;_
+              </span>}
         </button>
         {!open && (
           <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-2 z-50">
