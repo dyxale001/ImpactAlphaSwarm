@@ -2567,30 +2567,85 @@ def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
 # published-fact-sheet data the Funds page itself shows (FundRepository),
 # never the LLM. Off entirely when FUNDS_ENABLED is False, so a deployment
 # without the catalogue sees no behaviour change at all.
-_FUND_METRIC_KEYWORDS: dict[str, tuple[str, str]] = {
-    "ter": ("ter", "TER (total expense ratio)"),
-    "expense ratio": ("ter", "TER (total expense ratio)"),
-    "fee": ("ter", "TER (total expense ratio)"),
-    "cost": ("ter", "TER (total expense ratio)"),
-    "risk": ("risk_indicator_1to5", "risk indicator (1-5)"),
-    "benchmark": ("benchmark", "benchmark"),
-    "objective": ("objective", "objective"),
-    "size": ("fund_size_zar", "fund size (ZAR)"),
-    "aum": ("fund_size_zar", "fund size (ZAR)"),
-    "minimum": ("min_lump_sum", "minimum lump sum"),
-    "min lump sum": ("min_lump_sum", "minimum lump sum"),
-    "min investment": ("min_lump_sum", "minimum lump sum"),
-    "debit order": ("min_debit_order", "minimum monthly debit order"),
-    "performance": ("performance", "performance history"),
-    "return": ("performance", "performance history"),
-    "top holding": ("top_holdings", "top holdings"),
-    "holdings": ("top_holdings", "top holdings"),
-    "allocation": ("asset_allocation", "asset allocation"),
-    "tfsa": ("tfsa_eligible", "TFSA eligibility"),
-    "manco": ("manco", "management company"),
-    "management company": ("manco", "management company"),
-    "fund house": ("fund_house", "fund house"),
-}
+# What a question about a fund can ask for, in PRIORITY ORDER, each pattern
+# word-bounded.
+#
+# Two bugs in the table this replaces. It was a dict scanned with `phrase in
+# query`, so "ter" matched INSIDE "minimum TERm" and "minimum term for X"
+# answered with the fund's TER; and a plain substring has no precedence, so
+# "total investment charge" could never beat "charge"-adjacent keys. Ordered
+# list + word-boundary patterns fixes both. Each entry is (pattern, field, label,
+# formatter-key); the more specific phrasing sits ABOVE the more general.
+#
+# Every field named here is one the Funds page itself displays, so Ask and
+# the page cannot disagree about what a fund's figures are.
+_FUND_METRIC_SPECS: list[tuple[re.Pattern, str, str, str]] = [
+    (re.compile(r"\b(?:total\s+investment\s+charge|tic)\b", re.I), "tic", "total investment charge (TIC)", "pct"),
+    (re.compile(r"\b(?:total\s+expense\s+ratio|ter|expense\s+ratio)\b", re.I), "ter", "total expense ratio (TER)", "pct"),
+    (re.compile(r"\b(?:transaction\s+costs?|tc)\b", re.I), "tc", "transaction costs (TC)", "pct"),
+    (re.compile(r"\b(?:management\s+fee|annual\s+fee)\b", re.I), "annual_management_fee", "annual management fee", "pct"),
+    (re.compile(r"\b(?:fees?|charges?|costs?)\b", re.I), "tic", "total investment charge (TIC)", "pct"),
+    (re.compile(r"\b(?:risk\s+(?:profile|rating|level|indicator)|how\s+risky|risk)\b", re.I), "risk_indicator_raw", "risk profile, as the manager publishes it", "text"),
+    (re.compile(r"\b(?:minimum\s+(?:investment\s+)?term|how\s+long\s+should\s+i\s+(?:invest|hold)|min(?:imum)?\s+term|recommended\s+(?:term|horizon))\b", re.I), "recommended_min_term_years", "minimum term stated", "years"),
+    (re.compile(r"\b(?:(?:fund|total)\s+size|how\s+(?:big|large)|aum|assets\s+under\s+management)\b", re.I), "fund_size_zar", "fund size", "zar_big"),
+    (re.compile(r"\b(?:distribut\w*|pay\s*outs?|dividends?|income)\b", re.I), "distribution_frequency", "distributions", "text"),
+    (re.compile(r"\b(?:fact\s*sheet|mdd|last\s+updated|as\s+at|how\s+(?:recent|current|up\s*to\s*date))\b", re.I), "as_of", "fact sheet date", "date"),
+    (re.compile(r"\b(?:minimum\s+(?:lump\s+sum|investment)|min\s+lump|how\s+much\s+to\s+start)\b", re.I), "min_lump_sum", "minimum lump sum", "zar"),
+    (re.compile(r"\b(?:debit\s+order|monthly\s+minimum)\b", re.I), "min_debit_order", "minimum monthly debit order", "zar"),
+    (re.compile(r"\b(?:benchmark)\b", re.I), "benchmark", "benchmark", "text"),
+    (re.compile(r"\b(?:objective|aims?\s+to|what\s+does\s+it\s+(?:invest|do))\b", re.I), "objective", "objective", "text"),
+    (re.compile(r"\b(?:performance|returns?|how\s+has\s+.*?\s+(?:done|performed))\b", re.I), "performance", "annualised returns", "returns"),
+    (re.compile(r"\b(?:holdings?|what\s+(?:does\s+it|do\s+they)\s+hold)\b", re.I), "top_holdings", "top holdings", "holdings"),
+    (re.compile(r"\b(?:(?:asset\s+)?allocation|what\s+is\s+it\s+invested\s+in)\b", re.I), "asset_allocation", "asset allocation", "allocation"),
+    (re.compile(r"\b(?:portfolio\s+managers?|who\s+manages)\b", re.I), "portfolio_manager", "portfolio managers", "text"),
+    (re.compile(r"\b(?:regulation\s*28|reg\s*28)\b", re.I), "regulation_28", "Regulation 28 status", "bool_reg28"),
+    (re.compile(r"\b(?:tfsa|tax[-\s]free)\b", re.I), "tfsa_eligible", "TFSA eligibility", "bool_tfsa"),
+    (re.compile(r"\b(?:inception|when\s+(?:did\s+it\s+)?(?:start|launch)|launched)\b", re.I), "inception_date", "inception date", "date"),
+    (re.compile(r"\b(?:manco|management\s+company|who\s+(?:issues|runs))\b", re.I), "manco", "management company", "text"),
+    (re.compile(r"\b(?:fund\s+house|manager)\b", re.I), "fund_house", "fund house", "text"),
+]
+
+
+def _format_fund_value(value: Any, kind: str) -> Optional[str]:
+    """A fund figure as the Funds page would show it, or None if absent.
+
+    The previous version interpolated the raw value, so fund size read
+    "145660000000.0" and returns read "{'1y': 5.9, '3y': 13.2...}". Every
+    figure here is formatted to match the page's own presentation, and an
+    absent value is None — never a zero or a guess."""
+    if value in (None, "", [], {}):
+        return None
+    try:
+        if kind == "pct":
+            return f"{float(value):.2f}% a year"
+        if kind == "years":
+            n = float(value)
+            return f"{int(n) if n == int(n) else n} year{'s' if n != 1 else ''}"
+        if kind == "zar_big":
+            n = float(value)
+            return f"R{n / 1e9:.1f}bn" if n >= 1e9 else f"R{n / 1e6:.1f}m"
+        if kind == "zar":
+            return f"R{float(value):,.0f}"
+        if kind == "date":
+            return datetime.date.fromisoformat(str(value)[:10]).strftime("%d %B %Y").lstrip("0")
+        if kind == "bool_tfsa":
+            return "eligible for a tax-free savings account" if value else "not marked as TFSA-eligible"
+        if kind == "bool_reg28":
+            return "Regulation 28 compliant" if value else "not Regulation 28 compliant"
+        if kind == "returns" and isinstance(value, dict):
+            parts = [f"{k} {float(v):+.1f}%" for k, v in value.items() if v is not None]
+            return ", ".join(parts) or None
+        if kind == "holdings" and isinstance(value, dict):
+            top = sorted(value.items(), key=lambda kv: -float(kv[1] or 0))[:5]
+            return ", ".join(f"{k} ({float(v):.1f}%)" for k, v in top) or None
+        if kind == "allocation" and isinstance(value, dict):
+            top = sorted(value.items(), key=lambda kv: -float(kv[1] or 0))[:6]
+            return ", ".join(f"{k} {float(v):.1f}%" for k, v in top if float(v or 0) > 0) or None
+    except (TypeError, ValueError):
+        return None
+    return str(value)
+
+
 
 
 def _resolve_fund(query: str) -> Optional[dict]:
@@ -2692,6 +2747,148 @@ def _resolve_fund(query: str) -> Optional[dict]:
     return None
 
 
+# Questions about the fund CATALOGUE as a whole ("which funds are tax free
+# eligible", "show me the cheapest ETFs") rather than about one named fund.
+#
+# Root-cause gap: these fell through to ASSET_SEARCH, which only knows the
+# stock table, so every one of them was answered about the wrong thing —
+# "which funds have the lowest fees" came back "the data you've provided
+# lists individual companies, not investment funds", and "show me all the
+# ETFs" listed SNPS and PLTR. A catalogue question has to be recognised and
+# answered from the catalogue, or it is answered about stocks.
+_ASK_FUND_CATALOGUE_PATTERN = re.compile(
+    r"\b(?:funds?|etfs?|unit\s+trusts?|index\s+trackers?)\b", re.IGNORECASE,
+)
+# Words that mean "list, filter or rank", NOT "explain". "what" and "any"
+# are deliberately absent: "What is an ETF?" contains an ETF and a "what",
+# and is a definition request that has its own glossary entry and its own
+# tests — treating it as a catalogue listing answered a concept question
+# with a table of products. The listing verbs/superlatives below are what
+# distinguish "show me the ETFs" from "what is an ETF".
+_ASK_FUND_CATALOGUE_QUESTION = re.compile(
+    r"\b(?:which|show|list|cheapest|lowest|highest|biggest|largest|best|"
+    r"safest|riskiest|how\s+many|all\s+(?:the\s+)?(?:funds?|etfs?|unit\s+trusts?))\b",
+    re.IGNORECASE,
+)
+# A bare definition request, which always loses to the glossary.
+_ASK_DEFINITION_SHAPE = re.compile(
+    r"^\s*(?:what\s+is|what'?s|what\s+are|what\s+does|explain|define)\b", re.IGNORECASE,
+)
+
+
+def _ask_fund_catalogue_answer(query: str) -> Optional[AskResponse]:
+    """Answer a whole-catalogue question from the fund catalogue, or None
+    when the question is not one (or the feature is off).
+
+    Deliberately descriptive and never selective: it lists or orders funds
+    by a stated, checkable attribute (a fee, a size, TFSA status, vehicle
+    type) and never says which one the user should hold. Ordering by TIC
+    is a sort, not a recommendation, and the answer says so — AlphaSwarm
+    does not pick a fund (D-153)."""
+    from src.funds.config import FUNDS_ENABLED
+    if not FUNDS_ENABLED:
+        return None
+    if not (_ASK_FUND_CATALOGUE_PATTERN.search(query) and _ASK_FUND_CATALOGUE_QUESTION.search(query)):
+        return None
+    # "What is an ETF?" / "explain unit trusts" is a definition request and
+    # belongs to the glossary, even when it also happens to contain a
+    # listing word ("what are the best funds" is the one shape that is both,
+    # and a superlative earns the listing).
+    if _ASK_DEFINITION_SHAPE.search(query) and not re.search(
+        r"\b(?:best|cheapest|lowest|highest|biggest|largest|safest|riskiest|all\s+the)\b",
+        query, re.IGNORECASE,
+    ):
+        return None
+    try:
+        if FUNDS_ENABLED:
+            from src.funds.repository import FundRepository
+        repo = FundRepository()
+        funds = repo.list_active()
+        snapshots = repo.latest_snapshots([f["id"] for f in funds])
+    except Exception as e:
+        logger.warning("Ask fund-catalogue listing failed: %s", e)
+        return None
+    if not funds:
+        return None
+
+    ql = query.lower()
+    rows = [{**f, **snapshots.get(f["id"], {})} for f in funds]
+
+    # Narrow by what the question names.
+    scope: list[str] = []
+    if re.search(r"\betfs?\b|exchange[-\s]traded", ql):
+        rows = [r for r in rows if "etf" in (r.get("vehicle") or "").lower() or "etf" in (r.get("name") or "").lower()]
+        scope.append("ETFs")
+    elif re.search(r"\bunit\s+trusts?\b", ql):
+        rows = [r for r in rows if "etf" not in (r.get("vehicle") or "").lower() and "etf" not in (r.get("name") or "").lower()]
+        scope.append("unit trusts")
+    if re.search(r"\btfsa\b|tax[-\s]free", ql):
+        rows = [r for r in rows if r.get("tfsa_eligible")]
+        scope.append("TFSA-eligible")
+    if re.search(r"\bindex\s+tracker|\btracks?\b", ql):
+        rows = [r for r in rows if r.get("is_index_tracker")]
+        scope.append("index-tracking")
+    if not rows:
+        return AskResponse(
+            intent="FUND_QUESTION",
+            narration="No funds in AlphaSwarm's catalogue match that.",
+            data={}, source="fund_catalogue", is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # Order by a stated attribute if one is asked for.
+    ordered_by = None
+    reverse = False
+    if re.search(r"cheap|lowest\s+(?:fee|cost|charge|tic|ter)|lowest\s+fees|low\s+(?:fee|cost)", ql):
+        key, ordered_by = "tic", "total investment charge, lowest first"
+    elif re.search(r"biggest|largest|highest\s+(?:fund\s+)?size", ql):
+        key, ordered_by, reverse = "fund_size_zar", "fund size, largest first", True
+    elif re.search(r"safest|lowest\s+risk|least\s+risky", ql):
+        key, ordered_by = "risk_indicator_1to5", "risk indicator, lowest first"
+    elif re.search(r"riskiest|highest\s+risk|most\s+risky", ql):
+        key, ordered_by, reverse = "risk_indicator_1to5", "risk indicator, highest first", True
+    else:
+        key = None
+
+    if key:
+        have = [r for r in rows if r.get(key) is not None]
+        rows = sorted(have, key=lambda r: float(r[key]), reverse=reverse) or rows
+
+    shown = rows[:6]
+    kind_by_key = {"tic": "pct", "fund_size_zar": "zar_big", "risk_indicator_1to5": "text"}
+    items = []
+    for r in shown:
+        detail = _format_fund_value(r.get(key), kind_by_key.get(key, "text")) if key else None
+        if key == "risk_indicator_1to5" and detail:
+            detail = f"{detail}/5"
+        items.append(f"{r['name']}" + (f" ({detail})" if detail else ""))
+
+    label = " ".join(scope) if scope else "funds"
+    # "38 TFSA-eligible match" reads as a fragment; the noun has to be there.
+    if scope and not any(s in ("ETFs", "unit trusts") for s in scope):
+        label = f"{label} funds"
+    head = f"{len(rows)} {label} match" if len(rows) != 1 else f"1 {label.rstrip('s')} matches"
+    narration = f"{head}. "
+    if ordered_by:
+        narration += f"Ordered by {ordered_by}: "
+    else:
+        narration += "A few of them: "
+    narration += "; ".join(items) + "."
+    if len(rows) > len(shown):
+        narration += f" There are {len(rows) - len(shown)} more on the Funds page."
+    if ordered_by:
+        narration += (
+            " That is an ordering by one figure, not a recommendation — "
+            "AlphaSwarm doesn't pick a fund for you."
+        )
+    return AskResponse(
+        intent="FUND_QUESTION", narration=narration,
+        data={"funds": [{"name": r["name"], "id": r["id"]} for r in rows[:12]]},
+        source="fund_catalogue", is_blocked=False,
+        redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+    )
+
+
 def _fund_answer(fund: dict, query: str) -> AskResponse:
     """Grounded answer about one resolved fund — either the single metric
     asked about, or a short factual overview when none is named. Only ever
@@ -2711,38 +2908,72 @@ def _fund_answer(fund: dict, query: str) -> AskResponse:
         logger.warning("Ask fund snapshot lookup failed: %s", e)
 
     merged = {**fund, **snapshot}
-    ql = query.lower()
-    for phrase, (field, label) in _FUND_METRIC_KEYWORDS.items():
-        if phrase in ql:
-            value = merged.get(field)
-            if value in (None, ""):
-                narration = f"AlphaSwarm doesn't have a published {label} on file for {name}."
-            else:
-                narration = f"{name}'s {label} is {value}."
-            return AskResponse(
-                intent="FUND_QUESTION", narration=narration, data={"fund": merged},
-                source="fund_catalogue", is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
-            )
 
-    parts = [f"{name} is a {fund.get('asisa_category') or 'unit trust/ETF'} fund"]
+    def _respond(narration: str) -> AskResponse:
+        return AskResponse(
+            intent="FUND_QUESTION", narration=narration, data={"fund": merged},
+            source="fund_catalogue", is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    as_of = _format_fund_value(snapshot.get("as_of"), "date")
+    dated = f" (fact sheet as at {as_of})" if as_of else ""
+
+    for pattern, field, label, kind in _FUND_METRIC_SPECS:
+        if not pattern.search(query):
+            continue
+        shown = _format_fund_value(merged.get(field), kind)
+        if shown is None:
+            return _respond(f"AlphaSwarm doesn't have a published {label} on file for {name}.")
+        # Fact-sheet figures are only as current as the sheet; say which.
+        suffix = dated if field not in ("as_of", "inception_date", "manco", "fund_house") else ""
+        # Two kinds of value read badly in "X's label is Y": a status
+        # ("TFSA eligibility is eligible for...") and a plural noun
+        # ("distributions is Semi-annually"). Phrased as sentences instead.
+        if kind == "bool_tfsa":
+            return _respond(f"{name} is {shown}{suffix}.")
+        if kind == "bool_reg28":
+            return _respond(f"{name} is {shown}{suffix}.")
+        if field == "distribution_frequency":
+            return _respond(f"{name} distributes {shown[0].lower() + shown[1:]}{suffix}.")
+        if field == "risk_indicator_raw":
+            return _respond(f"{name}'s manager publishes its risk profile as {shown}{suffix}.")
+        return _respond(f"{name}'s {label} is {shown}{suffix}.")
+
+    # No specific figure asked for: an overview built from the same fields
+    # the Funds page leads with, in the same order, so the answer and the
+    # card cannot tell two different stories about one fund.
+    category = fund.get("asisa_category") or "unit trust/ETF"
+    lead = f"{name} is a {category} fund"
     if fund.get("manco"):
-        parts.append(f"managed by {fund['manco']}")
-    sentence = " ".join(parts) + "."
+        lead += f" issued by {fund['manco']}"
+    sentences = [lead + "."]
+
     facts = []
-    if snapshot.get("ter") not in (None, ""):
-        facts.append(f"TER {snapshot['ter']}")
-    if snapshot.get("risk_indicator_1to5") not in (None, ""):
-        facts.append(f"risk {snapshot['risk_indicator_1to5']}/5")
-    if snapshot.get("min_lump_sum") not in (None, ""):
-        facts.append(f"min lump sum {snapshot['min_lump_sum']}")
+    risk = _format_fund_value(snapshot.get("risk_indicator_raw"), "text")
+    if risk:
+        facts.append(f"its manager publishes its risk profile as {risk}")
+    tic = _format_fund_value(snapshot.get("tic"), "pct")
+    if tic:
+        facts.append(f"its total investment charge is {tic}")
+    term = _format_fund_value(snapshot.get("recommended_min_term_years"), "years")
+    if term:
+        facts.append(f"the minimum stated term is {term}")
+    size = _format_fund_value(snapshot.get("fund_size_zar"), "zar_big")
+    if size:
+        facts.append(f"it holds {size}")
+    dist = _format_fund_value(snapshot.get("distribution_frequency"), "text")
+    if dist:
+        facts.append(f"it distributes {dist.lower()}")
     if fund.get("tfsa_eligible"):
-        facts.append("TFSA-eligible")
+        facts.append("it is TFSA-eligible")
     if facts:
-        sentence += " " + ", ".join(facts).capitalize() + "."
-    return AskResponse(
-        intent="FUND_QUESTION", narration=sentence, data={"fund": merged},
-        source="fund_catalogue", is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
-    )
+        sentences.append(facts[0][0].upper() + facts[0][1:] + (
+            "; " + "; ".join(facts[1:]) if len(facts) > 1 else ""
+        ) + ".")
+    if as_of:
+        sentences.append(f"Figures are from the fact sheet as at {as_of}.")
+    return _respond(" ".join(sentences))
 
 
 # ---------------------------------------------------------------------------
@@ -4987,6 +5218,11 @@ def _ask_response_link(response: AskResponse) -> Optional[AskLink]:
             if isinstance(one, str) and one:
                 return AskLink(path=f"/asset/{one}", label=f"See {one}'s full analysis")
 
+    # A whole-catalogue answer (a list of funds, no single one) points at the
+    # Funds page itself rather than at any one fund.
+    if isinstance(data.get("funds"), list) and data["funds"] and not data.get("fund"):
+        return AskLink(path="/funds", label="Browse these on the Funds page")
+
     if data.get("fund"):
         fund = data["fund"]
         fund_id = fund.get("id") if isinstance(fund, dict) else None
@@ -5309,6 +5545,32 @@ async def _ask_alphaswarm_impl(
         except Exception as e:
             logger.warning("Ask whale-watching shortcut failed: %s", e)
 
+    # 2e'. Fund-catalogue questions — runs BEFORE the definitional shortcut
+    # below. A question that names a specific fund is never a generic
+    # definition request, but "what is the risk profile of Coronation
+    # Balanced Plus" has exactly the "what is ..." shape the shortcut
+    # keys on, so it used to be grabbed by the free-tier cache probe and
+    # answered from an SARB monetary-policy page that has nothing to do
+    # with it. Fund resolution is exact, so going first costs nothing.
+    #
+    # (Original comment:) Fund-catalogue questions ("what's the TER on Allan Gray Balanced?")
+    # — deterministic, checked only when no STOCK asset was named (a stock
+    # ticker/name always takes priority over a fund-name guess) so this can
+    # never steal a stock question's routing. No-op entirely when
+    # FUNDS_ENABLED is off (_resolve_fund returns None immediately).
+    if intent is None and resolved_asset is None:
+        try:
+            resolved_fund = _resolve_fund(query)
+            if resolved_fund is not None:
+                return _fund_answer(resolved_fund, query)
+            # No single fund named: it may be a question about the whole
+            # catalogue ("which funds are tax free eligible").
+            catalogue = _ask_fund_catalogue_answer(query)
+            if catalogue is not None:
+                return catalogue
+        except Exception as e:
+            logger.warning("Ask fund-catalogue shortcut failed: %s", e)
+
     # 2f. Deterministic definitional-learning-question shortcut ("what is an
     # ETF?", "what is a portfolio?") — see _ASK_DEFINITIONAL_SHAPE_PATTERN's
     # own comment. Only taken when the FREE tiers (glossary/Learning Centre/
@@ -5348,19 +5610,6 @@ async def _ask_alphaswarm_impl(
                 return shortcut
         except Exception as e:
             logger.warning("Ask definitional-learning shortcut failed: %s", e)
-
-    # 2g. Fund-catalogue questions ("what's the TER on Allan Gray Balanced?")
-    # — deterministic, checked only when no STOCK asset was named (a stock
-    # ticker/name always takes priority over a fund-name guess) so this can
-    # never steal a stock question's routing. No-op entirely when
-    # FUNDS_ENABLED is off (_resolve_fund returns None immediately).
-    if intent is None and resolved_asset is None:
-        try:
-            resolved_fund = _resolve_fund(query)
-            if resolved_fund is not None:
-                return _fund_answer(resolved_fund, query)
-        except Exception as e:
-            logger.warning("Ask fund-catalogue shortcut failed: %s", e)
 
     # 2h. The user's own results, asked for by the product's own feature
     # names ("my top picks", "my shortlist", "my recommended assets").

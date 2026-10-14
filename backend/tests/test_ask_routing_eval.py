@@ -482,6 +482,119 @@ def test_fund_resolution_is_off_when_the_feature_flag_is(monkeypatch):
     assert api._resolve_fund("tell me about coronation balanced plus fund") is None
 
 
+# ── 6a. Fund questions: which figure was asked for ───────────────────────
+# Everything the Funds page shows per fund must be askable. The table is
+# ordered, word-bounded, and routes the question to the RIGHT field.
+
+FUND_FIELD_ROUTING = [
+    ("what is the total investment charge", "tic"),
+    ("what is the TIC", "tic"),
+    ("what is the TER", "ter"),
+    ("what is the risk profile", "risk_indicator_raw"),
+    ("how risky is it", "risk_indicator_raw"),
+    ("how big is the fund", "fund_size_zar"),
+    ("what is the fund size", "fund_size_zar"),
+    ("how often does it distribute", "distribution_frequency"),
+    ("what is the minimum term", "recommended_min_term_years"),
+    ("when was the fact sheet last updated", "as_of"),
+    ("is it tax free eligible", "tfsa_eligible"),
+    ("what is the minimum lump sum", "min_lump_sum"),
+]
+
+
+@pytest.mark.parametrize("query,field", FUND_FIELD_ROUTING)
+def test_a_fund_question_is_routed_to_the_field_it_asks_for(query, field):
+    hit = next((f for pat, f, _l, _k in api._FUND_METRIC_SPECS if pat.search(query)), None)
+    assert hit == field, f"{query!r} routed to {hit}, expected {field}"
+
+
+def test_minimum_term_is_not_read_as_TER():
+    """Regression: the old table did `phrase in query`, so "ter" matched
+    INSIDE "minimum TERm" and the minimum-term question was answered with
+    the fund's expense ratio."""
+    hit = next(f for pat, f, _l, _k in api._FUND_METRIC_SPECS if pat.search("what is the minimum term"))
+    assert hit != "ter"
+
+
+def test_fund_figures_are_formatted_for_a_reader():
+    """The old version interpolated raw values: fund size read
+    "145660000000.0" and returns read a Python dict repr."""
+    assert api._format_fund_value(145660000000.0, "zar_big") == "R145.7bn"
+    assert api._format_fund_value(1.33, "pct") == "1.33% a year"
+    assert api._format_fund_value(5.0, "years") == "5 years"
+    assert api._format_fund_value(1.0, "years") == "1 year"
+    assert api._format_fund_value("2026-08-31", "date") == "31 August 2026"
+    assert api._format_fund_value(None, "pct") is None, "an absent figure must stay absent"
+    assert api._format_fund_value("", "text") is None
+
+
+def test_an_absent_fund_figure_is_never_rendered_as_zero():
+    for kind in ("pct", "years", "zar_big", "zar", "date"):
+        assert api._format_fund_value(None, kind) is None
+
+
+CATALOGUE_QUESTIONS = [
+    "which funds are tax free eligible",
+    "show me all the etfs",
+    "which funds have the lowest fees",
+    "what are the biggest funds",
+    "list the unit trusts",
+]
+NOT_CATALOGUE_QUESTIONS = [
+    "how do I get a refund",          # "fund" inside "refund"
+    "what is a defund",
+    "tell me about NVDA",
+    "what is beta",
+]
+
+
+@pytest.mark.parametrize("query", CATALOGUE_QUESTIONS)
+def test_catalogue_questions_are_recognised(query):
+    assert api._ASK_FUND_CATALOGUE_PATTERN.search(query)
+    assert api._ASK_FUND_CATALOGUE_QUESTION.search(query)
+
+
+@pytest.mark.parametrize("query", NOT_CATALOGUE_QUESTIONS)
+def test_non_fund_questions_are_not_caught_by_the_catalogue_path(query):
+    """Word-bounded: "fund" inside "refund" must not trigger a catalogue
+    listing."""
+    assert not api._ASK_FUND_CATALOGUE_PATTERN.search(query)
+
+
+def test_a_definition_request_is_never_answered_with_a_product_listing():
+    """Regression: "What is an ETF?" contains an ETF and a "what", so the
+    first version of the catalogue path answered a CONCEPT question with a
+    table of products. Two standing tests caught it. A definition request
+    belongs to the glossary even when it names a fund vehicle."""
+    for q in ("What is an ETF?", "What is an EFT?", "explain unit trusts", "define index tracker"):
+        assert api._ASK_DEFINITION_SHAPE.search(q), f"{q!r} not seen as a definition request"
+    for q in ("which funds are tax free eligible", "show me all the etfs", "list the unit trusts"):
+        assert not api._ASK_DEFINITION_SHAPE.search(q), f"{q!r} wrongly seen as a definition request"
+
+
+def test_no_source_regex_contains_a_stray_control_character():
+    """Regression guard for a bug that cost real time: regex source written
+    through a string-escaping layer had "\\b" interpreted as the BACKSPACE
+    escape, so a literal 0x08 byte landed in the file. The pattern then
+    silently never matched, and nothing failed — it just stopped working.
+    Any compiled pattern in api.py containing a control character is that
+    bug."""
+    import re as _re
+    for name in dir(api):
+        obj = getattr(api, name)
+        if isinstance(obj, _re.Pattern):
+            assert not any(ord(c) < 32 and c not in "\t\n\r" for c in obj.pattern), (
+                f"{name} contains a control character — a \\b was written as a backspace"
+            )
+    for pat, *_rest in api._FUND_METRIC_SPECS:
+        assert not any(ord(c) < 32 for c in pat.pattern)
+
+
+def test_api_source_file_contains_no_backspace_bytes():
+    raw = (Path(__file__).resolve().parents[1] / "src" / "api.py").read_bytes()
+    assert b"\x08" not in raw, "a literal backspace byte is in api.py"
+
+
 # ── 7. The resolution envelope ───────────────────────────────────────────
 # The envelope lets a model propose POINTERS for questions the patterns
 # cannot route. These tests pin the property that makes that safe: a

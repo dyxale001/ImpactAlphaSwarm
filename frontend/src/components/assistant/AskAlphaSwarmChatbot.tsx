@@ -142,7 +142,6 @@ export default function AskAlphaSwarmChatbot() {
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
-                <Sparkles className="w-6 h-6 text-brand-primary" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
