@@ -94,11 +94,11 @@ export default function AskAlphaSwarmChatbot() {
         <div
           role="dialog"
           aria-label="Ask AlphaSwarm assistant"
-          className="relative mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20 overflow-hidden"
+          className="relative mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20"
           style={{ animation: 'slide-up 0.2s ease-out forwards' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-brand-border/50 bg-brand-bg/40 shrink-0">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 pl-14 border-b border-brand-border/50 bg-brand-bg/40 rounded-t-[14px] shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <span aria-hidden="true" className="shrink-0 font-mono text-sm font-bold leading-none text-brand-accent">&gt;_</span>
               <p className="text-sm font-bold text-brand-fg truncate">Ask AlphaSwarm</p>
@@ -124,23 +124,30 @@ export default function AskAlphaSwarmChatbot() {
             </div>
           </div>
 
-          {/* The mascot sits in the panel's corner rather than in the flow:
-              present the whole time the chat is open, never pushing the
-              conversation around or competing with it for attention.
-              pointer-events-none so it can't swallow a click meant for the
-              messages behind it. */}
+          {/* The mascot leans out of the panel's top-left corner, so it
+              reads as sitting ON the card rather than inside the
+              conversation. Needs the panel NOT to clip (hence no
+              overflow-hidden on it, and the header carrying its own
+              rounded top instead), and the header carries left padding so
+              the title never runs underneath him. pointer-events-none so
+              he can't swallow a click meant for the controls behind. */}
           <img
             src={askBot}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-16 right-2 w-16 opacity-25 select-none"
+            className="pointer-events-none absolute -top-7 -left-4 w-20 z-10 select-none drop-shadow-lg"
           />
 
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
-                <span aria-hidden="true" className="font-mono text-2xl font-bold leading-none text-brand-primary">&gt;_</span>
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-14 items-center justify-center rounded-xl bg-brand-primary font-mono text-xl font-bold leading-none text-brand-accent"
+                >
+                  &gt;_
+                </span>
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
@@ -211,7 +218,7 @@ export default function AskAlphaSwarmChatbot() {
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-brand-primary text-brand-accent shadow-xl ring-2 ring-brand-accent/30 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent transition-all"
         >
           {open
             ? <X className="w-5 h-5 sm:w-6 sm:h-6" />
