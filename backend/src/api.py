@@ -793,6 +793,37 @@ class AskSource(BaseModel):
     retrieved_at: str
 
 
+class AskLink(BaseModel):
+    """Where in the app the reader can go and see this for themselves.
+
+    Derived deterministically from the intent and the resolved entity, not
+    chosen by a model, so it can never point somewhere the answer was not
+    actually about. Optional: an answer with no obvious destination (a
+    refusal, a clarification, a general definition) carries none rather
+    than a vague one.
+    """
+    path: str
+    label: str
+
+
+class AskDataPoint(BaseModel):
+    """One figure the answer states, with where the figure came from.
+
+    Per-claim provenance, not a label. It is emitted from the output
+    validator's own verification pass: to check a stated figure the
+    validator must already resolve which asset it belongs to, which stored
+    field it is, and what the trusted value is, so this is that work
+    reported rather than discarded. A figure only appears here if it was
+    checked and matched, which makes the list a statement about what the
+    answer actually rests on rather than a claim about its origin.
+    """
+    ticker: str
+    label: str
+    value: float
+    field: str
+    origin: str
+
+
 class AskResponse(BaseModel):
     intent: str
     narration: str
@@ -803,6 +834,13 @@ class AskResponse(BaseModel):
     # `source` (a short string label) stays the field older/other consumers
     # read, this is purely additive so no existing consumer breaks.
     sources: List[AskSource] = []
+    # Per-claim provenance for figures stated in the narration — see
+    # AskDataPoint. Empty when the answer states no checkable figure (a
+    # definition, a refusal, a clarification), which is not the same as
+    # unverified.
+    data_points: List[AskDataPoint] = []
+    # Deep link to the page this answer is about — see AskLink.
+    link: Optional[AskLink] = None
     is_blocked: bool = False
     redirect_suggestions: List[str] = []
 
@@ -1423,6 +1461,10 @@ def _ask_learning_answer_declined(narration: str) -> bool:
     learning branch itself (which re-routes to the asset path when the
     question turns out to name a real company). Was inline in the first of
     those; extracted so the phrase list cannot drift between the two."""
+    # Biased towards catching one: a false positive costs one extra
+    # retrieval tier (and usually finds a better source), while a false
+    # negative ships a regulator's name as the citation for "I don't have
+    # that information".
     lowered = (narration or "").lower()
     return narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
         p in lowered
@@ -1431,7 +1473,15 @@ def _ask_learning_answer_declined(narration: str) -> bool:
                   "t have enough information", "t have any information",
                   "t have information", "t included in the source",
                   "isn't included in the source", "no information about",
-                  "no information on")
+                  "no information on",
+                  # Meta-statements about the source rather than an answer
+                  # from it: "the information you provided doesn't cover X",
+                  # "I can't give an answer based on that source".
+                  "t cover", "not cover", "t address", "does not address",
+                  "t give an answer", "cannot give an answer",
+                  "based on that source", "based on the provided source",
+                  "you provided doesn", "source material doesn",
+                  "t mention", "does not mention")
     )
 
 
@@ -1835,6 +1885,7 @@ def _narrate_ask(
 
     result = validate_ask_output(narration, data=validation_data, comparison_assets=comparison_assets)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
 
     _ask_telemetry_mark(validation_failed=True)
@@ -1973,7 +2024,43 @@ def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
     return {"assets": rows}, "asset_search"
 
 
-def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
+# Which half of the user's own data a question is about. The watchlist and
+# the latest run's top picks are different things that happen to be served
+# by the same retrieval, and mixing them produces an answer that is true
+# about the wrong list.
+_ASK_WATCHLIST_SCOPE_PATTERN = re.compile(
+    r"\bwatch\s?list(?:ed)?\b|\btracking\b|\btracked\b|\bwatching\b|\bfollowing\b",
+    re.IGNORECASE,
+)
+_ASK_RUN_SCOPE_PATTERN = re.compile(
+    r"\btop\s+(?:pick|picks|asset|assets|stock|stocks|recommendation|recommendations)\b|"
+    r"\bshortlist\b|\brecommend\w*\b|\branked?\b|\branking\b|\bscored\b|"
+    r"\blatest\s+(?:run|analysis)\b|\banalysis\s+run\b",
+    re.IGNORECASE,
+)
+
+# The product's OWN feature names, asked about possessively. Root-cause bug
+# this fixes: the LLM classifier labelled "what are my top picks" and "what
+# are my top recommended assets" UNSUPPORTED_FINANCIAL_ADVICE — it read
+# "picks"/"recommended" as a request for a recommendation and refused, so a
+# user asking to see the output of a run they had already done was told
+# AlphaSwarm does not give advice. "My" is what settles it: a possessive
+# question about an existing, already-computed list is a lookup of the
+# user's own data, never a request for a new recommendation. Decided
+# deterministically here rather than left to the classifier to get right.
+_ASK_OWN_RESULTS_PATTERN = re.compile(
+    r"\bmy\s+(?:"
+    r"top\s+(?:recommended\s+|ranked\s+|scored\s+|rated\s+)?"
+    r"(?:pick|picks|asset|assets|stock|stocks|recommendation|recommendations)|"
+    r"picks|shortlist|recommendations?|rankings?|results|scores|"
+    r"recommended\s+(?:asset|assets|stock|stocks)"
+    r")\b|"
+    r"\b(?:what|which)\s+(?:did|does)\s+my\s+(?:latest\s+)?(?:run|analysis)\b",
+    re.IGNORECASE,
+)
+
+
+def _ask_user_data_search(user_id: str, query: str = "") -> tuple[dict, str]:
     """Deterministic retrieval of the user's own watchlist + latest run top
     picks.
 
@@ -2042,15 +2129,32 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
         )
         recs = recs_resp.data or []
         asset_ids = [r["asset_id"] for r in recs if r.get("asset_id")]
-        asset_map = {}
+        asset_map: dict = {}
         if asset_ids:
-            assets_resp = supabase.table("assets").select("id,ticker").in_("id", asset_ids).execute()
-            asset_map = {a["id"]: a["ticker"] for a in (assets_resp.data or [])}
+            # Root-cause bug this fixes: this selected ONLY id+ticker, so a
+            # top-picks entry reached the narrator as a bare symbol with no
+            # company name on it — and the narrator, needing a name to write
+            # a sentence, supplied one from its own knowledge. That is how
+            # "MA" (Mastercard) was narrated as "Microsoft (MA)": the ticker
+            # was right, the name was invented, and nothing checked it
+            # because the validator verifies figures and ticker membership,
+            # not company names. The fix is to give it the name rather than
+            # to police the guess.
+            assets_resp = (
+                supabase.table("assets").select("id,ticker,name,universe,current_price")
+                .in_("id", asset_ids).execute()
+            )
+            asset_map = {a["id"]: a for a in (assets_resp.data or []) if a.get("ticker")}
         for r in recs:
-            ticker = asset_map.get(r["asset_id"])
-            if not ticker:
+            asset_row = asset_map.get(r["asset_id"])
+            if not asset_row:
                 continue
-            metrics_by_ticker[ticker] = {k: v for k, v in r.items() if k != "asset_id"}
+            metrics_by_ticker[asset_row["ticker"]] = {
+                "name": asset_row.get("name"),
+                "universe": asset_row.get("universe"),
+                "current_price": _valid_price(asset_row.get("current_price")),
+                **{k: v for k, v in r.items() if k != "asset_id"},
+            }
         top_picks = [
             metrics_by_ticker[t] | {"ticker": t} for t in list(metrics_by_ticker)[:5]
             if metrics_by_ticker[t]["rank"] <= 5
@@ -2061,6 +2165,23 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
         for t in watchlist_tickers
     ]
 
+    # Scope the payload to what was actually asked about.
+    #
+    # Root-cause bug this fixes: both lists were always returned together,
+    # so a question about ONE of them handed the narrator the other as
+    # well. The user's watchlist (TSLA, SEDG, AMD, AAPL) and their run's
+    # top picks (MA, AAPL, JPM, BRK-B, V) overlap on one ticker and differ
+    # on seven — with both in the payload nothing stopped a "what's on my
+    # watchlist" answer from describing JPM, or a "my top picks" answer
+    # from describing SEDG. Narrowing the data is the only reliable fix:
+    # a figure the narrator was never given cannot appear in the answer.
+    # An ambiguous question ("show me my data") still gets both.
+    wants_watchlist = bool(_ASK_WATCHLIST_SCOPE_PATTERN.search(query or ""))
+    wants_run = bool(_ASK_RUN_SCOPE_PATTERN.search(query or ""))
+    if wants_watchlist and not wants_run:
+        return {"watchlist": watchlist}, "user_data"
+    if wants_run and not wants_watchlist:
+        return {"top_picks": top_picks}, "user_data"
     return {"watchlist": watchlist, "top_picks": top_picks}, "user_data"
 
 
@@ -3067,6 +3188,7 @@ def _narrate_synthesis(question: str, data: dict) -> Optional[str]:
 
     result = validate_ask_output(narration, data=data)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
     _ask_telemetry_mark(validation_failed=True)
     logger.warning("ask_output_validation_failed fn=_narrate_synthesis violations=%s", result.violations)
@@ -3206,6 +3328,7 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
 
     result = validate_ask_output(narration, comparison_assets=assets)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
     _ask_telemetry_mark(validation_failed=True)
     logger.warning("ask_output_validation_failed fn=_narrate_comparison violations=%s", result.violations)
@@ -4478,18 +4601,29 @@ def _ask_learning_question(query: str) -> AskResponse:
                 data={}, source="none", sources=[], is_blocked=False,
                 redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
             )
-        narration = grounded
-        return AskResponse(
-            intent="LEARNING_QUESTION",
-            narration=narration,
-            data={"term": query, "definition": grounded},
-            source=result.publisher,
-            sources=[AskSource(
-                title=result.title, publisher=result.publisher, url=result.url,
-                retrieved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            )],
-            is_blocked=False, redirect_suggestions=[],
-        )
+        # A cache entry can match on little more than a shared common word.
+        # Root-cause bug this fixes: "what is dollar cost averaging" matched
+        # the SARB monetary-policy entry, which of course does not define
+        # it, so the model correctly said the source did not cover the term
+        # — and the response went out with that decline as its answer AND
+        # with SARB attached as its source. Two failures in one: a citation
+        # asserting provenance for a non-answer, and a live search that
+        # never ran because this weak hit short-circuited it. A decline is
+        # now treated as a miss, so the question continues down the tiers
+        # to live search exactly as if the cache had held nothing.
+        if not _ask_learning_answer_declined(grounded):
+            return AskResponse(
+                intent="LEARNING_QUESTION",
+                narration=grounded,
+                data={"term": query, "definition": grounded},
+                source=result.publisher,
+                sources=[AskSource(
+                    title=result.title, publisher=result.publisher, url=result.url,
+                    retrieved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                )],
+                is_blocked=False, redirect_suggestions=[],
+            )
+        logger.info("ask_local_cache_declined term=%r falling through to live search", query)
 
     # 4b. Unresolved acronym — clarify rather than let it reach live search.
     # Checked HERE, before live web search (not after, as this used to be
@@ -4520,7 +4654,13 @@ def _ask_learning_question(query: str) -> AskResponse:
     live_result = educational_retrieval.search_live_provider_only(query)
     if live_result:
         grounded = _ground_external_answer(query, live_result)
-        if grounded is None:
+        # A decline is not an answer, so it must not be dressed as one. The
+        # page came off the approved allowlist, but if it turned out not to
+        # cover the term then citing it asserts provenance for content that
+        # does not exist — the user sees a regulator's name under "I don't
+        # have that information". Fall back to the honest no-source message
+        # with NO citation attached.
+        if grounded is None or _ask_learning_answer_declined(grounded):
             return AskResponse(
                 intent="LEARNING_QUESTION", narration=_ASK_LEARNING_NOT_COVERED_MESSAGE,
                 data={}, source="none", sources=[], is_blocked=False,
@@ -4608,6 +4748,37 @@ class AskSource(BaseModel):
     retrieved_at: str
 
 
+class AskLink(BaseModel):
+    """Where in the app the reader can go and see this for themselves.
+
+    Derived deterministically from the intent and the resolved entity, not
+    chosen by a model, so it can never point somewhere the answer was not
+    actually about. Optional: an answer with no obvious destination (a
+    refusal, a clarification, a general definition) carries none rather
+    than a vague one.
+    """
+    path: str
+    label: str
+
+
+class AskDataPoint(BaseModel):
+    """One figure the answer states, with where the figure came from.
+
+    Per-claim provenance, not a label. It is emitted from the output
+    validator's own verification pass: to check a stated figure the
+    validator must already resolve which asset it belongs to, which stored
+    field it is, and what the trusted value is, so this is that work
+    reported rather than discarded. A figure only appears here if it was
+    checked and matched, which makes the list a statement about what the
+    answer actually rests on rather than a claim about its origin.
+    """
+    ticker: str
+    label: str
+    value: float
+    field: str
+    origin: str
+
+
 class AskResponse(BaseModel):
     intent: str
     narration: str
@@ -4618,6 +4789,13 @@ class AskResponse(BaseModel):
     # `source` (a short string label) stays the field older/other consumers
     # read, this is purely additive so no existing consumer breaks.
     sources: List[AskSource] = []
+    # Per-claim provenance for figures stated in the narration — see
+    # AskDataPoint. Empty when the answer states no checkable figure (a
+    # definition, a refusal, a clarification), which is not the same as
+    # unverified.
+    data_points: List[AskDataPoint] = []
+    # Deep link to the page this answer is about — see AskLink.
+    link: Optional[AskLink] = None
     is_blocked: bool = False
     redirect_suggestions: List[str] = []
 
@@ -4659,6 +4837,129 @@ _ASK_GENERIC_SOURCES = {
 }
 
 
+# Where a figure physically came from, keyed by the retrieval tier that
+# produced it. The `source` field is an internal routing label; these are
+# the user-facing statements of origin that go with each cited figure.
+_ASK_ORIGIN_LABELS = {
+    "ai_recommendation": "your latest completed analysis run",
+    "analysis_explanation": "your latest completed analysis run",
+    "user_data": "your own watchlist and latest run",
+    "assets": "AlphaSwarm's stored stock data",
+    "asset_search": "AlphaSwarm's stored stock data",
+    "stocks": "AlphaSwarm's stored stock data",
+    "fund_catalogue": "the fund's published fact sheet",
+}
+
+
+# The validator keys metrics by the words that appear in narration, which
+# includes wording the product has since moved on from. Provenance is shown
+# to the user, so it uses the current on-screen name.
+_ASK_DATA_POINT_LABELS = {
+    "confidence score": "Signal Score",
+    "confidence": "Signal Score",
+    "current price": "Current price",
+    "rsi": "RSI",
+    "beta": "Beta",
+    "sharpe ratio": "Sharpe ratio",
+    "sharpe": "Sharpe ratio",
+    "volatility": "Volatility",
+    "signal strength": "Signal strength",
+    "sentiment score": "Sentiment score",
+    "quant score": "Quant score",
+    "rank": "Rank",
+    "price": "Current price",
+}
+
+
+def _ask_response_link(response: AskResponse) -> Optional[AskLink]:
+    """The page that shows what this answer talked about, if there is one.
+
+    Deterministic: the destination is read off the intent and whichever
+    entity retrieval actually resolved, so the link can only ever point at
+    something the answer was really about. A refusal, a clarification or a
+    bare definition gets no link — a plausible-looking destination for an
+    answer that did not reach any particular page would be worse than
+    none.
+    """
+    if response.is_blocked:
+        return None
+
+    data = response.data or {}
+    ticker = data.get("ticker")
+    if isinstance(ticker, str) and ticker:
+        return AskLink(path=f"/asset/{ticker}", label=f"See {ticker}'s full analysis")
+
+    # A single-asset answer assembled from a list (comparison, search).
+    for key in ("assets", "watchlist", "top_picks"):
+        rows = data.get(key)
+        if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict):
+            one = rows[0].get("ticker")
+            if isinstance(one, str) and one:
+                return AskLink(path=f"/asset/{one}", label=f"See {one}'s full analysis")
+
+    if data.get("fund"):
+        fund = data["fund"]
+        fund_id = fund.get("id") if isinstance(fund, dict) else None
+        if fund_id:
+            return AskLink(path=f"/funds/{fund_id}", label="See this fund's full fact sheet")
+        return AskLink(path="/funds", label="Browse the fund catalogue")
+
+    if response.intent == "USER_DATA_SEARCH":
+        # Which half of their own data the answer was scoped to decides the
+        # destination — the same distinction the retrieval already made.
+        if data.get("watchlist") and not data.get("top_picks"):
+            return AskLink(path="/watchlist", label="Open your watchlist")
+        return AskLink(path="/assets", label="See all your ranked stocks")
+
+    if response.intent == "ASSET_SEARCH":
+        return AskLink(path="/assets", label="Browse all stocks")
+
+    if response.source == "learning_centre":
+        return AskLink(path="/learning", label="Read more in the Learning Centre")
+
+    if response.intent == "PLATFORM_QUESTION":
+        return AskLink(path="/learning", label="Learn how AlphaSwarm works")
+
+    return None
+
+
+def _attach_data_points(response: AskResponse, claims: Any) -> AskResponse:
+    """Turn the validator's verified claims into per-figure provenance on
+    the response.
+
+    Only figures that were checked AND matched appear, so this is a record
+    of what the answer rests on rather than an assertion about where it
+    came from. Best-effort by design: provenance is a disclosure, and
+    failing to build it must never cost the user their answer."""
+    if not claims:
+        return response
+    origin = _ASK_ORIGIN_LABELS.get(response.source, "AlphaSwarm's own data")
+    try:
+        seen: set = set()
+        points: List[AskDataPoint] = []
+        for claim in claims:
+            key = (claim.ticker, claim.field)
+            if key in seen:
+                continue
+            seen.add(key)
+            label = _ASK_DATA_POINT_LABELS.get(
+                (claim.metric or "").lower(), (claim.metric or "").capitalize()
+            )
+            points.append(
+                AskDataPoint(
+                    ticker=claim.ticker,
+                    label=label,
+                    value=round(float(claim.actual), 4),
+                    field=claim.field,
+                    origin=origin,
+                )
+            )
+        return response.model_copy(update={"data_points": points})
+    except Exception as e:
+        logger.warning("Ask provenance assembly failed: %s", e)
+        return response
+
+
 def _ask_sense_check(query: str, response: Optional[AskResponse], user_id: Optional[str]) -> Optional[AskResponse]:
     """Cheap, deterministic sanity pass over the FINISHED answer, run once
     per request — not a second classification/LLM-judge call on every
@@ -4683,7 +4984,7 @@ def _ask_sense_check(query: str, response: Optional[AskResponse], user_id: Optio
         return response
 
     try:
-        data, source = _ask_user_data_search(user_id)
+        data, source = _ask_user_data_search(user_id, query)
     except Exception as e:
         logger.warning("Ask sense-check retrieval failed: %s", e)
         return response
@@ -4718,6 +5019,16 @@ async def ask_alphaswarm(
     try:
         response = await _ask_alphaswarm_impl(req, authorization)
         response = _ask_sense_check(req.query, response, telemetry.get("user_id"))
+        if response is not None:
+            response = _attach_data_points(response, telemetry.get("verified_claims"))
+            if response.link is None:
+                try:
+                    link = _ask_response_link(response)
+                except Exception as e:
+                    logger.warning("Ask link resolution failed: %s", e)
+                    link = None
+                if link is not None:
+                    response = response.model_copy(update={"link": link})
         return response
     finally:
         _ask_telemetry.reset(token)
@@ -4961,6 +5272,16 @@ async def _ask_alphaswarm_impl(
         except Exception as e:
             logger.warning("Ask fund-catalogue shortcut failed: %s", e)
 
+    # 2h. The user's own results, asked for by the product's own feature
+    # names ("my top picks", "my shortlist", "my recommended assets").
+    # Settled here rather than by the classifier, which refused these as
+    # requests for advice — see _ASK_OWN_RESULTS_PATTERN's own comment.
+    # Only fires on possessive phrasing, so "recommend me a stock" (no
+    # "my", and caught by the advice gates above long before this) is
+    # untouched.
+    if intent is None and _ASK_OWN_RESULTS_PATTERN.search(query):
+        intent = "USER_DATA_SEARCH"
+
     # 3. Intent classification (small Groq call) — skipped when 2d already
     # set `intent` deterministically.
     if intent is None:
@@ -5138,7 +5459,7 @@ async def _ask_alphaswarm_impl(
         if intent == "ASSET_SEARCH":
             data, source = _ask_asset_search(query, user_id)
         elif intent == "USER_DATA_SEARCH":
-            data, source = _ask_user_data_search(user_id)
+            data, source = _ask_user_data_search(user_id, query)
         elif intent == "ANALYSIS_EXPLANATION":
             data, source = _ask_analysis_explanation(query, user_id)
         else:

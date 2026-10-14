@@ -539,3 +539,229 @@ def test_the_prediction_gate_does_not_catch_legitimate_questions():
               "Why does AAPL rank above MSFT?", "how does the ranking work",
               "what is my watchlist"):
         assert not api._ask_blocklist_hit(q), f"{q!r} was wrongly blocked"
+
+
+# ── 9. The user's own data: right list, right question ───────────────────
+# The watchlist and the latest run's top picks are different lists that
+# overlap. Handing the narrator both lets an answer about one describe the
+# other, which is true about the wrong thing.
+
+WATCHLIST_SCOPED = [
+    "what is on my watchlist",
+    "tell me about the assets on my watchlist",
+    "which stocks am I tracking",
+    "compare the assets on my watchlist",
+]
+
+
+@pytest.mark.parametrize("query", WATCHLIST_SCOPED)
+def test_watchlist_questions_are_scoped_to_the_watchlist(query):
+    assert api._ASK_WATCHLIST_SCOPE_PATTERN.search(query), f"{query!r} not read as a watchlist question"
+    assert not api._ASK_RUN_SCOPE_PATTERN.search(query), f"{query!r} wrongly also read as a run question"
+
+
+RUN_SCOPED = [
+    "what are my top picks",
+    "what are my top recommended assets",
+    "show me my shortlist",
+    "what did my latest run rank highest",
+]
+
+
+@pytest.mark.parametrize("query", RUN_SCOPED)
+def test_top_pick_questions_are_scoped_to_the_run(query):
+    assert api._ASK_RUN_SCOPE_PATTERN.search(query), f"{query!r} not read as a run question"
+    assert not api._ASK_WATCHLIST_SCOPE_PATTERN.search(query), f"{query!r} wrongly also read as a watchlist question"
+
+
+OWN_RESULTS = [
+    "what are my top picks",
+    "what are my top recommended assets",
+    "show me my shortlist",
+    "what are my rankings",
+    "what did my latest run recommend",
+]
+
+
+@pytest.mark.parametrize("query", OWN_RESULTS)
+def test_asking_for_your_own_results_is_not_treated_as_asking_for_advice(query):
+    """Regression: the classifier refused "what are my top picks" as
+    investment advice, so a user asking to see the output of a run they had
+    already done was told AlphaSwarm doesn't give advice. Settled
+    deterministically now — "my" means an existing list, not a request for
+    a new recommendation."""
+    assert api._ASK_OWN_RESULTS_PATTERN.search(query), f"{query!r} not recognised as the user's own results"
+    assert not api._ask_blocklist_hit(query), f"{query!r} was blocked as advice"
+
+
+def test_asking_to_be_told_what_to_buy_is_still_advice():
+    """The other side of the line: without the possessive, it is a request
+    for a recommendation and must stay refused."""
+    for q in ("recommend me a stock", "what should I buy", "which stock should i buy",
+              "what's the best stock for me"):
+        assert not api._ASK_OWN_RESULTS_PATTERN.search(q), f"{q!r} wrongly read as the user's own data"
+
+
+# ── 10. Rank claims written in words ─────────────────────────────────────
+
+def test_a_wrong_rank_stated_in_words_is_caught():
+    """Regression: every numeric check in the validator matches digits, so
+    "It ranks first" was unverified. A narration claimed AAPL ranked first
+    while MA was rank 1 and passed validation cleanly."""
+    from src.utils.ask_output_validator import validate_ask_output
+    assets = [
+        {"ticker": "MA", "rank": 1},
+        {"ticker": "AAPL", "rank": 2},
+    ]
+    result = validate_ask_output(
+        "The top pick is Apple (AAPL). It ranks first in AlphaSwarm's run.",
+        comparison_assets=assets,
+    )
+    assert not result.valid
+    assert any("UNSUPPORTED_RANK_CLAIM" in v for v in result.violations)
+
+
+def test_a_correct_rank_stated_in_words_passes():
+    from src.utils.ask_output_validator import validate_ask_output
+    assets = [{"ticker": "MA", "rank": 1}, {"ticker": "AAPL", "rank": 2}]
+    result = validate_ask_output(
+        "Mastercard (MA) is the top pick. Apple (AAPL) ranks second.",
+        comparison_assets=assets,
+    )
+    assert result.valid, result.violations
+
+
+def test_rank_one_claims_made_in_prose_are_caught():
+    """The observed failure said "Apple leads with a strong quant score"
+    while Apple was rank 2 — a rank-1 claim with no ordinal and no digit
+    in it."""
+    from src.utils.ask_output_validator import validate_ask_output
+    assets = [{"ticker": "MA", "rank": 1}, {"ticker": "AAPL", "rank": 2}]
+    for wrong in ("Apple (AAPL) leads the list with a strong quant score.",
+                  "Apple (AAPL) is the highest-ranked name this run.",
+                  "Apple (AAPL) is the top pick."):
+        result = validate_ask_output(wrong, comparison_assets=assets)
+        assert not result.valid, f"missed a false rank-1 claim: {wrong!r}"
+
+    right = validate_ask_output(
+        "Mastercard (MA) leads the list. Apple (AAPL) follows.", comparison_assets=assets,
+    )
+    assert right.valid, right.violations
+
+
+def test_an_unattributable_rank_claim_is_skipped_not_guessed():
+    """A sentence naming two assets does not let either own the claim."""
+    from src.utils.ask_output_validator import validate_ask_output
+    assets = [{"ticker": "MA", "rank": 1}, {"ticker": "AAPL", "rank": 2}]
+    result = validate_ask_output(
+        "AAPL and MA both rank in the top five.", comparison_assets=assets,
+    )
+    assert result.valid, result.violations
+
+
+# ── 11. Provenance ───────────────────────────────────────────────────────
+
+def test_verified_figures_are_reported_not_discarded():
+    """The validator already resolves claim -> field -> trusted value to
+    check a figure; that mapping IS the provenance and is now returned."""
+    from src.utils.ask_output_validator import validate_ask_output
+    result = validate_ask_output(
+        "AAPL's RSI is about 56.1 and its beta is 0.64.",
+        data={"ticker": "AAPL", "rsi": 56.14, "beta": 0.6413},
+    )
+    assert result.valid, result.violations
+    reported = {(c.ticker, c.field) for c in result.verified_claims}
+    assert ("AAPL", "rsi") in reported
+    assert ("AAPL", "beta") in reported
+
+
+def test_an_answer_with_no_figures_reports_no_provenance():
+    """Empty means "stated no checkable figure", not "unverified"."""
+    from src.utils.ask_output_validator import validate_ask_output
+    result = validate_ask_output(
+        "Beta measures how much an asset moves relative to the market.",
+        data={"ticker": "AAPL", "beta": 0.64},
+    )
+    assert result.valid
+    assert result.verified_claims == []
+
+
+def test_a_rejected_answer_reports_no_provenance():
+    """A figure that failed verification must never be reported as if it
+    had passed."""
+    from src.utils.ask_output_validator import validate_ask_output
+    result = validate_ask_output(
+        "AAPL's RSI is about 91.", data={"ticker": "AAPL", "rsi": 56.14},
+    )
+    assert not result.valid
+    assert result.verified_claims == []
+
+
+# ── 12. A decline never carries a citation ───────────────────────────────
+
+def test_source_declines_are_recognised():
+    """Regression: an approved page that turned out not to cover the term
+    produced "the information you provided doesn't cover X" — shipped as
+    the answer, with that regulator cited underneath it. Recognising the
+    decline is what lets the question fall through to a better source and
+    keeps the citation off a non-answer."""
+    declines = [
+        "I'm sorry, but the information you provided doesn't cover dollar cost averaging.",
+        "I'm sorry, but the source material doesn't provide information about stop-loss orders.",
+        "I don't have enough information to answer that.",
+        "The source does not mention this term.",
+        "I can't give an answer based on that source.",
+        api._ASK_LEARNING_NOT_COVERED_MESSAGE,
+    ]
+    for text in declines:
+        assert api._ask_learning_answer_declined(text), f"not recognised as a decline: {text!r}"
+
+
+def test_real_answers_are_not_mistaken_for_declines():
+    answers = [
+        "Dollar-cost averaging means investing the same amount at regular intervals.",
+        "Beta is a measure of how much an asset's price moves relative to the market.",
+        "An index fund aims to track the performance of a specific market index.",
+        "A stop-loss order tells your broker to sell once a price level is reached.",
+    ]
+    for text in answers:
+        assert not api._ask_learning_answer_declined(text), f"real answer read as a decline: {text!r}"
+
+
+# ── 13. Links point where the answer actually went ───────────────────────
+
+def test_a_refusal_carries_no_link():
+    resp = api.AskResponse(
+        intent="UNSUPPORTED_FINANCIAL_ADVICE", narration="no", data={},
+        source="blocklist", is_blocked=True,
+    )
+    assert api._ask_response_link(resp) is None
+
+
+def test_a_single_asset_answer_links_to_that_asset():
+    resp = api.AskResponse(
+        intent="ANALYSIS_EXPLANATION", narration="ok", data={"ticker": "AAPL"},
+        source="ai_recommendation",
+    )
+    link = api._ask_response_link(resp)
+    assert link is not None and link.path == "/asset/AAPL"
+
+
+def test_a_watchlist_answer_links_to_the_watchlist_not_the_rankings():
+    resp = api.AskResponse(
+        intent="USER_DATA_SEARCH", narration="ok",
+        data={"watchlist": [{"ticker": "TSLA"}, {"ticker": "AMD"}]},
+        source="user_data",
+    )
+    link = api._ask_response_link(resp)
+    assert link is not None and link.path == "/watchlist"
+
+
+def test_a_top_picks_answer_links_to_the_ranked_stocks():
+    resp = api.AskResponse(
+        intent="USER_DATA_SEARCH", narration="ok",
+        data={"top_picks": [{"ticker": "MA"}, {"ticker": "AAPL"}]},
+        source="user_data",
+    )
+    link = api._ask_response_link(resp)
+    assert link is not None and link.path == "/assets"
