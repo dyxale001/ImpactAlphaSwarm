@@ -94,13 +94,13 @@ export default function AskAlphaSwarmChatbot() {
         <div
           role="dialog"
           aria-label="Ask AlphaSwarm assistant"
-          className="mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20 overflow-hidden"
+          className="relative mb-3 flex flex-col w-[calc(100vw-2rem)] max-w-sm h-[min(32rem,calc(100dvh-7rem))] sm:w-96 rounded-2xl border-2 border-brand-primary/70 bg-brand-card shadow-2xl ring-1 ring-brand-primary/20 overflow-hidden"
           style={{ animation: 'slide-up 0.2s ease-out forwards' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-brand-border/50 bg-brand-bg/40 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <img src={askBot} alt="" aria-hidden="true" className="w-5 h-5 shrink-0 object-contain" />
+              <span aria-hidden="true" className="shrink-0 font-mono text-sm font-bold leading-none text-brand-accent">&gt;_</span>
               <p className="text-sm font-bold text-brand-fg truncate">Ask AlphaSwarm</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -124,11 +124,23 @@ export default function AskAlphaSwarmChatbot() {
             </div>
           </div>
 
+          {/* The mascot sits in the panel's corner rather than in the flow:
+              present the whole time the chat is open, never pushing the
+              conversation around or competing with it for attention.
+              pointer-events-none so it can't swallow a click meant for the
+              messages behind it. */}
+          <img
+            src={askBot}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-16 right-2 w-16 opacity-25 select-none"
+          />
+
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
-                <img src={askBot} alt="" aria-hidden="true" className="w-12 h-12 object-contain" />
+                <span aria-hidden="true" className="font-mono text-2xl font-bold leading-none text-brand-primary">&gt;_</span>
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
@@ -203,7 +215,7 @@ export default function AskAlphaSwarmChatbot() {
         >
           {open
             ? <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            : <img src={askBot} alt="" aria-hidden="true" className="w-8 h-8 sm:w-9 sm:h-9 object-contain" />}
+            : <span aria-hidden="true" className="font-mono text-lg sm:text-xl font-bold leading-none tracking-tight">&gt;_</span>}
         </button>
         {!open && (
           <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-2 z-50">
