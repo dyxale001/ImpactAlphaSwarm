@@ -2771,6 +2771,17 @@ def _resolve_fund(query: str) -> Optional[dict]:
 # lists individual companies, not investment funds", and "show me all the
 # ETFs" listed SNPS and PLTR. A catalogue question has to be recognised and
 # answered from the catalogue, or it is answered about stocks.
+# A question ABOUT one of the product's pages — what it is, where it is, how
+# to use it — as opposed to a request to DO the page's job. The distinction
+# is what keeps "compare AAPL and GOOGL" (a comparison, answered with data)
+# from being answered with a description of the Compare page.
+_ASK_ABOUT_A_PAGE_PATTERN = re.compile(
+    r"\b(?:what(?:'s|\s+is|\s+are|\s+does)|where(?:'s|\s+is|\s+can\s+i\s+find)|how\s+(?:do|does|can)\s+(?:i|the|this|you)|"
+    r"tell\s+me\s+about|explain|about\s+the|what\s+can\s+i\s+do|does\s+alphaswarm\s+have|"
+    r"is\s+there\s+a|can\s+i\s+(?:use|see|find))\b",
+    re.IGNORECASE,
+)
+
 _ASK_FUND_CATALOGUE_PATTERN = re.compile(
     r"\b(?:funds?|etfs?|unit\s+trusts?|index\s+trackers?)\b", re.IGNORECASE,
 )
@@ -5258,6 +5269,14 @@ def _ask_response_link(response: AskResponse) -> Optional[AskLink]:
     if response.source == "learning_centre":
         return AskLink(path="/learning", label="Read more in the Learning Centre")
 
+    # An answer about a specific product page sets its own link (or, when
+    # that page is switched off, deliberately none). The generic fallback
+    # below is for methodology questions, and applying it here sent "the
+    # Compare page isn't available" to /learning — a link that implies the
+    # answer lives somewhere it does not.
+    if data.get("feature"):
+        return None
+
     if response.intent == "PLATFORM_QUESTION":
         return AskLink(path="/learning", label="Learn how AlphaSwarm works")
 
@@ -5500,6 +5519,63 @@ async def _ask_alphaswarm_impl(
     if multi_intent is not None:
         return multi_intent
 
+    # `intent` is a sentinel: None means "not yet deterministically decided".
+    # Declared here, ahead of the first shortcut that reads it, rather than
+    # at step 2d where it used to live — moving the page step above 2d
+    # otherwise read it before assignment.
+    intent: Optional[str] = None
+
+    # 2a'. The product's own pages — runs BEFORE every generic shortcut
+    # below (asset resolution, metric grounding, the definitional
+    # shortcut). Found by testing: placed after them, "what is the
+    # market news page" was resolved to News Corp ("news" matched a
+    # company name) and "what is the investment planner" was answered
+    # with a web definition of a financial PLANNER, a type of person.
+    # A question that names one of our own pages is decided here, first.
+    #
+    # (Original comment:) The product's own pages — Market News, Compare, Financial Tools,
+    # Funds. Asked about by name, so no classifier is needed, and answered
+    # from fixed reviewed text (utils/ask_features.py), never a model.
+    #
+    # Only an ENABLED page is described. These sit behind feature flags that
+    # default off, and a flag-off deployment has no such page: describing it
+    # — and especially linking to it — would send the user to a 404. A
+    # switched-off page the question names gets an honest "not available
+    # here" instead of falling through to "I'm not sure what you mean".
+    #
+    # Only fires on a question ABOUT the page (what is / where is / how do
+    # I use), so "compare AAPL and GOOGL" still goes to the comparison
+    # path, not to a description of the Compare page.
+    if intent is None and _ASK_ABOUT_A_PAGE_PATTERN.search(query):
+        try:
+            from src.utils.ask_features import match_feature, disabled_feature_named
+            page = match_feature(query)
+            if page is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=f"{page.summary} {page.detail}",
+                    data={"feature": page.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=[],
+                    link=AskLink(path=page.path, label=f"Open {page.name}"),
+                )
+            missing = disabled_feature_named(query)
+            if missing is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=(
+                        f"{missing.name} isn't available in this version of "
+                        f"AlphaSwarm yet."
+                    ),
+                    data={"feature": missing.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+                )
+        except Exception as e:
+            logger.warning("Ask feature-page lookup failed: %s", e)
+
     # 2b. Asset-specific metric questions ("what is Microsoft's beta?",
     # "what is GOOGL's RSI?", "what does its beta mean?") — deterministic,
     # checked BEFORE intent classification. resolved_asset+resolved_metric
@@ -5542,7 +5618,6 @@ async def _ask_alphaswarm_impl(
     # set by 2d/2e below, or by the classifier call in step 3 if neither
     # shortcut fired. 2f (whale watching) returns directly rather than
     # setting this sentinel, since it's a full response, not just an intent.
-    intent: Optional[str] = None
     if resolved_asset and not resolved_metric and (
         _ASK_ASSET_OVERVIEW_PATTERN.search(query) or _is_bare_ticker_query(query, resolved_asset)
     ):

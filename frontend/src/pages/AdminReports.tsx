@@ -228,8 +228,7 @@ function LearnersTab({ range }: { range: ReportRange }) {
         <SectionState loading={loading} error={error} />
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <KpiCard label="Watchlist adds (range)" value={data.watchlist_additions.in_range} sub={`${data.watchlist_additions.total} all time`} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <KpiCard
               label="Average XP"
               value={data.learning_xp.average}

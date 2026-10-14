@@ -595,6 +595,119 @@ def test_api_source_file_contains_no_backspace_bytes():
     assert b"\x08" not in raw, "a literal backspace byte is in api.py"
 
 
+# ── 6b. The product's own pages ──────────────────────────────────────────
+# Market News, Compare and Funds sit behind feature flags that default OFF.
+# A flag-off deployment has no such page, so describing or linking to one
+# sends the user to a 404.
+
+@pytest.fixture
+def _all_pages_on(monkeypatch):
+    for flag in ("MACRO_NEWS_ENABLED", "VITE_COMPARE_ENABLED", "FUNDS_ENABLED"):
+        monkeypatch.setenv(flag, "true")
+
+
+@pytest.fixture
+def _flagged_pages_off(monkeypatch):
+    for flag in ("MACRO_NEWS_ENABLED", "VITE_COMPARE_ENABLED", "COMPARE_ENABLED", "FUNDS_ENABLED"):
+        monkeypatch.setenv(flag, "false")
+
+
+def test_a_disabled_page_is_never_described_or_linked(_flagged_pages_off):
+    from src.utils.ask_features import match_feature, enabled_features
+    keys = {f.key for f in enabled_features()}
+    assert "market_news" not in keys and "compare" not in keys and "funds" not in keys
+    assert match_feature("what is the market news page") is None
+    assert match_feature("where is the compare page") is None
+
+
+def test_a_disabled_page_gets_an_honest_answer_not_a_silent_fallthrough(_flagged_pages_off):
+    """"Where is the Compare page?" must not fall through to "I'm not sure
+    what you mean", and must not be answered as though the page exists."""
+    from src.utils.ask_features import disabled_feature_named
+    assert disabled_feature_named("where is the compare page").key == "compare"
+    assert disabled_feature_named("what is the market news page").key == "market_news"
+
+
+def test_enabling_a_flag_enables_exactly_that_page(_all_pages_on):
+    from src.utils.ask_features import enabled_features, match_feature
+    assert {f.key for f in enabled_features()} >= {"market_news", "compare", "funds", "financial_tools"}
+    assert match_feature("what is the market news page").path == "/news"
+    assert match_feature("what does the compare page do").path == "/compare"
+
+
+def test_financial_tools_is_always_available(_flagged_pages_off):
+    from src.utils.ask_features import enabled_features
+    assert "financial_tools" in {f.key for f in enabled_features()}
+
+
+def test_a_flag_typo_fails_closed(monkeypatch):
+    """Only the literal "true" switches a feature on, matching every other
+    flag in the backend — "yes", "1" or "True " must not enable a page that
+    may not be deployed."""
+    from src.utils.ask_features import _env_true
+    monkeypatch.setenv("SOME_FLAG", "yes")
+    assert not _env_true("SOME_FLAG")
+    monkeypatch.setenv("SOME_FLAG", "1")
+    assert not _env_true("SOME_FLAG")
+    monkeypatch.setenv("SOME_FLAG", " TRUE ")
+    assert _env_true("SOME_FLAG")
+
+
+PAGE_QUESTIONS = [
+    "what are the financial tools",
+    "what is the investment planner",
+    "tell me about the funds page",
+    "what does the compare page do",
+    "where is the market news page",
+]
+
+
+@pytest.mark.parametrize("query", PAGE_QUESTIONS)
+def test_a_question_about_a_page_is_recognised_as_one(query):
+    assert api._ASK_ABOUT_A_PAGE_PATTERN.search(query), f"{query!r} not read as a question about a page"
+
+
+def test_doing_a_pages_job_is_not_a_question_about_it():
+    """"compare AAPL and GOOGL" is a comparison, answered with data — not a
+    description of the Compare page. The shape pattern is what keeps them
+    apart."""
+    assert not api._ASK_ABOUT_A_PAGE_PATTERN.search("compare AAPL and GOOGL")
+    assert not api._ASK_ABOUT_A_PAGE_PATTERN.search("show me my watchlist")
+
+
+def test_the_page_step_runs_before_every_generic_shortcut():
+    """Regression, found by testing. Placed after asset resolution, "what is
+    the market news page" resolved to News Corp ("news" matched a company
+    name), and "what is the investment planner" was answered with a web
+    definition of a financial PLANNER, a type of person. A question naming
+    one of our own pages has to be decided first."""
+    src = (Path(__file__).resolve().parents[1] / "src" / "api.py").read_text(encoding="utf-8")
+    page_step = src.index("# 2a'. The product's own pages")
+    for later in ("# 2b. Asset-specific metric questions",
+                  "# 2d. Deterministic asset-overview shortcut",
+                  "# 2f. Deterministic definitional-learning-question shortcut"):
+        assert page_step < src.index(later), f"page step must precede {later!r}"
+
+
+def test_intent_is_declared_before_the_first_step_that_reads_it():
+    """Regression: the sentinel used to be declared at step 2d. Moving the
+    page step above it read the name before assignment and crashed every
+    request."""
+    src = (Path(__file__).resolve().parents[1] / "src" / "api.py").read_text(encoding="utf-8")
+    declared = src.index("    intent: Optional[str] = None\n\n    # 2a'. The product's own pages")
+    first_read = src.index("if intent is None and _ASK_ABOUT_A_PAGE_PATTERN")
+    assert declared < first_read
+
+
+def test_a_not_available_answer_carries_no_link():
+    resp = api.AskResponse(
+        intent="PLATFORM_QUESTION",
+        narration="Compare isn't available in this version of AlphaSwarm yet.",
+        data={"feature": "compare"}, source="platform_methodology",
+    )
+    assert api._ask_response_link(resp) is None
+
+
 # ── 7. The resolution envelope ───────────────────────────────────────────
 # The envelope lets a model propose POINTERS for questions the patterns
 # cannot route. These tests pin the property that makes that safe: a
