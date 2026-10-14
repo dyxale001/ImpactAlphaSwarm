@@ -91,6 +91,19 @@ export interface ChatbotReport {
   average_latency_ms?: number | null;
   top_queried_assets?: { ticker: string; count: number }[];
   queries_over_time?: { date: string; count: number }[];
+  /** The questions asked, newest first. Only the user's question — never the
+   *  answer, and never who asked. Empty before migration 037 or when nothing
+   *  has been recorded in range. */
+  recent_queries?: RecentAskQuery[];
+}
+
+export interface RecentAskQuery {
+  asked_at: string | null;
+  query: string;
+  intent: string | null;
+  answered: boolean;
+  fallback_used: boolean;
+  asset_symbol: string | null;
 }
 
 export const adminReportsApi = {

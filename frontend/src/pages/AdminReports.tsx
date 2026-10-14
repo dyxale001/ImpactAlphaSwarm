@@ -3,7 +3,7 @@ import AdminTabs from "../components/admin/AdminTabs";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { adminReportsApi, type ReportRange } from "../services/api/adminReports";
+import { adminReportsApi, type ChatbotReport, type ReportRange } from "../services/api/adminReports";
 import { useAdminReport } from "../hooks/useAdminReports";
 
 const TABS = ["Overview", "Users", "Learners", "Assets", "Retention", "Chatbot"] as const;
@@ -330,9 +330,81 @@ function ChatbotTab({ range }: { range: ReportRange }) {
       <div className="glass-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">Top queried assets</h3>
         <RankBarChart data={data.top_queried_assets ?? []} dataKey="count" xKey="ticker" />
-        <p className="text-xs text-brand-muted-fg mt-3">
-          Aggregate counts only — raw prompts and answers are never stored or shown here.
-        </p>
+      </div>
+      <QuestionsLog queries={data.recent_queries ?? []} />
+    </div>
+  );
+}
+
+// What people are actually asking. The most useful single thing for spotting
+// where Ask AlphaSwarm falls short: a question that came back unanswered, or
+// via a fallback, is a gap in coverage you can read directly instead of
+// inferring from a rate.
+function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_queries"]> }) {
+  const [onlyUnanswered, setOnlyUnanswered] = useState(false);
+  const shown = onlyUnanswered ? queries.filter((q) => !q.answered || q.fallback_used) : queries;
+
+  return (
+    <div className="glass-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg">Questions asked</h3>
+        <label className="flex items-center gap-2 text-xs text-brand-muted-fg cursor-pointer">
+          <input
+            type="checkbox"
+            checked={onlyUnanswered}
+            onChange={(e) => setOnlyUnanswered(e.target.checked)}
+            className="accent-brand-primary"
+          />
+          Only unanswered or fallback
+        </label>
+      </div>
+      <p className="text-xs text-brand-muted-fg mb-4">
+        The questions people typed, newest first (up to the latest 100). Only the question is recorded — not the
+        answer, and not who asked. Questions are free text and can contain personal details, so they are visible
+        to admins only and cleared after the retention period.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-brand-muted-fg border-b border-brand-border">
+              <th className="py-2 pr-4 whitespace-nowrap">When</th>
+              <th className="py-2 pr-4">Question</th>
+              <th className="py-2 pr-4 whitespace-nowrap">Routed as</th>
+              <th className="py-2 whitespace-nowrap">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-3 text-brand-muted-fg">
+                  {queries.length === 0
+                    ? "No questions recorded yet. Questions are kept from the point this was switched on, so earlier ones are not shown."
+                    : "Every recorded question in this range was answered."}
+                </td>
+              </tr>
+            )}
+            {shown.map((q, i) => (
+              <tr key={`${q.asked_at}-${i}`} className="border-b border-brand-border/50 align-top">
+                <td className="py-2 pr-4 whitespace-nowrap text-brand-muted-fg">
+                  {q.asked_at ? new Date(q.asked_at).toLocaleString() : "—"}
+                </td>
+                <td className="py-2 pr-4 text-brand-fg break-words max-w-xl">{q.query}</td>
+                <td className="py-2 pr-4 whitespace-nowrap text-brand-muted-fg">
+                  {(q.intent ?? "unknown").toLowerCase().replace(/_/g, " ")}
+                </td>
+                <td className="py-2 whitespace-nowrap">
+                  {!q.answered ? (
+                    <span className="text-semantic-danger font-semibold">Not answered</span>
+                  ) : q.fallback_used ? (
+                    <span className="text-brand-muted-fg">Fallback</span>
+                  ) : (
+                    <span className="text-semantic-success">Answered</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

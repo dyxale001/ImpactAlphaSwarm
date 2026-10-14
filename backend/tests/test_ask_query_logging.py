@@ -213,7 +213,16 @@ def test_log_write_raising_synchronously_is_still_swallowed(monkeypatch):
 
 # ── No raw prompt/answer persisted ──────────────────────────────────────
 
-def test_no_raw_prompt_or_answer_text_is_ever_passed_to_the_logger(monkeypatch):
+def test_the_question_is_logged_but_the_answer_never_is(monkeypatch):
+    """The boundary as of migration 037.
+
+    This test used to assert that NEITHER the question nor the answer was
+    ever passed to the logger. The product owner has since asked to see the
+    questions people ask, so the question now goes through — but the
+    boundary moved to a specific place and this holds it there: the user's
+    own words are passed on (to be truncated and stored by the logger),
+    while the model's answer, and anything else the response carried, is
+    not."""
     _patch_rate_limit(monkeypatch)
     _patch_fake_auth(monkeypatch)
     monkeypatch.setattr(api, "_classify_ask_intent", lambda _q: "ANALYSIS_EXPLANATION")
@@ -227,10 +236,11 @@ def test_no_raw_prompt_or_answer_text_is_ever_passed_to_the_logger(monkeypatch):
 
     assert resp.narration == secret_answer  # sanity: the user still gets the real answer
     logged_values = list(calls[0].values())
-    assert query not in logged_values
-    assert secret_answer not in logged_values
+    assert query in logged_values, "the question is now recorded"
+    assert secret_answer not in logged_values, "the answer must never be recorded"
     assert set(calls[0].keys()) == {
         "user_id", "asset_symbol", "intent", "success", "fallback_used", "validation_failed", "latency_ms",
+        "query_text",
     }
 
 

@@ -5147,25 +5147,60 @@ class AskResponse(BaseModel):
     redirect_suggestions: List[str] = []
 
 
+# Longest slice of a question that is ever stored. A question is a sentence;
+# anything past this is pasted material the admin report has no use for and
+# the user did not mean to keep.
+_ASK_LOG_QUERY_MAX_CHARS = 500
+
+
+def _clean_logged_query(query: Optional[str]) -> Optional[str]:
+    """The question as it will be stored: whitespace collapsed, truncated,
+    and None if nothing is left. Only ever the user's own words — never the
+    answer."""
+    if not query:
+        return None
+    collapsed = " ".join(str(query).split())
+    if not collapsed:
+        return None
+    return collapsed[:_ASK_LOG_QUERY_MAX_CHARS]
+
+
 def _log_ask_query(
     *, user_id: Optional[str], asset_symbol: Optional[str], intent: str,
     success: bool, fallback_used: bool, validation_failed: bool, latency_ms: int,
+    query_text: Optional[str] = None,
 ) -> None:
     """Best-effort persistence of one /api/ask outcome for the Admin Reports
-    Chatbot report (migration 018_ask_query_logs.sql). Deliberately writes
-    only aggregate metadata — never the raw query or narration text — and
+    Chatbot report (migrations 018 and 037). Stores aggregate metadata plus
+    the user's QUESTION text (truncated) — never the model's answer — and
     NEVER raises: a logging failure must not turn a successful /api/ask
-    response into an error for the user."""
+    response into an error for the user.
+
+    The text is a separate, optional column (migration 037). If it has not
+    been applied the first insert fails on the unknown column, and the whole
+    row would be lost with it — taking every usage metric down for the sake
+    of one optional field. So a failure retries once WITHOUT the text,
+    which is exactly the behaviour from before 037 existed."""
+    row = {
+        "user_id": user_id,
+        "asset_symbol": asset_symbol,
+        "intent": intent,
+        "success": success,
+        "fallback_used": fallback_used,
+        "validation_failed": validation_failed,
+        "latency_ms": latency_ms,
+    }
+    text = _clean_logged_query(query_text)
     try:
-        supabase.table("ask_query_logs").insert({
-            "user_id": user_id,
-            "asset_symbol": asset_symbol,
-            "intent": intent,
-            "success": success,
-            "fallback_used": fallback_used,
-            "validation_failed": validation_failed,
-            "latency_ms": latency_ms,
-        }).execute()
+        supabase.table("ask_query_logs").insert({**row, "query_text": text} if text else row).execute()
+        return
+    except Exception as e:
+        if not text:
+            logger.warning("ask_query_log_write_failed: %s", e)
+            return
+        logger.warning("ask_query_log_text_write_failed (migration 037 applied?): %s", e)
+    try:
+        supabase.table("ask_query_logs").insert(row).execute()
     except Exception as e:
         logger.warning("ask_query_log_write_failed: %s", e)
 
@@ -5416,6 +5451,7 @@ async def ask_alphaswarm(
                 fallback_used=bool(telemetry.get("fallback_used")),
                 validation_failed=bool(telemetry.get("validation_failed")),
                 latency_ms=latency_ms,
+                query_text=req.query,
             )
 
 
@@ -7122,11 +7158,13 @@ async def admin_reports_retention(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/admin/reports/chatbot")
 async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str] = Header(None)):
-    """Ask AlphaSwarm usage/quality, from ask_query_logs (migration 018).
+    """Ask AlphaSwarm usage/quality, from ask_query_logs (migrations 018, 037).
 
-    Never returns raw prompt/answer text — only the aggregate metadata the
-    table stores. If the table doesn't exist yet (migration not applied) or
-    has no rows in range, reports that plainly rather than fabricating data.
+    Aggregate metadata, plus `recent_queries`: the questions asked, since
+    migration 037. Never the model's ANSWER, and never who asked — see
+    _recent_ask_queries. If the table doesn't exist yet (migration not
+    applied) or has no rows in range, reports that plainly rather than
+    fabricating data.
     """
     requester_id = await _get_user_id_from_bearer(authorization)
     await _require_admin(requester_id)
@@ -7182,4 +7220,47 @@ async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str]
         "average_latency_ms": avg_latency_ms,
         "top_queried_assets": top_queried_assets,
         "queries_over_time": queries_over_time,
+        "recent_queries": _recent_ask_queries(cutoff),
     }
+
+
+def _recent_ask_queries(cutoff: Optional[datetime.datetime], limit: int = 100) -> List[dict]:
+    """The questions people have asked, newest first, for the admin report.
+
+    A separate query from the aggregates on purpose. The question text lives
+    in a column added by migration 037, so selecting it alongside the
+    aggregates would make the whole report fail on a database where 037 has
+    not run yet — taking the working statistics down for an optional list.
+    Here a failure just means an empty list, which the page renders as "no
+    questions recorded yet".
+
+    Returns only what an admin needs to read a question in context: when,
+    what was asked, how it was routed and whether it was answered. Never the
+    answer, and never the user's identity — the report shows what is being
+    asked, not who is asking it."""
+    try:
+        q = (
+            supabase.table("ask_query_logs")
+            .select("created_at,query_text,intent,success,fallback_used,asset_symbol")
+            .not_.is_("query_text", "null")
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if cutoff:
+            q = q.gte("created_at", cutoff.isoformat())
+        rows = q.execute().data or []
+    except Exception as e:
+        logger.warning("admin_reports_chatbot recent_queries unavailable (migration 037 applied?): %s", e)
+        return []
+    return [
+        {
+            "asked_at": r.get("created_at"),
+            "query": r.get("query_text"),
+            "intent": r.get("intent"),
+            "answered": bool(r.get("success")),
+            "fallback_used": bool(r.get("fallback_used")),
+            "asset_symbol": r.get("asset_symbol"),
+        }
+        for r in rows
+        if r.get("query_text")
+    ]
