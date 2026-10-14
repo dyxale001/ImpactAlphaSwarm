@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { X, Send, Loader2 } from 'lucide-react'
+import { Sparkles, X, Send, Loader2 } from 'lucide-react'
 import askBot from '../../assets/ask-alphaswarm-bot.png'
 import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
@@ -100,7 +100,7 @@ export default function AskAlphaSwarmChatbot() {
           {/* Header */}
           <div className="flex items-center justify-between gap-2 px-4 py-3 pl-14 border-b border-brand-border/50 bg-brand-bg/40 rounded-t-[14px] shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <span aria-hidden="true" className="shrink-0 font-mono text-sm font-bold leading-none text-brand-accent">&gt;_</span>
+              <Sparkles className="w-4 h-4 shrink-0 text-brand-primary" />
               <p className="text-sm font-bold text-brand-fg truncate">Ask AlphaSwarm</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -142,12 +142,7 @@ export default function AskAlphaSwarmChatbot() {
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {!hasHistory && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-6">
-                <span
-                  aria-hidden="true"
-                  className="flex h-11 w-16 items-center justify-center rounded-xl bg-brand-primary font-mono text-2xl font-bold leading-none tracking-tighter text-brand-accent"
-                >
-                  <span className="-translate-y-[0.1em]">&gt;_</span>
-                </span>
+                <Sparkles className="w-6 h-6 text-brand-primary" />
                 <p className="text-sm font-semibold text-brand-fg">Ask AlphaSwarm anything</p>
                 <p className="text-xs text-brand-muted-fg max-w-[15rem]">
                   Ask about a stock, your watchlist, or how AlphaSwarm's analysis works.
@@ -218,20 +213,11 @@ export default function AskAlphaSwarmChatbot() {
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-brand-primary text-brand-accent shadow-xl ring-2 ring-brand-accent/30 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent transition-all"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"
         >
           {open
             ? <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            : <span
-                aria-hidden="true"
-                /* -translate-y: the underscore hangs below the baseline while
-                   ">" sits mid-height, so centring the TEXT BOX leaves the
-                   visible ink about 0.1em low. Nudged up to centre the ink
-                   rather than the box. */
-                className="font-mono text-2xl sm:text-3xl font-bold leading-none tracking-tighter -translate-y-[0.1em]"
-              >
-                &gt;_
-              </span>}
+            : <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>
         {!open && (
           <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-2 z-50">
