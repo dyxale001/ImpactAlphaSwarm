@@ -431,9 +431,11 @@ def test_a_failed_text_insert_retries_without_it_rather_than_losing_the_row(monk
     _REAL_LOG_ASK_QUERY(user_id="u1", asset_symbol=None, intent="UNKNOWN", success=False,
                        fallback_used=False, validation_failed=False, latency_ms=10,
                        query_text="some question")
-    assert len(db.attempts) == 2
-    assert "query_text" in db.attempts[0] and "query_text" not in db.attempts[1]
-    assert db.attempts[1]["intent"] == "UNKNOWN"
+    # The ladder drops optional columns progressively, ending at exactly the
+    # row that existed before either migration. It must LAND, not just try.
+    assert "query_text" in db.attempts[0]
+    assert "query_text" not in db.attempts[-1]
+    assert db.attempts[-1]["intent"] == "UNKNOWN"
 
 
 def test_logging_never_raises_even_when_every_insert_fails(monkeypatch):

@@ -95,6 +95,10 @@ export interface ChatbotReport {
    *  answer, and never who asked. Empty before migration 037 or when nothing
    *  has been recorded in range. */
   recent_queries?: RecentAskQuery[];
+  /** Requests where the model service itself failed (rate limit, outage).
+   *  null when it can't be known (before migration 038) — NOT zero, since
+   *  "zero service errors" would be a claim the data can't support. */
+  service_error_count?: number | null;
 }
 
 export interface RecentAskQuery {
@@ -103,6 +107,9 @@ export interface RecentAskQuery {
   intent: string | null;
   answered: boolean;
   fallback_used: boolean;
+  /** The model service failed for this request, as distinct from AlphaSwarm
+   *  being unable to handle the question. */
+  service_error: boolean;
   asset_symbol: string | null;
 }
 

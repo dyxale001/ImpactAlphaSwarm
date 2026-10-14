@@ -320,9 +320,18 @@ function ChatbotTab({ range }: { range: ReportRange }) {
         <KpiCard label="Fallback rate" value={`${data.fallback_rate_pct}%`} />
         <KpiCard label="Validation-failure rate" value={`${data.validation_failure_rate_pct}%`} />
       </div>
-      {data.average_latency_ms != null && (
-        <KpiCard label="Average latency" value={`${data.average_latency_ms} ms`} />
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {data.average_latency_ms != null && (
+          <KpiCard label="Average latency" value={`${data.average_latency_ms} ms`} />
+        )}
+        {data.service_error_count != null && (
+          <KpiCard
+            label="Service errors"
+            value={data.service_error_count}
+            sub="Model service failed (e.g. rate limit) — not a question AlphaSwarm couldn't handle"
+          />
+        )}
+      </div>
       <div className="glass-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">Queries over time</h3>
         <SimpleLineChart data={data.queries_over_time ?? []} dataKey="count" xKey="date" />
@@ -342,7 +351,7 @@ function ChatbotTab({ range }: { range: ReportRange }) {
 // inferring from a rate.
 function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_queries"]> }) {
   const [onlyUnanswered, setOnlyUnanswered] = useState(false);
-  const shown = onlyUnanswered ? queries.filter((q) => !q.answered || q.fallback_used) : queries;
+  const shown = onlyUnanswered ? queries.filter((q) => !q.answered || q.fallback_used || q.service_error) : queries;
 
   return (
     <div className="glass-card p-6">
@@ -355,7 +364,7 @@ function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_
             onChange={(e) => setOnlyUnanswered(e.target.checked)}
             className="accent-brand-primary"
           />
-          Only unanswered or fallback
+          Only problems (unanswered, fallback, service error)
         </label>
       </div>
       <p className="text-xs text-brand-muted-fg mb-4">
@@ -379,7 +388,7 @@ function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_
                 <td colSpan={4} className="py-3 text-brand-muted-fg">
                   {queries.length === 0
                     ? "No questions recorded yet. Questions are kept from the point this was switched on, so earlier ones are not shown."
-                    : "Every recorded question in this range was answered."}
+                    : "Every recorded question in this range was answered normally."}
                 </td>
               </tr>
             )}
@@ -393,7 +402,14 @@ function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_
                   {(q.intent ?? "unknown").toLowerCase().replace(/_/g, " ")}
                 </td>
                 <td className="py-2 whitespace-nowrap">
-                  {!q.answered ? (
+                  {q.service_error ? (
+                    <span
+                      className="text-semantic-warning font-semibold"
+                      title="The model service failed for this request (e.g. a rate limit), so this says nothing about whether AlphaSwarm could handle the question."
+                    >
+                      Service unavailable
+                    </span>
+                  ) : !q.answered ? (
                     <span className="text-semantic-danger font-semibold">Not answered</span>
                   ) : q.fallback_used ? (
                     <span className="text-brand-muted-fg">Fallback</span>

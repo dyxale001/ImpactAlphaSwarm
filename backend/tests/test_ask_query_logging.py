@@ -240,7 +240,7 @@ def test_the_question_is_logged_but_the_answer_never_is(monkeypatch):
     assert secret_answer not in logged_values, "the answer must never be recorded"
     assert set(calls[0].keys()) == {
         "user_id", "asset_symbol", "intent", "success", "fallback_used", "validation_failed", "latency_ms",
-        "query_text",
+        "query_text", "service_error",
     }
 
 
@@ -267,6 +267,10 @@ def test_ask_query_logs_insert_payload_has_no_text_columns(monkeypatch):
         user_id="u1", asset_symbol="GOOGL", intent="ASSET_SEARCH",
         success=True, fallback_used=False, validation_failed=False, latency_ms=42,
     )
+    # service_error is always written (a boolean about the SERVICE, never about
+    # the question or the answer); query_text only when a question is given.
     assert set(captured.keys()) == {
         "user_id", "asset_symbol", "intent", "success", "fallback_used", "validation_failed", "latency_ms",
+        "service_error",
     }
+    assert captured["service_error"] is False
