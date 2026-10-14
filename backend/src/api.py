@@ -1079,9 +1079,34 @@ def _check_ask_rate_limit(user_id: str) -> bool:
     return True
 
 
+# Prediction questions that NAME the asset, which the substring blocklist
+# above structurally cannot catch. Root-cause gap this closes: the list
+# holds fixed phrases like "will it go up", matched with `in`, so the
+# pronoun form was blocked while the far more natural named form slipped
+# straight through — "Will NVDA go up next week?", "Will Apple go down?"
+# and "Is Tesla going to rise?" all passed the deterministic gate and were
+# left entirely to the LLM classifier to catch. That makes the product's
+# central claim ("guardrails are enforced in code, before the model sees
+# the question") untrue for the single most obvious way to ask for a
+# prediction. A pattern, not more substrings: the asset sits BETWEEN the
+# auxiliary and the direction verb, which a fixed phrase cannot express.
+_ASK_PREDICTION_PATTERN = re.compile(
+    r"\bwill\s+(?:\w+\s+){0,3}?(?:go\s+(?:up|down)|rise|fall|drop|climb|crash|moon|"
+    r"increase|decrease|outperform|underperform|beat|recover|rebound)\b|"
+    r"\b(?:is|are|was)\s+(?:\w+\s+){0,3}?going\s+to\s+(?:go\s+(?:up|down)|rise|fall|drop|climb|crash)\b|"
+    r"\bwhere\s+will\s+(?:\w+\s+){0,3}?(?:be|go|end up)\b|"
+    r"\bhow\s+(?:high|low)\s+will\b|"
+    r"\b(?:price|share)\s+(?:prediction|forecast|target)\b|"
+    r"\bpredict\s+(?:the\s+)?(?:price|move|movement|direction)\b",
+    re.IGNORECASE,
+)
+
+
 def _ask_blocklist_hit(query: str) -> bool:
     q = query.lower()
-    return any(phrase in q for phrase in _ASK_BLOCKLIST)
+    if any(phrase in q for phrase in _ASK_BLOCKLIST):
+        return True
+    return bool(_ASK_PREDICTION_PATTERN.search(query))
 
 
 # Ask AlphaSwarm's Groq calls go through the project's shared GroqClient
@@ -1254,6 +1279,181 @@ def _classify_ask_intent(query: str) -> str:
     except Exception as e:
         logger.warning("Ask intent classification failed: %s", e)
         return "CLASSIFIER_UNAVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# Structured resolution envelope — the recovery layer for questions the
+# deterministic pattern layer cannot route.
+#
+# WHY THIS EXISTS, and why it does not weaken the grounding guarantee.
+#
+# Routing in this file is done by ~21 regex patterns, a 33-word stopword
+# list and a 26-step gate ladder. That layer is fast, auditable and free,
+# and it is the right default. What it cannot do is generalise: every
+# collision found so far ("on" -> ON Semiconductor, "technology" -> Micron
+# Technology, "information" -> Fidelity National, "S&P 500" -> SentinelOne)
+# was a string standing in for a meaning, and each was fixed one user
+# report at a time. The inverse failure is just as common and quieter: a
+# question that names a real asset in words no pattern anticipated ("the
+# iPhone company", "Zuckerberg's company", "the one that makes GPUs")
+# resolves to nothing and the user is told AlphaSwarm is not sure what they
+# mean.
+#
+# The key distinction this layer rests on: "what is the user asking about?"
+# and "what is the number?" are different trust questions. The second must
+# never come from a model — that is what the deterministic retrieval and
+# the output validator exist for, and none of that changes here. The first
+# is ordinary language understanding, and a model is simply better at it
+# than a regex.
+#
+# So the model proposes and the database disposes. This call returns
+# POINTERS ONLY — an intent label, candidate tickers, candidate fund names,
+# a metric name. Every ticker it proposes is then looked up in the real
+# `assets` table and dropped if it does not exist, so a hallucinated symbol
+# cannot survive; no value, price, score or fact ever originates here.
+#
+# Deliberately NOT the reverted rephrase-and-reclassify approach: that one
+# rewrote the QUESTION TEXT and then re-ran the classifier on the rewrite,
+# which let a rewrite that happened to drop advice-shaped wording launder a
+# refusal into an answer. Here the question text is never transformed
+# before the gates, and this layer never runs on a question the gates or
+# classifier already judged to be advice — only on the give-up path, where
+# the alternative is failing anyway.
+_ASK_ENVELOPE_ENABLED = os.getenv("ASK_ENVELOPE_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# Labels this layer is allowed to recover INTO. Advice and out-of-scope are
+# absent on purpose: a safety verdict is never revisited here, only an
+# "I don't know" is.
+_ASK_ENVELOPE_SAFE_INTENTS = {
+    "ANALYSIS_EXPLANATION",
+    "CONTEXT_SYNTHESIS",
+    "LEARNING_QUESTION",
+    "USER_DATA_SEARCH",
+    "ASSET_SEARCH",
+    "PLATFORM_QUESTION",
+}
+
+
+def _resolve_ask_envelope(query: str) -> Optional[dict]:
+    """One structured-extraction call: the user's question in, a typed
+    envelope of POINTERS out. Returns None on any failure, unparseable
+    output, or an intent outside the recoverable set — never raises, and
+    never returns a value the caller could mistake for data."""
+    client = _get_ask_intent_client()
+    if client is None:
+        return None
+    prompt = (
+        "Extract what this investing-platform question is ASKING FOR. Reply "
+        "with one JSON object and nothing else.\n\n"
+        "Schema:\n"
+        '{"intent": one of ANALYSIS_EXPLANATION | CONTEXT_SYNTHESIS | '
+        "LEARNING_QUESTION | USER_DATA_SEARCH | ASSET_SEARCH | "
+        "PLATFORM_QUESTION | UNSUPPORTED_FINANCIAL_ADVICE | UNKNOWN,\n"
+        ' "tickers": [stock ticker symbols the question refers to],\n'
+        ' "funds": [fund names the question refers to],\n'
+        ' "metric": a single metric name if one is asked about, else null}\n\n'
+        "Rules:\n"
+        "- tickers: give the SYMBOL for any company the question refers to, "
+        "however indirectly — 'the iPhone company' -> AAPL, "
+        "\"Zuckerberg's company\" -> META, 'Google' -> GOOGL. Empty list if "
+        "no specific company is referred to. Never invent a symbol you are "
+        "not confident is real; an empty list is always better than a guess.\n"
+        "- ANALYSIS_EXPLANATION: wants the data/figures on a named asset.\n"
+        "- CONTEXT_SYNTHESIS: wants results interpreted, compared, or "
+        "explained ('why does X rank above Y', 'what are the downsides of X', "
+        "'which of these is cheapest').\n"
+        "- LEARNING_QUESTION: wants a concept or term explained.\n"
+        "- USER_DATA_SEARCH: asks what is on their own watchlist or in their "
+        "own latest analysis run.\n"
+        "- ASSET_SEARCH: wants a LIST of assets by sector or category.\n"
+        "- PLATFORM_QUESTION: asks how AlphaSwarm itself works.\n"
+        "- UNSUPPORTED_FINANCIAL_ADVICE: wants to be told what to buy/sell, "
+        "or a prediction of what a price will do.\n"
+        "- Do not answer the question. Do not output any price, score, "
+        "figure or fact. Pointers only.\n\n"
+        f"Question: {query}\nJSON:"
+    )
+    try:
+        raw = client.complete(prompt).strip()
+    except Exception as e:
+        logger.warning("Ask envelope extraction failed: %s", e)
+        return None
+
+    # Tolerant parse: models wrap JSON in prose or fences often enough that
+    # requiring a bare object would throw away usable output.
+    import json as _json
+
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        parsed = _json.loads(raw[start:end + 1])
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    intent = str(parsed.get("intent") or "").strip().upper()
+    if intent not in _ASK_ENVELOPE_SAFE_INTENTS:
+        # Includes UNSUPPORTED_FINANCIAL_ADVICE and UNKNOWN: nothing to
+        # recover, and a safety label is for the gates to set, not this.
+        return None
+
+    def _symbols(key: str) -> List[str]:
+        raw_list = parsed.get(key)
+        if not isinstance(raw_list, list):
+            return []
+        return [str(v).strip() for v in raw_list if isinstance(v, (str, int)) and str(v).strip()][:5]
+
+    metric = parsed.get("metric")
+    return {
+        "intent": intent,
+        "tickers": _symbols("tickers"),
+        "funds": _symbols("funds"),
+        "metric": str(metric).strip() if isinstance(metric, str) and metric.strip() else None,
+    }
+
+
+def _ask_learning_answer_declined(narration: str) -> bool:
+    """True when a LEARNING_QUESTION answer is an honest "no source covers
+    this" rather than a real answer.
+
+    Shared by the two places that need it: the definitional shortcut (which
+    falls through to the classifier rather than commit to a decline) and the
+    learning branch itself (which re-routes to the asset path when the
+    question turns out to name a real company). Was inline in the first of
+    those; extracted so the phrase list cannot drift between the two."""
+    lowered = (narration or "").lower()
+    return narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
+        p in lowered
+        for p in ("t provide any information", "t contain any information",
+                  "t provide information", "t contain information",
+                  "t have enough information", "t have any information",
+                  "t have information", "t included in the source",
+                  "isn't included in the source", "no information about",
+                  "no information on")
+    )
+
+
+def _verify_envelope_tickers(proposed: List[str]) -> List[dict]:
+    """Keep only the proposed symbols that exist in the real `assets`
+    table. This is the whole safety mechanism of this layer: the model's
+    output is a claim about what the user meant, and that claim is checked
+    against the database before anything is built on it. A symbol the model
+    invented simply disappears here."""
+    if not proposed:
+        return []
+    wanted = {_normalize_ticker(t) for t in proposed}
+    try:
+        resp = supabase.table("assets").select("id,ticker,name,universe,current_price").execute()
+    except Exception as e:
+        logger.warning("Ask envelope ticker verification failed: %s", e)
+        return []
+    verified = []
+    for asset in resp.data or []:
+        if _normalize_ticker(asset.get("ticker") or "") in wanted:
+            verified.append(asset)
+    return verified
 
 
 def _format_price(value: float, currency: str) -> str:
@@ -2094,12 +2294,25 @@ def _resolve_asset(query: str) -> Optional[dict]:
         if ticker and ticker in tokens:
             return asset
 
-    # Possessive typo with no apostrophe ("googls rsi" instead of "GOOGL's
+    # Possessive typo with no apostrophe ("GOOGLS rsi" instead of "GOOGL's
     # RSI") — the {1,5}-length token match above never even sees a 6-letter
-    # word like "GOOGLS". Only fires when stripping one trailing S yields an
-    # ACTUAL known ticker, so it can't turn an unrelated 6-letter word into a
-    # false match.
-    for word in re.findall(r"\b[A-Za-z]{2,6}\b", query.upper()):
+    # word like "GOOGLS".
+    #
+    # Requires the token to be ALL-CAPS AS TYPED, for the same reason the
+    # edit-distance matcher below does. The old version uppercased the whole
+    # query first, so ANY ordinary word ending in "s" whose stem is a real
+    # ticker resolved to that ticker — and the worst case is the commonest
+    # word in this product's own vocabulary: "its". In a universe holding
+    # ticker "IT" (Gartner), every "what does ITS RSI mean?" — a pure
+    # conversational-reference question naming no asset at all — resolved
+    # to Gartner instead of being passed to context resolution. Same shape
+    # for "ons"/ON, "alls"/ALL, "runs"/RUN, "nows"/NOW. Caps-as-typed keeps
+    # the real typo case working and costs nothing else: nobody types a
+    # ticker in caps by accident.
+    for match in re.finditer(r"\b[A-Za-z]{2,6}\b", query):
+        word = match.group(0)
+        if word != word.upper():
+            continue
         if word.endswith("S") and word[:-1] in ticker_map:
             return ticker_map[word[:-1]]
 
@@ -3227,7 +3440,11 @@ _ASK_GLOSSARY = {
     "etf": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
     "eft": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
     "asset": "In investing, an asset is any resource with economic value that can be owned and traded — a stock, a bond, an ETF, property, or commodity are all examples. On AlphaSwarm, 'asset' generally refers to one of the tradable stocks or ETFs the platform tracks and analyses.",
-    "bull market": "A bull market is a sustained period in which prices in a market are generally rising (or expected to rise), typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
+    # "(or expected to rise)" was removed deliberately: the output validator
+    # reads that phrase as a price prediction, so the definition could never
+    # be quoted by the narrator without being rejected. Glossary text is
+    # shown verbatim, so it has to clear the same rules narration does.
+    "bull market": "A bull market is a sustained period in which prices in a market have generally been rising, typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
     "bear market": "A bear market is a sustained period in which prices in a market are generally falling, typically accompanied by widespread pessimism. It's the opposite of a bull market, where prices are generally rising.",
     "whale watching": "In general market terminology, \"whale watching\" means tracking the trading activity of large holders (\"whales\") — big investors, funds, or institutions — since their large trades can move prices or signal a shift in sentiment. AlphaSwarm has its own whale-tracking feature, separate from its ranking/Signal Score methodology, that surfaces insider dealings and institutional ownership data (based on public filings) for an asset.",
     # Fund-catalogue terms — general definitions only; any question about a
@@ -3533,7 +3750,7 @@ _ASK_QUALITATIVE_PERFORMANCE_PATTERN = re.compile(
     # ORIGINAL question) and just re-stated raw metric values instead of
     # actually explaining the reasoning — exactly the interpretation
     # request CONTEXT_SYNTHESIS exists for.
-    r"\bwhy\s+(?:is|was|does|did)?\s*(?:that|this|it|so)\b|^\s*why\??\s*$|"
+    r"\bwhy(?:'?s)?\s+(?:is|was|does|did)?\s*(?:that|this|it|so)\b|^\s*why\??\s*$|"
     r"\bis\s+(?:that|this)\s+(?:concerning|worrying|a\s+concern)\b",
     re.IGNORECASE,
 )
@@ -4430,8 +4647,15 @@ def _log_ask_query(
 
 # Sources that mean "a generic/definitional answer, not the user's own
 # retrieved data" — used only by _ask_sense_check below.
+#
+# "scope_boundary" is deliberately NOT here. It was, and that was wrong: a
+# scope refusal is a DECISION, not a failure to find data, so re-answering
+# it is overriding a guardrail. With it included, "what's my bank account
+# balance?" — correctly refused as out of scope — was re-answered from the
+# user's watchlist instead, because the question contains "my" and the
+# refusal's source looked generic. A boundary response is final.
 _ASK_GENERIC_SOURCES = {
-    "methodology_glossary", "learning_centre", "scope_boundary", "none", "platform_methodology",
+    "methodology_glossary", "learning_centre", "none", "platform_methodology",
 }
 
 
@@ -4719,12 +4943,7 @@ async def _ask_alphaswarm_impl(
             # it's a genuine grounded result, not an honest-but-wrong-source
             # decline; otherwise fall through to classification exactly as
             # if this shortcut had never fired.
-            is_decline = shortcut.narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
-                p in shortcut.narration.lower()
-                for p in ("t provide any information", "t contain any information",
-                          "t provide information", "t contain information")
-            )
-            if not is_decline:
+            if not _ask_learning_answer_declined(shortcut.narration):
                 return shortcut
         except Exception as e:
             logger.warning("Ask definitional-learning shortcut failed: %s", e)
@@ -4773,6 +4992,56 @@ async def _ask_alphaswarm_impl(
             is_blocked=False,
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
+
+    # 3a. Structured-envelope recovery — the ONLY place this runs, and it
+    # runs only because the alternative is telling the user we don't
+    # understand them. See _resolve_ask_envelope's own comment for why this
+    # does not weaken grounding: it returns pointers, every proposed ticker
+    # is verified against the real assets table, and a safety verdict is
+    # never revisited (advice/out-of-scope labels are not recoverable).
+    #
+    # On success it sets `intent` (and, for a verified asset, appends an
+    # explicit ticker clause the way _resolve_conversational_reference
+    # already does) and then FALLS THROUGH to the normal step-4 retrieval
+    # and step-5 narration below. No second retrieval path, no second
+    # narration path, no second validator — the recovered question is
+    # answered by exactly the same machinery as one the patterns routed.
+    if intent == "UNKNOWN" and _ASK_ENVELOPE_ENABLED:
+        envelope = _resolve_ask_envelope(query)
+        if envelope is not None:
+            verified = _verify_envelope_tickers(envelope["tickers"])
+            env_intent = envelope["intent"]
+
+            if not verified and envelope["funds"]:
+                try:
+                    fund = _resolve_fund(" ".join(envelope["funds"]))
+                    if fund is not None:
+                        return _fund_answer(fund, query)
+                except Exception as e:
+                    logger.warning("Ask envelope fund recovery failed: %s", e)
+
+            if len(verified) >= 2:
+                # Two verified assets and an interpretation intent is a
+                # comparison; reuse the exact clause the comparison branch
+                # of _ask_context_synthesis already triggers on.
+                a, b = verified[0]["ticker"], verified[1]["ticker"]
+                intent = "CONTEXT_SYNTHESIS"
+                query = f"{query} — compare {a} and {b}"
+            elif len(verified) == 1:
+                intent = env_intent if env_intent in (
+                    "ANALYSIS_EXPLANATION", "CONTEXT_SYNTHESIS",
+                ) else "ANALYSIS_EXPLANATION"
+                query = f"{query} — referring to {verified[0]['ticker']}"
+            elif env_intent in ("LEARNING_QUESTION", "PLATFORM_QUESTION",
+                                "USER_DATA_SEARCH", "ASSET_SEARCH"):
+                # No asset needed for these; the label alone is the recovery.
+                intent = env_intent
+
+            if intent != "UNKNOWN":
+                logger.info(
+                    "ask_envelope_recovered intent=%s verified_tickers=%s",
+                    intent, [a["ticker"] for a in verified],
+                )
 
     if intent == "UNKNOWN":
         return AskResponse(
@@ -4833,7 +5102,26 @@ async def _ask_alphaswarm_impl(
             contextual = _ask_contextual_metric_explanation(resolved_asset, resolved_metric, user_id, query)
             if contextual is not None:
                 return contextual
-            return _ask_learning_question(query)
+            learning = _ask_learning_question(query)
+            # A question about a real company, misread as a concept question,
+            # ends here as "I don't have enough information" — an answer
+            # about the wrong thing entirely. If the learning tiers declined
+            # AND a verified asset can be recovered from the question, it was
+            # never a concept question: re-route it to the asset path rather
+            # than hand back a refusal about a term nobody asked about.
+            if _ASK_ENVELOPE_ENABLED and _ask_learning_answer_declined(learning.narration):
+                recovered = _verify_envelope_tickers(
+                    (_resolve_ask_envelope(query) or {}).get("tickers") or []
+                )
+                if recovered:
+                    ticker = recovered[0]["ticker"]
+                    logger.info("ask_envelope_rerouted_from_learning ticker=%s", ticker)
+                    intent = "ANALYSIS_EXPLANATION"
+                    query = f"{query} — referring to {ticker}"
+                else:
+                    return learning
+            else:
+                return learning
         except Exception as e:
             logger.warning("Ask learning-question retrieval failed: %s", e)
             return AskResponse(
@@ -4860,12 +5148,48 @@ async def _ask_alphaswarm_impl(
         data, source = {}, "none"
 
     # No-data rule: never call the narrator if retrieval found nothing.
-    has_data = bool(
-        data.get("assets") if intent == "ASSET_SEARCH"
-        else data.get("watchlist") or data.get("top_picks") if intent == "USER_DATA_SEARCH"
-        else data.get("ticker") if intent == "ANALYSIS_EXPLANATION"
-        else False
-    )
+    def _has_data(d: dict) -> bool:
+        return bool(
+            d.get("assets") if intent == "ASSET_SEARCH"
+            else d.get("watchlist") or d.get("top_picks") if intent == "USER_DATA_SEARCH"
+            else d.get("ticker") if intent == "ANALYSIS_EXPLANATION"
+            else False
+        )
+
+    has_data = _has_data(data)
+
+    # 4a. Envelope recovery at the point retrieval actually fails.
+    #
+    # The commonest real failure is NOT "intent unknown" — it is "intent
+    # right, entity unresolved": the classifier correctly reads "what's the
+    # deal with Zuckerberg's company" as a question about one asset, then
+    # the pattern layer cannot turn that phrasing into a ticker, retrieval
+    # comes back empty, and the user is told AlphaSwarm has no supporting
+    # data — about a company it covers perfectly well. One verified-pointer
+    # lookup and a single retry fixes exactly that case, and only that
+    # case: this runs after retrieval has already failed, so it cannot
+    # change the answer to any question that was working.
+    if not has_data and intent in ("ASSET_SEARCH", "ANALYSIS_EXPLANATION") and _ASK_ENVELOPE_ENABLED:
+        try:
+            recovered_assets = _verify_envelope_tickers(
+                (_resolve_ask_envelope(query) or {}).get("tickers") or []
+            )
+        except Exception as e:
+            logger.warning("Ask envelope no-data recovery failed: %s", e)
+            recovered_assets = []
+        if recovered_assets:
+            ticker = recovered_assets[0]["ticker"]
+            logger.info("ask_envelope_recovered_entity intent=%s ticker=%s", intent, ticker)
+            query = f"{query} — referring to {ticker}"
+            try:
+                if intent == "ASSET_SEARCH":
+                    data, source = _ask_asset_search(query, user_id)
+                else:
+                    data, source = _ask_analysis_explanation(query, user_id)
+                has_data = _has_data(data)
+            except Exception as e:
+                logger.warning("Ask retrieval retry failed for intent %s: %s", intent, e)
+
     if not has_data:
         return AskResponse(
             intent=intent,
