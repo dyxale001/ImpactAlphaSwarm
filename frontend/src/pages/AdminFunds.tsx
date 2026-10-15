@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSignOut } from "../hooks/useSignOut";
 import { AlertTriangle, Landmark, RotateCcw } from "lucide-react";
+import AdminFundsSkeleton from "../components/admin/AdminFundsSkeleton";
 import AddFundForm from "../components/admin/AddFundForm";
 import AdminTabs from "../components/admin/AdminTabs";
 import {
@@ -76,7 +77,7 @@ export default function AdminFunds() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-brand-bg text-brand-fg">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="min-w-0 max-w-6xl mx-auto space-y-8">
         {/* The section's header block, matching its siblings: same ground, same
             eyebrow, same title scale, same count pill and sign-out. */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
@@ -95,6 +96,7 @@ export default function AdminFunds() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {!data && isLoading && <div aria-hidden="true" className="h-9 w-36 rounded-full bg-brand-border/25 motion-safe:animate-pulse" />}
             {data && (
               <div className="text-sm font-medium text-brand-muted-fg bg-brand-secondary px-4 py-2 rounded-full border border-brand-border">
                 Total Funds: {data.count}
@@ -127,7 +129,7 @@ export default function AdminFunds() {
           </div>
         )}
 
-        {isLoading && <div className="soft-card p-6 text-sm text-brand-secondary">Loading…</div>}
+        {isLoading && <AdminFundsSkeleton />}
 
         {!isLoading && data && (
           <div className="space-y-2">
@@ -140,7 +142,7 @@ export default function AdminFunds() {
             <p className="px-1 text-xs text-brand-muted-fg">
               Flagged after {data.soft_stale_days} days · stale after {data.stale_days}
             </p>
-            <div className="soft-card overflow-x-auto">
+            <div className="soft-card max-w-full overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-xs">
                 <thead className="border-b border-brand-border/40 text-[11px] uppercase tracking-[0.06em] text-brand-secondary/70">
                   <tr>
@@ -152,6 +154,7 @@ export default function AdminFunds() {
                   </tr>
                 </thead>
                 <tbody>
+                  {!error && data.funds.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-brand-muted-fg">No funds in the catalogue yet.</td></tr>}
                   {data.funds.map((fund) => (
                     <tr key={fund.id} className="border-b border-brand-border/20 last:border-0">
                       <td className="px-4 py-3">

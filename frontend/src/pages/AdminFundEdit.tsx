@@ -1,3 +1,4 @@
+import AdminFundEditSkeleton from "../components/admin/AdminFundEditSkeleton";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check } from "lucide-react";
@@ -64,7 +65,7 @@ export default function AdminFundEdit() {
   }, [load]);
 
   if (isLoading) {
-    return <Shell><p className="text-sm text-brand-secondary">Loading…</p></Shell>;
+    return <Shell><AdminFundEditSkeleton /></Shell>;
   }
   if (loadError || !fund || !stored || !fundId) {
     return <Shell><p className="text-sm text-brand-secondary">{loadError ?? "Not found."}</p></Shell>;

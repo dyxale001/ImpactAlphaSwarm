@@ -1,3 +1,4 @@
+import AdminReportsSkeleton, { type ReportSkeletonVariant } from "../components/admin/AdminReportsSkeleton";
 import { useState } from "react";
 import AdminTabs from "../components/admin/AdminTabs";
 import {
@@ -44,11 +45,10 @@ function TrendBadge({ deltaPct }: { deltaPct: number | null }) {
   );
 }
 
-function SectionState({ loading, error, empty }: { loading: boolean; error: string | null; empty?: boolean }) {
-  if (loading) return <div className="glass-card p-6 text-sm text-brand-muted-fg">Loading report…</div>;
+function SectionState({ loading, error, variant, showLatency = false }: { loading: boolean; error: string | null; variant: ReportSkeletonVariant; showLatency?: boolean }) {
+  if (loading) return <AdminReportsSkeleton variant={variant} showLatency={showLatency} />;
   if (error) return <div className="glass-card p-6 text-sm text-danger">Failed to load report: {error}</div>;
-  if (empty) return <div className="glass-card p-6 text-sm text-brand-muted-fg">No data available for the selected range.</div>;
-  return null;
+  return <div className="glass-card p-6 text-sm text-brand-muted-fg">No data available for the selected range.</div>;
 }
 
 function SimpleLineChart({ data, dataKey, xKey }: { data: any[]; dataKey: string; xKey: string }) {
@@ -91,7 +91,7 @@ function RankBarChart({ data, dataKey, xKey }: { data: any[]; dataKey: string; x
 
 function OverviewTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.overview, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Overview" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -131,7 +131,7 @@ function OverviewTab({ range }: { range: ReportRange }) {
 
 function UsersTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.users, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Users" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -175,7 +175,7 @@ function UsersTab({ range }: { range: ReportRange }) {
 
 function BadgesSection({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.badges, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Badges" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -225,7 +225,7 @@ function LearnersTab({ range }: { range: ReportRange }) {
   return (
     <div className="space-y-8">
       {loading || error || !data ? (
-        <SectionState loading={loading} error={error} />
+        <SectionState loading={loading} error={error} variant="Learners" />
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -252,7 +252,7 @@ function LearnersTab({ range }: { range: ReportRange }) {
 
 function AssetsTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.assets, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Assets" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
@@ -281,7 +281,7 @@ function RetentionTab() {
   // previously got a new identity every render, which retriggered
   // useAdminReport's effect every time and looped the fetch forever.
   const { data, loading, error } = useAdminReport(adminReportsApi.retention, "30d");
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Retention" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -308,7 +308,7 @@ function RetentionTab() {
 
 function ChatbotTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.chatbot, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Chatbot" showLatency={data?.average_latency_ms != null} />;
   if (!data.available) {
     return <div className="glass-card p-6 text-sm text-brand-muted-fg">{data.message}</div>;
   }
