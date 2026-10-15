@@ -45,7 +45,7 @@ it('routes tools independently and keeps Learning Centre entry points', () => {
   const learning = source('../../pages/Learning.tsx');
   expect(learning).toContain('navigate("/financial-tools")'); expect(learning).toContain('to="/financial-tools"');
   expect(learning).not.toContain('learning-panel-tools');
-  expect(source('../layout/AppLayout.tsx')).toContain('name: "Financial Tools", path: "/financial-tools"');
+  expect(source('../../data/appNavigation.ts')).toContain("name: 'Financial Tools', path: '/financial-tools'");
 });
 it('distinguishes a funded goal target from projected investment gain', () => {
   const html = renderToStaticMarkup(createElement(PurchasingPower, { futureValue: 50000, targetValue: 10000, startingCapital: 20000, monthlyContribution: 0, years: 10, inflationRate: '5' }));
