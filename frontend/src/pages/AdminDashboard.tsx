@@ -360,10 +360,11 @@ export default function AdminDashboard() {
                                 handleToggleStatus(user.id, isActive)
                               }
                               disabled={isToggling}
+                              aria-label={`${isToggling ? "Setting" : "Set"} account ${isActive ? "Inactive" : "Active"}`}
                               title={
                                 isActive
-                                  ? "Deactivate account"
-                                  : "Activate account"
+                                  ? "Set account Inactive"
+                                  : "Set account Active"
                               }
                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isActive
@@ -375,11 +376,11 @@ export default function AdminDashboard() {
                                 "…"
                               ) : isActive ? (
                                 <>
-                                  <ShieldOff size={12} /> Deactivate
+                                  <ShieldOff size={12} /> Inactive
                                 </>
                               ) : (
                                 <>
-                                  <ShieldCheck size={12} /> Activate
+                                  <ShieldCheck size={12} /> Active
                                 </>
                               )}
                             </button>
