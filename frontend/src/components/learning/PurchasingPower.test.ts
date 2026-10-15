@@ -74,3 +74,10 @@ it('shows validation within the editor without calculating invalid values', () =
   expect(html).toContain('Enter an inflation rate from 0 to 100%');
   expect(html).not.toContain('Projected final value in today');
 });
+
+it('renders the Financial Tools eyebrow using the Learning Centre label pattern', () => {
+  const html = renderToStaticMarkup(createElement(MemoryRouter, {}, createElement(FinancialToolsPage)));
+  expect(html).toContain('<p class="absolute bottom-full left-0 text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Financial Tools</p>');
+  expect(html.match(/<h1\b/g)).toHaveLength(1);
+  expect(html).toContain('pointer-events-none absolute inset-x-0 bottom-0');
+});

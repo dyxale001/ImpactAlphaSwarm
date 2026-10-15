@@ -96,7 +96,7 @@ export default function SettingsPage() {
         hidden={tab !== "profile"}
         className="space-y-4"
       >
-        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{PROFILE_TAB_INTRO}</p>
+        <p className="text-xs text-brand-muted-fg">{PROFILE_TAB_INTRO}</p>
         <RiskProfileCard profile={profile} />
         <GoalsCard profile={profile} />
       </div>
