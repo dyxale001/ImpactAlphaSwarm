@@ -1,4 +1,5 @@
-import { ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, ExternalLink } from 'lucide-react'
 import type { AskTurn } from '../../services/ask/types'
 
 interface Props {
@@ -65,6 +66,45 @@ export default function AskAnswerCard({ turn, onSuggestionClick }: Props) {
               Source: {sourceLabel(result.source)}
             </p>
           )
+        )}
+
+        {/* Per-figure provenance. Every row here is a number stated in the
+            answer above that was checked against AlphaSwarm's stored data
+            and matched — so it is the evidence the answer rests on, not a
+            restatement of it. Shown as a plain list rather than a
+            collapsible JSON dump: the point is that a reader can see the
+            figures and their origin at a glance. */}
+        {result.data_points && result.data_points.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t border-brand-border/40">
+            <p className="text-[10px] uppercase tracking-wider text-brand-muted-fg font-semibold">
+              Figures used · verified against {result.data_points[0].origin}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {result.data_points.map(p => (
+                <span
+                  key={`${p.ticker}-${p.field}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/50 px-2 py-0.5 text-[11px] text-brand-fg"
+                >
+                  <span className="font-semibold">{p.ticker}</span>
+                  <span className="text-brand-muted-fg">{p.label}</span>
+                  <span className="font-medium">{p.value.toLocaleString()}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Where to go and see this in the app. Backend-resolved from the
+            entity retrieval actually used, so it always points at what the
+            answer was about. */}
+        {result.link && (
+          <Link
+            to={result.link.path}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary hover:underline"
+          >
+            {result.link.label}
+            <ArrowRight className="w-3 h-3 shrink-0" aria-hidden="true" />
+          </Link>
         )}
 
         {result.redirect_suggestions.length > 0 && (
