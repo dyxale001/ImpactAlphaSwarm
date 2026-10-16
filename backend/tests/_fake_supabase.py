@@ -40,7 +40,27 @@ class _Query:
         self._rows = [r for r in self._rows if r.get(col) in values]
         return self
 
-    def order(self, *_args, **_kwargs):
+    def order(self, col=None, *_args, desc=False, **_kwargs):
+        # Honoured now: a query that asks for "newest first" must actually
+        # get newest first, or a test of that behaviour passes by accident.
+        if col is not None:
+            self._rows.sort(key=lambda r: (r.get(col) is None, r.get(col)), reverse=desc)
+        return self
+
+    @property
+    def not_(self):
+        """PostgREST's `.not_.is_(col, "null")` — negates the NEXT filter."""
+        self._negate_next = True
+        return self
+
+    def is_(self, col, value):
+        want_null = str(value).lower() == "null"
+        negate = getattr(self, "_negate_next", False)
+        self._negate_next = False
+        def keep(r):
+            is_null = r.get(col) is None
+            return (not is_null) if (want_null and negate) else (is_null if want_null else not is_null)
+        self._rows = [r for r in self._rows if keep(r)]
         return self
 
     def limit(self, n):

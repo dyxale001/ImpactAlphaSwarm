@@ -1,9 +1,11 @@
+import AdminReportsSkeleton, { type ReportSkeletonVariant } from "../components/admin/AdminReportsSkeleton";
+import { useSignOut } from "../hooks/useSignOut";
 import { useState } from "react";
 import AdminTabs from "../components/admin/AdminTabs";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { adminReportsApi, type ReportRange } from "../services/api/adminReports";
+import { adminReportsApi, type ChatbotReport, type ReportRange } from "../services/api/adminReports";
 import { useAdminReport } from "../hooks/useAdminReports";
 
 const TABS = ["Overview", "Users", "Learners", "Assets", "Retention", "Chatbot"] as const;
@@ -44,11 +46,10 @@ function TrendBadge({ deltaPct }: { deltaPct: number | null }) {
   );
 }
 
-function SectionState({ loading, error, empty }: { loading: boolean; error: string | null; empty?: boolean }) {
-  if (loading) return <div className="glass-card p-6 text-sm text-brand-muted-fg">Loading report…</div>;
+function SectionState({ loading, error, variant, showLatency = false }: { loading: boolean; error: string | null; variant: ReportSkeletonVariant; showLatency?: boolean }) {
+  if (loading) return <AdminReportsSkeleton variant={variant} showLatency={showLatency} />;
   if (error) return <div className="glass-card p-6 text-sm text-danger">Failed to load report: {error}</div>;
-  if (empty) return <div className="glass-card p-6 text-sm text-brand-muted-fg">No data available for the selected range.</div>;
-  return null;
+  return <div className="glass-card p-6 text-sm text-brand-muted-fg">No data available for the selected range.</div>;
 }
 
 function SimpleLineChart({ data, dataKey, xKey }: { data: any[]; dataKey: string; xKey: string }) {
@@ -91,7 +92,7 @@ function RankBarChart({ data, dataKey, xKey }: { data: any[]; dataKey: string; x
 
 function OverviewTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.overview, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Overview" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -131,7 +132,7 @@ function OverviewTab({ range }: { range: ReportRange }) {
 
 function UsersTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.users, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Users" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -175,7 +176,7 @@ function UsersTab({ range }: { range: ReportRange }) {
 
 function BadgesSection({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.badges, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Badges" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -225,11 +226,10 @@ function LearnersTab({ range }: { range: ReportRange }) {
   return (
     <div className="space-y-8">
       {loading || error || !data ? (
-        <SectionState loading={loading} error={error} />
+        <SectionState loading={loading} error={error} variant="Learners" />
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <KpiCard label="Watchlist adds (range)" value={data.watchlist_additions.in_range} sub={`${data.watchlist_additions.total} all time`} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <KpiCard
               label="Average XP"
               value={data.learning_xp.average}
@@ -252,7 +252,7 @@ function LearnersTab({ range }: { range: ReportRange }) {
 
 function AssetsTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.assets, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Assets" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
@@ -281,7 +281,7 @@ function RetentionTab() {
   // previously got a new identity every render, which retriggered
   // useAdminReport's effect every time and looped the fetch forever.
   const { data, loading, error } = useAdminReport(adminReportsApi.retention, "30d");
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Retention" />;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -308,7 +308,7 @@ function RetentionTab() {
 
 function ChatbotTab({ range }: { range: ReportRange }) {
   const { data, loading, error } = useAdminReport(adminReportsApi.chatbot, range);
-  if (loading || error || !data) return <SectionState loading={loading} error={error} />;
+  if (loading || error || !data) return <SectionState loading={loading} error={error} variant="Chatbot" showLatency={data?.average_latency_ms != null} />;
   if (!data.available) {
     return <div className="glass-card p-6 text-sm text-brand-muted-fg">{data.message}</div>;
   }
@@ -321,9 +321,18 @@ function ChatbotTab({ range }: { range: ReportRange }) {
         <KpiCard label="Fallback rate" value={`${data.fallback_rate_pct}%`} />
         <KpiCard label="Validation-failure rate" value={`${data.validation_failure_rate_pct}%`} />
       </div>
-      {data.average_latency_ms != null && (
-        <KpiCard label="Average latency" value={`${data.average_latency_ms} ms`} />
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {data.average_latency_ms != null && (
+          <KpiCard label="Average latency" value={`${data.average_latency_ms} ms`} />
+        )}
+        {data.service_error_count != null && (
+          <KpiCard
+            label="Service errors"
+            value={data.service_error_count}
+            sub="Model service failed (e.g. rate limit) — not a question AlphaSwarm couldn't handle"
+          />
+        )}
+      </div>
       <div className="glass-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">Queries over time</h3>
         <SimpleLineChart data={data.queries_over_time ?? []} dataKey="count" xKey="date" />
@@ -331,15 +340,95 @@ function ChatbotTab({ range }: { range: ReportRange }) {
       <div className="glass-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg mb-4">Top queried assets</h3>
         <RankBarChart data={data.top_queried_assets ?? []} dataKey="count" xKey="ticker" />
-        <p className="text-xs text-brand-muted-fg mt-3">
-          Aggregate counts only — raw prompts and answers are never stored or shown here.
-        </p>
+      </div>
+      <QuestionsLog queries={data.recent_queries ?? []} />
+    </div>
+  );
+}
+
+// What people are actually asking. The most useful single thing for spotting
+// where Ask AlphaSwarm falls short: a question that came back unanswered, or
+// via a fallback, is a gap in coverage you can read directly instead of
+// inferring from a rate.
+function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_queries"]> }) {
+  const [onlyUnanswered, setOnlyUnanswered] = useState(false);
+  const shown = onlyUnanswered ? queries.filter((q) => !q.answered || q.fallback_used || q.service_error) : queries;
+
+  return (
+    <div className="glass-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-muted-fg">Questions asked</h3>
+        <label className="flex items-center gap-2 text-xs text-brand-muted-fg cursor-pointer">
+          <input
+            type="checkbox"
+            checked={onlyUnanswered}
+            onChange={(e) => setOnlyUnanswered(e.target.checked)}
+            className="accent-brand-primary"
+          />
+          Only problems (unanswered, fallback, service error)
+        </label>
+      </div>
+      <p className="text-xs text-brand-muted-fg mb-4">
+        The questions people typed, newest first (up to the latest 100). Only the question is recorded — not the
+        answer, and not who asked. Questions are free text and can contain personal details, so they are visible
+        to admins only and cleared after the retention period.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-brand-muted-fg border-b border-brand-border">
+              <th className="py-2 pr-4 whitespace-nowrap">When</th>
+              <th className="py-2 pr-4">Question</th>
+              <th className="py-2 pr-4 whitespace-nowrap">Routed as</th>
+              <th className="py-2 whitespace-nowrap">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-3 text-brand-muted-fg">
+                  {queries.length === 0
+                    ? "No questions recorded yet. Questions are kept from the point this was switched on, so earlier ones are not shown."
+                    : "Every recorded question in this range was answered normally."}
+                </td>
+              </tr>
+            )}
+            {shown.map((q, i) => (
+              <tr key={`${q.asked_at}-${i}`} className="border-b border-brand-border/50 align-top">
+                <td className="py-2 pr-4 whitespace-nowrap text-brand-muted-fg">
+                  {q.asked_at ? new Date(q.asked_at).toLocaleString() : "—"}
+                </td>
+                <td className="py-2 pr-4 text-brand-fg break-words max-w-xl">{q.query}</td>
+                <td className="py-2 pr-4 whitespace-nowrap text-brand-muted-fg">
+                  {(q.intent ?? "unknown").toLowerCase().replace(/_/g, " ")}
+                </td>
+                <td className="py-2 whitespace-nowrap">
+                  {q.service_error ? (
+                    <span
+                      className="text-semantic-warning font-semibold"
+                      title="The model service failed for this request (e.g. a rate limit), so this says nothing about whether AlphaSwarm could handle the question."
+                    >
+                      Service unavailable
+                    </span>
+                  ) : !q.answered ? (
+                    <span className="text-semantic-danger font-semibold">Not answered</span>
+                  ) : q.fallback_used ? (
+                    <span className="text-brand-muted-fg">Fallback</span>
+                  ) : (
+                    <span className="text-semantic-success">Answered</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
 export default function AdminReports() {
+  const handleSignOut = useSignOut();
   const [tab, setTab] = useState<Tab>("Overview");
   const [range, setRange] = useState<ReportRange>("30d");
   const rangeAware: Tab[] = ["Overview", "Users", "Learners", "Assets", "Chatbot"];
@@ -355,6 +444,15 @@ export default function AdminReports() {
               Platform usage, learner engagement, and Ask AlphaSwarm behaviour — built entirely from real,
               persisted data. Nothing here is estimated or backfilled.
             </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium"
+            >
+              Sign out
+            </button>
           </div>
         </div>
 

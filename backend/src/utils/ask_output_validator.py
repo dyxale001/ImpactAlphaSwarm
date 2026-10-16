@@ -31,10 +31,34 @@ from typing import Optional
 
 
 @dataclass
+class VerifiedClaim:
+    """One figure in the narration that was checked against trusted data and
+    matched it.
+
+    This is a by-product the validator was already computing and then
+    discarding. To check "AAPL's RSI is about 56" the validator must
+    already resolve which asset the figure belongs to, which stored field
+    it corresponds to, and what the trusted value is — which is exactly
+    what provenance means. Returning it costs nothing and turns an
+    unverifiable label ("Source: AlphaSwarm's analysis") into the actual
+    list of figures the answer rests on.
+    """
+    ticker: str
+    metric: str
+    field: str
+    stated: float
+    actual: float
+
+
+@dataclass
 class OutputValidationResult:
     valid: bool
     violations: list[str] = field(default_factory=list)
     fallback_required: bool = False
+    # Populated only for claims that passed. An empty list means the
+    # narration made no checkable numeric claim (an explanation with no
+    # figures in it), NOT that verification was skipped.
+    verified_claims: list[VerifiedClaim] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +209,14 @@ def _nearest_ticker_before(text: str, position: int, known_tickers: set[str]) ->
     return matches[-1] if matches else None
 
 
-def _check_numerical_claims(narration: str, assets: list[dict]) -> list[str]:
+def _check_numerical_claims(
+    narration: str, assets: list[dict], verified_out: Optional[list] = None
+) -> list[str]:
+    """Violations for every checkable figure that did not match trusted data.
+
+    `verified_out`, when given, collects the figures that DID match — the
+    same resolution work, reported instead of dropped. See VerifiedClaim.
+    """
     if not assets:
         return []
     violations: list[str] = []
@@ -237,6 +268,101 @@ def _check_numerical_claims(narration: str, assets: list[dict]) -> list[str]:
             violations.append(
                 f"UNSUPPORTED_NUMERICAL_CLAIM: {asset.get('ticker')} {metric_name} "
                 f"claimed={claimed} actual={actual_f}"
+            )
+        elif verified_out is not None:
+            verified_out.append(
+                VerifiedClaim(
+                    ticker=str(asset.get("ticker") or ""),
+                    metric=metric_name,
+                    field=field_key,
+                    stated=claimed,
+                    actual=actual_f,
+                )
+            )
+    return violations
+
+
+# Ranking stated in WORDS rather than digits.
+#
+# Root-cause bug this catches: _NUMBER only matches digits, so every
+# numeric check in this file is blind to an ordinal written out. A
+# narration saying "The top pick is Apple (AAPL). It ranks first" passed
+# validation cleanly while AAPL was rank 2 and MA was rank 1 — the single
+# most load-bearing claim an answer about a ranked run can make, and the
+# one claim nothing verified. Words, not digits, so it needs its own pass.
+_ORDINAL_WORDS = {
+    "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5, "sixth": 6, "6th": 6,
+    "seventh": 7, "7th": 7, "eighth": 8, "8th": 8, "ninth": 9, "9th": 9,
+    "tenth": 10, "10th": 10,
+}
+_ORDINAL_RANK_RE = re.compile(
+    r"\b(?:rank(?:s|ed|ing)?|sits|placed|comes\s+in|is)\s+"
+    r"(?:in\s+|at\s+|the\s+)?(?:number\s+)?"
+    r"(" + "|".join(_ORDINAL_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+# A rank-1 claim made in prose rather than as a number: "the top pick",
+# "the top-ranked stock", "AAPL leads", "MA tops the list". "leads"/"tops"
+# are included because the observed failure used exactly those words —
+# "Apple leads with a strong quant score" while Apple was rank 2.
+_TOP_PICK_RE = re.compile(
+    r"\btop(?:[-\s])(?:pick|ranked|rated|scoring)\b|"
+    r"\b(?:leads|tops)\s+(?:the\s+)?(?:list|ranking|rankings|shortlist|run|pack)\b|"
+    r"\bleads\b(?=.{0,40}\b(?:rank|score|list|shortlist)\b)|"
+    r"\bhighest[-\s]ranked\b|\bnumber\s+one\b",
+    re.IGNORECASE,
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _check_ordinal_rank_claims(narration: str, assets: list[dict]) -> list[str]:
+    """Verify rank claims written as words against the trusted `rank` field.
+
+    Attribution is per sentence and deliberately conservative: a sentence
+    naming exactly one known ticker attributes to it, and a sentence naming
+    none or several is skipped rather than guessed at. That keeps this from
+    firing on "AAPL and MSFT both rank in the top five", where no single
+    asset owns the claim.
+    """
+    if not assets:
+        return []
+    by_ticker = {a["ticker"]: a for a in assets if a.get("ticker")}
+    known = set(by_ticker)
+    if not known:
+        return []
+    single_asset = assets[0] if len(assets) == 1 else None
+
+    violations: list[str] = []
+    for sentence in _SENTENCE_SPLIT_RE.split(narration):
+        ordinal_match = _ORDINAL_RANK_RE.search(sentence)
+        top_pick_match = _TOP_PICK_RE.search(sentence)
+        if not ordinal_match and not top_pick_match:
+            continue
+
+        mentioned = [t for t in _TICKER_RE.findall(sentence) if t in known]
+        if single_asset is not None and not mentioned:
+            asset = single_asset
+        elif len(set(mentioned)) == 1:
+            asset = by_ticker[mentioned[0]]
+        else:
+            continue  # nobody, or several — not attributable
+
+        actual_rank = asset.get("rank")
+        if actual_rank is None:
+            continue
+        try:
+            actual_rank = int(actual_rank)
+        except (TypeError, ValueError):
+            continue
+
+        claimed_rank = (
+            _ORDINAL_WORDS[ordinal_match.group(1).lower()] if ordinal_match else 1
+        )
+        if claimed_rank != actual_rank:
+            violations.append(
+                f"UNSUPPORTED_RANK_CLAIM: {asset.get('ticker')} stated as rank "
+                f"{claimed_rank}, actual rank {actual_rank}"
             )
     return violations
 
@@ -300,15 +426,21 @@ def validate_ask_output(
         violations.append(f"UNSUPPORTED_PREDICTION: matched '{prediction_match.group(0)}'")
 
     assets = _assets_from(data, comparison_assets)
-    violations.extend(_check_numerical_claims(_normalize_minus_signs(narration), assets))
+    verified: list[VerifiedClaim] = []
+    violations.extend(
+        _check_numerical_claims(_normalize_minus_signs(narration), assets, verified_out=verified)
+    )
     # Membership is only checked against the LIST form (comparison_assets) —
     # a definitive "these are the only valid tickers" set. The single `data`
     # asset is deliberately excluded here: a one-asset narration may
     # legitimately cite another ticker in parentheses for context (a
     # benchmark, a peer), which isn't a claim that AlphaSwarm retrieved data
     # on it the way a list-search result's tickers are.
+    violations.extend(_check_ordinal_rank_claims(narration, assets))
     violations.extend(_check_ticker_membership(narration, comparison_assets or []))
 
     if violations:
         return OutputValidationResult(valid=False, violations=violations, fallback_required=True)
-    return OutputValidationResult(valid=True, violations=[], fallback_required=False)
+    return OutputValidationResult(
+        valid=True, violations=[], fallback_required=False, verified_claims=verified
+    )

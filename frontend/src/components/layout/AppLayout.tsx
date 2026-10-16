@@ -1,36 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import AnalysisCompletionNotification from "../AnalysisCompletionNotification";
 import { readLastHubPage } from "../../utils/lastHubPage";
 import { useAuthStore } from "../../store/authStore";
 import { useSignOut } from "../../hooks/useSignOut";
-import {
-  LayoutDashboard,
-  CandlestickChart,
-  BookOpen,
-  Calculator,
-  Eye,
-  LineChart,
-  Terminal,
-  Settings,
-  Waves,
-  Landmark,
-  Newspaper,
-  Columns2,
-  Sparkles,
-  Menu,
-  X,
-  LogOut,
-} from "lucide-react";
-import { FUNDS_ENABLED } from "../../utils/fundsFlags";
-import { MACRO_NEWS_ENABLED } from "../../utils/macroNewsFlags";
-import { COMPARE_ENABLED } from "../../utils/compareFlags";
+import { Terminal, Menu, X, LogOut } from "lucide-react";
+import { getVisibleNavigation } from "../../data/appNavigation";
 
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const location = useLocation();
+
+  // The app scrolls this persistent region, rather than the window.
+  useLayoutEffect(() => {
+    if (location.pathname === "/financial-tools" && mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
+  }, [location.pathname]);
   const { profile, user } = useAuthStore();
   const signOut = useSignOut();
 
@@ -64,38 +53,7 @@ export default function AppLayout() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [menuOpen]);
 
-  const navItems = [
-    { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { name: "Stocks", path: "/assets", icon: CandlestickChart },
-    { name: "Market News", path: "/news", icon: Newspaper },
-    { name: "Funds", path: "/funds", icon: Landmark },
-    { name: "Compare", path: "/compare", icon: Columns2 },
-    { name: "Learning", path: "/learning", icon: BookOpen },
-    { name: "Financial Tools", path: "/financial-tools", icon: Calculator },
-    { name: "Watchlist", path: "/watchlist", icon: Eye },
-    { name: "Ask AlphaSwarm", path: "/ask", icon: Sparkles },
-    { name: "Portfolio", path: "/portfolio", icon: LineChart },
-    { name: "Whale Watching", path: "/whale-watching", icon: Waves },
-    { name: "Settings", path: "/settings", icon: Settings },
-  ];
-
-  const visibleNavItems = navItems.filter(
-    (i) =>
-      i.name === "Dashboard" ||
-      i.name === "Stocks" ||
-      i.name === "Watchlist" ||
-      i.name === "Ask AlphaSwarm" ||
-      i.name === "Whale Watching" ||
-      i.name === "Learning" ||
-      i.name === "Financial Tools" ||
-      i.name === "Settings" ||
-      // Behind the flag: the entry has to be in both the list above and this
-      // allow-list to appear, and the page it links to needs the backend flag
-      // as well, so nothing half-appears.
-      (FUNDS_ENABLED && i.name === "Funds") ||
-      (MACRO_NEWS_ENABLED && i.name === "Market News") ||
-      (COMPARE_ENABLED && i.name === "Compare")
-  );
+  const visibleNavItems = getVisibleNavigation();
 
   // An asset's pages (/asset/:ticker and its How it works / News / Social
   // sub-pages) live under a different path prefix than the /assets or /dashboard
@@ -127,6 +85,7 @@ export default function AppLayout() {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
+          data-spotlight="mobile-navigation"
           aria-label={menuOpen ? "Close navigation" : "Open navigation"}
           aria-expanded={menuOpen}
           className="p-2 -mr-2 rounded-full text-brand-muted-fg hover:text-brand-fg hover:bg-brand-bg/50 transition-colors"
@@ -140,6 +99,7 @@ export default function AppLayout() {
             {visibleNavItems.map((item) => (
               <NavLink
                 key={item.name}
+                data-spotlight-nav={item.path}
                 to={item.path}
                 onClick={() => setMenuOpen(false)}
                 className={navLinkClassesFor(item.path)}
@@ -181,6 +141,7 @@ export default function AppLayout() {
           {visibleNavItems.map((item) => (
             <NavLink
               key={item.name}
+              data-spotlight-nav={item.path}
               to={item.path}
               className={navLinkClassesFor(item.path)}
             >
@@ -228,6 +189,7 @@ export default function AppLayout() {
           over the bottom-right corner of the content, so pb-20 lets the last card
           on every page scroll clear of it; /ask has no floating button. */}
       <main
+        ref={mainRef}
         className={`relative flex-1 overflow-y-auto pt-14 lg:pt-0 ${
           location.pathname === "/ask" ? "" : "pb-20 lg:pb-0"
         }`}

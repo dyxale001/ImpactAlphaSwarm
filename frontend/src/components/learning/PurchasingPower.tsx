@@ -7,8 +7,8 @@ export default function PurchasingPower({ futureValue, years, inflationRate, onI
   const inputId = useId();
   const inflationError = validateInflation(inflationRate);
   return (
-    <section aria-label="Understanding inflation" className="space-y-3 rounded-2xl border border-brand-border bg-brand-bg p-4 text-sm text-brand-fg">
-      <h4 className="font-semibold">Understanding inflation</h4>
+    <details aria-label="Understanding inflation" className="space-y-3 rounded-2xl border border-brand-border bg-brand-bg p-4 text-sm text-brand-fg">
+      <summary className="cursor-pointer rounded-sm py-2 font-semibold text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary">Understanding inflation</summary>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-brand-muted-fg">
         <p>{inflationError ? 'Set an assumed annual inflation rate.' : `Based on ${Number(inflationRate)}% assumed annual inflation.`} Illustrative, not a forecast.</p>
         {onInflationChange && <details className="min-w-0">
@@ -35,6 +35,6 @@ export default function PurchasingPower({ futureValue, years, inflationRate, onI
         </>;
       })()}
       <p className="text-xs leading-relaxed text-brand-muted-fg">Inflation affects the purchasing power of both invested money and cash. These figures use the same today’s-money basis and illustrate purchasing power, not a guaranteed investment outcome. Investing does not always beat inflation.</p>
-    </section>
+    </details>
   );
 }

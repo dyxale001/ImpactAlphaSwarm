@@ -1,3 +1,4 @@
+import { SPOTLIGHT_SIGNUP_DATA } from "../utils/spotlightTour";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
@@ -53,6 +54,7 @@ export function useSignup() {
           first_name: formData.firstName,
           last_name: formData.lastName,
           role: "user",
+          ...SPOTLIGHT_SIGNUP_DATA,
         },
       },
     });

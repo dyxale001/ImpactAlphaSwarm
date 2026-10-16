@@ -23,7 +23,7 @@ export const SUMMARY_NO_SECTORS = "None chosen";
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 export const PROFILE_TAB_INTRO =
-  "The two things your fund matches are worked out from. Both come from your answers, and each is saved on its own.";
+  "Your risk profile and goals shape fund matches and are saved separately.";
 export const PREFERENCES_TAB_INTRO =
   "What the analysis run and the app read. Each card saves on its own.";
 export const ACCOUNT_TAB_INTRO = "Who you are signed in as.";
