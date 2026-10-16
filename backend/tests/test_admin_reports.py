@@ -19,6 +19,11 @@ from _fake_supabase import FakeSupabase
 
 NOW = datetime.datetime.now(datetime.timezone.utc)
 
+# Captured at collection time: conftest's autouse fixture no-ops
+# api._log_ask_query for every test, so the tests that exercise the REAL
+# function restore this reference (same pattern as test_ask_query_logging).
+_REAL_LOG_ASK_QUERY = api._log_ask_query
+
 
 def _iso(days_ago: float) -> str:
     return (NOW - datetime.timedelta(days=days_ago)).isoformat()
@@ -313,18 +318,139 @@ def test_chatbot_report_aggregates_rates_and_top_assets(monkeypatch):
     assert result["top_queried_assets"][0] == {"ticker": "GOOGL", "count": 2}
 
 
-def test_chatbot_report_never_exposes_raw_prompt_or_answer_fields(monkeypatch):
-    """The report only ever reads/returns the aggregate columns — this pins
-    down that no raw text field is selected or surfaced."""
+def test_chatbot_report_shows_the_question_but_never_the_answer_or_the_asker(monkeypatch):
+    """The privacy boundary, as of migration 037.
+
+    This used to pin that NO raw text was ever returned. The product owner
+    has since asked to see the questions people ask, so the boundary moved —
+    but to a specific place, and this test holds it there: the QUESTION is
+    shown; the model's ANSWER is not, and neither is who asked. A row that
+    carries an answer column anyway (as a buggy writer might) must still
+    not have it echoed back."""
     _patch_auth(monkeypatch, "admin-1")
     logs = [{
         "intent": "ASSET_SEARCH", "success": True, "fallback_used": False, "validation_failed": False,
-        "latency_ms": 100, "asset_symbol": "GOOGL", "user_id": "u1", "created_at": _iso(1),
-        # Simulates a row that (incorrectly) also had text columns — the report must not echo them.
-        "query": "what is GOOGL's price", "narration": "GOOGL is trading at R5,345",
+        "latency_ms": 100, "asset_symbol": "GOOGL", "user_id": "u1-secret-id", "created_at": _iso(1),
+        "query_text": "what is GOOGL price",
+        # Simulates a row that (incorrectly) also carried an answer.
+        "narration": "GOOGL is trading at R5,345",
     }]
     _install(monkeypatch, {"users": BASE_USERS, "ask_query_logs": logs})
     result = asyncio.run(api.admin_reports_chatbot(range="all", authorization="Bearer x"))
+
+    assert [q["query"] for q in result["recent_queries"]] == ["what is GOOGL price"]
     dumped = str(result)
-    assert "what is GOOGL's price" not in dumped
     assert "GOOGL is trading at R5,345" not in dumped
+    assert "u1-secret-id" not in dumped
+    assert all("user_id" not in q for q in result["recent_queries"])
+
+
+def test_recent_questions_are_newest_first_and_skip_rows_with_no_text(monkeypatch):
+    _patch_auth(monkeypatch, "admin-1")
+    base = {"intent": "LEARNING_QUESTION", "success": True, "fallback_used": False,
+            "validation_failed": False, "latency_ms": 50, "asset_symbol": None, "user_id": "u1"}
+    logs = [
+        {**base, "created_at": _iso(5), "query_text": "oldest question"},
+        {**base, "created_at": _iso(1), "query_text": "newest question"},
+        {**base, "created_at": _iso(3), "query_text": None},
+        {**base, "created_at": _iso(2), "query_text": "middle question"},
+    ]
+    _install(monkeypatch, {"users": BASE_USERS, "ask_query_logs": logs})
+    result = asyncio.run(api.admin_reports_chatbot(range="all", authorization="Bearer x"))
+    assert [q["query"] for q in result["recent_queries"]] == [
+        "newest question", "middle question", "oldest question",
+    ]
+    # The aggregates still count every row, text or not.
+    assert result["total_queries"] == 4
+
+
+def test_recent_questions_respect_the_date_range(monkeypatch):
+    _patch_auth(monkeypatch, "admin-1")
+    base = {"intent": "UNKNOWN", "success": False, "fallback_used": False,
+            "validation_failed": False, "latency_ms": 50, "asset_symbol": None, "user_id": "u1"}
+    logs = [
+        {**base, "created_at": _iso(1), "query_text": "inside the window"},
+        {**base, "created_at": _iso(60), "query_text": "outside the window"},
+    ]
+    _install(monkeypatch, {"users": BASE_USERS, "ask_query_logs": logs})
+    result = asyncio.run(api.admin_reports_chatbot(range="7d", authorization="Bearer x"))
+    assert [q["query"] for q in result["recent_queries"]] == ["inside the window"]
+
+
+def test_a_logged_question_is_truncated_and_whitespace_collapsed():
+    assert api._clean_logged_query("  what   is\n\tGOOGL  ") == "what is GOOGL"
+    assert api._clean_logged_query("x" * 5000) == "x" * api._ASK_LOG_QUERY_MAX_CHARS
+    assert api._clean_logged_query("   ") is None
+    assert api._clean_logged_query(None) is None
+    assert api._clean_logged_query("") is None
+
+
+class _RecordingSupabase:
+    """Records every insert; optionally rejects any row carrying query_text,
+    as a database without migration 037 would."""
+
+    def __init__(self, reject_text=False, always_fail=False):
+        self.attempts = []
+        self._reject_text = reject_text
+        self._always_fail = always_fail
+
+    def table(self, _name):
+        outer = self
+
+        class _T:
+            def insert(self, row):
+                self._row = row
+                return self
+
+            def execute(self):
+                outer.attempts.append(dict(self._row))
+                if outer._always_fail:
+                    raise RuntimeError("db down")
+                if outer._reject_text and "query_text" in self._row:
+                    raise RuntimeError('column "query_text" does not exist')
+
+        return _T()
+
+
+def test_logging_stores_the_question_and_never_the_answer(monkeypatch):
+    db = _RecordingSupabase()
+    monkeypatch.setattr(api, "supabase", db)
+    _REAL_LOG_ASK_QUERY(user_id="u1", asset_symbol="AAPL", intent="ANALYSIS_EXPLANATION",
+                       success=True, fallback_used=False, validation_failed=False,
+                       latency_ms=120, query_text="tell me about AAPL")
+    assert db.attempts[0]["query_text"] == "tell me about AAPL"
+    assert not any(k in db.attempts[0] for k in ("narration", "answer", "response"))
+
+
+def test_a_failed_text_insert_retries_without_it_rather_than_losing_the_row(monkeypatch):
+    """If migration 037 has not run, the insert that includes query_text
+    fails on the unknown column. Without the retry the WHOLE row is lost and
+    every usage metric goes dark for the sake of one optional field."""
+    db = _RecordingSupabase(reject_text=True)
+    monkeypatch.setattr(api, "supabase", db)
+    _REAL_LOG_ASK_QUERY(user_id="u1", asset_symbol=None, intent="UNKNOWN", success=False,
+                       fallback_used=False, validation_failed=False, latency_ms=10,
+                       query_text="some question")
+    # The ladder drops optional columns progressively, ending at exactly the
+    # row that existed before either migration. It must LAND, not just try.
+    assert "query_text" in db.attempts[0]
+    assert "query_text" not in db.attempts[-1]
+    assert db.attempts[-1]["intent"] == "UNKNOWN"
+
+
+def test_logging_never_raises_even_when_every_insert_fails(monkeypatch):
+    """A logging failure may never break an /api/ask answer."""
+    monkeypatch.setattr(api, "supabase", _RecordingSupabase(always_fail=True))
+    _REAL_LOG_ASK_QUERY(user_id=None, asset_symbol=None, intent="X", success=False,
+                       fallback_used=False, validation_failed=False, latency_ms=1,
+                       query_text="q")
+
+
+def test_no_question_text_is_sent_when_there_is_none(monkeypatch):
+    """A blank question stores nothing rather than an empty string, and takes
+    the plain-metrics path with a single insert."""
+    db = _RecordingSupabase()
+    monkeypatch.setattr(api, "supabase", db)
+    _REAL_LOG_ASK_QUERY(user_id="u1", asset_symbol=None, intent="UNKNOWN", success=False,
+                       fallback_used=False, validation_failed=False, latency_ms=1, query_text="   ")
+    assert len(db.attempts) == 1 and "query_text" not in db.attempts[0]

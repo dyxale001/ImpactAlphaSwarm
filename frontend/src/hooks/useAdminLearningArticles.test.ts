@@ -126,3 +126,9 @@ it('reloads article tags and optional video metadata for editing', async () => {
   expect(result.articles[0].tags).toEqual(['tfsa-planning']);
   expect(result.articles[0].video_url).toBe('https://vimeo.com/123');
 });
+
+it('saves exact controlled tag values from different presentation groups', async () => {
+  const tags = ['tfsa-planning', 'stock-analysis', 'risk-profile', 'compare-funds'];
+  await new LearningArticleAdminRepository().updateArticle('1', { ...values, tags });
+  expect(db.updated?.tags).toEqual(tags);
+});

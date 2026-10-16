@@ -1,3 +1,4 @@
+import AboutThisPage from "../components/guidance/AboutThisPage";
 import LearnMore from '../components/learning/LearnMore';
 import type {
   AnalysisLoadingStage,
@@ -450,6 +451,7 @@ export default function AssetsPage() {
             </button>
           </div>
         </div>
+        <AboutThisPage page="stocks" rankingMode={SCORECARD_ENABLED ? "scorecard" : "legacy"} methodologyHref={topPick ? `/asset/${encodeURIComponent(topPick.ticker)}/how-it-works` : undefined} />
       </div>
       <LearnMore context="stocks" />
 

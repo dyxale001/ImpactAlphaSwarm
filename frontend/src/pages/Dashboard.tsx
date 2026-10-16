@@ -1,3 +1,4 @@
+import UserSpotlightTour from "../components/onboarding/UserSpotlightTour";
 import LearnMore from '../components/learning/LearnMore';
 import { settingsPath } from "../utils/settingsTabs";
 import { useEffect, useState } from "react";
@@ -90,6 +91,7 @@ export default function DashboardPage() {
       learningProgressEnabled={placedWidgets.some(({ entry }) => entry.id === "learning-progress")}
     >
       <div className={`${PAGE} space-y-6`}>
+        {!isEditing && !drawerOpen && <UserSpotlightTour />}
         <TodayStrip
           widgetCount={placedWidgets.length}
           isEditing={isEditing}

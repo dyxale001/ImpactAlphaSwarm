@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { MessageCircleQuestion, RefreshCw, Sparkles } from "lucide-react";
 import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import { useSignals } from "../../../dashboard/DashboardDataContext";
+import { useAskChatbotStore } from "../../../store/askChatbotStore";
 import { SCORECARD_ENABLED } from "../../../hooks/useDashboardStats";
 import { useAnalysisRefresh } from "../../../hooks/useAnalysisRefresh";
 import { CONVERGENCE_DETAIL } from "../../../data/signalCopy";
@@ -49,6 +50,7 @@ function TopPickHero({
   topPick: NonNullable<ReturnType<typeof useSignals>["topPick"]>;
   size: WidgetProps["size"];
 }) {
+  const openAskChatbot = useAskChatbotStore((s) => s.openWithPrompt);
   const showScorecard = SCORECARD_ENABLED && topPick.hasSignalTerms;
   const quantPercentile =
     topPick.quantLean != null ? ((topPick.quantLean + 1) / 2) * 100 : null;
@@ -153,12 +155,27 @@ function TopPickHero({
             <p className="text-xs leading-relaxed text-brand-bg/80">{reasoning}</p>
           </div>
 
-          <Link
-            to={`/asset/${topPick.ticker}`}
-            className="inline-block text-xs font-semibold text-brand-accent hover:underline"
-          >
-            Full analysis →
-          </Link>
+          {/* The runners-up below carry this (RecommendationCard), so
+              without it the one stock you cannot ask about from the
+              dashboard was the one the run ranked first. Dark-ground
+              styling, since the hero sits on the forest card. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              to={`/asset/${topPick.ticker}`}
+              className="inline-block text-xs font-semibold text-brand-accent hover:underline"
+            >
+              Full analysis →
+            </Link>
+            <button
+              type="button"
+              onClick={() => openAskChatbot(`Tell me about ${topPick.ticker}`)}
+              aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-brand-bg/80 transition-colors hover:border-brand-accent/50 hover:bg-white/10 hover:text-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+            >
+              <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0" />
+              Ask AlphaSwarm about this
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -45,7 +45,7 @@ it('routes tools independently and keeps Learning Centre entry points', () => {
   const learning = source('../../pages/Learning.tsx');
   expect(learning).toContain('navigate("/financial-tools")'); expect(learning).toContain('to="/financial-tools"');
   expect(learning).not.toContain('learning-panel-tools');
-  expect(source('../layout/AppLayout.tsx')).toContain('name: "Financial Tools", path: "/financial-tools"');
+  expect(source('../../data/appNavigation.ts')).toContain("name: 'Financial Tools', path: '/financial-tools'");
 });
 it('distinguishes a funded goal target from projected investment gain', () => {
   const html = renderToStaticMarkup(createElement(PurchasingPower, { futureValue: 50000, targetValue: 10000, startingCapital: 20000, monthlyContribution: 0, years: 10, inflationRate: '5' }));
@@ -73,4 +73,11 @@ it('shows validation within the editor without calculating invalid values', () =
   expect(html).toContain('aria-invalid="true"');
   expect(html).toContain('Enter an inflation rate from 0 to 100%');
   expect(html).not.toContain('Projected final value in today');
+});
+
+it('renders the Financial Tools eyebrow using the Learning Centre label pattern', () => {
+  const html = renderToStaticMarkup(createElement(MemoryRouter, {}, createElement(FinancialToolsPage)));
+  expect(html).toContain('<p class="absolute bottom-full left-0 text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Financial Tools</p>');
+  expect(html.match(/<h1\b/g)).toHaveLength(1);
+  expect(html).toContain('pointer-events-none absolute inset-x-0 bottom-0');
 });

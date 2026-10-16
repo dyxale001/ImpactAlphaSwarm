@@ -25,3 +25,7 @@ it('uses existing Funds spacing and preserves one Dashboard contextual entry poi
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningProgressWidget');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).not.toContain('LearnMore');
 });
+
+it('gives Market News a local gap without an empty wrapper', () => {
+ expect(read('../../pages/MarketNews.tsx')).toContain('<LearnMore context="news" className="mt-6" />');
+});

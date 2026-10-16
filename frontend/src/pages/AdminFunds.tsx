@@ -86,7 +86,6 @@ export default function AdminFunds() {
               Admin
             </p>
             <h1 className="flex items-center gap-2 text-2xl sm:text-3xl font-bold tracking-tight">
-              <Landmark className="h-6 w-6 shrink-0 text-brand-primary" />
               Fund catalogue
             </h1>
             <p className="text-sm text-brand-muted-fg max-w-3xl">

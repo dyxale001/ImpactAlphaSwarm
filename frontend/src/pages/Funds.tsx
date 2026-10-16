@@ -1,3 +1,4 @@
+import AboutThisPage from "../components/guidance/AboutThisPage";
 import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, Landmark, Layers, Search, SlidersHorizontal } from "lucide-react";
@@ -147,6 +148,7 @@ export default function FundsPage() {
             {meta.meta?.header.strip ?? FUNDS_HEADER_STRIP}
           </p>
         </div>
+        <AboutThisPage page="funds" />
       </div>
       <LearnMore context="funds" className="mt-6" />
 

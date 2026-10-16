@@ -1,3 +1,4 @@
+import SproutMotif from './SproutMotif';
 import LearnMore from './LearnMore';
 import { useState } from 'react';
 import { Calculator } from 'lucide-react';
@@ -12,8 +13,12 @@ export default function FinancialTools() {
   return (
     <div className="space-y-6">
       <header className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
-        <h1 className="flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl"><Calculator className="h-7 w-7 shrink-0 text-brand-accent" aria-hidden="true" />Financial Tools</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">Plan your investments, explore potential growth, and understand your financial future.</p>
+        <SproutMotif className="h-14 sm:h-full" />
+        <div className="relative top-2">
+          <p className="absolute bottom-full left-0 text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Financial Tools</p>
+          <h1 className="flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl"><Calculator className="h-7 w-7 shrink-0 text-brand-accent" aria-hidden="true" />Financial Tools</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">Plan your investments, explore potential growth, and understand your financial future.</p>
+        </div>
       </header>
       <LearnMore context={selectedTool === "tfsa" ? "tools.tfsa" : `tools.${mode}`} />
       <div role="group" aria-label="Choose a financial tool" className="flex flex-wrap gap-2">

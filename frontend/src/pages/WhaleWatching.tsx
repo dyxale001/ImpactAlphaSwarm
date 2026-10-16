@@ -1,3 +1,4 @@
+import AboutThisPage from "../components/guidance/AboutThisPage";
 import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import {
@@ -128,6 +129,7 @@ export default function WhaleWatchingPage() {
             Informational only; this never affects your asset rankings.
           </p>
         </div>
+        <AboutThisPage page="whales" />
       </div>
       <LearnMore context="whales" />
 

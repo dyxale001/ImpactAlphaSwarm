@@ -808,6 +808,37 @@ class AskSource(BaseModel):
     retrieved_at: str
 
 
+class AskLink(BaseModel):
+    """Where in the app the reader can go and see this for themselves.
+
+    Derived deterministically from the intent and the resolved entity, not
+    chosen by a model, so it can never point somewhere the answer was not
+    actually about. Optional: an answer with no obvious destination (a
+    refusal, a clarification, a general definition) carries none rather
+    than a vague one.
+    """
+    path: str
+    label: str
+
+
+class AskDataPoint(BaseModel):
+    """One figure the answer states, with where the figure came from.
+
+    Per-claim provenance, not a label. It is emitted from the output
+    validator's own verification pass: to check a stated figure the
+    validator must already resolve which asset it belongs to, which stored
+    field it is, and what the trusted value is, so this is that work
+    reported rather than discarded. A figure only appears here if it was
+    checked and matched, which makes the list a statement about what the
+    answer actually rests on rather than a claim about its origin.
+    """
+    ticker: str
+    label: str
+    value: float
+    field: str
+    origin: str
+
+
 class AskResponse(BaseModel):
     intent: str
     narration: str
@@ -818,6 +849,13 @@ class AskResponse(BaseModel):
     # `source` (a short string label) stays the field older/other consumers
     # read, this is purely additive so no existing consumer breaks.
     sources: List[AskSource] = []
+    # Per-claim provenance for figures stated in the narration — see
+    # AskDataPoint. Empty when the answer states no checkable figure (a
+    # definition, a refusal, a clarification), which is not the same as
+    # unverified.
+    data_points: List[AskDataPoint] = []
+    # Deep link to the page this answer is about — see AskLink.
+    link: Optional[AskLink] = None
     is_blocked: bool = False
     redirect_suggestions: List[str] = []
 
@@ -1094,9 +1132,34 @@ def _check_ask_rate_limit(user_id: str) -> bool:
     return True
 
 
+# Prediction questions that NAME the asset, which the substring blocklist
+# above structurally cannot catch. Root-cause gap this closes: the list
+# holds fixed phrases like "will it go up", matched with `in`, so the
+# pronoun form was blocked while the far more natural named form slipped
+# straight through — "Will NVDA go up next week?", "Will Apple go down?"
+# and "Is Tesla going to rise?" all passed the deterministic gate and were
+# left entirely to the LLM classifier to catch. That makes the product's
+# central claim ("guardrails are enforced in code, before the model sees
+# the question") untrue for the single most obvious way to ask for a
+# prediction. A pattern, not more substrings: the asset sits BETWEEN the
+# auxiliary and the direction verb, which a fixed phrase cannot express.
+_ASK_PREDICTION_PATTERN = re.compile(
+    r"\bwill\s+(?:\w+\s+){0,3}?(?:go\s+(?:up|down)|rise|fall|drop|climb|crash|moon|"
+    r"increase|decrease|outperform|underperform|beat|recover|rebound)\b|"
+    r"\b(?:is|are|was)\s+(?:\w+\s+){0,3}?going\s+to\s+(?:go\s+(?:up|down)|rise|fall|drop|climb|crash)\b|"
+    r"\bwhere\s+will\s+(?:\w+\s+){0,3}?(?:be|go|end up)\b|"
+    r"\bhow\s+(?:high|low)\s+will\b|"
+    r"\b(?:price|share)\s+(?:prediction|forecast|target)\b|"
+    r"\bpredict\s+(?:the\s+)?(?:price|move|movement|direction)\b",
+    re.IGNORECASE,
+)
+
+
 def _ask_blocklist_hit(query: str) -> bool:
     q = query.lower()
-    return any(phrase in q for phrase in _ASK_BLOCKLIST)
+    if any(phrase in q for phrase in _ASK_BLOCKLIST):
+        return True
+    return bool(_ASK_PREDICTION_PATTERN.search(query))
 
 
 # Ask AlphaSwarm's Groq calls go through the project's shared GroqClient
@@ -1142,18 +1205,56 @@ _ask_intent_client = None
 _ask_narration_client = None
 
 
+class _FlaggingClient:
+    """Wraps the Groq client so ANY failure of a model call marks the request
+    as a service error, then re-raises unchanged.
+
+    Why a wrapper rather than a flag at each call site. There are eight
+    places a model call can fail (classification, narration, repair,
+    synthesis, comparison, two grounding calls, the envelope), each with its
+    own except handler that swallows the error and falls back. Flagging in
+    each handler would work today and quietly stop working the day a ninth
+    call is added. Every one of them goes through complete(), so this is the
+    one place that cannot be forgotten.
+
+    What it exists to tell apart. A question that fell back because the
+    MODEL SERVICE failed (a rate limit, an outage, an empty completion) and a
+    question that fell back because AlphaSwarm genuinely could not handle it
+    look identical in the log — both read "fallback" or "not answered". One
+    is an operational problem, the other is a coverage gap, and reading a
+    quota outage as a coverage gap sends someone off to fix routing that is
+    working. Behaviour is otherwise untouched: same return, same exception.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def complete(self, *args, **kwargs):
+        try:
+            return self._inner.complete(*args, **kwargs)
+        except Exception:
+            _ask_telemetry_mark(service_error=True)
+            raise
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def _get_ask_intent_client():
     global _ask_intent_client
     if _ask_intent_client is None:
         from src.utils.llm_client import GroqClient
 
-        _ask_intent_client = GroqClient.create(
+        _created = GroqClient.create(
             purpose="ask_intent",
             max_tokens=_ASK_INTENT_MAX_TOKENS,
             temperature=0,
             key_env=_ASK_KEY_ENV,
             fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
+        # create() returns None when no key is configured; keep that None so
+        # callers' "no client" handling still works.
+        _ask_intent_client = _FlaggingClient(_created) if _created is not None else None
     return _ask_intent_client
 
 
@@ -1162,13 +1263,14 @@ def _get_ask_narration_client():
     if _ask_narration_client is None:
         from src.utils.llm_client import GroqClient
 
-        _ask_narration_client = GroqClient.create(
+        _created = GroqClient.create(
             purpose="ask_narration",
             max_tokens=_ASK_NARRATION_MAX_TOKENS,
             temperature=0,
             key_env=_ASK_KEY_ENV,
             fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
+        _ask_narration_client = _FlaggingClient(_created) if _created is not None else None
     return _ask_narration_client
 
 
@@ -1185,6 +1287,10 @@ def _classify_ask_intent(query: str) -> str:
     uses the distinction to give an honest, retry-worthy message instead."""
     client = _get_ask_intent_client()
     if client is None:
+        # No exception to catch here (nothing was ever called), so the
+        # wrapper can't see it — but an unconfigured model service is exactly
+        # as much a service problem as a rate-limited one.
+        _ask_telemetry_mark(service_error=True)
         return "CLASSIFIER_UNAVAILABLE"
     prompt = (
         "Classify the user question into exactly one label, output ONLY the "
@@ -1269,6 +1375,193 @@ def _classify_ask_intent(query: str) -> str:
     except Exception as e:
         logger.warning("Ask intent classification failed: %s", e)
         return "CLASSIFIER_UNAVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# Structured resolution envelope — the recovery layer for questions the
+# deterministic pattern layer cannot route.
+#
+# WHY THIS EXISTS, and why it does not weaken the grounding guarantee.
+#
+# Routing in this file is done by ~21 regex patterns, a 33-word stopword
+# list and a 26-step gate ladder. That layer is fast, auditable and free,
+# and it is the right default. What it cannot do is generalise: every
+# collision found so far ("on" -> ON Semiconductor, "technology" -> Micron
+# Technology, "information" -> Fidelity National, "S&P 500" -> SentinelOne)
+# was a string standing in for a meaning, and each was fixed one user
+# report at a time. The inverse failure is just as common and quieter: a
+# question that names a real asset in words no pattern anticipated ("the
+# iPhone company", "Zuckerberg's company", "the one that makes GPUs")
+# resolves to nothing and the user is told AlphaSwarm is not sure what they
+# mean.
+#
+# The key distinction this layer rests on: "what is the user asking about?"
+# and "what is the number?" are different trust questions. The second must
+# never come from a model — that is what the deterministic retrieval and
+# the output validator exist for, and none of that changes here. The first
+# is ordinary language understanding, and a model is simply better at it
+# than a regex.
+#
+# So the model proposes and the database disposes. This call returns
+# POINTERS ONLY — an intent label, candidate tickers, candidate fund names,
+# a metric name. Every ticker it proposes is then looked up in the real
+# `assets` table and dropped if it does not exist, so a hallucinated symbol
+# cannot survive; no value, price, score or fact ever originates here.
+#
+# Deliberately NOT the reverted rephrase-and-reclassify approach: that one
+# rewrote the QUESTION TEXT and then re-ran the classifier on the rewrite,
+# which let a rewrite that happened to drop advice-shaped wording launder a
+# refusal into an answer. Here the question text is never transformed
+# before the gates, and this layer never runs on a question the gates or
+# classifier already judged to be advice — only on the give-up path, where
+# the alternative is failing anyway.
+_ASK_ENVELOPE_ENABLED = os.getenv("ASK_ENVELOPE_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# Labels this layer is allowed to recover INTO. Advice and out-of-scope are
+# absent on purpose: a safety verdict is never revisited here, only an
+# "I don't know" is.
+_ASK_ENVELOPE_SAFE_INTENTS = {
+    "ANALYSIS_EXPLANATION",
+    "CONTEXT_SYNTHESIS",
+    "LEARNING_QUESTION",
+    "USER_DATA_SEARCH",
+    "ASSET_SEARCH",
+    "PLATFORM_QUESTION",
+}
+
+
+def _resolve_ask_envelope(query: str) -> Optional[dict]:
+    """One structured-extraction call: the user's question in, a typed
+    envelope of POINTERS out. Returns None on any failure, unparseable
+    output, or an intent outside the recoverable set — never raises, and
+    never returns a value the caller could mistake for data."""
+    client = _get_ask_intent_client()
+    if client is None:
+        return None
+    prompt = (
+        "Extract what this investing-platform question is ASKING FOR. Reply "
+        "with one JSON object and nothing else.\n\n"
+        "Schema:\n"
+        '{"intent": one of ANALYSIS_EXPLANATION | CONTEXT_SYNTHESIS | '
+        "LEARNING_QUESTION | USER_DATA_SEARCH | ASSET_SEARCH | "
+        "PLATFORM_QUESTION | UNSUPPORTED_FINANCIAL_ADVICE | UNKNOWN,\n"
+        ' "tickers": [stock ticker symbols the question refers to],\n'
+        ' "funds": [fund names the question refers to],\n'
+        ' "metric": a single metric name if one is asked about, else null}\n\n'
+        "Rules:\n"
+        "- tickers: give the SYMBOL for any company the question refers to, "
+        "however indirectly — 'the iPhone company' -> AAPL, "
+        "\"Zuckerberg's company\" -> META, 'Google' -> GOOGL. Empty list if "
+        "no specific company is referred to. Never invent a symbol you are "
+        "not confident is real; an empty list is always better than a guess.\n"
+        "- ANALYSIS_EXPLANATION: wants the data/figures on a named asset.\n"
+        "- CONTEXT_SYNTHESIS: wants results interpreted, compared, or "
+        "explained ('why does X rank above Y', 'what are the downsides of X', "
+        "'which of these is cheapest').\n"
+        "- LEARNING_QUESTION: wants a concept or term explained.\n"
+        "- USER_DATA_SEARCH: asks what is on their own watchlist or in their "
+        "own latest analysis run.\n"
+        "- ASSET_SEARCH: wants a LIST of assets by sector or category.\n"
+        "- PLATFORM_QUESTION: asks how AlphaSwarm itself works.\n"
+        "- UNSUPPORTED_FINANCIAL_ADVICE: wants to be told what to buy/sell, "
+        "or a prediction of what a price will do.\n"
+        "- Do not answer the question. Do not output any price, score, "
+        "figure or fact. Pointers only.\n\n"
+        f"Question: {query}\nJSON:"
+    )
+    try:
+        raw = client.complete(prompt).strip()
+    except Exception as e:
+        logger.warning("Ask envelope extraction failed: %s", e)
+        return None
+
+    # Tolerant parse: models wrap JSON in prose or fences often enough that
+    # requiring a bare object would throw away usable output.
+    import json as _json
+
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        parsed = _json.loads(raw[start:end + 1])
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    intent = str(parsed.get("intent") or "").strip().upper()
+    if intent not in _ASK_ENVELOPE_SAFE_INTENTS:
+        # Includes UNSUPPORTED_FINANCIAL_ADVICE and UNKNOWN: nothing to
+        # recover, and a safety label is for the gates to set, not this.
+        return None
+
+    def _symbols(key: str) -> List[str]:
+        raw_list = parsed.get(key)
+        if not isinstance(raw_list, list):
+            return []
+        return [str(v).strip() for v in raw_list if isinstance(v, (str, int)) and str(v).strip()][:5]
+
+    metric = parsed.get("metric")
+    return {
+        "intent": intent,
+        "tickers": _symbols("tickers"),
+        "funds": _symbols("funds"),
+        "metric": str(metric).strip() if isinstance(metric, str) and metric.strip() else None,
+    }
+
+
+def _ask_learning_answer_declined(narration: str) -> bool:
+    """True when a LEARNING_QUESTION answer is an honest "no source covers
+    this" rather than a real answer.
+
+    Shared by the two places that need it: the definitional shortcut (which
+    falls through to the classifier rather than commit to a decline) and the
+    learning branch itself (which re-routes to the asset path when the
+    question turns out to name a real company). Was inline in the first of
+    those; extracted so the phrase list cannot drift between the two."""
+    # Biased towards catching one: a false positive costs one extra
+    # retrieval tier (and usually finds a better source), while a false
+    # negative ships a regulator's name as the citation for "I don't have
+    # that information".
+    lowered = (narration or "").lower()
+    return narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
+        p in lowered
+        for p in ("t provide any information", "t contain any information",
+                  "t provide information", "t contain information",
+                  "t have enough information", "t have any information",
+                  "t have information", "t included in the source",
+                  "isn't included in the source", "no information about",
+                  "no information on",
+                  # Meta-statements about the source rather than an answer
+                  # from it: "the information you provided doesn't cover X",
+                  # "I can't give an answer based on that source".
+                  "t cover", "not cover", "t address", "does not address",
+                  "t give an answer", "cannot give an answer",
+                  "based on that source", "based on the provided source",
+                  "you provided doesn", "source material doesn",
+                  "t mention", "does not mention")
+    )
+
+
+def _verify_envelope_tickers(proposed: List[str]) -> List[dict]:
+    """Keep only the proposed symbols that exist in the real `assets`
+    table. This is the whole safety mechanism of this layer: the model's
+    output is a claim about what the user meant, and that claim is checked
+    against the database before anything is built on it. A symbol the model
+    invented simply disappears here."""
+    if not proposed:
+        return []
+    wanted = {_normalize_ticker(t) for t in proposed}
+    try:
+        resp = supabase.table("assets").select("id,ticker,name,universe,current_price").execute()
+    except Exception as e:
+        logger.warning("Ask envelope ticker verification failed: %s", e)
+        return []
+    verified = []
+    for asset in resp.data or []:
+        if _normalize_ticker(asset.get("ticker") or "") in wanted:
+            verified.append(asset)
+    return verified
 
 
 def _format_price(value: float, currency: str) -> str:
@@ -1650,6 +1943,7 @@ def _narrate_ask(
 
     result = validate_ask_output(narration, data=validation_data, comparison_assets=comparison_assets)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
 
     _ask_telemetry_mark(validation_failed=True)
@@ -1788,7 +2082,48 @@ def _ask_asset_search(query: str, user_id: str) -> tuple[dict, str]:
     return {"assets": rows}, "asset_search"
 
 
-def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
+# Which half of the user's own data a question is about. The watchlist and
+# the latest run's top picks are different things that happen to be served
+# by the same retrieval, and mixing them produces an answer that is true
+# about the wrong list.
+_ASK_WATCHLIST_SCOPE_PATTERN = re.compile(
+    r"\bwatch\s?list(?:ed)?\b|\btracking\b|\btracked\b|\bwatching\b|\bfollowing\b",
+    re.IGNORECASE,
+)
+_ASK_RUN_SCOPE_PATTERN = re.compile(
+    r"\btop\s+(?:pick|picks|asset|assets|stock|stocks|recommendation|recommendations)\b|"
+    r"\bshortlist\b|\brecommend\w*\b|\branked?\b|\branking\b|\bscored\b|"
+    r"\blatest\s+(?:run|analysis)\b|\banalysis\s+run\b|"
+    # "my results" / "these results" means what the RUN produced. Without
+    # this, "compare the stocks in my results" matched neither scope, so
+    # both lists were handed over and the answer described the watchlist —
+    # the one list the question was not about.
+    r"\bresults?\b|\bmy\s+scores\b",
+    re.IGNORECASE,
+)
+
+# The product's OWN feature names, asked about possessively. Root-cause bug
+# this fixes: the LLM classifier labelled "what are my top picks" and "what
+# are my top recommended assets" UNSUPPORTED_FINANCIAL_ADVICE — it read
+# "picks"/"recommended" as a request for a recommendation and refused, so a
+# user asking to see the output of a run they had already done was told
+# AlphaSwarm does not give advice. "My" is what settles it: a possessive
+# question about an existing, already-computed list is a lookup of the
+# user's own data, never a request for a new recommendation. Decided
+# deterministically here rather than left to the classifier to get right.
+_ASK_OWN_RESULTS_PATTERN = re.compile(
+    r"\bmy\s+(?:"
+    r"top\s+(?:recommended\s+|ranked\s+|scored\s+|rated\s+)?"
+    r"(?:pick|picks|asset|assets|stock|stocks|recommendation|recommendations)|"
+    r"picks|shortlist|recommendations?|rankings?|results|scores|"
+    r"recommended\s+(?:asset|assets|stock|stocks)"
+    r")\b|"
+    r"\b(?:what|which)\s+(?:did|does)\s+my\s+(?:latest\s+)?(?:run|analysis)\b",
+    re.IGNORECASE,
+)
+
+
+def _ask_user_data_search(user_id: str, query: str = "") -> tuple[dict, str]:
     """Deterministic retrieval of the user's own watchlist + latest run top
     picks.
 
@@ -1857,15 +2192,32 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
         )
         recs = recs_resp.data or []
         asset_ids = [r["asset_id"] for r in recs if r.get("asset_id")]
-        asset_map = {}
+        asset_map: dict = {}
         if asset_ids:
-            assets_resp = supabase.table("assets").select("id,ticker").in_("id", asset_ids).execute()
-            asset_map = {a["id"]: a["ticker"] for a in (assets_resp.data or [])}
+            # Root-cause bug this fixes: this selected ONLY id+ticker, so a
+            # top-picks entry reached the narrator as a bare symbol with no
+            # company name on it — and the narrator, needing a name to write
+            # a sentence, supplied one from its own knowledge. That is how
+            # "MA" (Mastercard) was narrated as "Microsoft (MA)": the ticker
+            # was right, the name was invented, and nothing checked it
+            # because the validator verifies figures and ticker membership,
+            # not company names. The fix is to give it the name rather than
+            # to police the guess.
+            assets_resp = (
+                supabase.table("assets").select("id,ticker,name,universe,current_price")
+                .in_("id", asset_ids).execute()
+            )
+            asset_map = {a["id"]: a for a in (assets_resp.data or []) if a.get("ticker")}
         for r in recs:
-            ticker = asset_map.get(r["asset_id"])
-            if not ticker:
+            asset_row = asset_map.get(r["asset_id"])
+            if not asset_row:
                 continue
-            metrics_by_ticker[ticker] = {k: v for k, v in r.items() if k != "asset_id"}
+            metrics_by_ticker[asset_row["ticker"]] = {
+                "name": asset_row.get("name"),
+                "universe": asset_row.get("universe"),
+                "current_price": _valid_price(asset_row.get("current_price")),
+                **{k: v for k, v in r.items() if k != "asset_id"},
+            }
         top_picks = [
             metrics_by_ticker[t] | {"ticker": t} for t in list(metrics_by_ticker)[:5]
             if metrics_by_ticker[t]["rank"] <= 5
@@ -1876,6 +2228,23 @@ def _ask_user_data_search(user_id: str) -> tuple[dict, str]:
         for t in watchlist_tickers
     ]
 
+    # Scope the payload to what was actually asked about.
+    #
+    # Root-cause bug this fixes: both lists were always returned together,
+    # so a question about ONE of them handed the narrator the other as
+    # well. The user's watchlist (TSLA, SEDG, AMD, AAPL) and their run's
+    # top picks (MA, AAPL, JPM, BRK-B, V) overlap on one ticker and differ
+    # on seven — with both in the payload nothing stopped a "what's on my
+    # watchlist" answer from describing JPM, or a "my top picks" answer
+    # from describing SEDG. Narrowing the data is the only reliable fix:
+    # a figure the narrator was never given cannot appear in the answer.
+    # An ambiguous question ("show me my data") still gets both.
+    wants_watchlist = bool(_ASK_WATCHLIST_SCOPE_PATTERN.search(query or ""))
+    wants_run = bool(_ASK_RUN_SCOPE_PATTERN.search(query or ""))
+    if wants_watchlist and not wants_run:
+        return {"watchlist": watchlist}, "user_data"
+    if wants_run and not wants_watchlist:
+        return {"top_picks": top_picks}, "user_data"
     return {"watchlist": watchlist, "top_picks": top_picks}, "user_data"
 
 
@@ -2109,12 +2478,25 @@ def _resolve_asset(query: str) -> Optional[dict]:
         if ticker and ticker in tokens:
             return asset
 
-    # Possessive typo with no apostrophe ("googls rsi" instead of "GOOGL's
+    # Possessive typo with no apostrophe ("GOOGLS rsi" instead of "GOOGL's
     # RSI") — the {1,5}-length token match above never even sees a 6-letter
-    # word like "GOOGLS". Only fires when stripping one trailing S yields an
-    # ACTUAL known ticker, so it can't turn an unrelated 6-letter word into a
-    # false match.
-    for word in re.findall(r"\b[A-Za-z]{2,6}\b", query.upper()):
+    # word like "GOOGLS".
+    #
+    # Requires the token to be ALL-CAPS AS TYPED, for the same reason the
+    # edit-distance matcher below does. The old version uppercased the whole
+    # query first, so ANY ordinary word ending in "s" whose stem is a real
+    # ticker resolved to that ticker — and the worst case is the commonest
+    # word in this product's own vocabulary: "its". In a universe holding
+    # ticker "IT" (Gartner), every "what does ITS RSI mean?" — a pure
+    # conversational-reference question naming no asset at all — resolved
+    # to Gartner instead of being passed to context resolution. Same shape
+    # for "ons"/ON, "alls"/ALL, "runs"/RUN, "nows"/NOW. Caps-as-typed keeps
+    # the real typo case working and costs nothing else: nobody types a
+    # ticker in caps by accident.
+    for match in re.finditer(r"\b[A-Za-z]{2,6}\b", query):
+        word = match.group(0)
+        if word != word.upper():
+            continue
         if word.endswith("S") and word[:-1] in ticker_map:
             return ticker_map[word[:-1]]
 
@@ -2243,30 +2625,85 @@ def _resolve_multiple_assets(query: str, limit: int = 3) -> List[dict]:
 # published-fact-sheet data the Funds page itself shows (FundRepository),
 # never the LLM. Off entirely when FUNDS_ENABLED is False, so a deployment
 # without the catalogue sees no behaviour change at all.
-_FUND_METRIC_KEYWORDS: dict[str, tuple[str, str]] = {
-    "ter": ("ter", "TER (total expense ratio)"),
-    "expense ratio": ("ter", "TER (total expense ratio)"),
-    "fee": ("ter", "TER (total expense ratio)"),
-    "cost": ("ter", "TER (total expense ratio)"),
-    "risk": ("risk_indicator_1to5", "risk indicator (1-5)"),
-    "benchmark": ("benchmark", "benchmark"),
-    "objective": ("objective", "objective"),
-    "size": ("fund_size_zar", "fund size (ZAR)"),
-    "aum": ("fund_size_zar", "fund size (ZAR)"),
-    "minimum": ("min_lump_sum", "minimum lump sum"),
-    "min lump sum": ("min_lump_sum", "minimum lump sum"),
-    "min investment": ("min_lump_sum", "minimum lump sum"),
-    "debit order": ("min_debit_order", "minimum monthly debit order"),
-    "performance": ("performance", "performance history"),
-    "return": ("performance", "performance history"),
-    "top holding": ("top_holdings", "top holdings"),
-    "holdings": ("top_holdings", "top holdings"),
-    "allocation": ("asset_allocation", "asset allocation"),
-    "tfsa": ("tfsa_eligible", "TFSA eligibility"),
-    "manco": ("manco", "management company"),
-    "management company": ("manco", "management company"),
-    "fund house": ("fund_house", "fund house"),
-}
+# What a question about a fund can ask for, in PRIORITY ORDER, each pattern
+# word-bounded.
+#
+# Two bugs in the table this replaces. It was a dict scanned with `phrase in
+# query`, so "ter" matched INSIDE "minimum TERm" and "minimum term for X"
+# answered with the fund's TER; and a plain substring has no precedence, so
+# "total investment charge" could never beat "charge"-adjacent keys. Ordered
+# list + word-boundary patterns fixes both. Each entry is (pattern, field, label,
+# formatter-key); the more specific phrasing sits ABOVE the more general.
+#
+# Every field named here is one the Funds page itself displays, so Ask and
+# the page cannot disagree about what a fund's figures are.
+_FUND_METRIC_SPECS: list[tuple[re.Pattern, str, str, str]] = [
+    (re.compile(r"\b(?:total\s+investment\s+charge|tic)\b", re.I), "tic", "total investment charge (TIC)", "pct"),
+    (re.compile(r"\b(?:total\s+expense\s+ratio|ter|expense\s+ratio)\b", re.I), "ter", "total expense ratio (TER)", "pct"),
+    (re.compile(r"\b(?:transaction\s+costs?|tc)\b", re.I), "tc", "transaction costs (TC)", "pct"),
+    (re.compile(r"\b(?:management\s+fee|annual\s+fee)\b", re.I), "annual_management_fee", "annual management fee", "pct"),
+    (re.compile(r"\b(?:fees?|charges?|costs?)\b", re.I), "tic", "total investment charge (TIC)", "pct"),
+    (re.compile(r"\b(?:risk\s+(?:profile|rating|level|indicator)|how\s+risky|risk)\b", re.I), "risk_indicator_raw", "risk profile, as the manager publishes it", "text"),
+    (re.compile(r"\b(?:minimum\s+(?:investment\s+)?term|how\s+long\s+should\s+i\s+(?:invest|hold)|min(?:imum)?\s+term|recommended\s+(?:term|horizon))\b", re.I), "recommended_min_term_years", "minimum term stated", "years"),
+    (re.compile(r"\b(?:(?:fund|total)\s+size|how\s+(?:big|large)|aum|assets\s+under\s+management)\b", re.I), "fund_size_zar", "fund size", "zar_big"),
+    (re.compile(r"\b(?:distribut\w*|pay\s*outs?|dividends?|income)\b", re.I), "distribution_frequency", "distributions", "text"),
+    (re.compile(r"\b(?:fact\s*sheet|mdd|last\s+updated|as\s+at|how\s+(?:recent|current|up\s*to\s*date))\b", re.I), "as_of", "fact sheet date", "date"),
+    (re.compile(r"\b(?:minimum\s+(?:lump\s+sum|investment)|min\s+lump|how\s+much\s+to\s+start)\b", re.I), "min_lump_sum", "minimum lump sum", "zar"),
+    (re.compile(r"\b(?:debit\s+order|monthly\s+minimum)\b", re.I), "min_debit_order", "minimum monthly debit order", "zar"),
+    (re.compile(r"\b(?:benchmark)\b", re.I), "benchmark", "benchmark", "text"),
+    (re.compile(r"\b(?:objective|aims?\s+to|what\s+does\s+it\s+(?:invest|do))\b", re.I), "objective", "objective", "text"),
+    (re.compile(r"\b(?:performance|returns?|how\s+has\s+.*?\s+(?:done|performed))\b", re.I), "performance", "annualised returns", "returns"),
+    (re.compile(r"\b(?:holdings?|what\s+(?:does\s+it|do\s+they)\s+hold)\b", re.I), "top_holdings", "top holdings", "holdings"),
+    (re.compile(r"\b(?:(?:asset\s+)?allocation|what\s+is\s+it\s+invested\s+in)\b", re.I), "asset_allocation", "asset allocation", "allocation"),
+    (re.compile(r"\b(?:portfolio\s+managers?|who\s+manages)\b", re.I), "portfolio_manager", "portfolio managers", "text"),
+    (re.compile(r"\b(?:regulation\s*28|reg\s*28)\b", re.I), "regulation_28", "Regulation 28 status", "bool_reg28"),
+    (re.compile(r"\b(?:tfsa|tax[-\s]free)\b", re.I), "tfsa_eligible", "TFSA eligibility", "bool_tfsa"),
+    (re.compile(r"\b(?:inception|when\s+(?:did\s+it\s+)?(?:start|launch)|launched)\b", re.I), "inception_date", "inception date", "date"),
+    (re.compile(r"\b(?:manco|management\s+company|who\s+(?:issues|runs))\b", re.I), "manco", "management company", "text"),
+    (re.compile(r"\b(?:fund\s+house|manager)\b", re.I), "fund_house", "fund house", "text"),
+]
+
+
+def _format_fund_value(value: Any, kind: str) -> Optional[str]:
+    """A fund figure as the Funds page would show it, or None if absent.
+
+    The previous version interpolated the raw value, so fund size read
+    "145660000000.0" and returns read "{'1y': 5.9, '3y': 13.2...}". Every
+    figure here is formatted to match the page's own presentation, and an
+    absent value is None — never a zero or a guess."""
+    if value in (None, "", [], {}):
+        return None
+    try:
+        if kind == "pct":
+            return f"{float(value):.2f}% a year"
+        if kind == "years":
+            n = float(value)
+            return f"{int(n) if n == int(n) else n} year{'s' if n != 1 else ''}"
+        if kind == "zar_big":
+            n = float(value)
+            return f"R{n / 1e9:.1f}bn" if n >= 1e9 else f"R{n / 1e6:.1f}m"
+        if kind == "zar":
+            return f"R{float(value):,.0f}"
+        if kind == "date":
+            return datetime.date.fromisoformat(str(value)[:10]).strftime("%d %B %Y").lstrip("0")
+        if kind == "bool_tfsa":
+            return "eligible for a tax-free savings account" if value else "not marked as TFSA-eligible"
+        if kind == "bool_reg28":
+            return "Regulation 28 compliant" if value else "not Regulation 28 compliant"
+        if kind == "returns" and isinstance(value, dict):
+            parts = [f"{k} {float(v):+.1f}%" for k, v in value.items() if v is not None]
+            return ", ".join(parts) or None
+        if kind == "holdings" and isinstance(value, dict):
+            top = sorted(value.items(), key=lambda kv: -float(kv[1] or 0))[:5]
+            return ", ".join(f"{k} ({float(v):.1f}%)" for k, v in top) or None
+        if kind == "allocation" and isinstance(value, dict):
+            top = sorted(value.items(), key=lambda kv: -float(kv[1] or 0))[:6]
+            return ", ".join(f"{k} {float(v):.1f}%" for k, v in top if float(v or 0) > 0) or None
+    except (TypeError, ValueError):
+        return None
+    return str(value)
+
+
 
 
 def _resolve_fund(query: str) -> Optional[dict]:
@@ -2312,30 +2749,213 @@ def _resolve_fund(query: str) -> Optional[dict]:
     # captures it, and a pure-digit token (a share-class/index number, not
     # an ordinary short word) gets a flat weight high enough to decide a
     # tie on its own rather than being discarded by the length filter.
+    # Third bug in this matcher, same family as the other two: plurals.
+    # "Tell me about coronations funds" returned the Foord Flexible Fund OF
+    # FUNDS — "funds" was not in the generic-word list (only the singular
+    # "fund" was), so it scored against Foord's name, while "coronations"
+    # failed to match "Coronation" because the comparison is exact. A
+    # question naming one fund house came back with another's product.
+    # Both halves are fixed here: the generic words cover their plurals,
+    # and a query word is matched in singular form as well as as typed.
+    generic = {"fund", "funds", "trust", "trusts", "unit", "units", "etf", "etfs"}
     q_words = set(re.findall(r"\b[a-z0-9]+\b", query.lower()))
-    best_funds: list[dict] = []
-    best_score = 0
+    for word in list(q_words):
+        if len(word) > 4 and word.endswith("s"):
+            q_words.add(word[:-1])
+
+    # Scored on what matched, then tie-broken on what did NOT.
+    #
+    # Fourth bug in this matcher, surfaced when the catalogue grew from 11
+    # funds to 54: scoring purely on matched words is recall-only, so
+    # "satrix 40 etf" tied "Satrix 40 ETF" with "Satrix RAFI 40 ETF" —
+    # identical matches — and the tie made it refuse a fund the user had
+    # named exactly. A name carrying significant words the question never
+    # mentioned is a weaker match than one where everything lines up, so
+    # unmatched significant words break the tie. A genuine ambiguity (two
+    # names equally close in both directions) still refuses.
+    scored: list[tuple[int, int, dict]] = []
     for fund in funds:
         score = 0
+        unmatched = 0
         for word in re.findall(r"\b[a-z0-9]+\b", (fund.get("name") or "").lower()):
             if word.isdigit():
                 if word in q_words:
                     score += 20
+                else:
+                    unmatched += 1
                 continue
-            if word in _NAME_STOPWORDS or word in ("fund", "trust", "unit", "etf") or len(word) < 4:
+            if word in _NAME_STOPWORDS or word in generic or len(word) < 4:
                 continue
             if word in q_words:
                 score += len(word)
-        if score == 0:
-            continue
-        if score > best_score:
-            best_funds, best_score = [fund], score
-        elif score == best_score:
-            best_funds.append(fund)
+            else:
+                unmatched += 1
+        if score > 0:
+            scored.append((score, unmatched, fund))
+
+    if not scored:
+        return None
+    best_score = max(s for s, _u, _f in scored)
+    finalists = [(u, f) for s, u, f in scored if s == best_score]
+    fewest_unmatched = min(u for u, _f in finalists)
+    best_funds = [f for u, f in finalists if u == fewest_unmatched]
 
     if len(best_funds) == 1:
         return best_funds[0]
     return None
+
+
+# Questions about the fund CATALOGUE as a whole ("which funds are tax free
+# eligible", "show me the cheapest ETFs") rather than about one named fund.
+#
+# Root-cause gap: these fell through to ASSET_SEARCH, which only knows the
+# stock table, so every one of them was answered about the wrong thing —
+# "which funds have the lowest fees" came back "the data you've provided
+# lists individual companies, not investment funds", and "show me all the
+# ETFs" listed SNPS and PLTR. A catalogue question has to be recognised and
+# answered from the catalogue, or it is answered about stocks.
+# A question ABOUT one of the product's pages — what it is, where it is, how
+# to use it — as opposed to a request to DO the page's job. The distinction
+# is what keeps "compare AAPL and GOOGL" (a comparison, answered with data)
+# from being answered with a description of the Compare page.
+_ASK_ABOUT_A_PAGE_PATTERN = re.compile(
+    r"\b(?:what(?:'s|\s+is|\s+are|\s+does)|where(?:'s|\s+is|\s+can\s+i\s+find)|how\s+(?:do|does|can)\s+(?:i|the|this|you)|"
+    r"tell\s+me\s+about|explain|about\s+the|what\s+can\s+i\s+do|does\s+alphaswarm\s+have|"
+    r"is\s+there\s+a|can\s+i\s+(?:use|see|find))\b",
+    re.IGNORECASE,
+)
+
+_ASK_FUND_CATALOGUE_PATTERN = re.compile(
+    r"\b(?:funds?|etfs?|unit\s+trusts?|index\s+trackers?)\b", re.IGNORECASE,
+)
+# Words that mean "list, filter or rank", NOT "explain". "what" and "any"
+# are deliberately absent: "What is an ETF?" contains an ETF and a "what",
+# and is a definition request that has its own glossary entry and its own
+# tests — treating it as a catalogue listing answered a concept question
+# with a table of products. The listing verbs/superlatives below are what
+# distinguish "show me the ETFs" from "what is an ETF".
+_ASK_FUND_CATALOGUE_QUESTION = re.compile(
+    r"\b(?:which|show|list|cheapest|lowest|highest|biggest|largest|best|"
+    r"safest|riskiest|how\s+many|all\s+(?:the\s+)?(?:funds?|etfs?|unit\s+trusts?))\b",
+    re.IGNORECASE,
+)
+# A bare definition request, which always loses to the glossary.
+_ASK_DEFINITION_SHAPE = re.compile(
+    r"^\s*(?:what\s+is|what'?s|what\s+are|what\s+does|explain|define)\b", re.IGNORECASE,
+)
+
+
+def _ask_fund_catalogue_answer(query: str) -> Optional[AskResponse]:
+    """Answer a whole-catalogue question from the fund catalogue, or None
+    when the question is not one (or the feature is off).
+
+    Deliberately descriptive and never selective: it lists or orders funds
+    by a stated, checkable attribute (a fee, a size, TFSA status, vehicle
+    type) and never says which one the user should hold. Ordering by TIC
+    is a sort, not a recommendation, and the answer says so — AlphaSwarm
+    does not pick a fund (D-153)."""
+    from src.funds.config import FUNDS_ENABLED
+    if not FUNDS_ENABLED:
+        return None
+    if not (_ASK_FUND_CATALOGUE_PATTERN.search(query) and _ASK_FUND_CATALOGUE_QUESTION.search(query)):
+        return None
+    # "What is an ETF?" / "explain unit trusts" is a definition request and
+    # belongs to the glossary, even when it also happens to contain a
+    # listing word ("what are the best funds" is the one shape that is both,
+    # and a superlative earns the listing).
+    if _ASK_DEFINITION_SHAPE.search(query) and not re.search(
+        r"\b(?:best|cheapest|lowest|highest|biggest|largest|safest|riskiest|all\s+the)\b",
+        query, re.IGNORECASE,
+    ):
+        return None
+    try:
+        if FUNDS_ENABLED:
+            from src.funds.repository import FundRepository
+        repo = FundRepository()
+        funds = repo.list_active()
+        snapshots = repo.latest_snapshots([f["id"] for f in funds])
+    except Exception as e:
+        logger.warning("Ask fund-catalogue listing failed: %s", e)
+        return None
+    if not funds:
+        return None
+
+    ql = query.lower()
+    rows = [{**f, **snapshots.get(f["id"], {})} for f in funds]
+
+    # Narrow by what the question names.
+    scope: list[str] = []
+    if re.search(r"\betfs?\b|exchange[-\s]traded", ql):
+        rows = [r for r in rows if "etf" in (r.get("vehicle") or "").lower() or "etf" in (r.get("name") or "").lower()]
+        scope.append("ETFs")
+    elif re.search(r"\bunit\s+trusts?\b", ql):
+        rows = [r for r in rows if "etf" not in (r.get("vehicle") or "").lower() and "etf" not in (r.get("name") or "").lower()]
+        scope.append("unit trusts")
+    if re.search(r"\btfsa\b|tax[-\s]free", ql):
+        rows = [r for r in rows if r.get("tfsa_eligible")]
+        scope.append("TFSA-eligible")
+    if re.search(r"\bindex\s+tracker|\btracks?\b", ql):
+        rows = [r for r in rows if r.get("is_index_tracker")]
+        scope.append("index-tracking")
+    if not rows:
+        return AskResponse(
+            intent="FUND_QUESTION",
+            narration="No funds in AlphaSwarm's catalogue match that.",
+            data={}, source="fund_catalogue", is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    # Order by a stated attribute if one is asked for.
+    ordered_by = None
+    reverse = False
+    if re.search(r"cheap|lowest\s+(?:fee|cost|charge|tic|ter)|lowest\s+fees|low\s+(?:fee|cost)", ql):
+        key, ordered_by = "tic", "total investment charge, lowest first"
+    elif re.search(r"biggest|largest|highest\s+(?:fund\s+)?size", ql):
+        key, ordered_by, reverse = "fund_size_zar", "fund size, largest first", True
+    elif re.search(r"safest|lowest\s+risk|least\s+risky", ql):
+        key, ordered_by = "risk_indicator_1to5", "risk indicator, lowest first"
+    elif re.search(r"riskiest|highest\s+risk|most\s+risky", ql):
+        key, ordered_by, reverse = "risk_indicator_1to5", "risk indicator, highest first", True
+    else:
+        key = None
+
+    if key:
+        have = [r for r in rows if r.get(key) is not None]
+        rows = sorted(have, key=lambda r: float(r[key]), reverse=reverse) or rows
+
+    shown = rows[:6]
+    kind_by_key = {"tic": "pct", "fund_size_zar": "zar_big", "risk_indicator_1to5": "text"}
+    items = []
+    for r in shown:
+        detail = _format_fund_value(r.get(key), kind_by_key.get(key, "text")) if key else None
+        if key == "risk_indicator_1to5" and detail:
+            detail = f"{detail}/5"
+        items.append(f"{r['name']}" + (f" ({detail})" if detail else ""))
+
+    label = " ".join(scope) if scope else "funds"
+    # "38 TFSA-eligible match" reads as a fragment; the noun has to be there.
+    if scope and not any(s in ("ETFs", "unit trusts") for s in scope):
+        label = f"{label} funds"
+    head = f"{len(rows)} {label} match" if len(rows) != 1 else f"1 {label.rstrip('s')} matches"
+    narration = f"{head}. "
+    if ordered_by:
+        narration += f"Ordered by {ordered_by}: "
+    else:
+        narration += "A few of them: "
+    narration += "; ".join(items) + "."
+    if len(rows) > len(shown):
+        narration += f" There are {len(rows) - len(shown)} more on the Funds page."
+    if ordered_by:
+        narration += (
+            " That is an ordering by one figure, not a recommendation — "
+            "AlphaSwarm doesn't pick a fund for you."
+        )
+    return AskResponse(
+        intent="FUND_QUESTION", narration=narration,
+        data={"funds": [{"name": r["name"], "id": r["id"]} for r in rows[:12]]},
+        source="fund_catalogue", is_blocked=False,
+        redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+    )
 
 
 def _fund_answer(fund: dict, query: str) -> AskResponse:
@@ -2357,38 +2977,72 @@ def _fund_answer(fund: dict, query: str) -> AskResponse:
         logger.warning("Ask fund snapshot lookup failed: %s", e)
 
     merged = {**fund, **snapshot}
-    ql = query.lower()
-    for phrase, (field, label) in _FUND_METRIC_KEYWORDS.items():
-        if phrase in ql:
-            value = merged.get(field)
-            if value in (None, ""):
-                narration = f"AlphaSwarm doesn't have a published {label} on file for {name}."
-            else:
-                narration = f"{name}'s {label} is {value}."
-            return AskResponse(
-                intent="FUND_QUESTION", narration=narration, data={"fund": merged},
-                source="fund_catalogue", is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
-            )
 
-    parts = [f"{name} is a {fund.get('asisa_category') or 'unit trust/ETF'} fund"]
+    def _respond(narration: str) -> AskResponse:
+        return AskResponse(
+            intent="FUND_QUESTION", narration=narration, data={"fund": merged},
+            source="fund_catalogue", is_blocked=False,
+            redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+        )
+
+    as_of = _format_fund_value(snapshot.get("as_of"), "date")
+    dated = f" (fact sheet as at {as_of})" if as_of else ""
+
+    for pattern, field, label, kind in _FUND_METRIC_SPECS:
+        if not pattern.search(query):
+            continue
+        shown = _format_fund_value(merged.get(field), kind)
+        if shown is None:
+            return _respond(f"AlphaSwarm doesn't have a published {label} on file for {name}.")
+        # Fact-sheet figures are only as current as the sheet; say which.
+        suffix = dated if field not in ("as_of", "inception_date", "manco", "fund_house") else ""
+        # Two kinds of value read badly in "X's label is Y": a status
+        # ("TFSA eligibility is eligible for...") and a plural noun
+        # ("distributions is Semi-annually"). Phrased as sentences instead.
+        if kind == "bool_tfsa":
+            return _respond(f"{name} is {shown}{suffix}.")
+        if kind == "bool_reg28":
+            return _respond(f"{name} is {shown}{suffix}.")
+        if field == "distribution_frequency":
+            return _respond(f"{name} distributes {shown[0].lower() + shown[1:]}{suffix}.")
+        if field == "risk_indicator_raw":
+            return _respond(f"{name}'s manager publishes its risk profile as {shown}{suffix}.")
+        return _respond(f"{name}'s {label} is {shown}{suffix}.")
+
+    # No specific figure asked for: an overview built from the same fields
+    # the Funds page leads with, in the same order, so the answer and the
+    # card cannot tell two different stories about one fund.
+    category = fund.get("asisa_category") or "unit trust/ETF"
+    lead = f"{name} is a {category} fund"
     if fund.get("manco"):
-        parts.append(f"managed by {fund['manco']}")
-    sentence = " ".join(parts) + "."
+        lead += f" issued by {fund['manco']}"
+    sentences = [lead + "."]
+
     facts = []
-    if snapshot.get("ter") not in (None, ""):
-        facts.append(f"TER {snapshot['ter']}")
-    if snapshot.get("risk_indicator_1to5") not in (None, ""):
-        facts.append(f"risk {snapshot['risk_indicator_1to5']}/5")
-    if snapshot.get("min_lump_sum") not in (None, ""):
-        facts.append(f"min lump sum {snapshot['min_lump_sum']}")
+    risk = _format_fund_value(snapshot.get("risk_indicator_raw"), "text")
+    if risk:
+        facts.append(f"its manager publishes its risk profile as {risk}")
+    tic = _format_fund_value(snapshot.get("tic"), "pct")
+    if tic:
+        facts.append(f"its total investment charge is {tic}")
+    term = _format_fund_value(snapshot.get("recommended_min_term_years"), "years")
+    if term:
+        facts.append(f"the minimum stated term is {term}")
+    size = _format_fund_value(snapshot.get("fund_size_zar"), "zar_big")
+    if size:
+        facts.append(f"it holds {size}")
+    dist = _format_fund_value(snapshot.get("distribution_frequency"), "text")
+    if dist:
+        facts.append(f"it distributes {dist.lower()}")
     if fund.get("tfsa_eligible"):
-        facts.append("TFSA-eligible")
+        facts.append("it is TFSA-eligible")
     if facts:
-        sentence += " " + ", ".join(facts).capitalize() + "."
-    return AskResponse(
-        intent="FUND_QUESTION", narration=sentence, data={"fund": merged},
-        source="fund_catalogue", is_blocked=False, redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
-    )
+        sentences.append(facts[0][0].upper() + facts[0][1:] + (
+            "; " + "; ".join(facts[1:]) if len(facts) > 1 else ""
+        ) + ".")
+    if as_of:
+        sentences.append(f"Figures are from the fact sheet as at {as_of}.")
+    return _respond(" ".join(sentences))
 
 
 # ---------------------------------------------------------------------------
@@ -2426,6 +3080,24 @@ def _build_ask_reference_pattern():
 
 
 _ASK_REFERENCE_PATTERN = _build_ask_reference_pattern()
+
+# "what does X mean / indicate / tell me", "is that high / low / good" —
+# asking for a reading to be INTERPRETED rather than looked up. Paired with
+# _ASK_BARE_FIGURE_RE below so a question built around a figure just quoted
+# ("what does 0.37 indicate") is recognised as the follow-up it is, even
+# with no pronoun and no metric word in it.
+_ASK_VALUE_INTERPRETATION_PATTERN = re.compile(
+    r"\bwhat\s+does\b.*\b(?:mean|indicate|imply|suggest|tell|signify|show)\b|"
+    r"\bwhat'?s\s+that\s+mean\b|"
+    r"\bis\s+(?:that|this|it)?\s*(?:a\s+)?(?:high|low|good|bad|strong|weak|normal|typical)\b|"
+    r"\bhow\s+(?:high|low|good|bad)\s+is\b|"
+    r"\bis\s+\d",
+    re.IGNORECASE,
+)
+
+# A bare figure in the query: "0.37", "52", "1.89", "3,954.70". Excludes a
+# year-shaped token so "what happened in 2024" is not read as a reading.
+_ASK_BARE_FIGURE_RE = re.compile(r"(?<![\w.])(?!(?:19|20)\d{2}(?![\d.]))\d+(?:[.,]\d+)*(?![\w])")
 
 # "and the other 4?", "what about the rest?", "the remaining ones" — group/
 # plural follow-up wording that means "everything EXCEPT the one just
@@ -2584,7 +3256,44 @@ def _resolve_conversational_reference(
     if not context:
         return query, None, None, None
 
-    if not _ASK_REFERENCE_PATTERN.search(query) and not _ASK_COMPARISON_TRIGGER_PATTERN.search(query):
+    # A follow-up does not have to contain a pronoun.
+    #
+    # Root-cause bug this fixes: the gate below only let a query through if
+    # it carried referring or comparison wording, so a question that is
+    # unmistakably about the answer just given — but phrased without a
+    # pronoun — had context withheld from it:
+    #
+    #   "Tell me about NVDA"              -> volatility 0.37 stated
+    #   "what does volatility of 0.37 mean" -> no "it"/"that", so NVDA was
+    #       dropped and the generic textbook definition of volatility came
+    #       back instead of what 0.37 means FOR NVDA
+    #   "what does 0.37 indicate"         -> no metric word either, so it
+    #       dead-ended in "I don't have enough verified information"
+    #
+    # The signal is a FIGURE in the question, not a metric name. That
+    # distinction matters: "What is beta?" names a metric but asks what the
+    # concept means, and binding it to whatever asset happens to be active
+    # would answer a question the user did not ask (there is a standing test
+    # for exactly that). "What does volatility of 0.37 mean" quotes a
+    # reading, and a reading only exists because it was just stated — so it
+    # is a follow-up about that value whether or not a pronoun appears.
+    #
+    # Qualifies only when an active asset exists to refer to, and the query
+    # carries a bare figure plus either a metric name or interpretation
+    # phrasing. A first message with no context is untouched.
+    metric_in_query = _extract_metric_from_query(query)
+    implicit_metric_reference = bool(
+        context.active_asset
+        and not explicit_asset
+        and _ASK_BARE_FIGURE_RE.search(query)
+        and (metric_in_query or _ASK_VALUE_INTERPRETATION_PATTERN.search(query))
+    )
+
+    if (
+        not _ASK_REFERENCE_PATTERN.search(query)
+        and not _ASK_COMPARISON_TRIGGER_PATTERN.search(query)
+        and not implicit_metric_reference
+    ):
         # No referring OR comparison wording at all — the query stands
         # entirely on its own (e.g. "What is the JSE?"). Context must never
         # be attached to a question that didn't ask for it. Comparison
@@ -2869,6 +3578,7 @@ def _narrate_synthesis(question: str, data: dict) -> Optional[str]:
 
     result = validate_ask_output(narration, data=data)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
     _ask_telemetry_mark(validation_failed=True)
     logger.warning("ask_output_validation_failed fn=_narrate_synthesis violations=%s", result.violations)
@@ -3008,6 +3718,7 @@ def _narrate_comparison(question: str, assets: List[dict]) -> Optional[str]:
 
     result = validate_ask_output(narration, comparison_assets=assets)
     if result.valid:
+        _ask_telemetry_mark(verified_claims=result.verified_claims)
         return narration
     _ask_telemetry_mark(validation_failed=True)
     logger.warning("ask_output_validation_failed fn=_narrate_comparison violations=%s", result.violations)
@@ -3242,7 +3953,11 @@ _ASK_GLOSSARY = {
     "etf": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
     "eft": "An ETF (exchange-traded fund) is a basket of investments — often stocks, bonds, or a mix — that trades on a stock exchange throughout the day like an individual share, rather than being priced only once a day like a traditional mutual fund.",
     "asset": "In investing, an asset is any resource with economic value that can be owned and traded — a stock, a bond, an ETF, property, or commodity are all examples. On AlphaSwarm, 'asset' generally refers to one of the tradable stocks or ETFs the platform tracks and analyses.",
-    "bull market": "A bull market is a sustained period in which prices in a market are generally rising (or expected to rise), typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
+    # "(or expected to rise)" was removed deliberately: the output validator
+    # reads that phrase as a price prediction, so the definition could never
+    # be quoted by the narrator without being rejected. Glossary text is
+    # shown verbatim, so it has to clear the same rules narration does.
+    "bull market": "A bull market is a sustained period in which prices in a market have generally been rising, typically accompanied by investor optimism. It's the opposite of a bear market, where prices are generally falling.",
     "bear market": "A bear market is a sustained period in which prices in a market are generally falling, typically accompanied by widespread pessimism. It's the opposite of a bull market, where prices are generally rising.",
     "whale watching": "In general market terminology, \"whale watching\" means tracking the trading activity of large holders (\"whales\") — big investors, funds, or institutions — since their large trades can move prices or signal a shift in sentiment. AlphaSwarm has its own whale-tracking feature, separate from its ranking/Signal Score methodology, that surfaces insider dealings and institutional ownership data (based on public filings) for an asset.",
     # Fund-catalogue terms — general definitions only; any question about a
@@ -3548,7 +4263,7 @@ _ASK_QUALITATIVE_PERFORMANCE_PATTERN = re.compile(
     # ORIGINAL question) and just re-stated raw metric values instead of
     # actually explaining the reasoning — exactly the interpretation
     # request CONTEXT_SYNTHESIS exists for.
-    r"\bwhy\s+(?:is|was|does|did)?\s*(?:that|this|it|so)\b|^\s*why\??\s*$|"
+    r"\bwhy(?:'?s)?\s+(?:is|was|does|did)?\s*(?:that|this|it|so)\b|^\s*why\??\s*$|"
     r"\bis\s+(?:that|this)\s+(?:concerning|worrying|a\s+concern)\b",
     re.IGNORECASE,
 )
@@ -4276,18 +4991,29 @@ def _ask_learning_question(query: str) -> AskResponse:
                 data={}, source="none", sources=[], is_blocked=False,
                 redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
             )
-        narration = grounded
-        return AskResponse(
-            intent="LEARNING_QUESTION",
-            narration=narration,
-            data={"term": query, "definition": grounded},
-            source=result.publisher,
-            sources=[AskSource(
-                title=result.title, publisher=result.publisher, url=result.url,
-                retrieved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            )],
-            is_blocked=False, redirect_suggestions=[],
-        )
+        # A cache entry can match on little more than a shared common word.
+        # Root-cause bug this fixes: "what is dollar cost averaging" matched
+        # the SARB monetary-policy entry, which of course does not define
+        # it, so the model correctly said the source did not cover the term
+        # — and the response went out with that decline as its answer AND
+        # with SARB attached as its source. Two failures in one: a citation
+        # asserting provenance for a non-answer, and a live search that
+        # never ran because this weak hit short-circuited it. A decline is
+        # now treated as a miss, so the question continues down the tiers
+        # to live search exactly as if the cache had held nothing.
+        if not _ask_learning_answer_declined(grounded):
+            return AskResponse(
+                intent="LEARNING_QUESTION",
+                narration=grounded,
+                data={"term": query, "definition": grounded},
+                source=result.publisher,
+                sources=[AskSource(
+                    title=result.title, publisher=result.publisher, url=result.url,
+                    retrieved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                )],
+                is_blocked=False, redirect_suggestions=[],
+            )
+        logger.info("ask_local_cache_declined term=%r falling through to live search", query)
 
     # 4b. Unresolved acronym — clarify rather than let it reach live search.
     # Checked HERE, before live web search (not after, as this used to be
@@ -4318,7 +5044,13 @@ def _ask_learning_question(query: str) -> AskResponse:
     live_result = educational_retrieval.search_live_provider_only(query)
     if live_result:
         grounded = _ground_external_answer(query, live_result)
-        if grounded is None:
+        # A decline is not an answer, so it must not be dressed as one. The
+        # page came off the approved allowlist, but if it turned out not to
+        # cover the term then citing it asserts provenance for content that
+        # does not exist — the user sees a regulator's name under "I don't
+        # have that information". Fall back to the honest no-source message
+        # with NO citation attached.
+        if grounded is None or _ask_learning_answer_declined(grounded):
             return AskResponse(
                 intent="LEARNING_QUESTION", narration=_ASK_LEARNING_NOT_COVERED_MESSAGE,
                 data={}, source="none", sources=[], is_blocked=False,
@@ -4406,6 +5138,37 @@ class AskSource(BaseModel):
     retrieved_at: str
 
 
+class AskLink(BaseModel):
+    """Where in the app the reader can go and see this for themselves.
+
+    Derived deterministically from the intent and the resolved entity, not
+    chosen by a model, so it can never point somewhere the answer was not
+    actually about. Optional: an answer with no obvious destination (a
+    refusal, a clarification, a general definition) carries none rather
+    than a vague one.
+    """
+    path: str
+    label: str
+
+
+class AskDataPoint(BaseModel):
+    """One figure the answer states, with where the figure came from.
+
+    Per-claim provenance, not a label. It is emitted from the output
+    validator's own verification pass: to check a stated figure the
+    validator must already resolve which asset it belongs to, which stored
+    field it is, and what the trusted value is, so this is that work
+    reported rather than discarded. A figure only appears here if it was
+    checked and matched, which makes the list a statement about what the
+    answer actually rests on rather than a claim about its origin.
+    """
+    ticker: str
+    label: str
+    value: float
+    field: str
+    origin: str
+
+
 class AskResponse(BaseModel):
     intent: str
     narration: str
@@ -4416,38 +5179,241 @@ class AskResponse(BaseModel):
     # `source` (a short string label) stays the field older/other consumers
     # read, this is purely additive so no existing consumer breaks.
     sources: List[AskSource] = []
+    # Per-claim provenance for figures stated in the narration — see
+    # AskDataPoint. Empty when the answer states no checkable figure (a
+    # definition, a refusal, a clarification), which is not the same as
+    # unverified.
+    data_points: List[AskDataPoint] = []
+    # Deep link to the page this answer is about — see AskLink.
+    link: Optional[AskLink] = None
     is_blocked: bool = False
     redirect_suggestions: List[str] = []
+
+
+# Longest slice of a question that is ever stored. A question is a sentence;
+# anything past this is pasted material the admin report has no use for and
+# the user did not mean to keep.
+_ASK_LOG_QUERY_MAX_CHARS = 500
+
+
+def _clean_logged_query(query: Optional[str]) -> Optional[str]:
+    """The question as it will be stored: whitespace collapsed, truncated,
+    and None if nothing is left. Only ever the user's own words — never the
+    answer."""
+    if not query:
+        return None
+    collapsed = " ".join(str(query).split())
+    if not collapsed:
+        return None
+    return collapsed[:_ASK_LOG_QUERY_MAX_CHARS]
 
 
 def _log_ask_query(
     *, user_id: Optional[str], asset_symbol: Optional[str], intent: str,
     success: bool, fallback_used: bool, validation_failed: bool, latency_ms: int,
+    query_text: Optional[str] = None, service_error: bool = False,
 ) -> None:
     """Best-effort persistence of one /api/ask outcome for the Admin Reports
-    Chatbot report (migration 018_ask_query_logs.sql). Deliberately writes
-    only aggregate metadata — never the raw query or narration text — and
-    NEVER raises: a logging failure must not turn a successful /api/ask
-    response into an error for the user."""
-    try:
-        supabase.table("ask_query_logs").insert({
-            "user_id": user_id,
-            "asset_symbol": asset_symbol,
-            "intent": intent,
-            "success": success,
-            "fallback_used": fallback_used,
-            "validation_failed": validation_failed,
-            "latency_ms": latency_ms,
-        }).execute()
-    except Exception as e:
-        logger.warning("ask_query_log_write_failed: %s", e)
+    Chatbot report (migrations 018, 037, 038). Stores aggregate metadata,
+    the user's QUESTION (truncated), and whether the model SERVICE failed
+    for this request — never the model's answer — and NEVER raises: a
+    logging failure must not turn a successful /api/ask response into an
+    error for the user.
+
+    Two columns are optional additions (query_text from 037, service_error
+    from 038). A database that hasn't applied one rejects the whole insert
+    on the unknown column, which would lose the entire row — and with it
+    every usage metric — for the sake of an optional field. So a failed
+    insert is retried with progressively fewer of them, ending at exactly
+    the row that existed before either migration. The order matters:
+    service_error is dropped first, so a database with 037 but not 038 still
+    keeps its question text."""
+    base = {
+        "user_id": user_id,
+        "asset_symbol": asset_symbol,
+        "intent": intent,
+        "success": success,
+        "fallback_used": fallback_used,
+        "validation_failed": validation_failed,
+        "latency_ms": latency_ms,
+    }
+    text = _clean_logged_query(query_text)
+
+    # Every subset of the two optional columns, richest first, so whichever
+    # migrations HAVE been applied are honoured regardless of the order they
+    # were applied in. Duplicates (when there is no text) are skipped.
+    with_text = {"query_text": text} if text else {}
+    with_flag = {"service_error": bool(service_error)}
+    ladder = [
+        {**base, **with_text, **with_flag},
+        {**base, **with_text},
+        {**base, **with_flag},
+        base,
+    ]
+    attempts = []
+    for row in ladder:
+        if row not in attempts:
+            attempts.append(row)
+
+    last_error: Optional[Exception] = None
+    for row in attempts:
+        try:
+            supabase.table("ask_query_logs").insert(row).execute()
+            return
+        except Exception as e:
+            last_error = e
+            logger.warning("ask_query_log_write_failed (retrying with fewer columns): %s", e)
+    logger.warning("ask_query_log_write_failed: %s", last_error)
 
 
 # Sources that mean "a generic/definitional answer, not the user's own
 # retrieved data" — used only by _ask_sense_check below.
+#
+# "scope_boundary" is deliberately NOT here. It was, and that was wrong: a
+# scope refusal is a DECISION, not a failure to find data, so re-answering
+# it is overriding a guardrail. With it included, "what's my bank account
+# balance?" — correctly refused as out of scope — was re-answered from the
+# user's watchlist instead, because the question contains "my" and the
+# refusal's source looked generic. A boundary response is final.
 _ASK_GENERIC_SOURCES = {
-    "methodology_glossary", "learning_centre", "scope_boundary", "none", "platform_methodology",
+    "methodology_glossary", "learning_centre", "none", "platform_methodology",
 }
+
+
+# Where a figure physically came from, keyed by the retrieval tier that
+# produced it. The `source` field is an internal routing label; these are
+# the user-facing statements of origin that go with each cited figure.
+_ASK_ORIGIN_LABELS = {
+    "ai_recommendation": "your latest completed analysis run",
+    "analysis_explanation": "your latest completed analysis run",
+    "user_data": "your own watchlist and latest run",
+    "assets": "AlphaSwarm's stored stock data",
+    "asset_search": "AlphaSwarm's stored stock data",
+    "stocks": "AlphaSwarm's stored stock data",
+    "fund_catalogue": "the fund's published fact sheet",
+}
+
+
+# The validator keys metrics by the words that appear in narration, which
+# includes wording the product has since moved on from. Provenance is shown
+# to the user, so it uses the current on-screen name.
+_ASK_DATA_POINT_LABELS = {
+    "confidence score": "Signal Score",
+    "confidence": "Signal Score",
+    "current price": "Current price",
+    "rsi": "RSI",
+    "beta": "Beta",
+    "sharpe ratio": "Sharpe ratio",
+    "sharpe": "Sharpe ratio",
+    "volatility": "Volatility",
+    "signal strength": "Signal strength",
+    "sentiment score": "Sentiment score",
+    "quant score": "Quant score",
+    "rank": "Rank",
+    "price": "Current price",
+}
+
+
+def _ask_response_link(response: AskResponse) -> Optional[AskLink]:
+    """The page that shows what this answer talked about, if there is one.
+
+    Deterministic: the destination is read off the intent and whichever
+    entity retrieval actually resolved, so the link can only ever point at
+    something the answer was really about. A refusal, a clarification or a
+    bare definition gets no link — a plausible-looking destination for an
+    answer that did not reach any particular page would be worse than
+    none.
+    """
+    if response.is_blocked:
+        return None
+
+    data = response.data or {}
+    ticker = data.get("ticker")
+    if isinstance(ticker, str) and ticker:
+        return AskLink(path=f"/asset/{ticker}", label=f"See {ticker}'s full analysis")
+
+    # A single-asset answer assembled from a list (comparison, search).
+    for key in ("assets", "watchlist", "top_picks"):
+        rows = data.get(key)
+        if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict):
+            one = rows[0].get("ticker")
+            if isinstance(one, str) and one:
+                return AskLink(path=f"/asset/{one}", label=f"See {one}'s full analysis")
+
+    # A whole-catalogue answer (a list of funds, no single one) points at the
+    # Funds page itself rather than at any one fund.
+    if isinstance(data.get("funds"), list) and data["funds"] and not data.get("fund"):
+        return AskLink(path="/funds", label="Browse these on the Funds page")
+
+    if data.get("fund"):
+        fund = data["fund"]
+        fund_id = fund.get("id") if isinstance(fund, dict) else None
+        if fund_id:
+            return AskLink(path=f"/funds/{fund_id}", label="See this fund's full fact sheet")
+        return AskLink(path="/funds", label="Browse the fund catalogue")
+
+    if response.intent == "USER_DATA_SEARCH":
+        # Which half of their own data the answer was scoped to decides the
+        # destination — the same distinction the retrieval already made.
+        if data.get("watchlist") and not data.get("top_picks"):
+            return AskLink(path="/watchlist", label="Open your watchlist")
+        return AskLink(path="/assets", label="See all your ranked stocks")
+
+    if response.intent == "ASSET_SEARCH":
+        return AskLink(path="/assets", label="Browse all stocks")
+
+    if response.source == "learning_centre":
+        return AskLink(path="/learning", label="Read more in the Learning Centre")
+
+    # An answer about a specific product page sets its own link (or, when
+    # that page is switched off, deliberately none). The generic fallback
+    # below is for methodology questions, and applying it here sent "the
+    # Compare page isn't available" to /learning — a link that implies the
+    # answer lives somewhere it does not.
+    if data.get("feature"):
+        return None
+
+    if response.intent == "PLATFORM_QUESTION":
+        return AskLink(path="/learning", label="Learn how AlphaSwarm works")
+
+    return None
+
+
+def _attach_data_points(response: AskResponse, claims: Any) -> AskResponse:
+    """Turn the validator's verified claims into per-figure provenance on
+    the response.
+
+    Only figures that were checked AND matched appear, so this is a record
+    of what the answer rests on rather than an assertion about where it
+    came from. Best-effort by design: provenance is a disclosure, and
+    failing to build it must never cost the user their answer."""
+    if not claims:
+        return response
+    origin = _ASK_ORIGIN_LABELS.get(response.source, "AlphaSwarm's own data")
+    try:
+        seen: set = set()
+        points: List[AskDataPoint] = []
+        for claim in claims:
+            key = (claim.ticker, claim.field)
+            if key in seen:
+                continue
+            seen.add(key)
+            label = _ASK_DATA_POINT_LABELS.get(
+                (claim.metric or "").lower(), (claim.metric or "").capitalize()
+            )
+            points.append(
+                AskDataPoint(
+                    ticker=claim.ticker,
+                    label=label,
+                    value=round(float(claim.actual), 4),
+                    field=claim.field,
+                    origin=origin,
+                )
+            )
+        return response.model_copy(update={"data_points": points})
+    except Exception as e:
+        logger.warning("Ask provenance assembly failed: %s", e)
+        return response
 
 
 def _ask_sense_check(query: str, response: Optional[AskResponse], user_id: Optional[str]) -> Optional[AskResponse]:
@@ -4474,7 +5440,7 @@ def _ask_sense_check(query: str, response: Optional[AskResponse], user_id: Optio
         return response
 
     try:
-        data, source = _ask_user_data_search(user_id)
+        data, source = _ask_user_data_search(user_id, query)
     except Exception as e:
         logger.warning("Ask sense-check retrieval failed: %s", e)
         return response
@@ -4502,13 +5468,23 @@ async def ask_alphaswarm(
     (classification, narration, one bounded repair attempt) it took. The
     pipeline/behaviour below is entirely unchanged from before this wrapper
     existed; see _ask_alphaswarm_impl."""
-    telemetry: Dict[str, Any] = {"fallback_used": False, "validation_failed": False, "user_id": None}
+    telemetry: Dict[str, Any] = {"fallback_used": False, "validation_failed": False, "service_error": False, "user_id": None}
     token = _ask_telemetry.set(telemetry)
     start = time.monotonic()
     response: Optional[AskResponse] = None
     try:
         response = await _ask_alphaswarm_impl(req, authorization)
         response = _ask_sense_check(req.query, response, telemetry.get("user_id"))
+        if response is not None:
+            response = _attach_data_points(response, telemetry.get("verified_claims"))
+            if response.link is None:
+                try:
+                    link = _ask_response_link(response)
+                except Exception as e:
+                    logger.warning("Ask link resolution failed: %s", e)
+                    link = None
+                if link is not None:
+                    response = response.model_copy(update={"link": link})
         return response
     finally:
         _ask_telemetry.reset(token)
@@ -4536,6 +5512,8 @@ async def ask_alphaswarm(
                 fallback_used=bool(telemetry.get("fallback_used")),
                 validation_failed=bool(telemetry.get("validation_failed")),
                 latency_ms=latency_ms,
+                query_text=req.query,
+                service_error=bool(telemetry.get("service_error")),
             )
 
 
@@ -4639,6 +5617,63 @@ async def _ask_alphaswarm_impl(
     if multi_intent is not None:
         return multi_intent
 
+    # `intent` is a sentinel: None means "not yet deterministically decided".
+    # Declared here, ahead of the first shortcut that reads it, rather than
+    # at step 2d where it used to live — moving the page step above 2d
+    # otherwise read it before assignment.
+    intent: Optional[str] = None
+
+    # 2a'. The product's own pages — runs BEFORE every generic shortcut
+    # below (asset resolution, metric grounding, the definitional
+    # shortcut). Found by testing: placed after them, "what is the
+    # market news page" was resolved to News Corp ("news" matched a
+    # company name) and "what is the investment planner" was answered
+    # with a web definition of a financial PLANNER, a type of person.
+    # A question that names one of our own pages is decided here, first.
+    #
+    # (Original comment:) The product's own pages — Market News, Compare, Financial Tools,
+    # Funds. Asked about by name, so no classifier is needed, and answered
+    # from fixed reviewed text (utils/ask_features.py), never a model.
+    #
+    # Only an ENABLED page is described. These sit behind feature flags that
+    # default off, and a flag-off deployment has no such page: describing it
+    # — and especially linking to it — would send the user to a 404. A
+    # switched-off page the question names gets an honest "not available
+    # here" instead of falling through to "I'm not sure what you mean".
+    #
+    # Only fires on a question ABOUT the page (what is / where is / how do
+    # I use), so "compare AAPL and GOOGL" still goes to the comparison
+    # path, not to a description of the Compare page.
+    if intent is None and _ASK_ABOUT_A_PAGE_PATTERN.search(query):
+        try:
+            from src.utils.ask_features import match_feature, disabled_feature_named
+            page = match_feature(query)
+            if page is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=f"{page.summary} {page.detail}",
+                    data={"feature": page.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=[],
+                    link=AskLink(path=page.path, label=f"Open {page.name}"),
+                )
+            missing = disabled_feature_named(query)
+            if missing is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=(
+                        f"{missing.name} isn't available in this version of "
+                        f"AlphaSwarm yet."
+                    ),
+                    data={"feature": missing.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+                )
+        except Exception as e:
+            logger.warning("Ask feature-page lookup failed: %s", e)
+
     # 2b. Asset-specific metric questions ("what is Microsoft's beta?",
     # "what is GOOGL's RSI?", "what does its beta mean?") — deterministic,
     # checked BEFORE intent classification. resolved_asset+resolved_metric
@@ -4681,7 +5716,6 @@ async def _ask_alphaswarm_impl(
     # set by 2d/2e below, or by the classifier call in step 3 if neither
     # shortcut fired. 2f (whale watching) returns directly rather than
     # setting this sentinel, since it's a full response, not just an intent.
-    intent: Optional[str] = None
     if resolved_asset and not resolved_metric and (
         _ASK_ASSET_OVERVIEW_PATTERN.search(query) or _is_bare_ticker_query(query, resolved_asset)
     ):
@@ -4698,6 +5732,32 @@ async def _ask_alphaswarm_impl(
             return _ask_learning_question("what is whale watching")
         except Exception as e:
             logger.warning("Ask whale-watching shortcut failed: %s", e)
+
+    # 2e'. Fund-catalogue questions — runs BEFORE the definitional shortcut
+    # below. A question that names a specific fund is never a generic
+    # definition request, but "what is the risk profile of Coronation
+    # Balanced Plus" has exactly the "what is ..." shape the shortcut
+    # keys on, so it used to be grabbed by the free-tier cache probe and
+    # answered from an SARB monetary-policy page that has nothing to do
+    # with it. Fund resolution is exact, so going first costs nothing.
+    #
+    # (Original comment:) Fund-catalogue questions ("what's the TER on Allan Gray Balanced?")
+    # — deterministic, checked only when no STOCK asset was named (a stock
+    # ticker/name always takes priority over a fund-name guess) so this can
+    # never steal a stock question's routing. No-op entirely when
+    # FUNDS_ENABLED is off (_resolve_fund returns None immediately).
+    if intent is None and resolved_asset is None:
+        try:
+            resolved_fund = _resolve_fund(query)
+            if resolved_fund is not None:
+                return _fund_answer(resolved_fund, query)
+            # No single fund named: it may be a question about the whole
+            # catalogue ("which funds are tax free eligible").
+            catalogue = _ask_fund_catalogue_answer(query)
+            if catalogue is not None:
+                return catalogue
+        except Exception as e:
+            logger.warning("Ask fund-catalogue shortcut failed: %s", e)
 
     # 2f. Deterministic definitional-learning-question shortcut ("what is an
     # ETF?", "what is a portfolio?") — see _ASK_DEFINITIONAL_SHAPE_PATTERN's
@@ -4734,28 +5794,20 @@ async def _ask_alphaswarm_impl(
             # it's a genuine grounded result, not an honest-but-wrong-source
             # decline; otherwise fall through to classification exactly as
             # if this shortcut had never fired.
-            is_decline = shortcut.narration == _ASK_LEARNING_NOT_COVERED_MESSAGE or any(
-                p in shortcut.narration.lower()
-                for p in ("t provide any information", "t contain any information",
-                          "t provide information", "t contain information")
-            )
-            if not is_decline:
+            if not _ask_learning_answer_declined(shortcut.narration):
                 return shortcut
         except Exception as e:
             logger.warning("Ask definitional-learning shortcut failed: %s", e)
 
-    # 2g. Fund-catalogue questions ("what's the TER on Allan Gray Balanced?")
-    # — deterministic, checked only when no STOCK asset was named (a stock
-    # ticker/name always takes priority over a fund-name guess) so this can
-    # never steal a stock question's routing. No-op entirely when
-    # FUNDS_ENABLED is off (_resolve_fund returns None immediately).
-    if intent is None and resolved_asset is None:
-        try:
-            resolved_fund = _resolve_fund(query)
-            if resolved_fund is not None:
-                return _fund_answer(resolved_fund, query)
-        except Exception as e:
-            logger.warning("Ask fund-catalogue shortcut failed: %s", e)
+    # 2h. The user's own results, asked for by the product's own feature
+    # names ("my top picks", "my shortlist", "my recommended assets").
+    # Settled here rather than by the classifier, which refused these as
+    # requests for advice — see _ASK_OWN_RESULTS_PATTERN's own comment.
+    # Only fires on possessive phrasing, so "recommend me a stock" (no
+    # "my", and caught by the advice gates above long before this) is
+    # untouched.
+    if intent is None and _ASK_OWN_RESULTS_PATTERN.search(query):
+        intent = "USER_DATA_SEARCH"
 
     # 3. Intent classification (small Groq call) — skipped when 2d already
     # set `intent` deterministically.
@@ -4788,6 +5840,56 @@ async def _ask_alphaswarm_impl(
             is_blocked=False,
             redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
         )
+
+    # 3a. Structured-envelope recovery — the ONLY place this runs, and it
+    # runs only because the alternative is telling the user we don't
+    # understand them. See _resolve_ask_envelope's own comment for why this
+    # does not weaken grounding: it returns pointers, every proposed ticker
+    # is verified against the real assets table, and a safety verdict is
+    # never revisited (advice/out-of-scope labels are not recoverable).
+    #
+    # On success it sets `intent` (and, for a verified asset, appends an
+    # explicit ticker clause the way _resolve_conversational_reference
+    # already does) and then FALLS THROUGH to the normal step-4 retrieval
+    # and step-5 narration below. No second retrieval path, no second
+    # narration path, no second validator — the recovered question is
+    # answered by exactly the same machinery as one the patterns routed.
+    if intent == "UNKNOWN" and _ASK_ENVELOPE_ENABLED:
+        envelope = _resolve_ask_envelope(query)
+        if envelope is not None:
+            verified = _verify_envelope_tickers(envelope["tickers"])
+            env_intent = envelope["intent"]
+
+            if not verified and envelope["funds"]:
+                try:
+                    fund = _resolve_fund(" ".join(envelope["funds"]))
+                    if fund is not None:
+                        return _fund_answer(fund, query)
+                except Exception as e:
+                    logger.warning("Ask envelope fund recovery failed: %s", e)
+
+            if len(verified) >= 2:
+                # Two verified assets and an interpretation intent is a
+                # comparison; reuse the exact clause the comparison branch
+                # of _ask_context_synthesis already triggers on.
+                a, b = verified[0]["ticker"], verified[1]["ticker"]
+                intent = "CONTEXT_SYNTHESIS"
+                query = f"{query} — compare {a} and {b}"
+            elif len(verified) == 1:
+                intent = env_intent if env_intent in (
+                    "ANALYSIS_EXPLANATION", "CONTEXT_SYNTHESIS",
+                ) else "ANALYSIS_EXPLANATION"
+                query = f"{query} — referring to {verified[0]['ticker']}"
+            elif env_intent in ("LEARNING_QUESTION", "PLATFORM_QUESTION",
+                                "USER_DATA_SEARCH", "ASSET_SEARCH"):
+                # No asset needed for these; the label alone is the recovery.
+                intent = env_intent
+
+            if intent != "UNKNOWN":
+                logger.info(
+                    "ask_envelope_recovered intent=%s verified_tickers=%s",
+                    intent, [a["ticker"] for a in verified],
+                )
 
     if intent == "UNKNOWN":
         return AskResponse(
@@ -4848,7 +5950,26 @@ async def _ask_alphaswarm_impl(
             contextual = _ask_contextual_metric_explanation(resolved_asset, resolved_metric, user_id, query)
             if contextual is not None:
                 return contextual
-            return _ask_learning_question(query)
+            learning = _ask_learning_question(query)
+            # A question about a real company, misread as a concept question,
+            # ends here as "I don't have enough information" — an answer
+            # about the wrong thing entirely. If the learning tiers declined
+            # AND a verified asset can be recovered from the question, it was
+            # never a concept question: re-route it to the asset path rather
+            # than hand back a refusal about a term nobody asked about.
+            if _ASK_ENVELOPE_ENABLED and _ask_learning_answer_declined(learning.narration):
+                recovered = _verify_envelope_tickers(
+                    (_resolve_ask_envelope(query) or {}).get("tickers") or []
+                )
+                if recovered:
+                    ticker = recovered[0]["ticker"]
+                    logger.info("ask_envelope_rerouted_from_learning ticker=%s", ticker)
+                    intent = "ANALYSIS_EXPLANATION"
+                    query = f"{query} — referring to {ticker}"
+                else:
+                    return learning
+            else:
+                return learning
         except Exception as e:
             logger.warning("Ask learning-question retrieval failed: %s", e)
             return AskResponse(
@@ -4865,7 +5986,7 @@ async def _ask_alphaswarm_impl(
         if intent == "ASSET_SEARCH":
             data, source = _ask_asset_search(query, user_id)
         elif intent == "USER_DATA_SEARCH":
-            data, source = _ask_user_data_search(user_id)
+            data, source = _ask_user_data_search(user_id, query)
         elif intent == "ANALYSIS_EXPLANATION":
             data, source = _ask_analysis_explanation(query, user_id)
         else:
@@ -4875,12 +5996,48 @@ async def _ask_alphaswarm_impl(
         data, source = {}, "none"
 
     # No-data rule: never call the narrator if retrieval found nothing.
-    has_data = bool(
-        data.get("assets") if intent == "ASSET_SEARCH"
-        else data.get("watchlist") or data.get("top_picks") if intent == "USER_DATA_SEARCH"
-        else data.get("ticker") if intent == "ANALYSIS_EXPLANATION"
-        else False
-    )
+    def _has_data(d: dict) -> bool:
+        return bool(
+            d.get("assets") if intent == "ASSET_SEARCH"
+            else d.get("watchlist") or d.get("top_picks") if intent == "USER_DATA_SEARCH"
+            else d.get("ticker") if intent == "ANALYSIS_EXPLANATION"
+            else False
+        )
+
+    has_data = _has_data(data)
+
+    # 4a. Envelope recovery at the point retrieval actually fails.
+    #
+    # The commonest real failure is NOT "intent unknown" — it is "intent
+    # right, entity unresolved": the classifier correctly reads "what's the
+    # deal with Zuckerberg's company" as a question about one asset, then
+    # the pattern layer cannot turn that phrasing into a ticker, retrieval
+    # comes back empty, and the user is told AlphaSwarm has no supporting
+    # data — about a company it covers perfectly well. One verified-pointer
+    # lookup and a single retry fixes exactly that case, and only that
+    # case: this runs after retrieval has already failed, so it cannot
+    # change the answer to any question that was working.
+    if not has_data and intent in ("ASSET_SEARCH", "ANALYSIS_EXPLANATION") and _ASK_ENVELOPE_ENABLED:
+        try:
+            recovered_assets = _verify_envelope_tickers(
+                (_resolve_ask_envelope(query) or {}).get("tickers") or []
+            )
+        except Exception as e:
+            logger.warning("Ask envelope no-data recovery failed: %s", e)
+            recovered_assets = []
+        if recovered_assets:
+            ticker = recovered_assets[0]["ticker"]
+            logger.info("ask_envelope_recovered_entity intent=%s ticker=%s", intent, ticker)
+            query = f"{query} — referring to {ticker}"
+            try:
+                if intent == "ASSET_SEARCH":
+                    data, source = _ask_asset_search(query, user_id)
+                else:
+                    data, source = _ask_analysis_explanation(query, user_id)
+                has_data = _has_data(data)
+            except Exception as e:
+                logger.warning("Ask retrieval retry failed for intent %s: %s", intent, e)
+
     if not has_data:
         return AskResponse(
             intent=intent,
@@ -6063,11 +7220,13 @@ async def admin_reports_retention(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/admin/reports/chatbot")
 async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str] = Header(None)):
-    """Ask AlphaSwarm usage/quality, from ask_query_logs (migration 018).
+    """Ask AlphaSwarm usage/quality, from ask_query_logs (migrations 018, 037).
 
-    Never returns raw prompt/answer text — only the aggregate metadata the
-    table stores. If the table doesn't exist yet (migration not applied) or
-    has no rows in range, reports that plainly rather than fabricating data.
+    Aggregate metadata, plus `recent_queries`: the questions asked, since
+    migration 037. Never the model's ANSWER, and never who asked — see
+    _recent_ask_queries. If the table doesn't exist yet (migration not
+    applied) or has no rows in range, reports that plainly rather than
+    fabricating data.
     """
     requester_id = await _get_user_id_from_bearer(authorization)
     await _require_admin(requester_id)
@@ -6123,4 +7282,80 @@ async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str]
         "average_latency_ms": avg_latency_ms,
         "top_queried_assets": top_queried_assets,
         "queries_over_time": queries_over_time,
+        "recent_queries": _recent_ask_queries(cutoff),
+        "service_error_count": _ask_service_error_count(cutoff),
     }
+
+
+def _ask_service_error_count(cutoff: Optional[datetime.datetime]) -> Optional[int]:
+    """How many requests in range failed because the MODEL SERVICE did, or
+    None when that can't be known.
+
+    Its own query, for the same reason the question list is: service_error
+    lives in a column added by migration 038, so selecting it with the
+    aggregates would make the whole report fail on a database that hasn't
+    applied it. None (rather than 0) on failure matters: "0 service errors"
+    would be a claim, and before 038 there is no data to make it."""
+    try:
+        q = supabase.table("ask_query_logs").select("service_error").eq("service_error", True)
+        if cutoff:
+            q = q.gte("created_at", cutoff.isoformat())
+        return len(q.execute().data or [])
+    except Exception as e:
+        logger.warning("admin_reports_chatbot service_error_count unavailable (migration 038 applied?): %s", e)
+        return None
+
+
+def _recent_ask_queries(cutoff: Optional[datetime.datetime], limit: int = 100) -> List[dict]:
+    """The questions people have asked, newest first, for the admin report.
+
+    A separate query from the aggregates on purpose. The question text lives
+    in a column added by migration 037, so selecting it alongside the
+    aggregates would make the whole report fail on a database where 037 has
+    not run yet — taking the working statistics down for an optional list.
+    Here a failure just means an empty list, which the page renders as "no
+    questions recorded yet".
+
+    Returns only what an admin needs to read a question in context: when,
+    what was asked, how it was routed and whether it was answered. Never the
+    answer, and never the user's identity — the report shows what is being
+    asked, not who is asking it."""
+    # service_error is a column from migration 038. A database with 037 but
+    # not 038 would reject a select naming it, which would drop the WHOLE
+    # question list even though the questions themselves are fine — so ask
+    # for it, and on failure ask again without it. Each migration therefore
+    # lights up its own part of the report independently.
+    rows = None
+    for columns in (
+        "created_at,query_text,intent,success,fallback_used,asset_symbol,service_error",
+        "created_at,query_text,intent,success,fallback_used,asset_symbol",
+    ):
+        try:
+            q = (
+                supabase.table("ask_query_logs")
+                .select(columns)
+                .not_.is_("query_text", "null")
+                .order("created_at", desc=True)
+                .limit(limit)
+            )
+            if cutoff:
+                q = q.gte("created_at", cutoff.isoformat())
+            rows = q.execute().data or []
+            break
+        except Exception as e:
+            logger.warning("admin_reports_chatbot recent_queries select failed (%s): %s", columns.count(",") + 1, e)
+    if rows is None:
+        return []
+    return [
+        {
+            "asked_at": r.get("created_at"),
+            "query": r.get("query_text"),
+            "intent": r.get("intent"),
+            "answered": bool(r.get("success")),
+            "fallback_used": bool(r.get("fallback_used")),
+            "service_error": bool(r.get("service_error")),
+            "asset_symbol": r.get("asset_symbol"),
+        }
+        for r in rows
+        if r.get("query_text")
+    ]
