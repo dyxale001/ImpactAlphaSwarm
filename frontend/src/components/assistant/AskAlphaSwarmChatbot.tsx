@@ -210,6 +210,7 @@ export default function AskAlphaSwarmChatbot() {
         <button
           type="button"
           onClick={() => setOpen(!open)}
+          data-spotlight="floating-assistant"
           aria-label={open ? 'Close Ask AlphaSwarm' : 'Ask AlphaSwarm'}
           aria-expanded={open}
           className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-primary text-brand-bg shadow-xl border-2 border-brand-bg ring-2 ring-brand-primary/50 flex items-center justify-center hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary transition-all"

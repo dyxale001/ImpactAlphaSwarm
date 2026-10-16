@@ -88,7 +88,7 @@ export default function TodayStrip({
   const busy = isRunning || isRunInProgress;
 
   return (
-    <div className="hero-card overflow-hidden px-5 py-6 sm:px-7">
+    <div data-spotlight="dashboard" className="hero-card overflow-hidden px-5 py-6 sm:px-7">
       <RallyMotif className="h-full" />
 
       {/* Same proportions as the Assets hero: a title column that owns the FX
