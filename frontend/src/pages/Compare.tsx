@@ -13,7 +13,10 @@ import { useUniverseAssets, type UniverseAsset } from "../hooks/useUniverseAsset
 import { useWatchedTickers } from "../hooks/useCompareStocks";
 import { useCompareFunds } from "../hooks/useCompareFunds";
 import { useFundCatalogue, useFundMatches } from "../hooks/useFundCatalogue";
-import { FUNDS_ENABLED } from "../utils/fundsFlags";
+import { useUploadedFunds } from "../hooks/useFundUploads";
+import { FUND_UPLOADS_ENABLED, FUNDS_ENABLED } from "../utils/fundsFlags";
+import { asCatalogueFund } from "../utils/fundUploads";
+import { MY_FUNDS_TITLE } from "../utils/fundUploadsCopy";
 import { rememberHubPage } from "../utils/lastHubPage";
 import {
   MAX_COMPARE,
@@ -222,7 +225,15 @@ function FundsSide({
   const catalogue = useFundCatalogue({});
   const { matches } = useFundMatches();
   const { funds, missing, isLoading, error } = useCompareFunds(ids);
-  const known = useMemo(() => new Map(catalogue.funds.map((f) => [f.fund_id, f])), [catalogue.funds]);
+  // The reader's own uploaded funds, under their "mine-<id>" Compare ids, so one
+  // can be set beside catalogue funds.
+  const uploads = useUploadedFunds(FUND_UPLOADS_ENABLED);
+  const mineAsFunds = useMemo(
+    () => uploads.funds.map((f) => asCatalogueFund(f, f.sheet)),
+    [uploads.funds],
+  );
+  const searchable = useMemo(() => [...mineAsFunds, ...catalogue.funds], [mineAsFunds, catalogue.funds]);
+  const known = useMemo(() => new Map(searchable.map((f) => [f.fund_id, f])), [searchable]);
 
   // What the search box lists when opened with nothing typed: the funds matched to
   // the reader's profile first (the Funds page's own matches), then the whole
@@ -230,6 +241,8 @@ function FundsSide({
   // South African before Global, since that is where a local reader starts.
   const browseGroups = useMemo(() => {
     const groups: FundBrowseGroup[] = [];
+    const uploaded = mineAsFunds.filter((f) => !ids.includes(f.fund_id));
+    if (uploaded.length) groups.push({ label: MY_FUNDS_TITLE, funds: uploaded });
     const mine = matches
       .map((m) => known.get(m.fund_id))
       .filter((f): f is NonNullable<typeof f> => Boolean(f) && !ids.includes(f!.fund_id));
@@ -245,7 +258,7 @@ function FundsSide({
       groups.push({ label, funds: byGroup.get(label)!.sort((a, b) => a.name.localeCompare(b.name)) });
     }
     return groups;
-  }, [matches, known, catalogue.funds, ids]);
+  }, [matches, known, catalogue.funds, mineAsFunds, ids]);
 
   const picks: Pick[] = ids.map((id) => {
     const f = funds[id] ?? known.get(id);
@@ -260,7 +273,7 @@ function FundsSide({
         onRemove={onRemove}
         search={
           <FundSearch
-            funds={catalogue.funds}
+            funds={searchable}
             exclude={ids}
             browseGroups={browseGroups}
             onSelect={onAdd}

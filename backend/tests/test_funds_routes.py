@@ -52,7 +52,7 @@ MONEY_MARKET = {
     "yahoo_symbol": None,
     "asisa_geography": "South African",
     "asisa_asset_class": "Interest Bearing",
-    "asisa_category": "South African - Interest Bearing - Money Market",
+    "asisa_category": "South African - Interest Bearing - SA Money Market",
     "tfsa_eligible": False,
     "platforms": ["EasyEquities"],
     "curation_rule": "largest money market fund by fund size on the platform",
@@ -402,6 +402,12 @@ class TestFundDetail:
         assert "0.58" in why  # the published total charge
         assert "31 July 2026" in why
 
+    def test_the_explanation_also_comes_as_labelled_rows(self, client):
+        body = client.get("/api/fund-catalogue/f-mm").json()
+        parts = body["why_parts"]
+        assert parts and all(set(part) == {"key", "label", "text"} for part in parts)
+        assert any(part["label"] == "What it costs" and "0.58" in part["text"] for part in parts)
+
     def test_availability_is_stated_as_a_fact(self, client):
         body = client.get("/api/fund-catalogue/f-mm").json()
         assert body["available_on"] == "Available on EasyEquities."
@@ -425,9 +431,17 @@ class TestMatches:
         body = client.get("/api/fund-catalogue/matches").json()
         reason = body["matches"][0]["reason"]
         assert "Alpha Collective Investments (RF) (Pty) Ltd" in reason
-        assert "South African - Interest Bearing - Money Market" in reason
+        assert "South African - Interest Bearing - SA Money Market" in reason
         assert "31 July 2026" in reason
         assert "This is information, not advice." in reason
+
+    def test_a_match_carries_the_figures_a_browse_card_shows(self, client):
+        # The fund card is one shape on both halves of the page, so a match
+        # states fund size and distributions as the catalogue does.
+        body = client.get("/api/fund-catalogue/matches").json()
+        match = next(m for m in body["matches"] if m["name"] == "Alpha Money Market Fund")
+        assert match["fund_size_zar"] == 12000000000
+        assert match["distribution_frequency"] == "Monthly"
 
     def test_every_match_links_the_fact_sheet_it_cites(self, client):
         # The reason sentence names a fact sheet by date. Before this, a matched

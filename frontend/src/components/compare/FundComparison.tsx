@@ -1,6 +1,8 @@
 import { CalendarClock } from "lucide-react";
 import type { CatalogueFundDetail } from "../../services/api/fundCatalogue";
 import { VEHICLE_LABEL, formatPercent } from "../../utils/fundsCopy";
+import { uploadIdOf } from "../../utils/fundUploads";
+import { UPLOADED_BADGE } from "../../utils/fundUploadsCopy";
 import { formatFullDate } from "../research/quantSeries";
 import {
   DATE_GAP_WARN_DAYS,
@@ -61,7 +63,10 @@ export function fundColumn(f: CatalogueFundDetail): CompareColumn {
     id: f.fund_id,
     title: f.jse_code ?? f.name,
     subtitle: f.jse_code ? f.name : f.fund_house,
-    href: `/funds/${encodeURIComponent(f.fund_id)}`,
+    // A reader's own fund opens on its own page, not the catalogue's.
+    href: uploadIdOf(f.fund_id)
+      ? `/funds/mine/${encodeURIComponent(uploadIdOf(f.fund_id) as string)}`
+      : `/funds/${encodeURIComponent(f.fund_id)}`,
   };
 }
 
@@ -108,7 +113,11 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
           label="Type"
           tag={sameText(funds.map((f) => f.vehicle)) ? <RowTag kind="alike">{SAME}</RowTag> : undefined}
           values={funds.map((f) => (
-            <Value key={f.fund_id} main={VEHICLE_LABEL[f.vehicle] ?? f.vehicle} sub={f.fund_house} />
+            <Value
+              key={f.fund_id}
+              main={f.vehicle ? (VEHICLE_LABEL[f.vehicle] ?? f.vehicle) : <Missing>Not stated</Missing>}
+              sub={uploadIdOf(f.fund_id) ? [f.fund_house, UPLOADED_BADGE].filter(Boolean).join(" · ") : f.fund_house}
+            />
           ))}
         />
         <CompareRow
@@ -123,7 +132,14 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
             <Value
               key={f.fund_id}
               main={f.snapshot?.benchmark || <Missing />}
-              sub={f.is_index_tracker ? "Tracks this index" : "Actively managed against it"}
+              // An uploaded sheet does not say which, so it claims neither.
+              sub={
+                uploadIdOf(f.fund_id)
+                  ? undefined
+                  : f.is_index_tracker
+                    ? "Tracks this index"
+                    : "Actively managed against it"
+              }
             />
           ))}
         />

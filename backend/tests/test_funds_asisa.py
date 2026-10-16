@@ -38,7 +38,8 @@ MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 # Every migration that seeds categories, in the order they are applied. 024 laid
 # down the first fourteen; 025 added the fifteenth, Variable Term ILB, after a
 # fund was found filed under the nominal class because its own sheet wraps the
-# name across two lines. Discovered by globbing rather than listed, so a later
+# name across two lines. 037 renamed money market and added three more, to match
+# the 2025 standard. Discovered by globbing rather than listed, so a later
 # migration that adds a category is covered without editing this file — which is
 # the point of the tripwire, and a hard-coded list would quietly stop being one.
 
@@ -55,24 +56,35 @@ _SEED_ROW = re.compile(
 
 _SEED_STATEMENT = "insert into public.asisa_categories"
 _SEED_END = "on conflict (version, code) do nothing"
+_UPDATE_STATEMENT = "update public.asisa_categories"
+
+# Matches one rename: update … set col = 'v'[, col = 'v'] where version = 'v' and code = 'c';
+_UPDATE = re.compile(
+    r"update public\.asisa_categories\s+set\s+(?P<assignments>.+?)\s+"
+    r"where\s+version\s*=\s*'(?P<version>[\d-]+)'\s+and\s+code\s*=\s*'(?P<code>\w+)'\s*;",
+    re.DOTALL,
+)
+_ASSIGNMENT = re.compile(r"(?P<column>\w+)\s*=\s*'(?P<value>[^']*)'")
 
 
 def seeding_migrations() -> list[Path]:
-    """The migrations that seed categories, in application order."""
+    """The migrations that seed or rename categories, in application order."""
     found = [
         path
         for path in sorted(MIGRATIONS.glob("*.sql"))
-        if _SEED_STATEMENT in path.read_text(encoding="utf-8")
+        if _SEED_STATEMENT in (sql := path.read_text(encoding="utf-8")) or _UPDATE_STATEMENT in sql
     ]
     assert found, f"no migration under {MIGRATIONS} seeds asisa_categories"
     return found
 
 
 def seeded_rows() -> list[dict[str, str]]:
-    """Every category row seeded across the migration set.
+    """Every category row across the migration set, renames applied in order.
 
     Ordering matters only in that a later migration may not restate a row from an
-    earlier one; `test_no_category_is_seeded_twice` holds that.
+    earlier one; `test_no_category_is_seeded_twice` holds that. A rename is an
+    update to a row an earlier migration seeded, so it is applied to that row
+    rather than counted as a new one.
     """
     rows: list[dict[str, str]] = []
     for path in seeding_migrations():
@@ -86,6 +98,17 @@ def seeded_rows() -> list[dict[str, str]]:
             end = sql.index(_SEED_END, start)
             rows.extend(m.groupdict() for m in _SEED_ROW.finditer(sql[start:end]))
             cursor = end
+        assert sql.count(_UPDATE_STATEMENT) == len(_UPDATE.findall(sql)), (
+            f"{path.name} updates asisa_categories in a shape this parser cannot read"
+        )
+        for update in _UPDATE.finditer(sql):
+            targets = [
+                row for row in rows
+                if row["version"] == update["version"] and row["code"] == update["code"]
+            ]
+            assert len(targets) == 1, f"{path.name} renames {update['code']}, which no earlier migration seeds"
+            for assignment in _ASSIGNMENT.finditer(update["assignments"]):
+                targets[0][assignment["column"]] = assignment["value"]
     return rows
 
 
@@ -148,6 +171,51 @@ class TestMigrationAgreesWithCode:
         # And the truncated form must not resolve to the linked one.
         assert ASISA.resolve(nominal.name) is nominal
         assert ASISA.resolve(linked.name) is linked
+
+
+class TestThe2025Standard:
+    """REGRESSION GUARD: the seed now follows the standard its version names.
+
+    The rows were labelled '2025-10-01' while carrying pre-2024 names, so newer
+    money market sheets did not resolve, the "General" SA equity category the
+    biggest equity funds print did not exist, and the S&P 500 and Nasdaq 100
+    ETFs had nowhere to go.
+    """
+
+    def test_money_market_carries_its_current_name(self):
+        money_market = ASISA.by_code("sa_ib_money_market")
+        assert money_market is not None
+        assert money_market.name == "South African - Interest Bearing - SA Money Market"
+
+    def test_a_sheet_printed_before_the_rename_still_resolves(self):
+        # Cartesian's sheet still prints the old name. Same class, so resolve
+        # finds it — but by_name does not, because we store the current name.
+        old = "South African - Interest Bearing - Money Market"
+        assert ASISA.resolve(old) is ASISA.by_code("sa_ib_money_market")
+        assert ASISA.resolve("SA Interest Bearing Money Market") is ASISA.by_code("sa_ib_money_market")
+        assert ASISA.by_name(old) is None
+
+    def test_sa_general_and_general_are_different_categories(self):
+        # 100% local versus offshore allowed. Snapping one onto the other is the
+        # mistake that filed Ninety One Equity under SA General.
+        local = ASISA.by_code("sa_eq_general")
+        broad = ASISA.by_code("sa_eq_general_offshore")
+        assert local is not None and broad is not None
+        assert local.name == "South African - Equity - SA General"
+        assert broad.name == "South African - Equity - General"
+        assert ASISA.resolve("SA Equity General") is broad
+        assert ASISA.resolve("SA Equity SA General") is local
+
+    def test_the_s_and_p_500_and_nasdaq_have_a_category(self):
+        assert ASISA.resolve("Global - Equity - US") is ASISA.by_code("gl_eq_us")
+        assert ASISA.resolve("Global – Equity – Unclassified") is ASISA.by_code("gl_eq_unclassified")
+
+    def test_a_broad_market_tracker_reaches_the_middle_bracket_but_a_theme_does_not(self):
+        for code in ("sa_eq_general_offshore", "gl_eq_us"):
+            assert code in BRACKET_CATEGORIES["Moderate"]
+            assert code in TRACKER_ONLY["Moderate"]
+        assert "gl_eq_unclassified" not in BRACKET_CATEGORIES["Moderate"]
+        assert "gl_eq_unclassified" in BRACKET_CATEGORIES["Aggressive"]
 
 
 class TestClassification:
@@ -253,7 +321,15 @@ class TestBracketPolicy:
         # PINNED VALUE with teeth: the bracket table is a proposal, but this
         # property of it is not up for quiet revision.
         cautious = BRACKET_CATEGORIES["Conservative"]
-        for code in ("sa_eq_general", "gl_eq_general", "sa_re_general", "gl_re_general"):
+        for code in (
+            "sa_eq_general",
+            "sa_eq_general_offshore",
+            "gl_eq_general",
+            "gl_eq_us",
+            "gl_eq_unclassified",
+            "sa_re_general",
+            "gl_re_general",
+        ):
             assert code not in cautious
 
     def test_brackets_widen_as_risk_tolerance_rises(self):

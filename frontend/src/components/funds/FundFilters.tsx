@@ -69,7 +69,7 @@ export default function FundFilters({
   );
 
   const selectClass =
-    "max-w-full rounded-full border border-brand-border/60 bg-brand-surface px-3.5 py-2 text-xs font-semibold text-brand-secondary transition-colors hover:border-brand-border";
+    "min-h-10 max-w-full rounded-full border border-brand-border/60 bg-brand-surface px-3.5 py-2 text-[13px] font-semibold text-forest-600 transition-colors hover:border-brand-border";
 
   // `relative` is not decoration. The two sr-only labels below are
   // position:absolute, and an absolute box with no positioned ancestor sits at
@@ -80,21 +80,21 @@ export default function FundFilters({
   return (
     <div className="relative flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 flex-1 basis-48">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-brand-muted-fg" />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-forest-500" />
         <input
           type="search"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={FILTER_SEARCH_PLACEHOLDER}
           aria-label={FILTER_SEARCH_PLACEHOLDER}
-          className="w-full rounded-full border border-brand-border/60 bg-brand-surface py-2 pl-9 pr-9 text-xs text-brand-primary transition-colors placeholder:text-brand-muted-fg focus:border-brand-primary/50 focus:outline-none"
+          className="min-h-10 w-full rounded-full border border-brand-border/60 bg-brand-surface py-2 pl-9 pr-9 text-[13px] text-brand-primary transition-colors placeholder:text-forest-400 focus:border-brand-primary/50 focus:outline-none"
         />
         {text && (
           <button
             type="button"
             aria-label={FILTER_CLEAR_SEARCH}
             onClick={() => setText("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg transition-colors hover:text-brand-primary"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-forest-500 transition-colors hover:text-brand-primary"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -139,7 +139,15 @@ export default function FundFilters({
         </>
       )}
 
-      <label className="inline-flex items-center gap-2 text-xs font-semibold text-brand-secondary">
+      {/* A real checkbox in a pill the size of the selects beside it, so the
+          row reads as one set of controls and the whole pill is the target. */}
+      <label
+        className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-primary ${
+          filters.tfsa
+            ? "border-brand-accent bg-brand-accent text-brand-fg"
+            : "border-brand-border/60 bg-brand-surface text-forest-600 hover:border-brand-border"
+        }`}
+      >
         <input
           type="checkbox"
           checked={Boolean(filters.tfsa)}

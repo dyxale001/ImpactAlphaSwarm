@@ -226,6 +226,19 @@ WHY_RULE = "Why you are seeing it: {rules}."
 
 WHY_DISTRIBUTION = "It distributes income {frequency}."
 
+# The fund page lays the sections out as labelled rows rather than one
+# paragraph. Each label is the opening words of its section's sentence, so the
+# row reads the same as the paragraph with its lead-in moved into the margin.
+# The distribution sentence has no lead-in, so its label is a word of its own.
+WHY_LABELS: dict[str, str] = {
+    "what": "What it is",
+    "holds": "What it holds",
+    "costs": "What it costs",
+    "performance": "How it has done",
+    "distribution": "Income",
+    "rule": "Why you are seeing it",
+}
+
 # One plain sentence per rule, used to explain a match in the user's terms
 # rather than by rule name.
 RULE_NOTES: dict[str, str] = {
@@ -300,6 +313,7 @@ def all_strings() -> Iterator[str]:
     yield from GOALS_CLAUSE_PURPOSE.values()
     yield from RULE_NOTES.values()
     yield from VEHICLE_NOTE.values()
+    yield from WHY_LABELS.values()
 
     yield MATCH_REASON.format(
         manco="Example Collective Investments",

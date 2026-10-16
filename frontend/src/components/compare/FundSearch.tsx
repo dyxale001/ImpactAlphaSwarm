@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { CatalogueFund } from "../../services/api/fundCatalogue";
 import { VEHICLE_LABEL } from "../../utils/fundsCopy";
+import { uploadIdOf } from "../../utils/fundUploads";
+import { UPLOADED_BADGE } from "../../utils/fundUploadsCopy";
 
 // Jump to a fund by name, JSE code or manager. The fund twin of CompanySearch,
 // with the same field, dropdown and keys, so the two halves of the Compare toggle
@@ -223,7 +225,13 @@ function FundRow({
         <span className="min-w-0 truncate text-sm text-brand-fg">{fund.name}</span>
       </span>
       <span className="text-[11px] text-brand-muted-fg">
-        {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle} · {fund.fund_house}
+        {[
+          fund.vehicle ? (VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle) : null,
+          fund.fund_house,
+          uploadIdOf(fund.fund_id) ? UPLOADED_BADGE : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </span>
     </button>
   );

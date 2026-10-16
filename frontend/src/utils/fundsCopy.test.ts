@@ -12,7 +12,9 @@ import {
   formatFundCount,
   formatFundSize,
   formatMinTerm,
+  formatPeriod,
   formatPercent,
+  sectionAsAt,
   splitAsisaCategory,
 } from './fundsCopy'
 import { SOFT_STALE_DAYS, STALE_DAYS } from '../components/funds/StalenessChip'
@@ -137,6 +139,18 @@ describe('formatAsAt', () => {
   })
 })
 
+describe('sectionAsAt', () => {
+  it('dates a section the sheet dates separately', () => {
+    // Quarterly holdings on a monthly sheet must not read as the sheet's month.
+    expect(sectionAsAt('2026-06-30', '2026-08-31')).toBe('As at 30 June 2026')
+  })
+
+  it('adds nothing when the section shares the sheet date or has none', () => {
+    expect(sectionAsAt('2026-08-31', '2026-08-31')).toBeNull()
+    expect(sectionAsAt(null, '2026-08-31')).toBeNull()
+  })
+})
+
 describe('formatMinTerm', () => {
   it('uses months below a year', () => {
     expect(formatMinTerm(0.25)).toBe('3 months')
@@ -153,6 +167,25 @@ describe('formatMinTerm', () => {
     // Silence is not a claim, and the card omits the line.
     expect(formatMinTerm(null)).toBeNull()
     expect(formatMinTerm(0)).toBeNull()
+  })
+})
+
+describe('formatPeriod', () => {
+  it('names a fixed period in words', () => {
+    expect(formatPeriod('10y')).toBe('10 years')
+    expect(formatPeriod('1y')).toBe('1 year')
+  })
+
+  it('names the since-inception period by the year the fund started', () => {
+    expect(formatPeriod('inception', '1996-04-15')).toBe('Since 1996')
+  })
+
+  it('says "since launch" when the sheet gives no start date', () => {
+    expect(formatPeriod('inception', null)).toBe(copy.PERIOD_SINCE_LAUNCH)
+  })
+
+  it('shows a code it does not know as stored rather than guessing', () => {
+    expect(formatPeriod('ytd')).toBe('ytd')
   })
 })
 

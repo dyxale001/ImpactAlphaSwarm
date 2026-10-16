@@ -191,7 +191,7 @@ export const MATCHED_SECTION_TITLE =
 export const MATCH_INPUTS_TITLE = "What this list is filtered on";
 
 export const MATCH_INPUTS_LEAD =
-  "Three of your answers decide which funds appear above, weighed against the risk label each manager publishes. Nothing else from your account is used.";
+  "Three of your answers decide which funds appear in this list, weighed against the risk label each manager publishes. Nothing else from your account is used.";
 
 export const MATCH_INPUT_RISK_LABEL = "Your risk profile";
 export const MATCH_INPUT_HORIZON_LABEL = "When you need the money";
@@ -266,13 +266,6 @@ export const MIN_TERM_LABEL = "Minimum term stated";
 export const TFSA_BADGE = "Tax-free eligible";
 
 export const TRACKER_BADGE = "Index tracker";
-
-/** The reason sentence's own heading, which the card omitted.
- *
- *  It is the tallest and most variable block on a matched card and it sat there
- *  unlabelled, so it read as prose about the fund rather than as the answer to
- *  the question the section poses. The wording is the design note's own. */
-export const WHY_APPEARS_LABEL = "Why this appears";
 
 /** Follows a charge figure: "1.79% a year". Was inline in the card, which put
  *  it outside the scan. */
@@ -377,7 +370,7 @@ export const DETAIL_HOLDINGS_LEAD =
   "The biggest positions this sheet lists, as a share of the fund.";
 
 export const DETAIL_HOLDINGS_NOTE =
-  "The largest holdings the sheet prints, not the whole portfolio, and as at the date on it.";
+  "The largest holdings the sheet prints, not the whole portfolio, and as at the date shown.";
 
 /* ── What it takes to start ───────────────────────────────────────────────
  *
@@ -566,7 +559,6 @@ export function allStrings(): string[] {
     SHOW_ALL_ACTION,
     SHOW_FEWER_ACTION,
     FUNDS_HEADER_EYEBROW,
-    WHY_APPEARS_LABEL,
     COST_PER_YEAR,
     FUND_SIZE_LABEL,
     DISTRIBUTIONS_LABEL,
@@ -666,6 +658,56 @@ export function allStrings(): string[] {
     DETAIL_HORIZON_WORDS_LABEL,
     DETAIL_INCOME_TITLE,
     DETAIL_INCOME_LEAD,
+    DETAIL_KEY_FACTS_LABEL,
+    DETAIL_SEE_FIGURES,
+    ALLOCATION_HOME_LABEL,
+    ALLOCATION_ABROAD_LABEL,
+    PERIOD_SINCE_LAUNCH,
+    // The About dialog: every sentence it can show, list items included.
+    FUND_ABOUT_BUTTON,
+    FUND_ABOUT_EYEBROW,
+    FUND_ABOUT_TITLE,
+    FUND_ABOUT_INTRO,
+    FUND_ABOUT_STEPS_TITLE,
+    ...FUND_ABOUT_STEPS.flatMap((step) => [step.title, step.body]),
+    FUND_ABOUT_COST_TITLE,
+    FUND_ABOUT_COST_LABEL,
+    ...FUND_ABOUT_COST_FUNDS.map((fund) => fund.name),
+    formatCostCaption("R10\u00a0000"),
+    FUND_ABOUT_COST_READ,
+    FUND_ABOUT_RISK_TITLE,
+    ...FUND_ABOUT_RISK_STEPS,
+    FUND_ABOUT_RISK_BODY,
+    FUND_ABOUT_RISK_MATCH,
+    FUND_ABOUT_LABELS_TITLE,
+    ...FUND_ABOUT_LABELS.flatMap((item) => [item.label, item.body]),
+    FUND_ABOUT_MEANS_TITLE,
+    FUND_ABOUT_MEANS_LABEL,
+    ...FUND_ABOUT_MEANS,
+    FUND_ABOUT_NOT_MEANS_LABEL,
+    ...FUND_ABOUT_NOT_MEANS,
+    FUND_ABOUT_PAST_NOTE,
+    FUND_ABOUT_WAYFINDING_TITLE,
+    ...FUND_ABOUT_WAYFINDING.flatMap((item) => [item.title, item.body]),
+    FUND_ABOUT_FOOTER,
+    FUND_ABOUT_DONE,
+    FUNDS_TABS_LABEL,
+    FUNDS_TAB_MATCHED,
+    FUNDS_TAB_BROWSE,
+    // The fund page's reasoning trace panel.
+    FUND_TRACE_TITLE,
+    FUND_TRACE_LABEL,
+    FUND_TRACE_INVITE,
+    FUND_TRACE_BUTTON,
+    FUND_TRACE_WRITING,
+    FUND_TRACE_BADGE_MODEL,
+    FUND_TRACE_BADGE_TEMPLATE,
+    FUND_TRACE_MODEL_NOTE,
+    FUND_TRACE_TEMPLATE_NOTE,
+    FUND_TRACE_DISCLOSURE,
+    FUND_TRACE_DISCLOSURE_NO_PROFILE,
+    FUND_TRACE_EMPTY,
+    FUND_TRACE_FAILED,
     ...Object.values(VEHICLE_LABEL),
     // Sentences a formatter builds are shipped copy too, so they are scanned
     // rather than trusted for being generated. Every accepted value is listed:
@@ -673,6 +715,7 @@ export function allStrings(): string[] {
     // is the same tripwire the constants above get.
     ...["1y", "3y"].map(formatFeePeriod),
     ...["rolling_12m", "calendar_year"].map(formatExtremesBasis),
+    ...["10y", "5y", "3y", "1y", "inception"].map((period) => formatPeriod(period, "1996-04-15")),
     // Both grammatical numbers, because the singular and the plural are
     // separate strings once a formatter builds them.
     formatFundCount(1),
@@ -852,6 +895,17 @@ export function formatAsAt(value: string | null | undefined): string | null {
   return `${Number(day)} ${name} ${year}`;
 }
 
+/** "As at 30 June 2026", for a section the sheet dates separately from itself.
+ *  Null when the section shares the sheet's date, so the page adds nothing. */
+export function sectionAsAt(
+  sectionDate: string | null | undefined,
+  sheetDate: string | null | undefined,
+): string | null {
+  if (!sectionDate || sectionDate === sheetDate) return null;
+  const formatted = formatAsAt(sectionDate);
+  return formatted ? `As at ${formatted}` : null;
+}
+
 /** The stated minimum term, in words. */
 export function formatMinTerm(years: number | null | undefined): string | null {
   if (years === null || years === undefined || Number.isNaN(years) || years <= 0) return null;
@@ -914,3 +968,208 @@ export function factSheetAgeDays(asOf: string | null | undefined, today?: Date):
   const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return Math.max(0, Math.round((midnight - sheet) / 86_400_000));
 }
+
+// ── the fund page's layout, added with the 12/10 redesign ──────────────────
+
+/** The panel of headline figures in the fund page's header. Read by screen
+ *  readers only: on screen the figures' own labels say what they are. */
+export const DETAIL_KEY_FACTS_LABEL = "Key facts from the fact sheet";
+
+/** From the "How it has done" row of "Why this appears" to the tab with the
+ *  figures themselves. */
+export const DETAIL_SEE_FIGURES = "See the figures";
+
+/** The two halves of an allocation whose rows each say where they are held.
+ *  Shown only when every row does, so no row is filed under a guess. */
+export const ALLOCATION_HOME_LABEL = "In South Africa";
+
+export const ALLOCATION_ABROAD_LABEL = "Outside South Africa";
+
+/** The since-inception bar, when the sheet gives no start date to name. */
+export const PERIOD_SINCE_LAUNCH = "Since launch";
+
+/** A performance period in words: "5 years", "1 year", "Since 1996".
+ *  Stored keys are the sheets' own column codes ("5y", "inception"); a code
+ *  this does not know is shown as stored rather than guessed at. */
+export function formatPeriod(period: string, inceptionDate?: string | null): string {
+  if (period === "inception") {
+    const year = /^(\d{4})-/.exec(inceptionDate ?? "")?.[1];
+    return year ? `Since ${year}` : PERIOD_SINCE_LAUNCH;
+  }
+  const match = /^(\d+)y$/.exec(period);
+  if (!match) return period;
+  const years = Number(match[1]);
+  return `${years} year${years === 1 ? "" : "s"}`;
+}
+
+// ── about this page ────────────────────────────────────────────────────────
+// The "How Funds works" dialog behind the funds page header's About button, written
+// for someone new to investing (D-203's explanation with every analytic
+// output), the way Compare and Market News explain themselves.
+
+export const FUND_ABOUT_BUTTON = "About this page";
+export const FUND_ABOUT_EYEBROW = "About this page";
+export const FUND_ABOUT_TITLE = "How Funds works";
+export const FUND_ABOUT_INTRO =
+  "A fund pools money from many investors, and a manager invests it on their behalf. This page lists South African unit trusts and JSE-listed exchange traded funds, described the way their managers describe them, from the fact sheet every South African fund has to publish. It shows the funds whose risk label matches your profile first, then every fund we cover. It never tells you which fund to pick.";
+
+export const FUND_ABOUT_STEPS_TITLE = "How a fund gets onto this page";
+export const FUND_ABOUT_STEPS = [
+  {
+    key: "publish",
+    title: "Publish",
+    body: "Each fund's manager publishes a fact sheet, usually every month, with the fund's costs, holdings, returns and risk label.",
+  },
+  {
+    key: "record",
+    title: "Record",
+    body: "The figures are copied off that sheet into AlphaSwarm and keep its date. Nothing is calculated or estimated by us.",
+  },
+  {
+    key: "match",
+    title: "Match",
+    body: "Three of your onboarding answers are compared with the risk label each manager publishes. Funds that fit appear first, each with a sentence saying why.",
+  },
+  {
+    key: "browse",
+    title: "Browse",
+    body: "Every fund is still listed below the matches, grouped the way the industry classifies them, so you can see what the match left out.",
+  },
+] as const;
+
+export const FUND_ABOUT_COST_TITLE = "What a yearly charge adds up to";
+export const FUND_ABOUT_COST_LABEL = "An illustration, not real funds";
+export const FUND_ABOUT_COST_AMOUNTS = [10_000, 50_000] as const;
+/** Three made-up funds, one charge each, so the only thing that differs is the charge. */
+export const FUND_ABOUT_COST_FUNDS = [
+  { name: "Fund A", charge: 0.2 },
+  { name: "Fund B", charge: 1 },
+  { name: "Fund C", charge: 1.8 },
+] as const;
+export function formatCostCaption(amount: string): string {
+  return `Charges on ${amount} for one year`;
+}
+export const FUND_ABOUT_COST_READ =
+  "The total investment charge is taken from the fund every year, whether it gains or loses, so a gap that looks small as a percentage is a real amount of money, and it repeats each year you stay invested. A platform may add its own fee on top.";
+
+export const FUND_ABOUT_RISK_TITLE = "The risk label";
+export const FUND_ABOUT_RISK_STEPS = [
+  "Low",
+  "Low to Moderate",
+  "Moderate",
+  "Moderate to High",
+  "High",
+] as const;
+export const FUND_ABOUT_RISK_BODY =
+  "Each manager rates its own fund on its fact sheet. Some use five steps and some use seven, so AlphaSwarm places every label on one 1 to 5 scale. It describes how much the fund's value can move, in the manager's words. Two funds with the same label can still behave differently, which is why The figures tab shows each fund's strongest and weakest year.";
+export const FUND_ABOUT_RISK_MATCH =
+  "It is also the one fund figure the match at the top of this page reads. A fund whose manager publishes no risk label can be browsed but is never matched.";
+
+export const FUND_ABOUT_LABELS_TITLE = "Reading the labels";
+export const FUND_ABOUT_LABELS = [
+  {
+    key: "current",
+    label: STALENESS_CURRENT,
+    body: "The fact sheet is no more than 45 days old.",
+  },
+  {
+    key: "ageing",
+    label: STALENESS_AGEING,
+    body: "The sheet is 45 to 90 days old. The manager has probably published a newer one.",
+  },
+  {
+    key: "stale",
+    label: STALENESS_STALE,
+    body: "The sheet is more than 90 days old. Check the manager's own site before relying on these figures.",
+  },
+  {
+    key: "tfsa",
+    label: TFSA_BADGE,
+    body: "The fund can be held in a tax-free savings account.",
+  },
+  {
+    key: "tracker",
+    label: TRACKER_BADGE,
+    body: "The fund follows a market index, such as the JSE Top 40, rather than a manager's own choice of shares.",
+  },
+] as const;
+
+export const FUND_ABOUT_MEANS_TITLE = "What this page tells you";
+export const FUND_ABOUT_MEANS_LABEL = "It tells you";
+export const FUND_ABOUT_MEANS = [
+  "Which funds carry a published risk label that fits the answers you gave.",
+  "What each fund costs, holds and has returned, as its manager published it and dated.",
+  "Every fund we cover, not only the matched ones.",
+] as const;
+export const FUND_ABOUT_NOT_MEANS_LABEL = "It doesn't tell you";
+export const FUND_ABOUT_NOT_MEANS = [
+  "Whether a fund fits your whole situation. The match reads three answers, not your finances.",
+  "What any fund will return in future.",
+  "What AlphaSwarm thinks of a fund. Being matched is not a judgement about a fund, and neither is being left out.",
+] as const;
+export const FUND_ABOUT_PAST_NOTE =
+  "Past returns do not predict future returns. Every fact sheet says so, and so does this page.";
+
+export const FUND_ABOUT_WAYFINDING_TITLE = "Finding your way around";
+export const FUND_ABOUT_WAYFINDING = [
+  {
+    key: "matched",
+    title: "Matched funds",
+    body: "The funds whose published risk label fits your profile, each with the sentence saying who classified it, as what and when.",
+  },
+  {
+    key: "inputs",
+    title: MATCH_INPUTS_TITLE,
+    body: "The answers the match used. Change them and the matched list changes with them.",
+  },
+  {
+    key: "browse",
+    title: "Browsing and filters",
+    body: "Pick a category, or filter by fund type, where it invests, its manager or tax-free eligibility. Search finds a fund by name, manager or ISIN.",
+  },
+  {
+    key: "fund",
+    title: "A fund's own page",
+    body: "Open any card for the fund in full: what it costs and holds, its past returns, and a link to the fact sheet itself.",
+  },
+  {
+    key: "compare",
+    title: "Compare",
+    body: "Line up two or three funds in one table, all from the same kind of fact sheet figures.",
+  },
+] as const;
+
+export const FUND_ABOUT_FOOTER =
+  "AlphaSwarm is not a licensed financial services provider and does not give advice. The page informs; the decision stays with you.";
+export const FUND_ABOUT_DONE = "Got it";
+
+// ── one fund's reasoning trace ─────────────────────────────────────────────
+// The panel above the fund page's tabs. Personal and written on request, like
+// the Compare page's paragraph: what the fund is on its fact sheet, and whether
+// it is among the reader's matches and why (D-218).
+
+export const FUND_TRACE_TITLE = "This fund and your profile";
+export const FUND_TRACE_LABEL = "Reasoning trace";
+export const FUND_TRACE_INVITE =
+  "Get a short explanation of this fund in plain words: what it is, what it costs and how its manager rates its risk, and whether it is among the funds matched to your profile, and why.";
+export const FUND_TRACE_BUTTON = "Explain this fund";
+export const FUND_TRACE_WRITING = "Writing your explanation…";
+export const FUND_TRACE_BADGE_MODEL = "AI written, checked";
+export const FUND_TRACE_BADGE_TEMPLATE = "From template";
+export const FUND_TRACE_MODEL_NOTE =
+  "Written by a language model from this fund's fact sheet and your profile answers, then checked: every number in it appears in those figures, and any wording that gives advice or says the fund fits you fails it.";
+export const FUND_TRACE_TEMPLATE_NOTE =
+  "The model could not be used just now, so this paragraph was assembled from the same figures by a fixed template.";
+export const FUND_TRACE_DISCLOSURE =
+  "Written from this fund's fact sheet and your profile answers. Whether a fund is among your matches comes from fixed rules over its published labels, not from the AI, and is not a judgement about the fund.";
+export const FUND_TRACE_DISCLOSURE_NO_PROFILE =
+  "Written from this fund's fact sheet. Complete your risk profile to see whether it is among your matches.";
+export const FUND_TRACE_EMPTY =
+  "An explanation could not be written for this fund just now. The tabs below still show every figure.";
+export const FUND_TRACE_FAILED = "Unable to write the explanation. Try again in a moment.";
+
+// ── the funds page's two tabs ──────────────────────────────────────────────
+
+export const FUNDS_TABS_LABEL = "Funds sections";
+export const FUNDS_TAB_MATCHED = "Matched to your profile";
+export const FUNDS_TAB_BROWSE = "Browse every category";

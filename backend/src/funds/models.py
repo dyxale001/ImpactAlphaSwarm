@@ -254,6 +254,10 @@ class MatchResult:
     is_index_tracker: bool = False
     rules_applied: tuple[str, ...] = ()
     reason: str = ""
+    # Carried so a matched card states the same figures as a browse card. The
+    # matcher never reads them.
+    fund_size_zar: float | None = None
+    distribution_frequency: str | None = None
 
 
 @dataclass(frozen=True)

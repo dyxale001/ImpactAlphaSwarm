@@ -43,7 +43,7 @@ export default function FundsNotice({
         <Icon className="h-4 w-4" />
       </span>
       <p className="max-w-md text-[13px] font-bold text-brand-primary">{title}</p>
-      <p className="max-w-md text-xs leading-relaxed text-brand-secondary">{body}</p>
+      <p className="max-w-md text-xs leading-relaxed text-forest-600">{body}</p>
       {actionLabel && onAction && (
         <button
           type="button"

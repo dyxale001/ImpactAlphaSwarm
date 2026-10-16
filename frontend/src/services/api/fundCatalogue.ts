@@ -71,6 +71,11 @@ export interface FundSnapshot {
   asset_allocation: Record<string, number> | null;
   performance: Record<string, number> | null;
   top_holdings: Record<string, number> | null;
+  /** The date the holdings / allocation are as at when the sheet prints its own
+   *  — managers refresh holdings quarterly, so an August sheet often carries
+   *  "Holdings as at 30 June". Null means the sheet's own date (migration 038). */
+  holdings_as_of?: string | null;
+  allocation_as_of?: string | null;
   /** How the row got here — `manual` for everything transcribed by hand. */
   source: string | null;
   entered_by: string | null;
@@ -132,6 +137,14 @@ export interface FundSnapshot {
   income_distribution: Record<string, number> | null;
 }
 
+/** One row of "Why this appears": the section's lead-in as its label, and the
+ *  rest of its sentence. */
+export interface FundWhyPart {
+  key: string;
+  label: string;
+  text: string;
+}
+
 /** One fund, its newest fact sheet, and the dates it has been published on. */
 export interface CatalogueFundDetail extends CatalogueFund {
   snapshot: FundSnapshot | null;
@@ -145,6 +158,9 @@ export interface CatalogueFundDetail extends CatalogueFund {
   /** The templated sentence saying who classified this fund, as what, and when.
    *  Null when no fact sheet is on file, because there is then nothing to say. */
   why_this_appears: string | null;
+  /** The same sentences as labelled rows, for the page's layout. Null when the
+   *  paragraph is the unavailable notice, or from a backend that predates it. */
+  why_parts?: FundWhyPart[] | null;
   disclaimer: string;
   not_licensed: string;
 }
@@ -209,6 +225,9 @@ export interface FundMatch {
   tfsa_eligible: boolean;
   is_index_tracker: boolean;
   rules_applied: string[];
+  /** Carried so a matched card states the same figures as a browse card. */
+  fund_size_zar: number | null;
+  distribution_frequency: string | null;
   /** The sentence naming who classified the fund, as what, when, and which of
    *  the user's own answers the filter used. Rendered on the server so the
    *  wording is reviewed in one place. */
@@ -324,4 +343,31 @@ export async function getFundMatches() {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<FundMatchesResponse>;
+}
+
+/** One fund's reasoning trace for the signed-in reader: what the fund is on its
+ *  fact sheet, and whether it is among their matches and why. */
+export interface FundTraceResponse {
+  fund_id: string;
+  /** False when the deployment has not switched the feature on. */
+  available: boolean;
+  /** The paragraph, or null when one could not be written. */
+  trace: string | null;
+  source: "model" | "template" | null;
+  model: string | null;
+  generated_at: string | null;
+  /** Whether it explains the reader's own match (false with no profile on file). */
+  personal: boolean;
+}
+
+/** Writes the reader's paragraph about this fund now. What the button calls.
+ *  Nothing is stored, so there is nothing to read back on a later visit. */
+export async function explainFundTrace(fundId: string) {
+  const token = await getToken();
+  const res = await fetch(`${BASE}/api/fund-catalogue/${encodeURIComponent(fundId)}/trace`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<FundTraceResponse>;
 }

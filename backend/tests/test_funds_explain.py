@@ -189,6 +189,51 @@ class TestTheBuilder:
         assert "What it is:" not in text
 
 
+class TestTheLabelledRows:
+    def test_each_section_becomes_a_row_with_its_lead_in_as_the_label(self):
+        parts = ExplanationBuilder().build_parts(
+            context(match=match_result(), profile=profile(purpose="income"))
+        )
+        assert parts is not None
+        by_key = {part["key"]: part for part in parts}
+        assert by_key["costs"]["label"] == "What it costs"
+        assert by_key["costs"]["text"].startswith("A total")
+        assert by_key["holds"]["text"].startswith("As at")
+        # The distribution sentence has no lead-in, so it keeps every word.
+        assert by_key["distribution"]["label"] == "Income"
+        assert by_key["distribution"]["text"].startswith("It distributes income")
+
+    def test_the_rows_say_what_the_paragraph_says(self):
+        ctx = context(match=match_result(), profile=profile(purpose="income"))
+        parts = ExplanationBuilder().build_parts(ctx)
+        paragraph = ExplanationBuilder().build(ctx)
+        assert parts is not None
+        for part in parts:
+            assert part["text"][1:] in paragraph
+
+    def test_every_lead_in_opens_its_template(self):
+        # A label that drifted from its sentence would print the words twice.
+        assert copytext.WHY_WHAT.startswith(copytext.WHY_LABELS["what"])
+        assert copytext.WHY_HOLDS.startswith(copytext.WHY_LABELS["holds"])
+        assert copytext.WHY_COSTS.startswith(copytext.WHY_LABELS["costs"])
+        assert copytext.WHY_COSTS_TER_ONLY.startswith(copytext.WHY_LABELS["costs"])
+        assert copytext.WHY_PERFORMANCE.startswith(copytext.WHY_LABELS["performance"])
+        assert copytext.WHY_RULE.startswith(copytext.WHY_LABELS["rule"])
+
+    def test_nothing_to_show_is_none_not_an_empty_list(self):
+        assert ExplanationBuilder().build_parts(context({"as_of": "2026-07-31"})) is None
+
+    def test_rows_the_guard_rejects_are_never_returned(self):
+        class InventingSection(ExplanationSection):
+            name = "costs"
+
+            def render(self, ctx):
+                return "What it costs: a total investment charge of 0.01% a year."
+
+        builder = ExplanationBuilder(sections=(CostsSection(), InventingSection()))
+        assert builder.build_parts(context()) is None
+
+
 class TestTheNumberGuard:
     def test_every_number_in_the_output_is_in_the_sheet(self):
         ctx = context(match=match_result(), profile=profile(horizon_target_year=2031))

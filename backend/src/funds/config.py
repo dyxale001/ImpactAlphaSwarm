@@ -5,12 +5,11 @@ does the same for discovery and ranking), so a module either exists in the serve
 app or it does not. Both flags default OFF: merging this feature changes no
 behaviour until an environment sets them.
 
-The two flags are separate because the catalogue and the generated prose carry
-different risks. ``FUNDS_ENABLED`` mounts the router and the page — inert data
-served from published fact sheets. ``FUND_TRACES_ENABLED`` turns on the
-model-written explanation, which cannot ship before its guards and the copy
-review are in place. The catalogue is useful without it: version one renders a
-templated "Why this appears" built from the snapshot's own fields.
+``FUNDS_ENABLED`` mounts the router and the page — inert data served from
+published fact sheets — and everything on it, the fund page's reasoning trace
+included: that paragraph ships behind its own guards and template fallback
+rather than a flag (see trace.py). ``FUND_TRACES_ENABLED`` was reserved for
+model-written fund prose and is no longer read.
 """
 
 import os
@@ -31,9 +30,9 @@ def _flag(name: str, default: str = "false") -> bool:
 # catalogue renders a page that says nothing.
 FUNDS_ENABLED = _flag("FUNDS_ENABLED")
 
-# Model-written fund explanations. Off by default and gated separately from the
-# catalogue: it must not flip before the forbidden-term and number-grounding
-# guards are proven, and before the copy has been reviewed.
+# Reserved for model-written fund explanations. Nothing reads it: the fund
+# page's reasoning trace (trace.py) is on wherever the catalogue is, behind its
+# guards and its template fallback, and needs no flag.
 FUND_TRACES_ENABLED = _flag("FUND_TRACES_ENABLED")
 
 # Private Supabase Storage bucket holding one PDF per fact-sheet snapshot at
@@ -53,3 +52,20 @@ MDD_SIGNED_URL_TTL_SECONDS = int(os.getenv("FUNDS_MDD_URL_TTL", "3600"))
 # exists so a future platform with a real minimum needs a value here rather than
 # a new rule in the matcher.
 PLATFORM_MIN_DEBIT_ORDER: float | None = None
+
+# Mounts /api/fund-uploads: a reader uploads a fact sheet, Gemini reads it
+# (reading.py), they review every figure and save it to their own list
+# (migration 039). Off by default like every flag here, and only read when
+# FUNDS_ENABLED is on too, since an uploaded fund is shown on the Funds page.
+# Needs GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION and FUND_EXTRACT_MODEL.
+FUND_UPLOADS_ENABLED = _flag("FUND_UPLOADS_ENABLED")
+
+# A fact sheet is a two-to-four page PDF of well under a megabyte; the limits
+# leave room for a long one and refuse anything that is plainly something else
+# before it costs a model call.
+FUND_UPLOAD_MAX_BYTES = int(os.getenv("FUND_UPLOAD_MAX_BYTES", str(10 * 1024 * 1024)))
+FUND_UPLOAD_MAX_PAGES = int(os.getenv("FUND_UPLOAD_MAX_PAGES", "10"))
+
+# Uploads per reader in any 24 hours, cached or not. About 2 US cents each, so
+# the limit is less about cost than about one account hammering the endpoint.
+FUND_UPLOADS_PER_DAY = int(os.getenv("FUND_UPLOADS_PER_DAY", "10"))

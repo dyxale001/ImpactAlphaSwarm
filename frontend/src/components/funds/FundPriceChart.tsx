@@ -46,10 +46,10 @@ export default function FundPriceChart({
   const pad = (high - low) * 0.08 || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-bold text-brand-primary">{DETAIL_PRICE_TITLE}</h2>
-        <span className="text-[11px] text-brand-secondary/70">
+        <h2 className="text-base font-bold text-brand-primary">{DETAIL_PRICE_TITLE}</h2>
+        <span className="text-[11px] text-forest-500">
           {data[0].date} to {data[data.length - 1].date}
         </span>
       </div>
@@ -89,7 +89,7 @@ export default function FundPriceChart({
         </ResponsiveContainer>
       </div>
 
-      <p className="text-[11px] leading-relaxed text-brand-secondary/60">{prices.note}</p>
+      <p className="text-xs leading-relaxed text-forest-500">{prices.note}</p>
     </section>
   );
 }

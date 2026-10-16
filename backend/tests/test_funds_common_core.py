@@ -262,6 +262,36 @@ class TestInceptionDate:
         assert any("before collective" in e for e in errors(inception_date="1917-02-24"))
 
 
+class TestSectionDates:
+    """Migration 038: holdings and allocation can carry their own date.
+
+    Coronation's August 2026 sheets print "HOLDINGS As at 30 Jun 2026"; shown
+    under the sheet's date, June's holdings read as August's.
+    """
+
+    MIGRATION_038 = MIGRATION.parent / "038_fund_snapshot_section_dates.sql"
+
+    def test_the_columns_are_added_and_selected(self):
+        sql = self.MIGRATION_038.read_text(encoding="utf-8")
+        selected = {c.strip() for c in SNAPSHOT_COLUMNS.split(",")}
+        for column in ("holdings_as_of", "allocation_as_of"):
+            assert re.search(rf"add column if not exists {column}\b", sql), column
+            assert column in selected, column
+
+    def test_an_earlier_quarter_end_is_accepted(self):
+        assert check(holdings_as_of="2026-06-30", allocation_as_of="2026-06-30") == []
+
+    def test_a_date_after_the_sheet_is_refused(self):
+        assert any("after the sheet" in e for e in errors(holdings_as_of="2026-08-31"))
+
+    def test_a_date_over_a_year_old_warns_but_does_not_block(self):
+        assert errors(allocation_as_of="2025-03-31") == []
+        assert any("over a year" in w for w in check(allocation_as_of="2025-03-31"))
+
+    def test_a_malformed_date_is_refused(self):
+        assert any("not a YYYY-MM-DD" in e for e in errors(holdings_as_of="June 2026"))
+
+
 class TestIncomeDistribution:
     """INVARIANT: a declared zero is kept, a negative is refused.
 
@@ -347,7 +377,7 @@ class TestTheSeedCarriesTheCommonCore:
             )
         }
         # The four funds whose Minimum Disclosure Document is readable locally.
-        for isin in ("ZAE000240123", "ZAE000240131", "ZAE000027108", "ZAE000188538"):
+        for isin in ("ZAE000240123", "ZAE000240131", "ZAE000027108", "ZAE000126033"):
             row = rows[isin]
             assert row["nav_cpu"], isin
             assert row["nav_date"], isin

@@ -36,7 +36,7 @@ export default function RiskScale({
     return note ? (
       <p
         className={`text-xs leading-relaxed ${
-          onDark ? "text-lime-100/80" : "text-brand-secondary/80"
+          onDark ? "text-lime-100/80" : "text-forest-500"
         }`}
       >
         {note}
@@ -51,7 +51,7 @@ export default function RiskScale({
       {!compact && (
         <span
           className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${
-            onDark ? "text-lime-100/60" : "text-brand-secondary/70"
+            onDark ? "text-lime-100/60" : "text-forest-500"
           }`}
         >
           {RISK_SCALE_TITLE}

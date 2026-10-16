@@ -142,6 +142,8 @@ export interface SnapshotInput {
    *  and the API has always accepted it; the type never listed it, so the
    *  edit screen could not read it back without an error. */
   top_holdings?: Record<string, number> | null;
+  holdings_as_of?: string | null;
+  allocation_as_of?: string | null;
 
   // The common core, all optional: a sheet that omits one must still be
   // recordable, and a reader that refuses a field has to be able to leave it

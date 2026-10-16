@@ -769,6 +769,52 @@ class InceptionDateValidator(RowValidator):
         return []
 
 
+class SectionDateValidator(RowValidator):
+    """The date a sheet's holdings or allocation are as at, when it prints its own.
+
+    Managers refresh holdings quarterly and print them on every monthly sheet:
+    Coronation's August 2026 sheets say "HOLDINGS As at 30 Jun 2026". The date can
+    only be at or before the sheet's, and a year older would be a quarterly table
+    nobody updated — possible, but worth a second look rather than a silent save.
+    """
+
+    name = "section_dates"
+
+    STALE_AFTER_DAYS = 366
+
+    def check(self, row: dict[str, Any]) -> list[Problem]:
+        problems: list[Problem] = []
+        as_of = _as_date(row.get("as_of"))
+        for field in ("holdings_as_of", "allocation_as_of"):
+            raw = row.get(field)
+            if is_blank(raw):
+                continue
+            dated = _as_date(raw)
+            if dated is None:
+                problems.append(Problem(field, f"{raw!r} is not a YYYY-MM-DD date"))
+                continue
+            if as_of is None:
+                continue
+            if dated > as_of:
+                problems.append(
+                    Problem(
+                        field,
+                        f"{dated.isoformat()} is after the sheet's own date {as_of.isoformat()}; "
+                        f"a section cannot be newer than the document printing it",
+                    )
+                )
+            elif (as_of - dated).days > self.STALE_AFTER_DAYS:
+                problems.append(
+                    Problem(
+                        field,
+                        f"{dated.isoformat()} is over a year before the sheet's date; check it was "
+                        f"not read off a different table",
+                        severity=WARNING,
+                    )
+                )
+        return problems
+
+
 class IncomeDistributionValidator(RowValidator):
     """The cents-per-unit history, as the sheet's distribution table prints it.
 
@@ -888,6 +934,8 @@ def snapshot_validators(today: date | None = None) -> ValidatorChain:
             RollingReturnValidator(),
             InceptionDateValidator(today=today),
             IncomeDistributionValidator(),
+            # Migration 038.
+            SectionDateValidator(),
         ),
         label="snapshot",
     )

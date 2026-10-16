@@ -133,6 +133,9 @@ class SnapshotIn(BaseModel):
     asset_allocation: Optional[dict[str, float]] = None
     performance: Optional[dict[str, float]] = None
     top_holdings: Optional[dict[str, float]] = None
+    # Migration 038: set only when the sheet dates the section itself.
+    holdings_as_of: Optional[str] = None
+    allocation_as_of: Optional[str] = None
 
     # The common core added in migration 025 — the rest of what every Minimum
     # Disclosure Document publishes. All optional, because a sheet that omits one

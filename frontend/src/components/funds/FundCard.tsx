@@ -19,7 +19,6 @@ import {
   TFSA_BADGE,
   TRACKER_BADGE,
   VEHICLE_LABEL,
-  WHY_APPEARS_LABEL,
   formatAsAt,
   formatFundSize,
   formatMinTerm,
@@ -37,41 +36,27 @@ import type { CatalogueFund, FundMatch } from "../../services/api/fundCatalogue"
  * management company on the card rather than only the brand, and the fact-sheet
  * date beside the numbers rather than in a footnote.
  *
- * Costs lead over performance deliberately. The total investment charge is the
- * most comparable disclosed figure across every fund and the one a beginner
- * cannot read; past returns are the least comparable and the most likely to be
- * mistaken for a forecast.
+ * Costs lead over performance deliberately, and now in size as well as order.
+ * The total investment charge is the most comparable disclosed figure across
+ * every fund and the one a beginner cannot read; past returns are the least
+ * comparable and the most likely to be mistaken for a forecast.
  *
- * ## Why there are two variants
+ * ## One card on both tabs
  *
- * The page shows this card in two places that are answering different
- * questions, and one shape was serving both badly. `FundMatch` carries no fund
- * size, distribution frequency or risk note, so a matched card filled two of
- * four figure slots and a browse card filled four — the same component at two
- * materially different heights, by accident rather than by choice.
- *
- * So the difference is now declared. `matched` states the two figures both DTOs
- * carry and spends the height it saves on the reason sentence, which is the
- * only thing on the card the reader cannot get from the fund itself.
- * `catalogue` states all four, printing "Not stated" where the sheet is silent
- * rather than dropping the row — on a card whose purpose is comparison, a
- * quietly missing figure reads as a shorter answer instead of a silent
- * document.
- *
- * `reason` is written by the backend, so the sentence that has to survive the
- * advice test is reviewed in one place. It is labelled here with the design
- * note's own heading: unlabelled, the tallest and most variable block on the
- * card read as prose about the fund rather than as the answer to the question
- * the section above it poses.
+ * The matched card used to carry the "Why this appears" sentence and drop fund
+ * size and distributions to make room for it, so the two tabs drew two shapes
+ * of card. The sentence is gone from the card: it was the longest block on it,
+ * and why a fund is among a reader's matches is now explained on the fund's own
+ * page, in the reasoning trace that reads the reader's answers. A match now
+ * carries the same figures as a catalogue row, so every card states all four,
+ * printing "Not stated" where the sheet is silent rather than dropping the row —
+ * on a card whose purpose is comparison, a quietly missing figure reads as a
+ * shorter answer instead of a silent document.
  */
 export default function FundCard({
   fund,
-  reason,
-  variant = "catalogue",
 }: {
   fund: CatalogueFund | (FundMatch & Partial<CatalogueFund>);
-  reason?: string;
-  variant?: "matched" | "catalogue";
 }) {
   const catalogue = fund as Partial<CatalogueFund>;
   const cost = formatPercent(fund.tic ?? null);
@@ -79,38 +64,23 @@ export default function FundCard({
   const asAt = formatAsAt(fund.as_of ?? null);
   const minTerm = formatMinTerm(fund.recommended_min_term_years ?? null);
   const size = formatFundSize(catalogue.fund_size_zar ?? null);
+  const distributions = catalogue.distribution_frequency ?? null;
   const tiers = splitAsisaCategory(fund.asisa_category);
-  // The brand and the company that issues the sheet are usually the same name
-  // and sometimes are not: a co-named boutique fund is run by one house and
-  // issued by another, and the second is the party whose document this is.
-  // Both, then, but only when they differ — printed twice it looks like a bug.
   const separateManco = fund.manco && fund.manco !== fund.fund_house ? fund.manco : null;
-
-  // The dated document first, the manager's listing page only as a fallback.
-  // Linking the listing page under "Read the fact sheet" sends a reader to an
-  // index of hundreds of funds instead of the one whose figures they are
-  // looking at, so the label changes with the destination.
   const factSheetUrl = fund.mdd_url ?? catalogue.mdd_page_url ?? null;
   const linksToDocument = Boolean(fund.mdd_url);
-
-  // Why this fund can be browsed and never matched. `risk_note` is the
-  // backend's own sentence where it has one; the two fallbacks distinguish a
-  // sheet that carries no indicator from a fund with no sheet on file at all,
-  // which are different facts about different things.
   const riskNote =
     catalogue.risk_note ??
     (catalogue.has_factsheet === false ? RISK_NO_SHEET_NOTE : RISK_UNPUBLISHED_NOTE);
 
   return (
-    <article className="soft-card flex flex-col gap-4 p-4 sm:p-5">
+    <article className="soft-card flex flex-col gap-4 p-5 transition-colors hover:border-brand-primary/30">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Three badges saying three unrelated things, so they are drawn
-              three ways. Vehicle and tracker were styled identically, which
-              made "unit trust" and "index tracker" look like one fact stated
-              twice. The accent fill is spent on tax-free eligibility alone:
-              it is the only one of the three with a consequence attached. */}
-          <span className="chip bg-brand-bg text-brand-secondary">
+              three ways. The accent fill is spent on tax-free eligibility
+              alone: it is the only one of the three with a consequence. */}
+          <span className="chip bg-brand-bg text-forest-600">
             {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}
           </span>
           {fund.is_index_tracker && (
@@ -122,39 +92,38 @@ export default function FundCard({
             <span className="chip bg-brand-accent text-brand-fg">{TFSA_BADGE}</span>
           )}
         </div>
-
         {/* The name is the way in to the full sheet. Only the name is a link:
             making the whole card clickable would swallow the fact-sheet link in
             the footer, which goes somewhere else entirely. */}
-        <h3 className="text-[15px] font-bold leading-snug tracking-[-0.01em] text-brand-primary">
+        <h3 className="text-base font-bold leading-snug tracking-[-0.01em] text-brand-primary">
           {fund.fund_id ? (
-            <Link to={`/funds/${fund.fund_id}`} className="hover:underline">
+            <Link
+              to={`/funds/${fund.fund_id}`}
+              className="underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+            >
               {fund.name}
             </Link>
           ) : (
             fund.name
           )}
         </h3>
-
         <div className="flex flex-col gap-0.5">
-          <p className="text-xs font-semibold leading-snug text-brand-secondary">
-            {fund.fund_house}
-          </p>
+          <p className="text-[13px] font-semibold leading-snug text-forest-600">{fund.fund_house}</p>
           {separateManco && (
-            <p className="text-[11px] leading-snug text-brand-secondary/70">
+            <p className="text-[11px] leading-snug text-forest-500">
               {DETAIL_MANCO_LABEL} {separateManco}
             </p>
           )}
           {/* The three tiers, with the geography carrying the weight. A reader
               cannot tell a South African fund from a global one by its name,
               and the classification is the only place the page says so. */}
-          <p className="text-xs leading-snug text-brand-secondary">
+          <p className="text-xs leading-snug text-forest-600">
             {tiers ? (
               <>
-                <span className="font-semibold text-brand-primary">{tiers.geography}</span>
-                <span className="text-brand-secondary/50"> · </span>
+                <span className="font-bold text-brand-primary">{tiers.geography}</span>
+                {" · "}
                 {tiers.assetClass}
-                <span className="text-brand-secondary/50"> · </span>
+                {" · "}
                 {tiers.focus}
               </>
             ) : (
@@ -172,46 +141,37 @@ export default function FundCard({
       {fund.risk_level != null ? (
         <RiskScale level={fund.risk_level} label={fund.risk_label ?? null} />
       ) : (
-        <p className="rounded-md border-l-2 border-brand-border bg-brand-bg px-3 py-2 text-[11px] leading-relaxed text-brand-secondary">
+        <p className="rounded-lg bg-brand-bg px-3 py-2.5 text-xs leading-relaxed text-forest-600">
           {riskNote}
         </p>
       )}
 
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 text-xs sm:grid-cols-2">
-        {cost ? (
-          <Figure label={COST_LABEL} value={`${cost} ${COST_PER_YEAR}`} />
-        ) : expense ? (
-          <Figure label={COST_TER_LABEL} value={`${expense} ${COST_PER_YEAR}`} />
-        ) : null}
-
-        {/* Stated on a browse card even when the sheet is silent, because four
-            cards side by side are a comparison and a dropped row makes a
-            silent document look like a shorter answer. A matched card keeps
-            the height for the reason sentence instead. */}
-        {minTerm ? (
-          <Figure label={MIN_TERM_LABEL} value={minTerm} />
-        ) : variant === "catalogue" ? (
-          <Figure label={MIN_TERM_LABEL} value={NOT_STATED} muted />
-        ) : null}
-
-        {variant === "catalogue" && size && <Figure label={FUND_SIZE_LABEL} value={size} />}
-        {variant === "catalogue" && fund.distribution_frequency && (
-          <Figure label={DISTRIBUTIONS_LABEL} value={fund.distribution_frequency} />
-        )}
-      </dl>
-
-      {variant === "matched" && reason && (
-        <div className="rounded-md bg-brand-bg/70 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-brand-muted-fg">
-            {WHY_APPEARS_LABEL}
-          </p>
-          <p className="mt-1 text-[11px] leading-relaxed text-brand-secondary">{reason}</p>
+      {/* One number leads, because one number is comparable across every fund.
+          The rest sit under it at one level. */}
+      {(cost || expense) && (
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-brand-border/40 pt-3.5">
+          <span className="text-2xl font-extrabold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
+            {cost ?? expense}
+          </span>
+          <span className="text-xs text-forest-500">
+            {cost ? COST_LABEL : COST_TER_LABEL} · {COST_PER_YEAR}
+          </span>
         </div>
       )}
 
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+        <Figure label={MIN_TERM_LABEL} value={minTerm ?? NOT_STATED} muted={!minTerm} />
+        <Figure label={FUND_SIZE_LABEL} value={size ?? NOT_STATED} muted={!size} />
+        {distributions && (
+          <div className="col-span-2">
+            <Figure label={DISTRIBUTIONS_LABEL} value={distributions} />
+          </div>
+        )}
+      </dl>
+
       <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-brand-border/40 pt-3">
         {asAt ? (
-          <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-brand-secondary/70">
+          <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-forest-500">
             <span className="tabular-nums">
               {AS_AT} {asAt}
             </span>
@@ -225,7 +185,7 @@ export default function FundCard({
             href={factSheetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-brand-primary hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-brand-primary hover:underline"
           >
             {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
             <ExternalLink className="h-3 w-3" />
@@ -236,11 +196,6 @@ export default function FundCard({
   );
 }
 
-/** One published figure, label over value.
- *
- *  `muted` is for a figure the sheet does not state. It stays in the grid and
- *  says so, which is a different claim from a blank cell: the document is
- *  silent, the fund is not missing something. */
 function Figure({
   label,
   value,
@@ -252,10 +207,10 @@ function Figure({
 }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[11px] text-brand-muted-fg">{label}</dt>
+      <dt className="text-[11px] text-forest-500">{label}</dt>
       <dd
-        className={`text-[13px] font-bold tabular-nums ${
-          muted ? "text-brand-secondary/60" : "text-brand-primary"
+        className={`mt-0.5 text-[13px] tabular-nums ${
+          muted ? "font-semibold text-forest-400" : "font-bold text-brand-primary"
         }`}
       >
         {value}

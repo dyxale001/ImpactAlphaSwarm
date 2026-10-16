@@ -49,15 +49,15 @@ export default function FundMinimums({
   if (!lump && !debit) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 ${className}`}>
-      <h2 className="text-sm font-bold text-brand-primary">{DETAIL_MINIMUMS_TITLE}</h2>
+    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+      <h2 className="text-base font-bold text-brand-primary">{DETAIL_MINIMUMS_TITLE}</h2>
 
       <dl className="flex flex-col gap-2.5">
         {lump && <Minimum label={DETAIL_MIN_LUMP_LABEL} value={lump} />}
         {debit && <Minimum label={DETAIL_MIN_DEBIT_LABEL} value={debit} />}
       </dl>
 
-      <p className="mt-auto text-[11px] leading-relaxed text-brand-secondary/60">
+      <p className="mt-auto text-xs leading-relaxed text-forest-500">
         {DETAIL_MINIMUMS_NOTE}
       </p>
     </section>
@@ -81,7 +81,7 @@ export function hasMinimums(
 function Minimum({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] text-brand-secondary/70">{label}</dt>
+      <dt className="text-[11px] text-forest-500">{label}</dt>
       <dd className="text-sm font-bold tabular-nums text-brand-primary">{value}</dd>
     </div>
   );

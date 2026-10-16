@@ -58,7 +58,7 @@ FUND = {
     "yahoo_symbol": None,
     "asisa_geography": "South African",
     "asisa_asset_class": "Interest Bearing",
-    "asisa_category": "South African - Interest Bearing - Money Market",
+    "asisa_category": "South African - Interest Bearing - SA Money Market",
     "tfsa_eligible": False,
     "platforms": ["EasyEquities"],
     "curation_rule": "largest money market fund by fund size",
