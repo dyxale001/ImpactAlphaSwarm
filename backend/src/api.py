@@ -1205,18 +1205,56 @@ _ask_intent_client = None
 _ask_narration_client = None
 
 
+class _FlaggingClient:
+    """Wraps the Groq client so ANY failure of a model call marks the request
+    as a service error, then re-raises unchanged.
+
+    Why a wrapper rather than a flag at each call site. There are eight
+    places a model call can fail (classification, narration, repair,
+    synthesis, comparison, two grounding calls, the envelope), each with its
+    own except handler that swallows the error and falls back. Flagging in
+    each handler would work today and quietly stop working the day a ninth
+    call is added. Every one of them goes through complete(), so this is the
+    one place that cannot be forgotten.
+
+    What it exists to tell apart. A question that fell back because the
+    MODEL SERVICE failed (a rate limit, an outage, an empty completion) and a
+    question that fell back because AlphaSwarm genuinely could not handle it
+    look identical in the log — both read "fallback" or "not answered". One
+    is an operational problem, the other is a coverage gap, and reading a
+    quota outage as a coverage gap sends someone off to fix routing that is
+    working. Behaviour is otherwise untouched: same return, same exception.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def complete(self, *args, **kwargs):
+        try:
+            return self._inner.complete(*args, **kwargs)
+        except Exception:
+            _ask_telemetry_mark(service_error=True)
+            raise
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def _get_ask_intent_client():
     global _ask_intent_client
     if _ask_intent_client is None:
         from src.utils.llm_client import GroqClient
 
-        _ask_intent_client = GroqClient.create(
+        _created = GroqClient.create(
             purpose="ask_intent",
             max_tokens=_ASK_INTENT_MAX_TOKENS,
             temperature=0,
             key_env=_ASK_KEY_ENV,
             fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
+        # create() returns None when no key is configured; keep that None so
+        # callers' "no client" handling still works.
+        _ask_intent_client = _FlaggingClient(_created) if _created is not None else None
     return _ask_intent_client
 
 
@@ -1225,13 +1263,14 @@ def _get_ask_narration_client():
     if _ask_narration_client is None:
         from src.utils.llm_client import GroqClient
 
-        _ask_narration_client = GroqClient.create(
+        _created = GroqClient.create(
             purpose="ask_narration",
             max_tokens=_ASK_NARRATION_MAX_TOKENS,
             temperature=0,
             key_env=_ASK_KEY_ENV,
             fallback_key_env=_ASK_FALLBACK_KEY_ENV,
         )
+        _ask_narration_client = _FlaggingClient(_created) if _created is not None else None
     return _ask_narration_client
 
 
@@ -1248,6 +1287,10 @@ def _classify_ask_intent(query: str) -> str:
     uses the distinction to give an honest, retry-worthy message instead."""
     client = _get_ask_intent_client()
     if client is None:
+        # No exception to catch here (nothing was ever called), so the
+        # wrapper can't see it — but an unconfigured model service is exactly
+        # as much a service problem as a rate-limited one.
+        _ask_telemetry_mark(service_error=True)
         return "CLASSIFIER_UNAVAILABLE"
     prompt = (
         "Classify the user question into exactly one label, output ONLY the "
@@ -2771,6 +2814,17 @@ def _resolve_fund(query: str) -> Optional[dict]:
 # lists individual companies, not investment funds", and "show me all the
 # ETFs" listed SNPS and PLTR. A catalogue question has to be recognised and
 # answered from the catalogue, or it is answered about stocks.
+# A question ABOUT one of the product's pages — what it is, where it is, how
+# to use it — as opposed to a request to DO the page's job. The distinction
+# is what keeps "compare AAPL and GOOGL" (a comparison, answered with data)
+# from being answered with a description of the Compare page.
+_ASK_ABOUT_A_PAGE_PATTERN = re.compile(
+    r"\b(?:what(?:'s|\s+is|\s+are|\s+does)|where(?:'s|\s+is|\s+can\s+i\s+find)|how\s+(?:do|does|can)\s+(?:i|the|this|you)|"
+    r"tell\s+me\s+about|explain|about\s+the|what\s+can\s+i\s+do|does\s+alphaswarm\s+have|"
+    r"is\s+there\s+a|can\s+i\s+(?:use|see|find))\b",
+    re.IGNORECASE,
+)
+
 _ASK_FUND_CATALOGUE_PATTERN = re.compile(
     r"\b(?:funds?|etfs?|unit\s+trusts?|index\s+trackers?)\b", re.IGNORECASE,
 )
@@ -5136,27 +5190,80 @@ class AskResponse(BaseModel):
     redirect_suggestions: List[str] = []
 
 
+# Longest slice of a question that is ever stored. A question is a sentence;
+# anything past this is pasted material the admin report has no use for and
+# the user did not mean to keep.
+_ASK_LOG_QUERY_MAX_CHARS = 500
+
+
+def _clean_logged_query(query: Optional[str]) -> Optional[str]:
+    """The question as it will be stored: whitespace collapsed, truncated,
+    and None if nothing is left. Only ever the user's own words — never the
+    answer."""
+    if not query:
+        return None
+    collapsed = " ".join(str(query).split())
+    if not collapsed:
+        return None
+    return collapsed[:_ASK_LOG_QUERY_MAX_CHARS]
+
+
 def _log_ask_query(
     *, user_id: Optional[str], asset_symbol: Optional[str], intent: str,
     success: bool, fallback_used: bool, validation_failed: bool, latency_ms: int,
+    query_text: Optional[str] = None, service_error: bool = False,
 ) -> None:
     """Best-effort persistence of one /api/ask outcome for the Admin Reports
-    Chatbot report (migration 018_ask_query_logs.sql). Deliberately writes
-    only aggregate metadata — never the raw query or narration text — and
-    NEVER raises: a logging failure must not turn a successful /api/ask
-    response into an error for the user."""
-    try:
-        supabase.table("ask_query_logs").insert({
-            "user_id": user_id,
-            "asset_symbol": asset_symbol,
-            "intent": intent,
-            "success": success,
-            "fallback_used": fallback_used,
-            "validation_failed": validation_failed,
-            "latency_ms": latency_ms,
-        }).execute()
-    except Exception as e:
-        logger.warning("ask_query_log_write_failed: %s", e)
+    Chatbot report (migrations 018, 037, 038). Stores aggregate metadata,
+    the user's QUESTION (truncated), and whether the model SERVICE failed
+    for this request — never the model's answer — and NEVER raises: a
+    logging failure must not turn a successful /api/ask response into an
+    error for the user.
+
+    Two columns are optional additions (query_text from 037, service_error
+    from 038). A database that hasn't applied one rejects the whole insert
+    on the unknown column, which would lose the entire row — and with it
+    every usage metric — for the sake of an optional field. So a failed
+    insert is retried with progressively fewer of them, ending at exactly
+    the row that existed before either migration. The order matters:
+    service_error is dropped first, so a database with 037 but not 038 still
+    keeps its question text."""
+    base = {
+        "user_id": user_id,
+        "asset_symbol": asset_symbol,
+        "intent": intent,
+        "success": success,
+        "fallback_used": fallback_used,
+        "validation_failed": validation_failed,
+        "latency_ms": latency_ms,
+    }
+    text = _clean_logged_query(query_text)
+
+    # Every subset of the two optional columns, richest first, so whichever
+    # migrations HAVE been applied are honoured regardless of the order they
+    # were applied in. Duplicates (when there is no text) are skipped.
+    with_text = {"query_text": text} if text else {}
+    with_flag = {"service_error": bool(service_error)}
+    ladder = [
+        {**base, **with_text, **with_flag},
+        {**base, **with_text},
+        {**base, **with_flag},
+        base,
+    ]
+    attempts = []
+    for row in ladder:
+        if row not in attempts:
+            attempts.append(row)
+
+    last_error: Optional[Exception] = None
+    for row in attempts:
+        try:
+            supabase.table("ask_query_logs").insert(row).execute()
+            return
+        except Exception as e:
+            last_error = e
+            logger.warning("ask_query_log_write_failed (retrying with fewer columns): %s", e)
+    logger.warning("ask_query_log_write_failed: %s", last_error)
 
 
 # Sources that mean "a generic/definitional answer, not the user's own
@@ -5258,6 +5365,14 @@ def _ask_response_link(response: AskResponse) -> Optional[AskLink]:
     if response.source == "learning_centre":
         return AskLink(path="/learning", label="Read more in the Learning Centre")
 
+    # An answer about a specific product page sets its own link (or, when
+    # that page is switched off, deliberately none). The generic fallback
+    # below is for methodology questions, and applying it here sent "the
+    # Compare page isn't available" to /learning — a link that implies the
+    # answer lives somewhere it does not.
+    if data.get("feature"):
+        return None
+
     if response.intent == "PLATFORM_QUESTION":
         return AskLink(path="/learning", label="Learn how AlphaSwarm works")
 
@@ -5353,7 +5468,7 @@ async def ask_alphaswarm(
     (classification, narration, one bounded repair attempt) it took. The
     pipeline/behaviour below is entirely unchanged from before this wrapper
     existed; see _ask_alphaswarm_impl."""
-    telemetry: Dict[str, Any] = {"fallback_used": False, "validation_failed": False, "user_id": None}
+    telemetry: Dict[str, Any] = {"fallback_used": False, "validation_failed": False, "service_error": False, "user_id": None}
     token = _ask_telemetry.set(telemetry)
     start = time.monotonic()
     response: Optional[AskResponse] = None
@@ -5397,6 +5512,8 @@ async def ask_alphaswarm(
                 fallback_used=bool(telemetry.get("fallback_used")),
                 validation_failed=bool(telemetry.get("validation_failed")),
                 latency_ms=latency_ms,
+                query_text=req.query,
+                service_error=bool(telemetry.get("service_error")),
             )
 
 
@@ -5500,6 +5617,63 @@ async def _ask_alphaswarm_impl(
     if multi_intent is not None:
         return multi_intent
 
+    # `intent` is a sentinel: None means "not yet deterministically decided".
+    # Declared here, ahead of the first shortcut that reads it, rather than
+    # at step 2d where it used to live — moving the page step above 2d
+    # otherwise read it before assignment.
+    intent: Optional[str] = None
+
+    # 2a'. The product's own pages — runs BEFORE every generic shortcut
+    # below (asset resolution, metric grounding, the definitional
+    # shortcut). Found by testing: placed after them, "what is the
+    # market news page" was resolved to News Corp ("news" matched a
+    # company name) and "what is the investment planner" was answered
+    # with a web definition of a financial PLANNER, a type of person.
+    # A question that names one of our own pages is decided here, first.
+    #
+    # (Original comment:) The product's own pages — Market News, Compare, Financial Tools,
+    # Funds. Asked about by name, so no classifier is needed, and answered
+    # from fixed reviewed text (utils/ask_features.py), never a model.
+    #
+    # Only an ENABLED page is described. These sit behind feature flags that
+    # default off, and a flag-off deployment has no such page: describing it
+    # — and especially linking to it — would send the user to a 404. A
+    # switched-off page the question names gets an honest "not available
+    # here" instead of falling through to "I'm not sure what you mean".
+    #
+    # Only fires on a question ABOUT the page (what is / where is / how do
+    # I use), so "compare AAPL and GOOGL" still goes to the comparison
+    # path, not to a description of the Compare page.
+    if intent is None and _ASK_ABOUT_A_PAGE_PATTERN.search(query):
+        try:
+            from src.utils.ask_features import match_feature, disabled_feature_named
+            page = match_feature(query)
+            if page is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=f"{page.summary} {page.detail}",
+                    data={"feature": page.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=[],
+                    link=AskLink(path=page.path, label=f"Open {page.name}"),
+                )
+            missing = disabled_feature_named(query)
+            if missing is not None:
+                return AskResponse(
+                    intent="PLATFORM_QUESTION",
+                    narration=(
+                        f"{missing.name} isn't available in this version of "
+                        f"AlphaSwarm yet."
+                    ),
+                    data={"feature": missing.key},
+                    source="platform_methodology",
+                    is_blocked=False,
+                    redirect_suggestions=_ASK_REDIRECT_SUGGESTIONS,
+                )
+        except Exception as e:
+            logger.warning("Ask feature-page lookup failed: %s", e)
+
     # 2b. Asset-specific metric questions ("what is Microsoft's beta?",
     # "what is GOOGL's RSI?", "what does its beta mean?") — deterministic,
     # checked BEFORE intent classification. resolved_asset+resolved_metric
@@ -5542,7 +5716,6 @@ async def _ask_alphaswarm_impl(
     # set by 2d/2e below, or by the classifier call in step 3 if neither
     # shortcut fired. 2f (whale watching) returns directly rather than
     # setting this sentinel, since it's a full response, not just an intent.
-    intent: Optional[str] = None
     if resolved_asset and not resolved_metric and (
         _ASK_ASSET_OVERVIEW_PATTERN.search(query) or _is_bare_ticker_query(query, resolved_asset)
     ):
@@ -7047,11 +7220,13 @@ async def admin_reports_retention(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/admin/reports/chatbot")
 async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str] = Header(None)):
-    """Ask AlphaSwarm usage/quality, from ask_query_logs (migration 018).
+    """Ask AlphaSwarm usage/quality, from ask_query_logs (migrations 018, 037).
 
-    Never returns raw prompt/answer text — only the aggregate metadata the
-    table stores. If the table doesn't exist yet (migration not applied) or
-    has no rows in range, reports that plainly rather than fabricating data.
+    Aggregate metadata, plus `recent_queries`: the questions asked, since
+    migration 037. Never the model's ANSWER, and never who asked — see
+    _recent_ask_queries. If the table doesn't exist yet (migration not
+    applied) or has no rows in range, reports that plainly rather than
+    fabricating data.
     """
     requester_id = await _get_user_id_from_bearer(authorization)
     await _require_admin(requester_id)
@@ -7107,4 +7282,80 @@ async def admin_reports_chatbot(range: str = "30d", authorization: Optional[str]
         "average_latency_ms": avg_latency_ms,
         "top_queried_assets": top_queried_assets,
         "queries_over_time": queries_over_time,
+        "recent_queries": _recent_ask_queries(cutoff),
+        "service_error_count": _ask_service_error_count(cutoff),
     }
+
+
+def _ask_service_error_count(cutoff: Optional[datetime.datetime]) -> Optional[int]:
+    """How many requests in range failed because the MODEL SERVICE did, or
+    None when that can't be known.
+
+    Its own query, for the same reason the question list is: service_error
+    lives in a column added by migration 038, so selecting it with the
+    aggregates would make the whole report fail on a database that hasn't
+    applied it. None (rather than 0) on failure matters: "0 service errors"
+    would be a claim, and before 038 there is no data to make it."""
+    try:
+        q = supabase.table("ask_query_logs").select("service_error").eq("service_error", True)
+        if cutoff:
+            q = q.gte("created_at", cutoff.isoformat())
+        return len(q.execute().data or [])
+    except Exception as e:
+        logger.warning("admin_reports_chatbot service_error_count unavailable (migration 038 applied?): %s", e)
+        return None
+
+
+def _recent_ask_queries(cutoff: Optional[datetime.datetime], limit: int = 100) -> List[dict]:
+    """The questions people have asked, newest first, for the admin report.
+
+    A separate query from the aggregates on purpose. The question text lives
+    in a column added by migration 037, so selecting it alongside the
+    aggregates would make the whole report fail on a database where 037 has
+    not run yet — taking the working statistics down for an optional list.
+    Here a failure just means an empty list, which the page renders as "no
+    questions recorded yet".
+
+    Returns only what an admin needs to read a question in context: when,
+    what was asked, how it was routed and whether it was answered. Never the
+    answer, and never the user's identity — the report shows what is being
+    asked, not who is asking it."""
+    # service_error is a column from migration 038. A database with 037 but
+    # not 038 would reject a select naming it, which would drop the WHOLE
+    # question list even though the questions themselves are fine — so ask
+    # for it, and on failure ask again without it. Each migration therefore
+    # lights up its own part of the report independently.
+    rows = None
+    for columns in (
+        "created_at,query_text,intent,success,fallback_used,asset_symbol,service_error",
+        "created_at,query_text,intent,success,fallback_used,asset_symbol",
+    ):
+        try:
+            q = (
+                supabase.table("ask_query_logs")
+                .select(columns)
+                .not_.is_("query_text", "null")
+                .order("created_at", desc=True)
+                .limit(limit)
+            )
+            if cutoff:
+                q = q.gte("created_at", cutoff.isoformat())
+            rows = q.execute().data or []
+            break
+        except Exception as e:
+            logger.warning("admin_reports_chatbot recent_queries select failed (%s): %s", columns.count(",") + 1, e)
+    if rows is None:
+        return []
+    return [
+        {
+            "asked_at": r.get("created_at"),
+            "query": r.get("query_text"),
+            "intent": r.get("intent"),
+            "answered": bool(r.get("success")),
+            "fallback_used": bool(r.get("fallback_used")),
+            "service_error": bool(r.get("service_error")),
+            "asset_symbol": r.get("asset_symbol"),
+        }
+        for r in rows
+        if r.get("query_text")
+    ]
