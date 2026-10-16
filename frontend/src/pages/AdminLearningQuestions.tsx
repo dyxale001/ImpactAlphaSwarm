@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSignOut } from "../hooks/useSignOut";
 import { BookOpen, Edit3, ListOrdered, Plus, Trash2, X } from "lucide-react";
 import AdminTabs from "../components/admin/AdminTabs";
+import AdminQuestionListSkeleton from "../components/admin/AdminQuestionListSkeleton";
 import AdminLearningQuestionsSkeleton from "../components/admin/AdminLearningQuestionsSkeleton";
 import {
   type AdminLearningAnswer,
@@ -549,10 +550,8 @@ export default function AdminLearningQuestions() {
               </div>
 
               {loadingQuestions ? (
-                <div className="rounded-brand border border-brand-border bg-background p-8 text-sm text-brand-muted-fg shadow-card">
-                  Loading questions...
-                </div>
-              ) : sortedQuestions.length === 0 ? (
+                <AdminQuestionListSkeleton />
+              ) : error && sortedQuestions.length === 0 ? null : sortedQuestions.length === 0 ? (
                 <div className="rounded-brand border border-brand-border bg-background p-8 text-sm text-brand-muted-fg shadow-card">
                   No questions exist for this article yet.
                 </div>
