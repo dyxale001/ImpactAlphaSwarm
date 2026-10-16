@@ -4,10 +4,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import LearningPage from './Learning';
+import AppLayout from '../components/layout/AppLayout';
+vi.mock('../components/assistant/AskAlphaSwarmChatbot', () => ({ default: () => null }));
+vi.mock('../components/AnalysisCompletionNotification', () => ({ default: () => null }));
+vi.mock('../hooks/useSignOut', () => ({ useSignOut: () => vi.fn() }));
 const mocks = vi.hoisted(() => ({ content: vi.fn(), badges: vi.fn(), state: vi.fn(), submit: vi.fn() }));
 vi.mock('../store/authStore', () => ({ useAuthStore: () => ({ session:{user:{id:'user'}},profile:{id:'user'},analysis:null,isProfileLoading:false,fetchProfile:vi.fn() }) }));
 vi.mock('../services/supabase/learningService', () => ({ fetchLearningCentreData:mocks.content,fetchLearningBadges:mocks.badges,fetchLearningUserState:mocks.state,submitLearningQuiz:mocks.submit }));
-vi.mock('../components/learning/LearningRoadmap', () => ({ default: ({categories,onOpenArticle}:any) => createElement('div',{},...categories.flatMap((c:any)=>c.articles.map((a:any)=>createElement('button',{key:a.id,onClick:()=>onOpenArticle(a)},`Read ${a.id}`)))) }));
+vi.mock('../components/learning/LearningRoadmap', () => ({ default: ({categories,onOpenArticle,onOpenFinancialTools}:any) => createElement('div',{},createElement('button',{onClick:onOpenFinancialTools},'Explore Financial Tools'),...categories.flatMap((c:any)=>c.articles.map((a:any)=>createElement('button',{key:a.id,onClick:()=>onOpenArticle(a)},`Read ${a.id}`)))) }));
 vi.mock('../components/learning/LearningCategorySection', () => ({default:()=>null}));
 vi.mock('../components/learning/LearningBadgeGallery', () => ({default:()=>null}));
 vi.mock('../components/learning/LearningQuizModal', () => ({default:({article,onClose}:any)=>createElement('div',{'data-testid':'quiz'},`Quiz ${article.id}`,createElement('button',{onClick:onClose},'Close Quiz'))}));
@@ -30,3 +34,35 @@ it('tracks quiz back/forward and navigation to B',async()=>{await mount();await 
 it('handles direct links then quiz interactions',async()=>{await mount('/learning?article=A');expect(viewer('A')).toBe(true);await click('Take Quiz');await click('Close Quiz');await click('Read A');expect(viewer('A')).toBe(true);});
 it('closes and reopens an article',async()=>{await mount();await click('Read A');await click('Close');expect(router.state.location.search).toBe('');await click('Read A');expect(viewer('A')).toBe(true);});
 it.each(['/learning?article=deleted','/learning?article=invalid&quiz=1'])('handles missing %s',async path=>{await mount(path);expect(container.textContent).toContain('This learning article is unavailable');expect(container.querySelector('[data-testid="quiz"]')).toBeNull();await click('Return to Learning Centre');expect(router.state.location.search).toBe('');});
+
+async function mountLayout() {
+ router=createMemoryRouter([{element:createElement(AppLayout),children:[
+  {path:'/learning',element:createElement(LearningPage)},
+  {path:'/financial-tools',element:createElement('h1',{},'Financial Tools')},
+ ]}],{initialEntries:['/financial-tools']});
+ await act(async()=>root.render(createElement(RouterProvider,{router})));
+ const main=container.querySelector('main')!;
+ main.scrollTop=900;
+ await act(async()=>router.navigate('/learning'));
+ expect(main.scrollTop).toBe(900);
+ return main;
+}
+it.each(['link','button'])('opens tools at the top through the Learning %s after a scrolled visit',async kind=>{
+ const main=await mountLayout();
+ const entry=[...container.querySelectorAll(kind==='link'?'a':'button')].find(el=>el.textContent==='Explore Financial Tools') as HTMLElement;
+ expect(entry).toBeTruthy();
+ await act(async()=>entry.click());
+ expect(router.state.location.pathname).toBe('/financial-tools');
+ expect(main.scrollTop).toBe(0);
+});
+it('does not reset scroll on article deep links, query changes, or unrelated routes',async()=>{
+ const main=await mountLayout();
+ await act(async()=>router.navigate('/learning?article=A'));
+ expect(main.scrollTop).toBe(900);
+ await act(async()=>router.navigate('/financial-tools'));
+ main.scrollTop=400;
+ await act(async()=>router.navigate('/financial-tools?view=goal'));
+ expect(main.scrollTop).toBe(400);
+ await act(async()=>router.navigate(-1));
+ expect(main.scrollTop).toBe(400);
+});

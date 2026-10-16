@@ -263,7 +263,7 @@ export default function MarketNewsPage() {
           </div>
         </div>
       </div>
-      <LearnMore context="news" />
+      <LearnMore context="news" className="mt-6" />
 
       <AboutMarketNewsModal open={showAbout} onClose={closeAbout} threshold={feed?.threshold ?? 0.6} />
 

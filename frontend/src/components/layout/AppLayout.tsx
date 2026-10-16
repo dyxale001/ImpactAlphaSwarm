@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import AskAlphaSwarmChatbot from "../assistant/AskAlphaSwarmChatbot";
 import AnalysisCompletionNotification from "../AnalysisCompletionNotification";
@@ -30,7 +30,15 @@ import { COMPARE_ENABLED } from "../../utils/compareFlags";
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const location = useLocation();
+
+  // The app scrolls this persistent region, rather than the window.
+  useLayoutEffect(() => {
+    if (location.pathname === "/financial-tools" && mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
+  }, [location.pathname]);
   const { profile, user } = useAuthStore();
   const signOut = useSignOut();
 
@@ -228,6 +236,7 @@ export default function AppLayout() {
           over the bottom-right corner of the content, so pb-20 lets the last card
           on every page scroll clear of it; /ask has no floating button. */}
       <main
+        ref={mainRef}
         className={`relative flex-1 overflow-y-auto pt-14 lg:pt-0 ${
           location.pathname === "/ask" ? "" : "pb-20 lg:pb-0"
         }`}

@@ -1,3 +1,4 @@
+import { LEARNING_TAG_GROUPS } from './learningTagGroups';
 import { LEARNING_TAGS } from '../../data/learningContexts';
 import { learningVideoEmbed } from '../../utils/learningVideo';
 import LearningVideo from '../learning/LearningVideo';
@@ -160,9 +161,14 @@ export default function LearningArticleForm({
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-semibold text-brand-fg">Related pages and features</legend>
-            <div className="grid gap-2 sm:grid-cols-2">{Object.entries(LEARNING_TAGS).map(([tag, label]) => <label key={tag} className="flex items-center gap-2 text-sm text-brand-fg">
-              <input type="checkbox" checked={(values.tags ?? []).includes(tag)} onChange={event => onChange("tags", event.target.checked ? [...(values.tags ?? []), tag] : (values.tags ?? []).filter(value => value !== tag))} />{label}
-            </label>)}</div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {LEARNING_TAG_GROUPS.map(group => <fieldset key={group.label} className="min-w-0 space-y-2 rounded-xl border border-brand-border p-3">
+                <legend className="px-1 text-xs font-semibold text-brand-primary">{group.label}</legend>
+                {group.tags.map(tag => <label key={tag} className="flex min-h-9 items-center gap-2 text-sm text-brand-fg">
+                  <input type="checkbox" checked={(values.tags ?? []).includes(tag)} onChange={event => onChange("tags", event.target.checked ? [...(values.tags ?? []), tag] : (values.tags ?? []).filter(value => value !== tag))} />{LEARNING_TAGS[tag]}
+                </label>)}
+              </fieldset>)}
+            </div>
           </fieldset>
           <div className="space-y-2">
             <label htmlFor="learning-video" className="block text-sm font-semibold text-brand-fg">Educational video URL (optional)</label>

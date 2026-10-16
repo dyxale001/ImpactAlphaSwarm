@@ -1,3 +1,4 @@
+import { createElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 const markdownComponents: Components = {
@@ -128,8 +129,21 @@ const markdownComponents: Components = {
 
 type MarkdownRendererProps = {
   content: string;
+  afterHeading?: { offset: number; content: ReactNode };
 };
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  return <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>;
+export default function MarkdownRenderer({ content, afterHeading }: MarkdownRendererProps) {
+  const components = { ...markdownComponents };
+  if (afterHeading) {
+    // Insert alongside the rendered heading, without splitting or rewriting
+    // Markdown: reference links and subsequent headings keep their context.
+    for (const tag of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+      const Heading = markdownComponents[tag] ?? tag;
+      components[tag] = ({ node, ...props }) => <>
+        {createElement(Heading, props)}
+        {node?.position?.start.offset === afterHeading.offset && afterHeading.content}
+      </>;
+    }
+  }
+  return <ReactMarkdown components={components}>{content}</ReactMarkdown>;
 }

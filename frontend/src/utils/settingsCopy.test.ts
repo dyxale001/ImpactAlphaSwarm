@@ -61,3 +61,8 @@ describe('when the answers were last saved', () => {
     expect(lastSavedAt({})).toBeNull()
   })
 })
+
+it('uses the approved concise profile introduction', async () => {
+  const { PROFILE_TAB_INTRO } = await import('./settingsCopy');
+  expect(PROFILE_TAB_INTRO).toBe('Your risk profile and goals shape fund matches and are saved separately.');
+});

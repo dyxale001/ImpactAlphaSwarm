@@ -1,3 +1,4 @@
+import { useSignOut } from "../hooks/useSignOut";
 import { useState } from "react";
 import AdminTabs from "../components/admin/AdminTabs";
 import {
@@ -427,6 +428,7 @@ function QuestionsLog({ queries }: { queries: NonNullable<ChatbotReport["recent_
 }
 
 export default function AdminReports() {
+  const handleSignOut = useSignOut();
   const [tab, setTab] = useState<Tab>("Overview");
   const [range, setRange] = useState<ReportRange>("30d");
   const rangeAware: Tab[] = ["Overview", "Users", "Learners", "Assets", "Chatbot"];
@@ -442,6 +444,15 @@ export default function AdminReports() {
               Platform usage, learner engagement, and Ask AlphaSwarm behaviour — built entirely from real,
               persisted data. Nothing here is estimated or backfilled.
             </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-danger/30 border border-danger hover:border-danger hover:text-background hover:bg-danger text-danger text-sm font-medium"
+            >
+              Sign out
+            </button>
           </div>
         </div>
 
