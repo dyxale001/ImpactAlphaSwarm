@@ -1,15 +1,11 @@
-import LearnMore from '../components/learning/LearnMore';
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowRight, Info, Newspaper } from "lucide-react";
+import { AlertTriangle, ArrowRight, Newspaper } from "lucide-react";
 import { getMacroNews, type MacroFeed } from "../services/api/macroNews";
-import MacroArticleCard from "../components/macroNews/MacroArticleCard";
+import MacroArticleCard, { sectorDot } from "../components/macroNews/MacroArticleCard";
 import SectorSummary from "../components/macroNews/SectorSummary";
-import AboutMarketNewsModal from "../components/macroNews/AboutMarketNewsModal";
-import WireMotif from "../components/macroNews/WireMotif";
-import { universeIcon } from "../components/macroNews/universeIcons";
+import AboutMarketNews from "../components/macroNews/AboutMarketNews";
 import FundsNotice from "../components/funds/FundsNotice";
-import { sectorColour } from "../utils/sectorColours";
 import { filterByTag, groupByDay, storiesFor, tagCounts, userSectors } from "../utils/macroNews";
 import { useAuthStore } from "../store/authStore";
 
@@ -24,11 +20,8 @@ import { useAuthStore } from "../store/authStore";
 // nothing is hidden, only ordered. Relevance only: no story is called good or bad
 // for anything, and none of it feeds the rankings.
 
-// Verdant's press and focus states: a small press-in, and the lime focus outline the
-// rest of the app uses.
-const PRESSABLE =
-  "transition-transform duration-[120ms] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent";
-
+// A sector filter: the platform's filter chip with the sector's dot and its count,
+// as on the conservative design. Market-wide is grey, outside the sector palette.
 function FilterPill({
   label,
   count,
@@ -42,32 +35,11 @@ function FilterPill({
   marketWide: boolean;
   onClick: () => void;
 }) {
-  const Icon = universeIcon(label);
-  // The icon sits on its sector's tint, the same wash the watchlist and Settings use.
-  const tint = marketWide ? "bg-neutral-100" : sectorColour(label).tint;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full py-1.5 pl-2 pr-3 text-xs font-semibold shadow-sm ${
-        active ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary hover:bg-brand-surface/70"
-      }`}
-    >
-      <span
-        className={`flex h-5 w-5 items-center justify-center rounded-full ${active ? "bg-white/15" : tint}`}
-        aria-hidden
-      >
-        <Icon className="h-3 w-3" />
-      </span>
+    <button type="button" onClick={onClick} aria-pressed={active} className="as-fchip">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${sectorDot(label, marketWide)}`} aria-hidden />
       {label}
-      <span
-        className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
-          active ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
-        }`}
-      >
-        {count}
-      </span>
+      <span className="tabular-nums text-brand-muted-fg">{count}</span>
     </button>
   );
 }
@@ -76,7 +48,7 @@ function FeedSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden>
       {[0, 1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="soft-card h-56 animate-pulse p-5">
+        <div key={i} className="as-card h-56 animate-pulse p-5">
           <div className="h-3 w-24 rounded-full bg-brand-border/50" />
           <div className="mt-4 h-4 w-3/4 rounded-full bg-brand-border/50" />
           <div className="mt-2 h-4 w-1/2 rounded-full bg-brand-border/50" />
@@ -98,8 +70,8 @@ function storyCount(n: number): string {
 type PageTab = "sectors" | "stories";
 type StoriesView = "tagged" | "other";
 
-// The platform's tab bar, as on the stock and fund pages: a pill with the active tab
-// in lime. self-start keeps it from stretching to the page width inside a flex column.
+// The platform's tab bar, as on the stock page and Compare: full size, and on a phone
+// an even grid across the width.
 function PageTabs({ value, onChange }: { value: PageTab; onChange: (tab: PageTab) => void }) {
   const tabs: { key: PageTab; label: string }[] = [
     { key: "sectors", label: "Sectors" },
@@ -109,7 +81,7 @@ function PageTabs({ value, onChange }: { value: PageTab; onChange: (tab: PageTab
     <div
       role="tablist"
       aria-label="Market news sections"
-      className="self-start inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap"
+      className="as-tabs grid w-full grid-cols-2 rounded-[20px] sm:inline-flex sm:w-auto sm:self-start sm:rounded-full"
     >
       {tabs.map((tab) => (
         <button
@@ -120,9 +92,7 @@ function PageTabs({ value, onChange }: { value: PageTab; onChange: (tab: PageTab
           aria-selected={value === tab.key}
           aria-controls={`panel-${tab.key}`}
           onClick={() => onChange(tab.key)}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-            value === tab.key ? "bg-brand-accent text-brand-fg" : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className="as-tab"
         >
           {tab.label}
         </button>
@@ -131,8 +101,8 @@ function PageTabs({ value, onChange }: { value: PageTab; onChange: (tab: PageTab
   );
 }
 
-// The smaller forest toggle for choices inside a tab (which sectors, tagged or not),
-// so the two levels never look like the same control.
+// The small tray for choices inside a tab (which sectors, tagged or not), one level
+// down from the page tabs, so the two levels never look like the same control.
 function Toggle<T extends string>({
   options,
   value,
@@ -148,16 +118,14 @@ function Toggle<T extends string>({
   asTabs?: boolean;
 }) {
   return (
-    <div className="inline-flex self-start rounded-full bg-brand-surface p-1 shadow-sm" role={asTabs ? "tablist" : "group"} aria-label={label}>
+    <div className="as-tabs as-tabs-sm self-start" role={asTabs ? "tablist" : "group"} aria-label={label}>
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           {...(asTabs ? { role: "tab", "aria-selected": value === opt.value } : { "aria-pressed": value === opt.value })}
-          className={`${PRESSABLE} rounded-full px-3 py-1 text-xs font-semibold ${
-            value === opt.value ? "bg-brand-primary text-brand-bg" : "text-brand-secondary hover:text-brand-primary"
-          }`}
+          className="as-tab"
         >
           {opt.label}
         </button>
@@ -172,15 +140,12 @@ export default function MarketNewsPage() {
   const [searchParams] = useSearchParams();
   // ?filter=Finance arrives from a stock's Market news tab. Read once, like ?tab=.
   const [filter, setFilter] = useState<string | null>(() => searchParams.get("filter"));
-  const [showAbout, setShowAbout] = useState(false);
   const [sectorScope, setSectorScope] = useState<"mine" | "all">("mine");
   // Opens on ?tab=stories (and ?view=other) when asked, like the stock page's ?tab=.
   // Read once on mount; switching afterwards is local state.
   const [tab, setTab] = useState<PageTab>(() => (searchParams.get("tab") === "stories" ? "stories" : "sectors"));
   const [view, setView] = useState<StoriesView>(() => (searchParams.get("view") === "other" ? "other" : "tagged"));
   const tabsRef = useRef<HTMLDivElement>(null);
-  // Stable, so the modal's open effect doesn't re-run (and refocus) on every render.
-  const closeAbout = useCallback(() => setShowAbout(false), []);
   const chosen = useAuthStore((s) => s.analysis?.investment_universe);
 
   useEffect(() => {
@@ -222,16 +187,14 @@ export default function MarketNewsPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
-      {/* ── Header ── */}
-      <div className="hero-card overflow-hidden px-5 pb-10 pt-8 sm:px-7">
-        {/* Right-hand artwork, as on the other hub pages; a phone has no free side for it. */}
-        <WireMotif className="hidden h-full md:block" />
-        <div className="relative">
-          <div>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-accent">
-              Current affairs
-            </span>
-            <h1 className="mt-1 flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+      {/* ── Header ──
+          The same title card as Stocks, Funds and Compare: no motif, and the
+          relevance caveat lives in About this page with the lessons. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">Current affairs</p>
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
               <Newspaper className="h-7 w-7 shrink-0 text-brand-accent" />
               Market News
             </h1>
@@ -239,35 +202,18 @@ export default function MarketNewsPage() {
               World and market news from Reuters, CNBC and Bloomberg, updated three times a day. Each story shows
               how likely it is to be relevant to each investment universe.
             </p>
-            <p className="mt-3 max-w-2xl text-xs leading-relaxed text-brand-bg/60">
-              Relevance, not direction: nothing here says whether news is good or bad, and these stories do not
-              affect AlphaSwarm's rankings.
-            </p>
           </div>
-          <div className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
             {updated && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-brand-bg">
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-3.5 text-xs font-semibold text-brand-bg">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-accent" aria-hidden />
                 Updated {updated}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setShowAbout(true)}
-              aria-haspopup="dialog"
-              className={`${PRESSABLE} inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg hover:bg-lime-400`}
-            >
-              <Info className="h-3.5 w-3.5" aria-hidden />
-              About this page
-            </button>
+            <AboutMarketNews threshold={feed?.threshold ?? 0.6} learnContext="news" />
           </div>
         </div>
       </div>
-      {/* The page spaces its sections with their own top margin rather than a
-          column gap, so the card needs one too, as on the Funds page. */}
-      <LearnMore context="news" className="mt-6" />
-
-      <AboutMarketNewsModal open={showAbout} onClose={closeAbout} threshold={feed?.threshold ?? 0.6} />
 
       {error && (
         <div className="mt-6">
@@ -283,7 +229,7 @@ export default function MarketNewsPage() {
 
       {feed && cardProps && (
         <div className="mt-6 flex flex-col gap-6">
-          <div ref={tabsRef} className="flex scroll-mt-6 flex-col">
+          <div ref={tabsRef} className="flex scroll-mt-20 flex-col lg:scroll-mt-6">
             <PageTabs value={tab} onChange={setTab} />
           </div>
 
@@ -292,7 +238,7 @@ export default function MarketNewsPage() {
             <div role="tabpanel" id="panel-sectors" aria-labelledby="tab-sectors" className="animate-fade-up flex flex-col gap-8">
               <section className="flex flex-col gap-4" aria-labelledby="sectors-heading">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 id="sectors-heading" className="text-lg font-bold tracking-[-0.015em] text-brand-primary">
+                  <h2 id="sectors-heading" className="text-lg font-bold tracking-[-0.015em] text-forest-900">
                     {showAll ? "Sectors this week" : "Your sectors this week"}
                   </h2>
                   {mine.length > 0 && mine.length < feed.universes.length && (
@@ -348,33 +294,21 @@ export default function MarketNewsPage() {
 
               {view === "tagged" && (
                 <div key="tagged" className="animate-fade-up">
-                  <p className="text-xs text-brand-muted-fg">
+                  <p className="text-sm text-brand-muted-fg">
                     Every story from the last {feed.days} days tagged to a sector or as market-wide, with all of its
                     scores.
                   </p>
 
-                  {/* Filters: one scrolling row on a phone, wrapping from tablet up. */}
-                  <div
-                    className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
-                    role="group"
-                    aria-label="Filter by universe"
-                  >
+                  {/* Filters wrap on a phone too, so none sits past the edge. */}
+                  <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filter by universe">
                     <button
                       type="button"
                       onClick={() => setFilter(null)}
                       aria-pressed={filter === null}
-                      className={`${PRESSABLE} inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm ${
-                        filter === null ? "bg-brand-primary text-brand-bg" : "bg-brand-surface text-brand-primary"
-                      }`}
+                      className="as-fchip"
                     >
                       All
-                      <span
-                        className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] tabular-nums ${
-                          filter === null ? "bg-white/15" : "bg-brand-bg text-brand-muted-fg"
-                        }`}
-                      >
-                        {feed.tagged.length}
-                      </span>
+                      <span className="tabular-nums text-brand-muted-fg">{feed.tagged.length}</span>
                     </button>
                     {filters.map((f) => (
                       <FilterPill
@@ -407,7 +341,7 @@ export default function MarketNewsPage() {
                     ) : (
                       days.map((day) => (
                         <section key={day.key} className="mt-8 flex flex-col gap-4">
-                          <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
+                          <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
                             {day.label}
                             <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
                           </h2>
@@ -424,7 +358,7 @@ export default function MarketNewsPage() {
                       <button
                         type="button"
                         onClick={() => setFilter(mw)}
-                        className={`${PRESSABLE} mt-8 inline-flex items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline`}
+                        className="mt-8 inline-flex items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
                       >
                         Market-wide news touches every universe too: {storyCount(counts[mw] ?? 0)}
                         <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -436,7 +370,7 @@ export default function MarketNewsPage() {
 
               {view === "other" && (
                 <div key="other" className="animate-fade-up">
-                  <p className="max-w-3xl text-xs leading-relaxed text-brand-muted-fg">
+                  <p className="max-w-3xl text-sm leading-relaxed text-brand-muted-fg">
                     Stories from the last {feed.days} days that weren't tagged to any sector or as market-wide, usually
                     crime, courts, lifestyle or one-off events. Their scores are shown so you can see why.
                   </p>
@@ -451,7 +385,7 @@ export default function MarketNewsPage() {
                   ) : (
                     otherDays.map((day) => (
                       <section key={day.key} className="mt-8 flex flex-col gap-4">
-                        <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-brand-primary">
+                        <h2 className="flex items-baseline gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
                           {day.label}
                           <span className="text-xs font-medium text-brand-muted-fg">{storyCount(day.articles.length)}</span>
                         </h2>

@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
+ ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -28,8 +28,10 @@ it('uses existing Funds spacing and preserves one Dashboard contextual entry poi
  expect(read('../dashboard/widgets/learningWidgets.tsx')).not.toContain('LearnMore');
 });
 
-it('gives Market News a local gap without an empty wrapper', () => {
- expect(read('../../pages/MarketNews.tsx')).toContain('<LearnMore context="news" className="mt-6" />');
+it('moves the Market News lessons into its About dialog', () => {
+ const page = read('../../pages/MarketNews.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('learnContext="news"');
 });
 
 it('moves the Stocks lessons into About this page', () => {

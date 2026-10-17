@@ -10,62 +10,62 @@ import {
   splitScores,
   type ProbabilityRow,
 } from "../../utils/macroNews";
-import { universeIcon } from "./universeIcons";
 
 // One story: publisher and time, its tags, the headline, the publisher's own blurb,
 // a link out, and every score the model gave it.
 //
-// The scores are a strip rather than a bar per universe. Seven bars a card made the
-// numbers louder than the news, and most of them read 1%. The strip boxes what is
-// tagged or at least 10%, and lists the rest on one muted line, so all seven numbers
-// stay on the card at about a third of the height.
+// The scores that matter (tagged, or at least 10%) are a bar each, so two sectors
+// can be compared at a glance; the rest are listed on one muted line, so all seven
+// numbers stay on the card without seven bars that mostly read 1%. Bars are coloured
+// by state, as in the About dialog's example: forest when the story is tagged to the
+// sector, grey when it is not. The sector's own colour is the dot beside its name.
 
 // Neutral grey, outside the sector palette (forest and lime), because market-wide is
 // not a sector: it applies to all of them.
-const MARKET_WIDE = { fill: "bg-neutral-600", tint: "bg-neutral-100", border: "border-neutral-400" };
+const MARKET_WIDE_DOT = "bg-neutral-500";
 
-function colourFor(label: string, marketWide: boolean) {
-  return marketWide ? MARKET_WIDE : sectorColour(label);
+export function sectorDot(label: string, marketWide: boolean): string {
+  return marketWide ? MARKET_WIDE_DOT : sectorColour(label).fill;
 }
 
-export function TagPill({ label, marketWide }: { label: string; marketWide: boolean }) {
-  const colour = colourFor(label, marketWide);
+export function TagChip({ label, marketWide }: { label: string; marketWide: boolean }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-brand-primary ${colour.tint}`}
-    >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colour.fill}`} aria-hidden />
+    <span className="chip">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${sectorDot(label, marketWide)}`} aria-hidden />
       {label}
     </span>
   );
 }
 
-function ScoreCell({ row }: { row: ProbabilityRow }) {
-  const colour = colourFor(row.label, row.marketWide);
-  const Icon = universeIcon(row.label);
+function ScoreBar({ row }: { row: ProbabilityRow }) {
   const pct = Math.round((row.p ?? 0) * 100);
   return (
     <li
-      className={`relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl px-2.5 py-1.5 text-[11px] ${
-        row.tagged ? `${colour.tint} font-bold text-brand-primary` : "bg-brand-bg text-brand-secondary"
-      }`}
+      className="flex flex-col gap-1"
       aria-label={`${row.label}: ${formatProbability(row.p)}${row.tagged ? ", tagged" : ""}`}
-      title={row.label}
     >
-      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="whitespace-nowrap">{shortLabel(row.label)}</span>
-      <span className="pl-1 tabular-nums">{formatProbability(row.p)}</span>
-      {/* How much of the cell the score fills, along its bottom edge. */}
-      <span
-        className={`absolute bottom-0 left-0 h-[3px] ${colour.fill} ${row.tagged ? "" : "opacity-40"}`}
-        style={{ width: `${pct}%` }}
-        aria-hidden
-      />
+      <span className="flex items-center justify-between gap-3 text-xs">
+        <span
+          className={`flex min-w-0 items-center gap-1.5 ${row.tagged ? "font-semibold text-forest-900" : "text-brand-muted-fg"}`}
+        >
+          <span className={`h-2 w-2 shrink-0 rounded-full ${sectorDot(row.label, row.marketWide)}`} aria-hidden />
+          <span className="truncate">{row.label}</span>
+        </span>
+        <span className={`tabular-nums ${row.tagged ? "font-bold text-forest-900" : "text-brand-muted-fg"}`}>
+          {formatProbability(row.p)}
+        </span>
+      </span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-forest-50" aria-hidden>
+        <span
+          className={`block h-full rounded-full ${row.tagged ? "bg-forest-700" : "bg-neutral-400"}`}
+          style={{ width: `max(4px, ${pct}%)` }}
+        />
+      </span>
     </li>
   );
 }
 
-function ScoreStrip({
+function Relevance({
   article,
   universes,
   marketWideLabel,
@@ -76,28 +76,30 @@ function ScoreStrip({
 }) {
   if (!article.scored) {
     return (
-      <p className="text-[11px] leading-relaxed text-brand-muted-fg">
-        Not scored yet. It is checked again at the next update.
-      </p>
+      <p className="text-xs leading-relaxed text-brand-muted-fg">Not scored yet. It is checked again at the next update.</p>
     );
   }
   const { cells, rest } = splitScores(probabilityRows(article, universes, marketWideLabel));
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-muted-fg">Relevance</p>
+    <div className="flex flex-col gap-2 border-t border-forest-900/8 pt-3">
+      <p className="text-xs font-bold text-brand-muted-fg">Relevance</p>
       {cells.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
+        <ul className="flex flex-col gap-2">
           {cells.map((row) => (
-            <ScoreCell key={row.label} row={row} />
+            <ScoreBar key={row.label} row={row} />
           ))}
         </ul>
       )}
       {rest.length > 0 && (
-        <p className="text-[11px] leading-relaxed text-brand-muted-fg">
+        <p className="text-xs leading-relaxed text-brand-muted-fg">
+          {cells.length > 0 && "Others: "}
           {rest.map((r, i) => (
             <span key={r.label} title={r.label}>
               {i > 0 && <span aria-hidden> · </span>}
-              {shortLabel(r.label)} <span className="tabular-nums">{formatProbability(r.p)}</span>
+              {/* A name never wraps away from its number. */}
+              <span className="whitespace-nowrap">
+                {shortLabel(r.label)} <span className="tabular-nums">{formatProbability(r.p)}</span>
+              </span>
             </span>
           ))}
         </p>
@@ -123,47 +125,44 @@ export default function MacroArticleCard({
   const showBlurb = !blurbRepeatsHeadline(article.headline, article.blurb, article.source);
 
   return (
-    <article className="soft-card flex flex-col gap-4 p-5">
-      <header className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-brand-muted-fg">
-          <span className="font-semibold text-brand-secondary">{article.source}</span>
-          <span aria-hidden>·</span>
-          <time dateTime={article.published_at} className="tabular-nums">
-            {time}
-          </time>
-          {article.commentary && (
-            <span
-              className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning-strong"
-              title="A presenter's or columnist's view on a stock, not a news event"
-            >
-              Commentary
-            </span>
-          )}
-        </div>
-        {article.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {article.tags.map((t) => (
-              <TagPill key={t} label={t} marketWide={t === marketWideLabel} />
-            ))}
-          </div>
+    <article className="as-card flex flex-col gap-3 p-5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-brand-muted-fg">
+        <span className="font-bold text-forest-900">{article.source}</span>
+        <span aria-hidden>·</span>
+        <time dateTime={article.published_at} className="tabular-nums">
+          {time}
+        </time>
+        {article.commentary && (
+          <span className="chip chip-caution" title="A presenter's or columnist's view on a stock, not a news event">
+            Commentary
+          </span>
         )}
-        <h3 className="text-base font-bold leading-snug tracking-[-0.015em] text-brand-primary">
-          <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-            {headline}
-          </a>
-        </h3>
-        {showBlurb && <p className="line-clamp-3 text-xs leading-relaxed text-brand-secondary">{article.blurb}</p>}
-        <a
-          href={article.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-fit items-center gap-1 rounded-full text-xs font-semibold text-forest-500 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-        >
-          Read on {article.source}
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+      </div>
+      {article.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {article.tags.map((t) => (
+            <TagChip key={t} label={t} marketWide={t === marketWideLabel} />
+          ))}
+        </div>
+      )}
+      <h3 className="text-base font-bold leading-snug tracking-[-0.01em] text-forest-900">
+        <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          {headline}
         </a>
-      </header>
-      <ScoreStrip article={article} universes={universes} marketWideLabel={marketWideLabel} />
+      </h3>
+      {showBlurb && <p className="line-clamp-3 text-sm leading-relaxed text-brand-muted-fg">{article.blurb}</p>}
+      <a
+        href={article.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex w-fit items-center gap-1 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+      >
+        Read on {article.source}
+        <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+      </a>
+      <div className="mt-auto">
+        <Relevance article={article} universes={universes} marketWideLabel={marketWideLabel} />
+      </div>
     </article>
   );
 }

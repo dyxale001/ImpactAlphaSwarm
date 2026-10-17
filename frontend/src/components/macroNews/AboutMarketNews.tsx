@@ -1,32 +1,33 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   ArrowRight,
   BrainCircuit,
   Check,
+  Info,
   Layers,
   ListFilter,
   MessageSquareQuote,
   Newspaper,
   Percent,
+  Sparkles,
   Tag,
   X,
 } from "lucide-react";
+import PageExplanationDialog from "../guidance/PageExplanationDialog";
+import AboutLessons from "../guidance/AboutLessons";
+import type { LearningContext } from "../../data/learningContexts";
 import { shortLabel } from "../../utils/macroNews";
 
-// "How Market News works", opened from the header's About button.
+// "How Market News works": the header's About button and its dialog, in the shared
+// About shell the Stocks, Funds and Compare pages use.
 //
 // Written for someone new to investing (D-234's explainer, D-203's explanation with
 // every analytic output): what happens to a story, what the percentages mean and do
 // not mean, and how to find your way around. The centre of it is a worked example on
 // real stories, because "a story is tagged at 60%" is abstract until you watch one
-// story clear the line for two sectors and miss it for a third.
-//
-// Built as the platform's modals are: a dimmed forest backdrop with no blur (Verdant
-// has no backdrop-filter), Escape and the backdrop close it, focus moves in and goes
-// back to the button afterwards. Rendered into document.body because the page
-// animates in with a transform, and a fixed overlay inside a transformed parent is
-// positioned against that parent rather than the screen.
+// story clear the line for two sectors and miss it for a third. The page's caveat
+// (relevance, not direction; no effect on the rankings) closes it, as the other
+// pages' caveats close theirs.
 
 /** Scores Jev gave three real stories in the week of 30 September 2026. */
 const EXAMPLES: { key: string; label: string; publisher: string; headline: string; scores: Record<string, number> }[] = [
@@ -104,20 +105,20 @@ function Pipeline() {
   return (
     <ol className="grid gap-2 sm:grid-cols-4">
       {STEPS.map((step, i) => (
-        <li key={step.title} className="relative flex flex-col gap-2 rounded-2xl bg-brand-bg p-3">
+        <li key={step.title} className="as-inset relative flex flex-col gap-2 p-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-primary text-brand-accent" aria-hidden>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-forest-800 text-lime-500" aria-hidden>
               <step.icon className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[13px] font-bold text-brand-primary">
+            <span className="text-sm font-bold text-forest-900">
               <span className="sr-only">Step {i + 1}: </span>
               {step.title}
             </span>
           </div>
-          <p className="text-xs leading-relaxed text-brand-secondary">{step.body}</p>
+          <p className="text-xs leading-relaxed text-brand-muted-fg">{step.body}</p>
           {i < STEPS.length - 1 && (
             <ArrowRight
-              className="absolute -right-2.5 top-4 z-10 hidden h-4 w-4 rounded-full bg-brand-card text-brand-muted-fg sm:block"
+              className="absolute -right-2.5 top-4 z-10 hidden h-4 w-4 rounded-full bg-white text-brand-muted-fg sm:block"
               aria-hidden
             />
           )}
@@ -140,10 +141,10 @@ function ScoreExample({ threshold }: { threshold: number }) {
   const linePct = Math.round(threshold * 100);
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-brand-border/60 p-4">
+    <div className="flex flex-col gap-4 rounded-[16px] border border-forest-900/10 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">Real scores, week of 30 Sept</p>
-        <div className="inline-flex rounded-full bg-brand-bg p-1" role="tablist" aria-label="Example stories">
+        <p className="text-xs font-bold text-brand-muted-fg">Real scores, week of 30 Sept</p>
+        <div className="as-tabs as-tabs-sm" role="tablist" aria-label="Example stories">
           {EXAMPLES.map((e) => (
             <button
               key={e.key}
@@ -151,9 +152,7 @@ function ScoreExample({ threshold }: { threshold: number }) {
               role="tab"
               aria-selected={active === e.key}
               onClick={() => setActive(e.key)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-transform duration-[120ms] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent ${
-                active === e.key ? "bg-brand-primary text-brand-bg" : "text-brand-secondary hover:text-brand-primary"
-              }`}
+              className="as-tab"
             >
               {e.label}
             </button>
@@ -162,8 +161,8 @@ function ScoreExample({ threshold }: { threshold: number }) {
       </div>
 
       <div>
-        <p className="text-[11px] text-brand-muted-fg">{example.publisher}</p>
-        <p className="text-sm font-bold leading-snug text-brand-primary">{example.headline}</p>
+        <p className="text-xs text-brand-muted-fg">{example.publisher}</p>
+        <p className="text-sm font-bold leading-snug text-forest-900">{example.headline}</p>
       </div>
 
       {/* The chart. Label column, bar column, value column; the 60% line is drawn once
@@ -173,7 +172,7 @@ function ScoreExample({ threshold }: { threshold: number }) {
           <span />
           <div className="relative h-4">
             <span
-              className="absolute -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-brand-primary"
+              className="absolute -translate-x-1/2 whitespace-nowrap text-xs font-semibold text-forest-900"
               style={{ left: `${linePct}%` }}
             >
               {linePct}% line
@@ -192,44 +191,42 @@ function ScoreExample({ threshold }: { threshold: number }) {
                 className="group grid grid-cols-[6.5rem_1fr_2.75rem] items-center gap-x-3 sm:grid-cols-[9rem_1fr_2.75rem]"
                 title={`${label}: ${pct}%${isTagged ? ", tagged" : ", below the line"}`}
               >
-                <span className={`truncate text-xs ${isTagged ? "font-bold text-brand-primary" : "text-brand-secondary"}`}>
+                <span className={`truncate text-xs ${isTagged ? "font-bold text-forest-900" : "text-brand-muted-fg"}`}>
                   <span className="sm:hidden">{shortLabel(label)}</span>
                   <span className="hidden sm:inline">{label}</span>
                 </span>
-                <span className="relative h-2.5 rounded-full bg-brand-bg">
-                  {/* Rounded at the data end only; a sliver stays visible at 0-1%. */}
+                <span className="relative h-2.5 rounded-full bg-forest-50">
+                  {/* Rounded at the data end; a sliver stays visible at 0-1%. */}
                   <span
-                    className={`absolute inset-y-0 left-0 rounded-r-[4px] ${
-                      isTagged ? "bg-brand-primary" : "bg-neutral-500"
-                    }`}
-                    style={{ width: `max(2px, ${pct}%)` }}
+                    className={`absolute inset-y-0 left-0 rounded-full ${isTagged ? "bg-forest-700" : "bg-neutral-400"}`}
+                    style={{ width: `max(4px, ${pct}%)` }}
                   />
                   <span
-                    className="absolute -inset-y-1 w-0 border-l-2 border-dashed border-brand-primary/70"
+                    className="absolute -inset-y-1 w-0 border-l-2 border-dashed border-forest-900/70"
                     style={{ left: `${linePct}%` }}
                     aria-hidden
                   />
                 </span>
-                <span className={`text-right text-xs tabular-nums ${isTagged ? "font-bold text-brand-primary" : "text-brand-muted-fg"}`}>
+                <span className={`text-right text-xs tabular-nums ${isTagged ? "font-bold text-forest-900" : "text-brand-muted-fg"}`}>
                   {pct}%
                 </span>
               </li>
             );
           })}
         </ul>
-        <figcaption className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-brand-muted-fg">
+        <figcaption className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted-fg">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded-sm bg-brand-primary" aria-hidden />
+            <span className="h-2 w-4 rounded-full bg-forest-700" aria-hidden />
             Tagged (at or above the line)
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded-sm bg-neutral-500" aria-hidden />
+            <span className="h-2 w-4 rounded-full bg-neutral-400" aria-hidden />
             Not tagged
           </span>
         </figcaption>
       </figure>
 
-      <p className="text-xs leading-relaxed text-brand-fg/90">
+      <p className="text-sm leading-relaxed text-forest-900">
         <span className="font-semibold">What happened: </span>
         {tagged.length === 0
           ? "nothing reached the line, so the story isn't tagged and sits under Untagged."
@@ -244,80 +241,79 @@ function ScoreExample({ threshold }: { threshold: number }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-[15px] font-bold tracking-[-0.01em] text-brand-primary">{title}</h3>
+      <h3 className="text-base font-bold tracking-[-0.01em] text-forest-900">{title}</h3>
       {children}
     </section>
   );
 }
 
-export default function AboutMarketNewsModal({
-  open,
-  onClose,
+const WAYFINDING = [
+  {
+    icon: Layers,
+    title: "Sectors",
+    body: "The quick read: an overview and the top stories for each of your sectors, plus news that affects every sector.",
+  },
+  {
+    icon: ListFilter,
+    title: "All stories",
+    body: "Every tagged story with all its scores, filterable by sector. Untagged shows the rest, so nothing is hidden.",
+  },
+  {
+    icon: MessageSquareQuote,
+    title: "Commentary label",
+    body: "Marks a presenter's or columnist's view on a stock rather than a news event. These never lead a summary.",
+  },
+  {
+    icon: Newspaper,
+    title: "On each stock's page",
+    body: "A Market news tab shows the news for that stock's sector. It's about the sector, not the company itself.",
+  },
+];
+
+export default function AboutMarketNews({
   threshold = 0.6,
+  learnContext,
+  className = "",
 }: {
-  open: boolean;
-  onClose: () => void;
   threshold?: number;
+  learnContext?: LearningContext;
+  className?: string;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const titleId = useId();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const navigatingRef = useRef(false);
+  const close = useCallback(() => setOpen(false), []);
+  const leave = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      navigatingRef.current = true;
+      close();
+    },
+    [close],
+  );
 
-  // Escape closes it; focus moves in on open and back to whatever opened it on close;
-  // the page behind stops scrolling while it is up.
-  useEffect(() => {
-    if (!open) return;
-    const opener = document.activeElement as HTMLElement | null;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panelRef.current?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflow;
-      opener?.focus?.();
-    };
-  }, [open, onClose]);
-
-  if (!open || typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto p-4">
-      <button type="button" aria-label="Close" onClick={onClose} className="fixed inset-0 bg-forest-900/50" />
-
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="animate-fade-up relative my-auto flex max-h-[min(90dvh,56rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-brand-card shadow-xl focus:outline-none"
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => {
+          navigatingRef.current = false;
+          setOpen(true);
+        }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`as-btn as-btn-sm as-btn-ghost-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent ${className}`}
       >
-        {/* The forest header the platform's panels use. */}
-        <header className="hero-card flex shrink-0 items-start justify-between gap-3 rounded-none px-5 py-4 sm:px-6">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-accent">About this page</p>
-            <h2 id={titleId} className="mt-0.5 text-lg font-bold tracking-[-0.015em] text-brand-bg">
-              How Market News works
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-1.5 text-brand-bg/70 transition-colors hover:bg-white/10 hover:text-brand-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
-
-        <div className="flex flex-col gap-7 overflow-y-auto px-5 py-6 sm:px-6">
-          <p className="text-sm leading-relaxed text-brand-fg/90">
+        <Info className="h-3.5 w-3.5" aria-hidden />
+        About this page
+      </button>
+      {open && (
+        <PageExplanationDialog title="How Market News works" onClose={close} triggerRef={triggerRef} navigatingRef={navigatingRef}>
+          <p className="text-base leading-relaxed text-forest-900">
             World news can affect whole groups of companies at once: an interest-rate decision touches banks, a chip
             export ban touches technology firms. This page gathers the week's news and shows which of AlphaSwarm's
             sectors each story is about, so you can see what's happening around the stocks you follow.
@@ -333,23 +329,23 @@ export default function AboutMarketNewsModal({
 
           <Section title="What the percentage means">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-brand-bg p-4">
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-brand-primary">
+              <div className="as-inset p-4">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-forest-900">
                   <Check className="h-3.5 w-3.5" aria-hidden />
                   It means
                 </p>
-                <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-brand-secondary">
+                <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-brand-muted-fg">
                   <li>How sure the model is that a story is about that sector.</li>
                   <li>97% means it's very sure; 24% means a loose link at most.</li>
                   <li>Every score is shown, low ones included, so you can check the model's reading.</li>
                 </ul>
               </div>
-              <div className="rounded-2xl bg-brand-bg p-4">
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-brand-primary">
+              <div className="as-inset p-4">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-forest-900">
                   <X className="h-3.5 w-3.5" aria-hidden />
                   It doesn't mean
                 </p>
-                <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-brand-secondary">
+                <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-brand-muted-fg">
                   <li>Whether the news is good or bad for the sector.</li>
                   <li>The chance that prices will move.</li>
                   <li>A reason to buy or sell anything.</li>
@@ -363,12 +359,14 @@ export default function AboutMarketNewsModal({
           </Section>
 
           <Section title="The AI overviews">
-            <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
-              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-                <BrainCircuit className="h-3 w-3 text-brand-primary" />
+            <div className="as-inset p-4">
+              <p className="mb-2 flex items-center gap-2 text-sm font-bold text-forest-900">
+                <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                </span>
                 AI overview
-              </div>
-              <p className="text-sm leading-relaxed text-brand-fg/90">
+              </p>
+              <p className="text-sm leading-relaxed text-forest-900">
                 Each sector's box like this one is a short summary, written by AI from the stories tagged to that sector
                 and rewritten when they change. It's told to report only what the stories say: never whether news is
                 good or bad, never a prediction, never advice. It can still make mistakes, so the stories it was written
@@ -379,55 +377,25 @@ export default function AboutMarketNewsModal({
 
           <Section title="Finding your way around">
             <ul className="grid gap-2 sm:grid-cols-2">
-              {[
-                {
-                  icon: Layers,
-                  title: "Sectors",
-                  body: "The quick read: an overview and the top stories for each of your sectors, plus news that affects every sector.",
-                },
-                {
-                  icon: ListFilter,
-                  title: "All stories",
-                  body: "Every tagged story with all its scores, filterable by sector. Untagged shows the rest, so nothing is hidden.",
-                },
-                {
-                  icon: MessageSquareQuote,
-                  title: "Commentary label",
-                  body: "Marks a presenter's or columnist's view on a stock rather than a news event. These never lead a summary.",
-                },
-                {
-                  icon: Newspaper,
-                  title: "On each stock's page",
-                  body: "A Market news tab shows the news for that stock's sector. It's about the sector, not the company itself.",
-                },
-              ].map((item) => (
-                <li key={item.title} className="flex gap-3 rounded-2xl bg-brand-bg p-3">
+              {WAYFINDING.map((item) => (
+                <li key={item.title} className="as-inset flex gap-3 p-3">
                   <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-forest-500" aria-hidden />
                   <div>
-                    <p className="text-xs font-bold text-brand-primary">{item.title}</p>
-                    <p className="text-xs leading-relaxed text-brand-secondary">{item.body}</p>
+                    <p className="text-sm font-bold text-forest-900">{item.title}</p>
+                    <p className="text-xs leading-relaxed text-brand-muted-fg">{item.body}</p>
                   </div>
                 </li>
               ))}
             </ul>
           </Section>
 
-          <p className="border-t border-brand-border/60 pt-4 text-xs leading-relaxed text-brand-muted-fg">
-            Market News informs; it doesn't advise. Nothing on this page changes AlphaSwarm's rankings or signals.
+          {learnContext && <AboutLessons context={learnContext} title="Lessons for this page" onNavigate={leave} />}
+          <p className="border-t border-forest-900/10 pt-4 text-xs leading-relaxed text-brand-muted-fg">
+            Relevance, not direction: nothing on this page says whether news is good or bad. Market News informs; it
+            doesn't advise, and nothing on it changes AlphaSwarm's rankings or signals.
           </p>
-        </div>
-
-        <footer className="flex shrink-0 justify-end border-t border-brand-border/60 px-5 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-brand-primary px-4 py-2 text-xs font-bold text-brand-bg transition-transform duration-[120ms] hover:opacity-85 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            Got it
-          </button>
-        </footer>
-      </div>
-    </div>,
-    document.body,
+        </PageExplanationDialog>
+      )}
+    </>
   );
 }
