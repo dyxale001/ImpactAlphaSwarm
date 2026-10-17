@@ -52,20 +52,30 @@ export function sortItems<T extends Sortable>(items: T[], key: SortKey): T[] {
 }
 
 // Back link, icon, title and subtitle shared by both source pages.
-// The day's headline figures as soft tiles, so the page stands alone without going
-// back. `hint` qualifies a figure in small type (e.g. "top 15 shown") rather than
-// inflating it, and `chip` sits beside a figure that has a word for it.
+// Headline figures as soft tiles. `hint` qualifies a figure in small type (e.g. "top
+// 15 shown") rather than inflating it, `chip` sits beside a figure that has a word for
+// it, and `tone` colours a signed figure green for up and red for down.
 export function SummaryStrip({
   pills,
 }: {
-  pills: { label: string; value: React.ReactNode; hint?: string; chip?: React.ReactNode }[];
+  pills: {
+    label: string;
+    value: React.ReactNode;
+    hint?: string;
+    chip?: React.ReactNode;
+    tone?: "up" | "down";
+  }[];
 }) {
   return (
     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {pills.map((pill) => (
         <div key={pill.label} className="as-inset flex flex-col gap-1 p-3 sm:p-4">
           <dt className="text-xs text-brand-muted-fg">{pill.label}</dt>
-          <dd className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xl font-bold tabular-nums tracking-[-0.01em] text-forest-900">
+          <dd
+            className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xl font-bold tabular-nums tracking-[-0.01em] ${
+              pill.tone === "up" ? "text-up" : pill.tone === "down" ? "text-down" : "text-forest-900"
+            }`}
+          >
             {pill.value}
             {pill.chip}
           </dd>

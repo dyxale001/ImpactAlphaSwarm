@@ -850,7 +850,7 @@ export default function AssetDetailsPage() {
 
       {recommendation && tab === "quant" && (
         <SectionCard
-          title="Quant"
+          title="Quantitative data"
           description="How the price has behaved, shown in rand, and where this stock sits among the others in the run. Measurements, not a recommendation."
           action={<MethodologyDialog section="quant" />}
         >
@@ -869,6 +869,12 @@ export default function AssetDetailsPage() {
                   {
                     label: `Change over ${QUANT_HORIZON_LABELS[horizon]}`,
                     value: formatChange(quantHistory.facts.change_pct),
+                    tone:
+                      (quantHistory.facts.change_pct ?? 0) > 0
+                        ? "up"
+                        : (quantHistory.facts.change_pct ?? 0) < 0
+                          ? "down"
+                          : undefined,
                     hint: `${formatPrice(quantHistory.facts.first_close, quantHistory.displayCurrency)} to ${formatPrice(quantHistory.facts.last_close, quantHistory.displayCurrency)}`,
                   },
                   { label: "High", value: formatPrice(quantHistory.facts.high, quantHistory.displayCurrency) },
@@ -876,6 +882,8 @@ export default function AssetDetailsPage() {
                   {
                     label: "Largest fall",
                     value: formatDrawdown(quantHistory.facts.max_drawdown_pct),
+                    // A fall, so red whenever there was one.
+                    tone: quantHistory.facts.max_drawdown_pct ? "down" : undefined,
                     hint: "From a peak to a later low",
                   },
                 ]}
