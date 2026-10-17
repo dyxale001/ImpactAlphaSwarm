@@ -66,6 +66,12 @@ export const REVIEW_UNDO = "Undo";
 export const REVIEW_EDIT = "Edit";
 export const REVIEW_DONE = "Done";
 export const REVIEW_REQUIRED = "Required";
+/** The status chip on a flagged value that still needs a decision. */
+export const REVIEW_CHECK_BADGE = "Check this";
+/** Under a large rand figure, how the typed number reads, so a wrong unit shows. */
+export const REVIEW_READS_AS = "Reads as {value}";
+export const REVIEW_SOURCE_CHIP = "Read by AI, checked by you";
+export const REVIEW_SHEET_DATED = "Fact sheet dated {date}";
 export const REVIEW_FROM_PAGE = "Page {page}";
 export const REVIEW_FROM_GRAPHIC = "read off a chart or graphic";
 export const REVIEW_NOT_ON_SHEET = "Not on the sheet";

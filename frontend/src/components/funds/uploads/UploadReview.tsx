@@ -33,7 +33,6 @@ import {
   REVIEW_DONE,
   REVIEW_EDIT,
   REVIEW_EXISTING,
-  REVIEW_EXTRAS_TITLE,
   REVIEW_EYEBROW,
   REVIEW_FLAGGED_LEAD,
   REVIEW_FLAGGED_TITLE,
@@ -50,6 +49,8 @@ import {
   REVIEW_VEHICLE_UNIT_TRUST,
   REVIEW_VEHICLE_UNSET,
   SAVE_FAILED,
+  REVIEW_SHEET_DATED,
+  REVIEW_SOURCE_CHIP,
 } from "../../../utils/fundUploadsCopy";
 import ReviewField from "./ReviewField";
 
@@ -93,6 +94,7 @@ export default function UploadReview({
   const progress = reviewProgress(review);
   const sections = useMemo(() => reviewSections(review), [review]);
   const name = review.fund_name?.input || reading.existing_fund?.name || "";
+  const sheetDate = review.as_of?.input ? formatFieldValue("as_of", review.as_of.input) : "";
 
   const update = (next: ReviewState, field: string) => {
     setReview(next);
@@ -162,19 +164,28 @@ export default function UploadReview({
         ))}
       </datalist>
 
-      <header className="soft-card flex flex-col gap-2 p-5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-lime-700">{REVIEW_EYEBROW}</span>
-        <h3 id={`${listId}-title`} className="text-lg font-bold leading-snug text-brand-primary">
-          {name || labelFor("fund_name")}
-        </h3>
-        <p className="max-w-[70ch] text-[13px] leading-relaxed text-forest-600">{REVIEW_LEAD}</p>
+      {/* The fund being checked, the sheet it came from, and who read it. */}
+      <header className="as-card flex flex-col gap-3 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-brand-muted-fg">{REVIEW_EYEBROW}</p>
+            <h3 id={`${listId}-title`} className="mt-1 text-xl font-bold tracking-[-0.01em] text-forest-900">
+              {name || labelFor("fund_name")}
+            </h3>
+            {sheetDate && (
+              <p className="mt-1 text-xs text-brand-muted-fg">{REVIEW_SHEET_DATED.replace("{date}", sheetDate)}</p>
+            )}
+          </div>
+          <span className="chip chip-accent">{REVIEW_SOURCE_CHIP}</span>
+        </div>
+        <p className="max-w-[70ch] text-sm leading-relaxed text-brand-muted-fg">{REVIEW_LEAD}</p>
         {reading.existing_fund && (
-          <p className="flex items-start gap-2 rounded-lg bg-brand-bg px-3 py-2 text-xs leading-relaxed text-forest-600">
+          <p className="as-inset flex items-start gap-2 px-3 py-2 text-xs leading-relaxed text-brand-muted-fg">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             {REVIEW_EXISTING.replace("{name}", reading.existing_fund.name ?? name)}
           </p>
         )}
-        {reading.cached && <p className="text-[11px] text-forest-500">{REVIEW_CACHED}</p>}
+        {reading.cached && <p className="text-xs text-brand-muted-fg">{REVIEW_CACHED}</p>}
       </header>
 
       {sections.flagged.length > 0 && (
@@ -185,13 +196,37 @@ export default function UploadReview({
         </Section>
       )}
 
-      {sections.missing.length > 0 && (
-        <Section title={REVIEW_MISSING_TITLE} lead={REVIEW_MISSING_LEAD} count={sections.missing.length}>
+      {/* What the sheet did not state, with the two facts about the fund the
+          sheet never states at all, in one card of fields side by side. */}
+      <Section title={REVIEW_MISSING_TITLE} lead={REVIEW_MISSING_LEAD} count={sections.missing.length || undefined}>
+        <div className="as-card grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
           {sections.missing.map((state) => (
-            <ReviewField key={state.field} {...fieldProps(state)} />
+            <ReviewField key={state.field} {...fieldProps(state)} bare />
           ))}
-        </Section>
-      )}
+          <label className="flex flex-col gap-1.5 text-sm font-bold text-forest-900">
+            {REVIEW_VEHICLE_LABEL}
+            <select
+              value={vehicle}
+              onChange={(e) => setVehicle(e.target.value as Vehicle)}
+              className="as-select w-full rounded-[12px] font-normal"
+            >
+              <option value="">{REVIEW_VEHICLE_UNSET}</option>
+              <option value="unit_trust">{REVIEW_VEHICLE_UNIT_TRUST}</option>
+              <option value="etf">{REVIEW_VEHICLE_ETF}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm font-bold text-forest-900">
+            {REVIEW_FUND_HOUSE_LABEL}
+            <input
+              value={fundHouse}
+              maxLength={200}
+              onChange={(e) => setFundHouse(e.target.value)}
+              className="h-10 rounded-[12px] border border-forest-900/15 bg-white px-3 text-sm font-normal text-forest-900 transition-colors hover:border-forest-900/30 focus:border-forest-700 focus:outline-none"
+            />
+            <span className="text-xs font-normal text-brand-muted-fg">{REVIEW_FUND_HOUSE_HINT}</span>
+          </label>
+        </div>
+      </Section>
 
       {sections.confirmed.length > 0 && (
         <section className="flex flex-col gap-3">
@@ -199,19 +234,17 @@ export default function UploadReview({
             type="button"
             onClick={() => setShowRead((open) => !open)}
             aria-expanded={showRead}
-            className="flex w-full items-center justify-between gap-3 rounded-brand border border-brand-border/50 bg-brand-surface px-4 py-3 text-left"
+            className="as-card flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
           >
             <span className="flex flex-col gap-0.5">
-              <span className="flex items-center gap-2 text-[15px] font-bold text-brand-primary">
-                <CheckCircle2 className="h-4 w-4 text-lime-700" aria-hidden />
+              <span className="flex items-center gap-2 text-base font-bold text-forest-900">
+                <CheckCircle2 className="h-4 w-4 text-up" aria-hidden />
                 {REVIEW_CONFIRMED_TITLE}
-                <span className="rounded-full bg-forest-50 px-2 py-px text-[11px] font-bold tabular-nums text-forest-500">
-                  {sections.confirmed.length}
-                </span>
+                <span className="chip tabular-nums">{sections.confirmed.length}</span>
               </span>
-              <span className="text-xs text-forest-500">{REVIEW_CONFIRMED_LEAD}</span>
+              <span className="text-xs text-brand-muted-fg">{REVIEW_CONFIRMED_LEAD}</span>
             </span>
-            <ChevronDown className={`h-4 w-4 shrink-0 text-forest-500 ${showRead ? "rotate-180" : ""}`} aria-hidden />
+            <ChevronDown className={`h-4 w-4 shrink-0 text-forest-700 transition-transform ${showRead ? "rotate-180" : ""}`} aria-hidden />
           </button>
           {showRead &&
             GROUPS.map(([group, title]) => {
@@ -219,7 +252,7 @@ export default function UploadReview({
               if (inGroup.length === 0) return null;
               return (
                 <div key={group} className="flex flex-col gap-2">
-                  <h4 className="text-xs font-bold uppercase tracking-[0.06em] text-forest-500">{title}</h4>
+                  <h4 className="text-xs font-bold text-brand-muted-fg">{title}</h4>
                   {inGroup.map((state) => (
                     <ReadRow key={state.field} {...fieldProps(state)} />
                   ))}
@@ -229,40 +262,13 @@ export default function UploadReview({
         </section>
       )}
 
-      <Section title={REVIEW_EXTRAS_TITLE}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 text-[13px] font-bold text-brand-primary">
-            {REVIEW_VEHICLE_LABEL}
-            <select
-              value={vehicle}
-              onChange={(e) => setVehicle(e.target.value as Vehicle)}
-              className="min-h-10 rounded-lg border border-brand-border/60 bg-brand-surface px-3 py-2 text-[13px] font-normal text-brand-primary focus:border-brand-primary/50 focus:outline-none"
-            >
-              <option value="">{REVIEW_VEHICLE_UNSET}</option>
-              <option value="unit_trust">{REVIEW_VEHICLE_UNIT_TRUST}</option>
-              <option value="etf">{REVIEW_VEHICLE_ETF}</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-bold text-brand-primary">
-            {REVIEW_FUND_HOUSE_LABEL}
-            <input
-              value={fundHouse}
-              maxLength={200}
-              onChange={(e) => setFundHouse(e.target.value)}
-              className="min-h-10 rounded-lg border border-brand-border/60 bg-brand-surface px-3 py-2 text-[13px] font-normal text-brand-primary focus:border-brand-primary/50 focus:outline-none"
-            />
-            <span className="text-[11px] font-normal text-forest-500">{REVIEW_FUND_HOUSE_HINT}</span>
-          </label>
-        </div>
-      </Section>
-
       {/* Stays in view while the person works down the list, so the reason
           Save is disabled is never off screen. */}
-      <footer className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-brand border border-brand-border/60 bg-brand-surface/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <footer className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-[20px] border border-forest-900/10 bg-white/95 p-4 shadow-float backdrop-blur sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1" aria-live="polite">
           <p
-            className={`flex items-center gap-1.5 text-[13px] font-semibold ${
-              progress.canSave ? "text-lime-700" : "text-warning-strong"
+            className={`flex items-center gap-1.5 text-sm font-semibold ${
+              progress.canSave ? "text-up" : "text-caution"
             }`}
           >
             {progress.canSave ? (
@@ -273,7 +279,7 @@ export default function UploadReview({
             {progress.summary}
           </p>
           {error && (
-            <p className="text-xs text-warning-strong" role="alert">
+            <p className="text-xs text-down" role="alert">
               {error}
             </p>
           )}
@@ -283,7 +289,7 @@ export default function UploadReview({
             type="button"
             onClick={discard}
             disabled={saving}
-            className="inline-flex min-h-10 items-center rounded-full border border-brand-border/60 bg-brand-surface px-4 py-2 text-[13px] font-bold text-brand-primary transition-colors hover:border-brand-primary/40 disabled:opacity-50"
+            className="as-btn as-btn-secondary"
           >
             {REVIEW_CANCEL}
           </button>
@@ -291,7 +297,7 @@ export default function UploadReview({
             type="button"
             onClick={save}
             disabled={!progress.canSave || saving}
-            className="inline-flex min-h-10 items-center rounded-full bg-brand-accent px-4 py-2 text-[13px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-forest-50 disabled:text-forest-400 disabled:active:scale-100"
+            className="as-btn as-btn-primary"
           >
             {saving ? REVIEW_SAVING : REVIEW_SAVE}
           </button>
@@ -317,20 +323,14 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <h4 className="flex items-center gap-2 text-[15px] font-bold text-brand-primary">
-          {tone === "warning" && <AlertTriangle className="h-4 w-4 text-warning-strong" aria-hidden />}
+        <h4 className="flex items-center gap-2 text-base font-bold text-forest-900">
+          {tone === "warning" && <AlertTriangle className="h-4 w-4 text-caution" aria-hidden />}
           {title}
           {count !== undefined && (
-            <span
-              className={`rounded-full px-2 py-px text-[11px] font-bold tabular-nums ${
-                tone === "warning" ? "bg-warning/15 text-warning-strong" : "bg-forest-50 text-forest-500"
-              }`}
-            >
-              {count}
-            </span>
+            <span className={`chip tabular-nums ${tone === "warning" ? "chip-caution" : ""}`}>{count}</span>
           )}
         </h4>
-        {lead && <p className="text-xs text-forest-500">{lead}</p>}
+        {lead && <p className="text-xs text-brand-muted-fg">{lead}</p>}
       </div>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
@@ -350,7 +350,7 @@ function ReadRow(props: React.ComponentProps<typeof ReviewField>) {
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="self-end text-xs font-bold text-brand-primary hover:underline"
+            className="self-end text-sm font-bold text-forest-700 hover:underline"
           >
             {REVIEW_DONE}
           </button>
@@ -362,14 +362,14 @@ function ReadRow(props: React.ComponentProps<typeof ReviewField>) {
   // text once they have changed it.
   const shown = isChanged(state) ? state.input.trim() : formatFieldValue(state.field, state.original);
   return (
-    <div className="flex items-start justify-between gap-3 rounded-lg border border-brand-border/40 bg-brand-surface px-3.5 py-2.5">
+    <div className="flex items-start justify-between gap-3 rounded-[12px] border border-forest-900/10 bg-white px-4 py-3">
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[11px] text-forest-500">{labelFor(state.field)}</span>
-        <span className="break-words text-[13px] font-semibold text-brand-primary">
+        <span className="text-xs text-brand-muted-fg">{labelFor(state.field)}</span>
+        <span className="break-words text-sm font-semibold text-forest-900">
           {shown || "—"}
         </span>
         {state.read.quote && (
-          <span className="text-[11px] leading-relaxed text-forest-500">
+          <span className="text-xs leading-relaxed text-brand-muted-fg">
             {state.read.page ? `${REVIEW_FROM_PAGE.replace("{page}", String(state.read.page))} · ` : ""}“
             {state.read.quote}”
           </span>
@@ -378,7 +378,7 @@ function ReadRow(props: React.ComponentProps<typeof ReviewField>) {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-brand-primary hover:underline"
+        className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
       >
         <Pencil className="h-3 w-3" aria-hidden />
         {REVIEW_EDIT}

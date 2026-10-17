@@ -121,7 +121,9 @@ export default function MyFundsPanel({
         {!uploads.isLoading && !uploads.error && uploads.funds.length === 0 && !reading && (
           <FundsNotice icon={FolderOpen} title={LIST_EMPTY_TITLE} body={LIST_EMPTY_BODY} />
         )}
-        {uploads.funds.length > 0 && (
+        {/* Out of the way while a sheet is under review, so the screen is only
+            the review; the list is back the moment it is saved or discarded. */}
+        {uploads.funds.length > 0 && !reading && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {uploads.funds.map((fund) => (
               <UploadedFundCard key={fund.id} fund={fund} />
