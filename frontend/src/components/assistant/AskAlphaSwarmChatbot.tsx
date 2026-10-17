@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ArrowUpRight, Sparkles, X, Send, Loader2 } from 'lucide-react'
-import askBot from '../../assets/ask-alphaswarm-bot.png'
 import { useAskAlphaSwarm } from '../../hooks/useAskAlphaSwarm'
 import { useAskChatbotStore } from '../../store/askChatbotStore'
 import AskAnswerCard, { AskThinking } from '../ask/AskAnswerCard'
 import AskHelp from '../ask/AskHelp'
+import AskMascot from '../ask/AskMascot'
 
 // Mirrors the backend's own _ASK_REDIRECT_SUGGESTIONS (api.py) — same
 // three example questions shown wherever Ask AlphaSwarm has nothing to
@@ -128,19 +128,15 @@ export default function AskAlphaSwarmChatbot() {
             </div>
           </div>
 
-          {/* The mascot leans out of the panel's top-left corner, so it
-              reads as sitting ON the card rather than inside the
-              conversation. Needs the panel NOT to clip (hence no
-              overflow-hidden on it, and the header carrying its own
-              rounded top instead), and the header carries left padding so
-              the title never runs underneath him. pointer-events-none so
-              he can't swallow a click meant for the controls behind. */}
-          <img
-            src={askBot}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-7 -left-4 w-20 z-10 select-none drop-shadow-lg"
-          />
+          {/* The mascot sits on the panel's top-left corner, so it reads as ON the
+              card rather than inside the conversation. The panel must NOT clip
+              (hence no overflow-hidden, and the header carrying its own rounded
+              top), and the header's left padding keeps the title clear of it.
+              It glances down while you type, looks up while an answer is being
+              written, and hops when one arrives. */}
+          <div className="pointer-events-none absolute -left-4 -top-8 z-10">
+            <AskMascot size={76} state={loading ? 'thinking' : query.trim() ? 'typing' : 'idle'} answers={turns.length} />
+          </div>
 
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
