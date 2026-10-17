@@ -28,7 +28,7 @@ export default function GoalQuestions({
   const embedded = appearance === "embedded";
   return (
     <div
-      className={`flex flex-col ${embedded ? "divide-y divide-brand-border/40" : "gap-4"} ${className}`}
+      className={`flex flex-col ${embedded ? "divide-y divide-forest-900/8" : "gap-4"} ${className}`}
     >
       {GOAL_QUESTIONS.map((q, index) => (
         <QuestionBlock

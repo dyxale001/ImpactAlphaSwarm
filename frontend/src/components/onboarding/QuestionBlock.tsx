@@ -13,8 +13,10 @@
  *   exactly as the onboarding page has always drawn it.
  * - `embedded`: for a question that sits inside a card that already has a
  *   border. No card of its own; a numbered gutter, a hairline between
- *   questions, and the selected row in the forest-ring-with-lime-dot idiom the
- *   sector and expertise tiles beside it use.
+ *   questions, and each answer as a row in the platform's selectable-tile look
+ *   (the sector and expertise tiles beside it): a fine outline that darkens on
+ *   hover, and when chosen a forest outline on light green with a forest radio
+ *   holding a lime dot.
  *
  * Wording and option values come from the caller, so the two appearances can
  * never drift apart in what they ask.
@@ -62,13 +64,13 @@ export default function QuestionBlock({
         <span className="pt-0.5 text-xs font-bold tabular-nums text-brand-muted-fg">
           {number ?? ""}
         </span>
-        <p id={`q-${question.id}`} className="text-sm font-semibold leading-snug text-brand-fg">
+        <p id={`q-${question.id}`} className="text-sm font-bold leading-snug text-forest-900">
           {text}
         </p>
         {question.hint && (
           <p className="col-start-2 text-xs leading-snug text-brand-muted-fg">{question.hint}</p>
         )}
-        <div className="col-start-2 mt-1 flex flex-col gap-1.5" role="radiogroup">
+        <div className="col-start-2 mt-1.5 flex flex-col gap-2" role="radiogroup">
           {question.options.map((opt) => {
             const selected = value === opt.value;
             return (
@@ -78,20 +80,21 @@ export default function QuestionBlock({
                 role="radio"
                 aria-checked={selected}
                 onClick={() => onAnswer(question.id, opt.value)}
-                className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[13px] transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40 ${
+                className={`flex min-h-11 items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700 ${
                   selected
-                    ? "border-brand-primary/50 bg-brand-primary/5 font-semibold text-brand-fg"
-                    : "border-brand-border/60 bg-brand-surface/40 text-brand-fg hover:border-brand-border hover:bg-brand-surface"
+                    ? "border-forest-700 bg-forest-50 font-semibold text-forest-900"
+                    : "border-forest-900/12 bg-white text-forest-900 hover:border-forest-900/30"
                 }`}
               >
                 <span
-                  className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
-                    selected ? "border-brand-primary bg-brand-primary" : "border-brand-border"
+                  className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
+                    selected ? "border-forest-700 bg-forest-700" : "border-forest-900/25 bg-white"
                   }`}
+                  aria-hidden="true"
                 >
-                  {selected && <span className="h-[7px] w-[7px] rounded-full bg-brand-accent" />}
+                  {selected && <span className="h-2 w-2 rounded-full bg-lime-500" />}
                 </span>
-                <span className="leading-[1.45]">{opt.label}</span>
+                <span className="leading-snug">{opt.label}</span>
               </button>
             );
           })}

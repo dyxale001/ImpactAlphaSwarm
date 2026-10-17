@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Clock } from "lucide-react";
+import { Check, ChevronDown, Clock } from "lucide-react";
 import QuestionBlock from "../onboarding/QuestionBlock";
 import SettingsCard, { CardChip, Consequence } from "./SettingsCard";
 import { PrimaryButton, SecondaryButton, TextButton } from "./SettingsButtons";
@@ -186,14 +186,14 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
           </div>
 
           <div
-            className="h-1.5 overflow-hidden rounded-full bg-brand-primary/8"
+            className="h-1.5 overflow-hidden rounded-full bg-forest-50"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={retakeProgress(step)}
           >
             <div
-              className="h-full rounded-full bg-brand-accent transition-[width] duration-300 ease-[cubic-bezier(0.2,0.6,0.2,1)]"
+              className="h-full rounded-full bg-forest-700 transition-[width] duration-300 ease-[cubic-bezier(0.2,0.6,0.2,1)]"
               style={{ width: `${retakeProgress(step)}%` }}
             />
           </div>
@@ -207,14 +207,13 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
                   type="button"
                   onClick={() => setStep(i)}
                   aria-current={i === step ? "step" : undefined}
-                  className={`rounded-full border px-2.5 py-1 text-xs font-bold transition-colors ${
-                    i === step
-                      ? "border-transparent bg-brand-primary text-brand-bg"
-                      : done
-                        ? "border-transparent bg-lime-100 text-lime-700 hover:bg-lime-200"
-                        : "border-brand-border text-brand-muted-fg hover:text-brand-fg"
+                  // The step in view is forest; a finished step is lime with a tick;
+                  // the rest are outlined, as the platform's chips are.
+                  className={`chip cursor-pointer ${
+                    i === step ? "chip-dark" : done ? "chip-accent" : "chip-line text-brand-muted-fg hover:text-forest-900"
                   }`}
                 >
+                  {done && i !== step && <Check className="h-3 w-3" aria-hidden="true" />}
                   {s.title}
                 </button>
               );
@@ -236,7 +235,7 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
 
           <p className="text-xs text-brand-muted-fg">{RETAKE_PREFILLED}</p>
 
-          <div className="flex flex-col divide-y divide-brand-border/40">
+          <div className="flex flex-col divide-y divide-forest-900/8">
             {questions.map((q, i) => (
               <QuestionBlock
                 key={q.id}
