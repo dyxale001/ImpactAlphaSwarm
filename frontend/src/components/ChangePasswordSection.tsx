@@ -5,7 +5,7 @@ import { PrimaryButton, SecondaryButton, TextButton } from './settings/SettingsB
 import { PASSWORD_CARD_LEAD, PASSWORD_CARD_TITLE, RETAKE_SAVING } from '../utils/settingsCopy'
 
 const INPUT =
-  'mt-1 w-full rounded-lg border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-primary/40'
+  "mt-1 h-11 w-full rounded-[12px] border border-forest-900/15 bg-white px-3.5 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none disabled:hover:border-forest-900/15"
 
 export default function ChangePasswordSection() {
   const [isOpen, setIsOpen] = useState(false)

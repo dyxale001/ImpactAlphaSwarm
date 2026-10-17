@@ -103,13 +103,13 @@ export default function GoalsCard({ profile }: { profile: Profile }) {
             return (
               <div
                 key={q.id}
-                className="rounded-lg border border-brand-border/40 bg-brand-primary/[0.03] px-3 py-2.5"
+                className="rounded-lg border border-forest-900/8 bg-brand-primary/[0.03] px-3 py-2.5"
               >
-                <dt className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-muted-fg">
+                <dt className="text-xs font-semibold text-brand-muted-fg">
                   {GOAL_LABELS[q.id] ?? q.question}
                 </dt>
                 <dd
-                  className={`mt-0.5 text-[13px] font-semibold leading-snug ${
+                  className={`mt-0.5 text-sm font-semibold leading-snug ${
                     answer ? "text-brand-fg" : "text-brand-muted-fg"
                   }`}
                 >

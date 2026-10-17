@@ -130,10 +130,10 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
       {/* ── The rating, and the ceiling it sets ── */}
       <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-x-8">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand-muted-fg">
+          <p className="text-xs font-semibold text-brand-muted-fg">
             {RISK_RATING_LABEL}
           </p>
-          <p className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-brand-primary">
+          <p className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-forest-900">
             {riskLabel ?? RISK_NOT_ANSWERED}
           </p>
         </div>
@@ -144,14 +144,14 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs sm:grid-cols-3">
           {savedDate && (
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-muted-fg">
+              <dt className="text-xs font-semibold text-brand-muted-fg">
                 {RISK_ANSWERED_LABEL}
               </dt>
               <dd className="mt-0.5 font-semibold text-brand-fg">{savedDate}</dd>
             </div>
           )}
           <div>
-            <dt className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-muted-fg">
+            <dt className="text-xs font-semibold text-brand-muted-fg">
               {RISK_QUESTIONS_LABEL}
             </dt>
             <dd className="mt-0.5 font-semibold tabular-nums text-brand-fg">
@@ -164,8 +164,8 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
       )}
 
       {riskLabel && (
-        <details className="rounded-lg border border-brand-border/40 bg-forest-50 px-3 py-2.5 text-xs text-brand-fg">
-          <summary className="cursor-pointer font-bold text-brand-primary">Why this risk level?</summary>
+        <details className="rounded-[12px] bg-forest-50 px-3 py-2.5 text-xs text-brand-fg">
+          <summary className="cursor-pointer font-bold text-forest-900">Why this risk level?</summary>
           <div className="mt-3 space-y-3 leading-relaxed">
             {reasoning ? (
               <>
@@ -185,9 +185,9 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
 
       {/* ── The retake, in steps ── */}
       {open && (
-        <div id="risk-retake" className="flex flex-col gap-4 border-t border-brand-border/40 pt-4">
+        <div id="risk-retake" className="flex flex-col gap-4 border-t border-forest-900/8 pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <p className="text-sm font-bold text-brand-primary">
+            <p className="text-sm font-bold text-forest-900">
               Step {step + 1} of {RETAKE_STEPS.length}{" "}
               <span className="font-semibold text-brand-muted-fg">· {current.title}</span>
             </p>
@@ -218,7 +218,7 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
                   type="button"
                   onClick={() => setStep(i)}
                   aria-current={i === step ? "step" : undefined}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                  className={`rounded-full border px-2.5 py-1 text-xs font-bold transition-colors ${
                     i === step
                       ? "border-transparent bg-brand-primary text-brand-bg"
                       : done
@@ -233,9 +233,9 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
           </div>
 
           {preview && (
-            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-brand-border/40 bg-forest-50 px-3 py-2.5 text-sm text-brand-fg">
+            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[12px] bg-forest-50 px-3 py-2.5 text-sm text-brand-fg">
               <span>
-                {RETAKE_PREVIEW_PREFIX} <strong className="text-brand-primary">{preview}</strong>
+                {RETAKE_PREVIEW_PREFIX} <strong className="text-forest-900">{preview}</strong>
               </span>
               <span className="text-xs text-brand-muted-fg">
                 {riskLabel && preview !== riskLabel
@@ -261,12 +261,12 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
           </div>
 
           {error && (
-            <p role="alert" className="text-xs text-semantic-danger">
+            <p role="alert" className="text-xs text-down">
               {error}
             </p>
           )}
 
-          <div className="flex flex-col gap-3 border-t border-brand-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-forest-900/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <TextButton onClick={closeRetake} disabled={isSaving}>
                 {RETAKE_CANCEL}
@@ -307,7 +307,7 @@ function CeilingScale() {
   if (isLoading || error || !bracket) return null;
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand-muted-fg">
+      <p className="text-xs font-semibold text-brand-muted-fg">
         {RISK_CEILING_LABEL}
       </p>
       <div className="mt-1.5">

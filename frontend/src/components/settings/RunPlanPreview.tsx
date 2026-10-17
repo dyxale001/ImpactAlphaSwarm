@@ -16,10 +16,10 @@ function Stat({ Icon, label, value }: { Icon: React.ElementType; label: string; 
   return (
     <div className="flex items-center gap-2.5">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary/10">
-        <Icon size={14} className="text-brand-primary" strokeWidth={1.75} />
+        <Icon size={14} className="text-forest-900" strokeWidth={1.75} />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-muted-fg">{label}</p>
+        <p className="text-xs font-semibold text-brand-muted-fg">{label}</p>
         <p className="text-sm font-bold tabular-nums text-brand-fg transition-all duration-200">{value}</p>
       </div>
     </div>
@@ -41,14 +41,14 @@ export default function RunPlanPreview({ sectors }: { sectors: string[] }) {
   const summary = plan.shares.map((s) => `${s.sector} ${s.places}`).join(", ");
 
   return (
-    <div className="rounded-xl border border-brand-border/40 bg-brand-surface/20 p-4" aria-live="polite">
+    <div className="rounded-xl border border-forest-900/8 bg-brand-surface/20 p-4" aria-live="polite">
       <div className="grid grid-cols-2 gap-3">
         <Stat Icon={Timer} label={RUN_PLAN_TIME_LABEL} value={`About ${plan.time}`} />
         <Stat Icon={Layers} label={RUN_PLAN_COUNT_LABEL} value={`${plan.companies} of ${RUN_TICKER_CAP}`} />
       </div>
 
       <div className="mt-4">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-muted-fg">
+        <p className="text-xs font-semibold text-brand-muted-fg">
           {RUN_PLAN_SPLIT_LABEL}
         </p>
         <div
@@ -66,7 +66,7 @@ export default function RunPlanPreview({ sectors }: { sectors: string[] }) {
         </div>
         <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
           {plan.shares.map((s) => (
-            <li key={s.sector} className="inline-flex items-center gap-1.5 text-[11px] text-brand-muted-fg">
+            <li key={s.sector} className="inline-flex items-center gap-1.5 text-xs text-brand-muted-fg">
               <span className={`h-2 w-2 shrink-0 rounded-full ${fillFor(s.sector)}`} />
               {s.sector}
               <span className="font-bold tabular-nums text-brand-fg">{s.places}</span>
@@ -75,7 +75,7 @@ export default function RunPlanPreview({ sectors }: { sectors: string[] }) {
         </ul>
       </div>
 
-      <div className="mt-3.5 space-y-1 border-t border-brand-border/30 pt-3 text-[10px] leading-snug text-brand-muted-fg">
+      <div className="mt-3.5 space-y-1 border-t border-brand-border/30 pt-3 text-xs leading-snug text-brand-muted-fg">
         <p>{RUN_PLAN_TIME_NOTE}</p>
         <p>{RUN_PLAN_WATCHLIST_NOTE}</p>
       </div>

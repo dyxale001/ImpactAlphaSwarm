@@ -43,16 +43,16 @@ export default function SettingsCard({
     <section
       id={id}
       aria-labelledby={id ? `${id}-title` : undefined}
-      className={`glass-card flex flex-col gap-4 p-5 sm:p-6 ${
-        tone === "danger" ? "border-semantic-danger/30" : ""
+      className={`as-card flex flex-col gap-4 p-5 sm:p-6 ${
+        tone === "danger" ? "!border-down/30" : ""
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 max-w-[62ch]">
           <h2
             id={id ? `${id}-title` : undefined}
-            className={`text-[15px] font-bold tracking-tight ${
-              tone === "danger" ? "text-semantic-danger" : "text-brand-fg"
+            className={`text-base font-bold tracking-[-0.01em] ${
+              tone === "danger" ? "text-down" : "text-forest-900"
             }`}
           >
             {title}
@@ -67,7 +67,7 @@ export default function SettingsCard({
       {error && (
         <div
           role="alert"
-          className="rounded-lg border border-semantic-danger/20 bg-semantic-danger/10 px-3 py-2.5 text-xs text-semantic-danger"
+          className="rounded-[12px] bg-down-bg px-3 py-2.5 text-sm text-down"
         >
           {error}
         </div>
@@ -75,14 +75,14 @@ export default function SettingsCard({
       {success && (
         <div
           role="status"
-          className="rounded-lg border border-semantic-success/20 bg-semantic-success/10 px-3 py-2.5 text-xs text-semantic-success"
+          className="rounded-[12px] bg-up-bg px-3 py-2.5 text-sm font-semibold text-up"
         >
           {success}
         </div>
       )}
 
       {hasFooter && (
-        <div className="flex flex-col gap-3 border-t border-brand-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-forest-900/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-brand-muted-fg">{consequence}</div>
           {actions && <div className="flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>}
         </div>
@@ -91,10 +91,10 @@ export default function SettingsCard({
   );
 }
 
-/** A small uppercase fact chip for a card header. */
+/** A small fact chip for a card header: the platform chip. */
 export function CardChip({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary/8 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-brand-primary">
+    <span className="chip">
       {children}
     </span>
   );
@@ -104,7 +104,7 @@ export function CardChip({ children }: { children: ReactNode }) {
 export function Consequence({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   return (
     <span className="inline-flex items-start gap-1.5 leading-relaxed">
-      {icon && <span className="mt-[2px] shrink-0 text-lime-700">{icon}</span>}
+      {icon && <span className="mt-[2px] shrink-0 text-forest-500">{icon}</span>}
       <span>{children}</span>
     </span>
   );

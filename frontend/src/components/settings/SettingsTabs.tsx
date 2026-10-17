@@ -1,8 +1,8 @@
 import { SETTINGS_TABS, SETTINGS_TAB_LABELS, type SettingsTab } from "../../utils/settingsTabs";
 
 /**
- * The Settings tab strip. Same pills, same keyboard handling as the Learning
- * Centre's, so moving between the two pages feels like one app.
+ * The Settings tab strip: the platform's tab bar, with the same keyboard
+ * handling as the Learning Centre's, so moving between the two feels like one app.
  */
 export default function SettingsTabs({
   active,
@@ -15,7 +15,7 @@ export default function SettingsTabs({
     <div
       role="tablist"
       aria-label="Settings views"
-      className="flex gap-2 overflow-x-auto no-scrollbar border-b border-brand-border pb-3 sm:flex-wrap"
+      className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full"
     >
       {SETTINGS_TABS.map((tab, index) => {
         const selected = active === tab;
@@ -43,14 +43,18 @@ export default function SettingsTabs({
               onChange(next);
               document.getElementById(`settings-tab-${next}`)?.focus();
             }}
-            // px-4 on a phone: at px-5 the three tabs came to 375px against 361px
-            // of screen, and Account sat half cut off with nothing saying the
-            // strip scrolls.
-            className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:px-5 ${
-              selected ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"
-            }`}
+            // Three across on a phone, so none sits off the edge; "Investor
+            // profile" reads "Profile" there to fit.
+            className="as-tab px-2 sm:px-4"
           >
-            {SETTINGS_TAB_LABELS[tab]}
+            {tab === "profile" ? (
+              <>
+                <span className="sm:hidden">Profile</span>
+                <span className="hidden sm:inline">{SETTINGS_TAB_LABELS[tab]}</span>
+              </>
+            ) : (
+              SETTINGS_TAB_LABELS[tab]
+            )}
           </button>
         );
       })}

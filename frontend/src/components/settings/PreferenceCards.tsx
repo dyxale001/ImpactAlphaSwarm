@@ -38,8 +38,8 @@ const EXPERTISE_TILES = [
 
 function SelectionRing() {
   return (
-    <span className="absolute right-2.5 top-2.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-primary animate-in zoom-in-75 duration-150">
-      <Check size={9} strokeWidth={3.5} className="text-brand-accent" />
+    <span className="absolute right-2.5 top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-forest-700 animate-in zoom-in-75 duration-150">
+      <Check size={11} strokeWidth={3.5} className="text-white" />
     </span>
   );
 }
@@ -64,33 +64,33 @@ function Tile({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`group relative rounded-xl border px-3.5 py-3 text-left transition-all duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40 ${
+      className={`group relative rounded-[14px] border px-3.5 py-3 text-left transition-colors duration-150 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700 ${
         on
-          ? "border-brand-primary/50 bg-brand-primary/5"
-          : "border-brand-border/40 bg-brand-surface/20 hover:border-brand-border/70 hover:bg-brand-surface/40"
+          ? "border-forest-700 bg-forest-50"
+          : "border-forest-900/12 bg-white hover:border-forest-900/30"
       }`}
     >
       {on && <SelectionRing />}
       <div className="mb-2.5 flex items-center gap-2">
         <div
-          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-            on ? "bg-brand-primary/15" : "bg-brand-border/20 group-hover:bg-brand-border/30"
+          className={`flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors ${
+            on ? "bg-white" : "bg-forest-50"
           }`}
         >
-          <Icon size={13} className={on ? "text-brand-primary" : "text-brand-muted-fg"} strokeWidth={1.75} />
+          <Icon size={16} className={on ? "text-forest-700" : "text-brand-muted-fg"} strokeWidth={1.75} />
         </div>
         {numeral && (
           <span
-            className={`text-[10px] font-bold tracking-wider ${
-              on ? "text-brand-primary" : "text-brand-muted-fg/50"
+            className={`text-xs font-bold ${
+              on ? "text-forest-700" : "text-brand-muted-fg/60"
             }`}
           >
             {numeral}
           </span>
         )}
       </div>
-      <p className="text-xs font-semibold leading-tight text-brand-fg">{title}</p>
-      <p className="mt-0.5 text-[10px] leading-snug text-brand-muted-fg">{desc}</p>
+      <p className="text-sm font-bold leading-tight text-forest-900">{title}</p>
+      <p className="mt-0.5 text-xs leading-snug text-brand-muted-fg">{desc}</p>
     </button>
   );
 }
@@ -145,7 +145,7 @@ export function SectorsCard({ settings }: { settings: Settings }) {
           />
         ))}
       </div>
-      {none && <p className="text-[11px] text-semantic-warning">{SECTORS_NONE_WARNING}</p>}
+      {none && <p className="text-xs font-semibold text-caution">{SECTORS_NONE_WARNING}</p>}
       <RunPlanPreview sectors={formData.investment_universe} />
     </SettingsCard>
   );
