@@ -56,7 +56,7 @@ export default function FundSwings({
         {strongest && (
           <div>
             <dt className="text-xs font-semibold text-forest-500">{DETAIL_SWINGS_HIGH_LABEL}</dt>
-            <dd className="mt-1 text-[28px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
+            <dd className="mt-1 text-2xl font-extrabold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
               {strongest}
             </dd>
           </div>
@@ -65,7 +65,7 @@ export default function FundSwings({
           <div>
             <dt className="text-xs font-semibold text-forest-500">{DETAIL_SWINGS_LOW_LABEL}</dt>
             <dd
-              className={`mt-1 text-[28px] font-extrabold leading-none tracking-[-0.02em] tabular-nums ${
+              className={`mt-1 text-2xl font-extrabold leading-none tracking-[-0.02em] tabular-nums ${
                 (low ?? 0) < 0 ? "text-[#c0705f]" : "text-brand-primary"
               }`}
             >
@@ -105,7 +105,7 @@ function SwingRange({ high, low }: { high: number; low: number }) {
         style={{ left: `${zero}%` }}
       />
       <span
-        className="absolute top-5 -translate-x-1/2 text-[11px] font-bold text-forest-900"
+        className="absolute top-5 -translate-x-1/2 text-xs font-bold text-forest-900"
         style={{ left: `${zero}%` }}
       >
         0%

@@ -365,7 +365,7 @@ export function BackLink({ to = "/funds", label = DETAIL_BACK }: { to?: string; 
   return (
     <Link
       to={to}
-      className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-forest-500 transition-colors hover:text-brand-primary"
+      className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-forest-900"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       {label}
@@ -617,7 +617,7 @@ function Overview({
               {/* One number leads, because one number is comparable across every
                   fund in the catalogue. The parts of it follow. */}
               <div>
-                <p className="text-4xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-brand-primary">
+                <p className="text-3xl font-bold leading-none tracking-[-0.02em] tabular-nums text-forest-900">
                   {tic ?? ter}
                 </p>
                 <p className="mt-1.5 text-xs text-forest-500">
@@ -716,14 +716,14 @@ function WhyRows({
           key={row.key}
           className="flex flex-wrap gap-x-5 gap-y-1 border-t border-brand-border/40 py-3 first:border-t-0 first:pt-1"
         >
-          <dt className="w-32 shrink-0 text-[13px] font-semibold text-forest-500">{row.label}</dt>
+          <dt className="w-32 shrink-0 text-xs font-semibold text-brand-muted-fg">{row.label}</dt>
           <dd className="min-w-0 max-w-[65ch] flex-1 basis-72 text-sm leading-relaxed text-forest-900">
             {row.text}
             {row.key === "performance" && onSeeFigures && (
               <button
                 type="button"
                 onClick={onSeeFigures}
-                className="ml-1.5 inline-flex items-center gap-1 text-[13px] font-bold text-brand-primary underline decoration-brand-primary/35 underline-offset-[3px] transition-colors hover:decoration-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+                className="ml-1.5 inline-flex items-center gap-1 text-sm font-bold text-forest-700 underline decoration-brand-primary/35 underline-offset-[3px] transition-colors hover:decoration-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
               >
                 {DETAIL_SEE_FIGURES}
                 <ArrowRight className="h-3 w-3" />
@@ -764,12 +764,12 @@ function CostRow({
   return (
     <div className={`flex items-center gap-2 ${sub ? "pl-[18px]" : ""}`}>
       {swatch && <span className={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${swatch}`} aria-hidden="true" />}
-      <dt className={`flex-1 ${sub ? "text-xs text-forest-500" : "text-[13px] text-forest-900"}`}>
+      <dt className={`flex-1 ${sub ? "text-xs text-brand-muted-fg" : "text-sm text-forest-900"}`}>
         {label}
       </dt>
       <dd
         className={`tabular-nums ${
-          sub ? "text-[13px] font-semibold text-forest-500" : "text-sm font-bold text-brand-primary"
+          sub ? "text-xs font-semibold text-brand-muted-fg" : "text-sm font-bold text-forest-900"
         }`}
       >
         {value}
@@ -819,10 +819,10 @@ function Figures({
           manager can strike a price on a different day. */}
       {nav && (
         <Tile span={SPAN.half} title={DETAIL_NAV_LABEL}>
-          <p className="text-[28px] font-bold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
+          <p className="text-2xl font-bold leading-none tracking-[-0.02em] tabular-nums text-forest-900">
             {nav}
           </p>
-          {navDate && <p className="text-[11px] text-forest-500">{`Struck on ${navDate}`}</p>}
+          {navDate && <p className="text-xs text-brand-muted-fg">{`Struck on ${navDate}`}</p>}
           <Fine rule>{DETAIL_NAV_NOTE}</Fine>
         </Tile>
       )}

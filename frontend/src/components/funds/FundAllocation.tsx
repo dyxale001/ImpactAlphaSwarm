@@ -94,7 +94,7 @@ export default function FundAllocation({
             {group.heading && (
               <p className="mb-2 text-xs font-bold text-brand-primary">{group.heading}</p>
             )}
-            <ul className="flex flex-col gap-2 text-[13px]">
+            <ul className="flex flex-col gap-2 text-sm">
               {group.rows.map((row) => (
                 <li key={row.name} className="flex items-center gap-2">
                   <span
@@ -119,7 +119,7 @@ export default function FundAllocation({
 
 function DatedChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full bg-forest-50 px-2 py-0.5 text-[11px] font-bold text-forest-500">
+    <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-bold text-forest-500">
       {children}
     </span>
   );

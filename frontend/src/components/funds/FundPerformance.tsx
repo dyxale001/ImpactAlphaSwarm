@@ -80,7 +80,7 @@ export default function FundPerformance({
                 dataKey="value"
                 position="top"
                 formatter={(value: unknown) => `${Number(value)}%`}
-                style={{ fontSize: 13, fontWeight: 700, fill: "#1b3530" }}
+                style={{ fontSize: 12, fontWeight: 700, fill: "#1b3530" }}
               />
             </Bar>
           </BarChart>

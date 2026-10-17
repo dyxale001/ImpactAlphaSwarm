@@ -81,7 +81,7 @@ export function hasMinimums(
 function Minimum({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] text-forest-500">{label}</dt>
+      <dt className="text-xs text-brand-muted-fg">{label}</dt>
       <dd className="text-sm font-bold tabular-nums text-brand-primary">{value}</dd>
     </div>
   );

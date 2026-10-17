@@ -36,7 +36,7 @@ export default function FundIncomeHistory({
       <p className="text-xs leading-relaxed text-forest-500">{DETAIL_INCOME_LEAD}</p>
       {/* A bar per payment, scaled to the largest, so a reader sees whether the
           income has been steady without comparing decimals down a column. */}
-      <ul className="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-x-3.5 gap-y-3 text-[13px]">
+      <ul className="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-x-3.5 gap-y-3 text-sm">
         {entries.map((entry) => (
           <li key={entry.month} className="contents">
             <span className="text-forest-900">{formatDistributionMonth(entry.month)}</span>
