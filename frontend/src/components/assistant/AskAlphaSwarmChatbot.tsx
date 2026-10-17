@@ -94,12 +94,14 @@ export default function AskAlphaSwarmChatbot() {
         <div
           role="dialog"
           aria-label="Ask AlphaSwarm assistant"
-          // The strong outline stays (D-212: the panel was "getting lost" on busy pages).
-          className="relative mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[calc(100vw-2rem)] max-w-sm flex-col rounded-[20px] border-2 border-forest-700 bg-white shadow-float sm:w-[26rem]"
+          // D-212 asked that the panel not get "lost" on busy pages. A 1px solid forest
+          // outline, a deep shadow and the tinted header keep it distinct without the
+          // heavy 2px frame.
+          className="relative mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[calc(100vw-2rem)] max-w-sm flex-col rounded-[20px] border border-forest-700 bg-white shadow-[0_24px_60px_-12px_rgba(16,34,30,0.45),0_8px_20px_-8px_rgba(16,34,30,0.25)] sm:w-[26rem]"
           style={{ animation: 'slide-up 0.2s ease-out forwards' }}
         >
           {/* Header */}
-          <div className="flex shrink-0 items-center justify-between gap-2 rounded-t-[18px] border-b border-forest-900/8 bg-forest-50 py-3 pl-16 pr-3">
+          <div className="flex shrink-0 items-center justify-between gap-2 rounded-t-[19px] border-b border-forest-900/8 bg-forest-50 py-3 pl-16 pr-3">
             {/* The mascot marks the panel, so the title needs no icon of its own. */}
             <p className="min-w-0 truncate text-sm font-bold text-forest-900">Ask AlphaSwarm</p>
             <div className="flex shrink-0 items-center gap-1">
