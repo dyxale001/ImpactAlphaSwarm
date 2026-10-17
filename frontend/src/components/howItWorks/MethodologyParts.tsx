@@ -1,5 +1,5 @@
 import { useId, useState, type ComponentType, type ReactNode } from 'react';
-import { ArrowRight, ChevronDown, Info, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ChevronDown, Info } from 'lucide-react';
 
 // The building blocks the "How it's calculated" sections share, in the same
 // visual language as the "About this page" dialogs: soft forest-50 insets,
@@ -121,26 +121,6 @@ export function BandStrip({ bands, label }: { bands: { name: string; range: stri
   );
 }
 
-/** A left-to-right chain of events, for how data reaches the page. */
-export function Timeline({ points }: { points: { title: string; body: string }[] }) {
-  return (
-    <ol className="relative grid gap-3 sm:grid-cols-4 sm:gap-2">
-      {points.map((p, i) => (
-        <li key={p.title} className="relative flex gap-3 sm:flex-col sm:gap-2">
-          <div className="flex flex-col items-center sm:flex-row">
-            <span className="h-3 w-3 shrink-0 rounded-full border-2 border-forest-700 bg-white" aria-hidden="true" />
-            {i < points.length - 1 && <span className="w-px flex-1 bg-forest-900/15 sm:h-px sm:w-auto" aria-hidden="true" />}
-          </div>
-          <div className="pb-1 sm:pr-2">
-            <p className="text-sm font-bold text-forest-900">{p.title}</p>
-            <p className="text-xs leading-relaxed text-brand-muted-fg">{p.body}</p>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 /** A plain note: an info line on the soft inset. */
 export function Note({ children, icon: NoteIcon = Info }: { children: ReactNode; icon?: Icon }) {
   return (
@@ -148,17 +128,6 @@ export function Note({ children, icon: NoteIcon = Info }: { children: ReactNode;
       <NoteIcon className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
       <div className="text-sm leading-relaxed text-brand-muted-fg">{children}</div>
     </div>
-  );
-}
-
-/** Reference data shown beside the analysis but kept out of it. */
-export function NotInRanking({ what }: { what: string }) {
-  return (
-    <Note icon={ShieldCheck}>
-      <Strong>Not part of your ranking.</Strong> {what} is shown for context only. It
-      never moves a stock up or down your list, and nothing here is a reason to buy or
-      sell on its own.
-    </Note>
   );
 }
 

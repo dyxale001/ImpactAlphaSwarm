@@ -1,4 +1,4 @@
-// Ranking and reference-data constants the methodology copy quotes. Each mirrors a
+// Ranking constants the methodology copy quotes. Each mirrors a
 // backend value, named beside it, so the explanation cannot quietly drift from
 // what the code does. Change them together.
 
@@ -27,14 +27,3 @@ export const SHORTLIST_SIZE = 5;
 
 // quant_analyst QUANT_MIN_UNIVERSE: fewer stocks than this and no percentiles.
 export const QUANT_MIN_UNIVERSE = 10;
-
-// ww_config: how often the ownership and dealings data is refreshed.
-export const INSTITUTIONS_TTL_DAYS = 7;
-export const INSIDER_TTL_HOURS = 48;
-export const INSIDER_WINDOW_DAYS = 90;
-// The 13F deadline: up to this many days after the quarter ends.
-export const FILING_13F_LAG_DAYS = 45;
-
-// macro/config.py MACRO_TAG_THRESHOLD and the New York pull times.
-export const MACRO_TAG_THRESHOLD_PCT = 60;
-export const MACRO_PULL_TIMES = ["08:30", "12:30", "16:30"];

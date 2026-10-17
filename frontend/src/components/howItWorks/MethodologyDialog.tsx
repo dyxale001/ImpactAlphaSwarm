@@ -47,7 +47,7 @@ export default function MethodologyDialog({ section }: { section: MethodologyKey
             // The stock page's own tabs, phone grid included, so each section is
             // found under the name it has on the page.
             <div role="tablist" aria-label="Methodology sections"
-              className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:flex sm:rounded-full">
+              className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full">
               {METHODOLOGY_SECTIONS.map(s => (
                 <button key={s.key} type="button" role="tab" aria-selected={s.key === active}
                   onClick={event => { choose(s.key); event.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }}

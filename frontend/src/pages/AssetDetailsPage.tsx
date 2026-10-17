@@ -933,20 +933,12 @@ export default function AssetDetailsPage() {
             variant="asset"
             showSummary
           />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <WhaleCaveat />
-            <MethodologyDialog section="investors" />
-          </div>
+          <WhaleCaveat />
         </div>
       )}
 
       {recommendation && tab === "news" && MACRO_NEWS_ENABLED && (
-        <div className="space-y-3">
-          <StockMarketNewsTab ticker={asset.ticker} />
-          <div className="flex justify-end">
-            <MethodologyDialog section="news" />
-          </div>
-        </div>
+        <StockMarketNewsTab ticker={asset.ticker} />
       )}
 
       {recommendation && tab === "insiders" && (
@@ -957,10 +949,7 @@ export default function AssetDetailsPage() {
             variant="asset"
             showSummary
           />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <WhaleCaveat />
-            <MethodologyDialog section="insiders" />
-          </div>
+          <WhaleCaveat />
         </div>
       )}
     </div>

@@ -32,10 +32,10 @@ it('has one tab per stock page section and opens on the section it came from', a
 
 it('switches section in place and always reopens on its own section', async () => {
   const trigger = await open('quant');
-  const insiders = tabs().find(t => t.textContent!.includes('Insider trading'))!;
-  await act(async () => insiders.click());
-  expect(title()).toBe('Where the insider dealings come from');
-  expect(dialog().textContent).toContain('Form 4');
+  const sentiment = tabs().find(t => t.textContent!.includes('Sentiment'))!;
+  await act(async () => sentiment.click());
+  expect(title()).toBe('How the sentiment score is built');
+  expect(dialog().textContent).toContain('Tier 1');
   await act(async () => (dialog().querySelector('button[aria-label="Close"]') as HTMLButtonElement).click());
   expect(document.querySelector('dialog')).toBeNull();
   await act(async () => trigger.click());
