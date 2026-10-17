@@ -1,135 +1,135 @@
-import { BarChart3, Calculator, Ruler, Tags, ShieldCheck } from "lucide-react";
-import MethodologyCardHeader from "./MethodologyCardHeader";
-import MethodologyStep from "./MethodologyStep";
+import { Calculator, Ruler, Tags } from 'lucide-react';
 import {
-  RAW_METRICS,
-  RSI_BANDS,
-  BETA_BANDS,
-  SUB_DIMENSIONS,
-  SUB_DIMENSION_ORDER,
-  SUB_DIMENSION_DIRECTION,
   QUANT_HORIZONS,
-} from "../../data/quantExplainers";
+  QUANT_TRACE_DISCLOSURE,
+  RAW_METRICS,
+  SUB_DIMENSION_DIRECTION,
+  SUB_DIMENSION_ORDER,
+  SUB_DIMENSIONS,
+} from '../../data/quantExplainers';
+import { QUANT_MIN_UNIVERSE, SHORTLIST_SIZE } from '../../data/rankingMethodology';
+import { BandStrip, Body, Bullets, Cards, Lead, MoreDetail, Note, Section, Steps, Strong } from './MethodologyParts';
 
-// The quantitative walkthrough. This replaced a "documentation coming soon"
-// placeholder that promised to explain how the metrics "become a score" — which
-// would now describe something the app deliberately no longer does. The quant layer
-// produces disclosed facts (values, peer positions, definitional bands), not a
-// composite rating.
-//
-// Metric definitions and band wording are imported from data/quantExplainers.ts —
-// the same source the asset page uses — so this page cannot drift from the panel.
+// The price measurements: what is measured, how it is compared with the run's other
+// stocks, and which readings are deliberately only described.
+
+const PEERS = [6, 14, 23, 31, 40, 47, 55, 63, 71, 86, 94];
+const DEMO_PCT = 78;
+
+/** Where one stock sits among the run's stocks, as dots on a 0-100 track. */
+function PercentileDemo() {
+  return (
+    <div className="as-inset p-4" role="img"
+      aria-label={`Illustration: a stock at the ${DEMO_PCT}th percentile sits above about 8 in 10 of the stocks in its run`}>
+      <div className="relative mx-2 h-10" aria-hidden="true">
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-forest-100" />
+        {PEERS.map(p => (
+          <span key={p} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-forest-500/60" style={{ left: `${p}%` }} />
+        ))}
+        <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-forest-700 shadow" style={{ left: `${DEMO_PCT}%` }} />
+        <span className="absolute -top-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold text-forest-900" style={{ left: `${DEMO_PCT}%` }}>This stock</span>
+      </div>
+      <div className="mx-2 flex justify-between text-[11px] text-brand-muted-fg" aria-hidden="true">
+        <span>Lowest in the run</span>
+        <span>Highest</span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
+        {DEMO_PCT}th percentile: above about 8 in 10 of the other stocks analysed in the
+        same run. A position among peers, not a rating.
+      </p>
+    </div>
+  );
+}
+
 export default function QuantMethodology() {
   return (
-    <div id="quant" className="soft-card w-full space-y-5 p-4 sm:p-6" style={{ scrollMarginTop: "1.5rem" }}>
-      <MethodologyCardHeader
-        icon={BarChart3}
-        title="The price measurements"
-        subtitle="Facts about recent price behaviour, deliberately not a rating."
-      />
+    <>
+      <Lead>
+        Facts about how the price has behaved over roughly the last year, compared with
+        the other stocks analysed in the same run. Deliberately not a rating.
+      </Lead>
 
-      <div className="pt-1">
-        <MethodologyStep n={1} icon={Calculator} title="Measure each stock">
-          <p>
-            For every stock we pull roughly a year of daily prices and compute a
-            standard set of measurements using published formulas:
-          </p>
-          <ul className="mt-1 space-y-1.5">
-            {RAW_METRICS.map((m) => (
-              <li key={m.key}>
-                <span className="font-semibold text-brand-fg">{m.label}</span>:{" "}
-                {m.detail}
-              </li>
-            ))}
-          </ul>
-          <p>
-            These are reproducible: the same window and the same formula give the
-            same answer, whoever runs it.
-          </p>
-        </MethodologyStep>
+      <Section title="How it is measured">
+        <Steps steps={[
+          {
+            icon: Calculator, title: 'Measure',
+            body: <>About a year of daily prices, run through standard published formulas. The same window and formula give the same answer, whoever runs it.</>,
+          },
+          {
+            icon: Ruler, title: 'Compare with peers',
+            body: <>Three readings become a percentile: where the stock sits among the other stocks in the same run.</>,
+          },
+          {
+            icon: Tags, title: 'Describe, never rank',
+            body: <>RSI and beta are shown as labelled ranges instead, because neither extreme is simply better.</>,
+          },
+        ]} />
+      </Section>
 
-        <MethodologyStep
-          n={2}
-          icon={Ruler}
-          title="Compare against today's candidates"
-        >
-          <p>
-            A raw number like a Sharpe ratio of 1.2 means little on its own, so we
-            report{" "}
-            <span className="font-semibold text-brand-fg">
-              where it sits among the other stocks analysed in the same run
-            </span>, for example “78th percentile”. That is a factual count, not a
-            judgement.
-          </p>
-          <p>
-            Only measurements where “more” unambiguously means more of one thing
-            are ranked this way: momentum, risk-adjusted return, and stability. If
-            a run has too few comparable stocks for a ranking to mean anything, we
-            show the facts and say the ranking was not possible rather than
-            inventing a position.
-          </p>
-          <p>
-            A percentile still needs its direction stated, because it differs per
-            row. Beside every reading the stock page says which way is which:
-          </p>
-          <ul className="mt-1 space-y-1.5">
-            {SUB_DIMENSION_ORDER.map((key) => (
-              <li key={key}>
-                <span className="font-semibold text-brand-fg">{SUB_DIMENSIONS[key].label}</span>:{" "}
-                {SUB_DIMENSION_DIRECTION[key]}
-              </li>
-            ))}
-          </ul>
-          <p>
-            The Quant tab also draws the closing price and the daily RSI over{" "}
-            {QUANT_HORIZONS.join(", ")} windows, in the stock's own listing currency.
-            The line describes what the price did; it is not a chart to trade from.
-          </p>
-        </MethodologyStep>
-
-        <MethodologyStep n={3} icon={Tags} title="Report context, not verdicts">
-          <p>
-            Two measurements are deliberately{" "}
-            <span className="font-semibold text-brand-fg">never ranked</span>,
-            because for them “higher” is not “better”; both extremes are simply
-            notable. They are shown as definitional labels instead:
-          </p>
-          <ul className="mt-1 space-y-1.5">
-            <li>
-              <span className="font-semibold text-brand-fg">RSI</span>:{" "}
-              {Object.values(RSI_BANDS).join(" · ")}
+      <Section title="Position among peers">
+        <PercentileDemo />
+        <Body>Each ranked reading says which way is which, because it differs per row:</Body>
+        <ul className="grid gap-2 sm:grid-cols-3">
+          {SUB_DIMENSION_ORDER.map(key => (
+            <li key={key} className="as-inset flex flex-col gap-1.5 p-3">
+              <span className="text-sm font-bold text-forest-900">{SUB_DIMENSIONS[key].label}</span>
+              <span className="text-xs leading-relaxed text-brand-muted-fg">{SUB_DIMENSION_DIRECTION[key]}</span>
             </li>
-            <li>
-              <span className="font-semibold text-brand-fg">Beta</span>:{" "}
-              {Object.values(BETA_BANDS).join(" · ")}
-            </li>
-          </ul>
-          <p>
-            Saying “RSI 28 is in the conventional oversold range” is true by
-            convention, much like saying 28°C is above room temperature. It is not
-            a claim about what the price will do next.
-          </p>
-        </MethodologyStep>
+          ))}
+        </ul>
+        <Body>
+          With fewer than {QUANT_MIN_UNIVERSE} comparable stocks in a run, a ranking would
+          mean little, so the page shows the measurements and says the ranking was not
+          possible rather than inventing a position.
+        </Body>
+      </Section>
 
-        <MethodologyStep
-          n={4}
-          icon={ShieldCheck}
-          title="Why there is no single quant score"
-          isLast
-        >
-          <p>
-            An earlier version folded these measurements into one quantitative
-            score where higher meant better. We removed it. Rules such as
-            “oversold, therefore add points” bundle a forecast and a value
-            judgement into a single number, a recommendation dressed up as data.
-          </p>
-          <p>
-            What remains is every underlying measurement, its position among
-            today's candidates, and a plain-language explanation of what it
-            measures, so you can form your own view.
-          </p>
-        </MethodologyStep>
-      </div>
-    </div>
+      <Section title="Shown as ranges, never ranked">
+        <p className="text-sm font-semibold text-forest-900">RSI, how fast and far the price has moved recently</p>
+        <BandStrip label="RSI ranges" bands={[
+          { name: 'Oversold', range: 'Below 30', className: 'bg-forest-100 text-forest-700' },
+          { name: 'Neutral', range: '30 to 70', className: 'bg-forest-50 text-forest-700' },
+          { name: 'Overbought', range: 'Above 70', className: 'bg-forest-100 text-forest-700' },
+        ]} />
+        <p className="pt-1 text-sm font-semibold text-forest-900">Beta, how the price moves with the S&amp;P 500</p>
+        <BandStrip label="Beta ranges" bands={[
+          { name: 'Moves opposite', range: 'Below 0', className: 'bg-forest-100 text-forest-700' },
+          { name: 'Moves less', range: '0 to 0.8', className: 'bg-forest-50 text-forest-700' },
+          { name: 'In step', range: '0.8 to 1.2', className: 'bg-forest-50 text-forest-700' },
+          { name: 'Moves more', range: 'Above 1.2', className: 'bg-forest-100 text-forest-700' },
+        ]} />
+        <Body>
+          Saying "RSI 28 is in the conventional oversold range" is true by convention,
+          like saying 28°C is above room temperature. It is not a claim about what the
+          price will do next.
+        </Body>
+      </Section>
+
+      <Section title="Every measurement">
+        <Cards cards={[
+          ...RAW_METRICS.map(m => ({ title: m.label, body: m.detail })),
+          { title: 'Total price change', body: 'How much the price rose or fell across the analysis window. Together with the MACD histogram it makes up momentum.' },
+        ]} />
+      </Section>
+
+      <Section title="Why there is no single quant score">
+        <Note>
+          An older version folded these measurements into one score where higher meant
+          better, with rules such as "oversold, therefore add points". That bundles a
+          forecast and a value judgement into one number, so it is no longer shown and no
+          longer decides your top {SHORTLIST_SIZE}. What you see instead is every
+          measurement, its position among peers and what it means.
+        </Note>
+      </Section>
+
+      <MoreDetail title="More detail">
+        <Bullets items={[
+          <><Strong>The formulas.</Strong> RSI uses 14 days with Wilder's smoothing; MACD uses 12, 26 and 9 day averages; the Sharpe ratio takes a 2% risk-free rate over 252 trading days a year; volatility is the annualised spread of daily moves; beta is measured against the S&amp;P 500 over the same window.</>,
+          <><Strong>"The same run".</Strong> The nightly run measures every stock analysed that night together, so the peers are all of those stocks, not only your own list.</>,
+          <><Strong>The chart.</Strong> The Quant tab draws the closing price and each day's RSI over {QUANT_HORIZONS.join(', ')} windows, converted to rand at one stated rate so the share's moves and the exchange rate's moves stay apart.</>,
+          <><Strong>The written summary.</Strong> Where the Quant tab shows a written summary, it is {QUANT_TRACE_DISCLOSURE.charAt(0).toLowerCase() + QUANT_TRACE_DISCLOSURE.slice(1)}</>,
+        ]} />
+      </MoreDetail>
+    </>
   );
 }

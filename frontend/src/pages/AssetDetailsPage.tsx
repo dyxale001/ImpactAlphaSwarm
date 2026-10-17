@@ -8,7 +8,6 @@ import {
   BarChart3,
   MessageSquare,
   TriangleAlert,
-  HelpCircle,
   ArrowRight,
   Columns2,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel, { ordinal } from "../components/research/QuantMetricsPanel";
 import KeyReadings from "../components/research/KeyReadings";
+import MethodologyDialog from "../components/howItWorks/MethodologyDialog";
 import {
   HorizonPicker,
   QuantTrendChart,
@@ -203,28 +203,6 @@ function ContributorRow({
   );
 }
 
-// Each card owns its own explanation. One page-wide "how is this calculated?" made
-// the reader hunt for the part that applied to what they were looking at; scoping
-// the link to the section is the difference between disclosure and a document dump.
-function ExplainerLink({
-  ticker,
-  section,
-}: {
-  ticker: string;
-  section: "ranking" | "sentiment" | "quant";
-}) {
-  return (
-    <Link
-      to={`/asset/${ticker}/how-it-works#${section}`}
-      className="as-btn as-btn-sm as-btn-secondary shrink-0"
-      title="How is this calculated?"
-    >
-      <HelpCircle className="w-3.5 h-3.5" />
-      <span className="hidden sm:inline">How is this calculated?</span>
-      <span className="sm:hidden">How?</span>
-    </Link>
-  );
-}
 
 const ANALYSIS_TABS = [
   "ranking",
@@ -664,7 +642,7 @@ export default function AssetDetailsPage() {
                   : "—"}
               </p>
             </div>
-            <ExplainerLink ticker={asset.ticker} section="ranking" />
+            <MethodologyDialog section="ranking" />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -777,7 +755,7 @@ export default function AssetDetailsPage() {
               </span>
             }
             action={
-              <ExplainerLink ticker={asset.ticker} section="sentiment" />
+              <MethodologyDialog section="sentiment" />
             }
           >
             {/* One wrapper, so this card controls its own spacing. Handing SectionCard
@@ -890,7 +868,7 @@ export default function AssetDetailsPage() {
           title="Quantitative Data"
           description="What the price history shows: measurements and peer context, not a recommendation."
           icon={BarChart3}
-          action={<ExplainerLink ticker={asset.ticker} section="quant" />}
+          action={<MethodologyDialog section="quant" />}
         >
           {/* One wrapper, for the same reason the sentiment card has one: the card's
               uniform space-y would otherwise put the window switch, the chart and the
@@ -955,12 +933,20 @@ export default function AssetDetailsPage() {
             variant="asset"
             showSummary
           />
-          <WhaleCaveat />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <WhaleCaveat />
+            <MethodologyDialog section="investors" />
+          </div>
         </div>
       )}
 
       {recommendation && tab === "news" && MACRO_NEWS_ENABLED && (
-        <StockMarketNewsTab ticker={asset.ticker} />
+        <div className="space-y-3">
+          <StockMarketNewsTab ticker={asset.ticker} />
+          <div className="flex justify-end">
+            <MethodologyDialog section="news" />
+          </div>
+        </div>
       )}
 
       {recommendation && tab === "insiders" && (
@@ -971,7 +957,10 @@ export default function AssetDetailsPage() {
             variant="asset"
             showSummary
           />
-          <WhaleCaveat />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <WhaleCaveat />
+            <MethodologyDialog section="insiders" />
+          </div>
         </div>
       )}
     </div>

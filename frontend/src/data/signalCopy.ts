@@ -69,7 +69,7 @@ export const TERM_COPY: Record<
     label: "Signal strength",
     question: "How strongly do the measurements lean?",
     detail:
-      "How far the combined price and tone measurements sit from neutral. A high reading means the inputs are saying something definite; a low one means they are close to neutral. Direction is shown separately; strength alone says nothing about which way.",
+      "Where the price and news/social tone measurements sit when combined half and half, from unfavourable to favourable. The middle is neutral: the more both lean favourable, the higher the reading, and the more they lean unfavourable, the lower, so the most unfavourable stocks sit at the bottom.",
   },
   convergence: {
     label: "Agreement",
@@ -87,7 +87,7 @@ export const TERM_COPY: Record<
     label: "Fit with your profile",
     question: "Does it match what you told us?",
     detail:
-      "How the stock's market volatility compares with the risk preference you set during onboarding. This only ever moves a stock DOWN when it is more volatile than you asked for; it never promotes anything. It reflects your own stated preference, not a view on the stock.",
+      "Whether the stock's beta (how sharply it tends to move with the market) suits the risk preference you set during onboarding. It only applies to a Conservative profile, where a stock with a beta above 1.2 moves DOWN; it never promotes anything. It reflects your own stated preference, not a view on the stock.",
   },
 };
 

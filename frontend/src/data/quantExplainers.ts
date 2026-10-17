@@ -22,9 +22,9 @@ export const SUB_DIMENSIONS: Record<
 > = {
   momentum: {
     label: "Momentum",
-    subtitle: "How strongly the price has been trending recently",
+    subtitle: "How strongly the price has risen recently, compared with its peers",
     detail:
-      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other stock in the same run. It describes what the price has already done. It does not predict what it will do next.",
+      "Combines recent trend strength (the MACD histogram) with the total price change over the analysis window, then ranks the result against every other stock in the same run. A price that rose strongly ranks high; one that rose little or fell ranks low. It describes what the price has already done. It does not predict what it will do next.",
   },
   risk_adjusted_return: {
     label: "Risk-adjusted return",
@@ -139,14 +139,14 @@ export const NO_DATA_NOTE =
 //
 // A percentile with no stated direction is as opaque as the raw number it replaced.
 // "78th percentile" on stability does not say whether that is steady or jumpy, and it
-// differs per row: on momentum higher means a stronger trend, on stability higher means
+// differs per row: on momentum higher means a stronger rise, on stability higher means
 // a calmer price. So every row carries one sentence saying which way is which, and one
 // plain reading that turns the ordinal into a comparison a beginner can picture.
 //
 // Still not a verdict. "Steadier than about 8 in 10 peers" is a fact about the past
 // window; whether steadiness is what a reader wants depends on the reader.
 export const SUB_DIMENSION_DIRECTION: Record<SubDimensionKey, string> = {
-  momentum: "Higher means a stronger recent price trend, in either direction of travel.",
+  momentum: "Higher means the price rose more strongly than its peers; lower means it rose less or fell.",
   risk_adjusted_return:
     "Higher means more past return for each unit of turbulence along the way.",
   stability: "Higher means a steadier price from day to day; lower means a jumpier one.",
@@ -155,7 +155,7 @@ export const SUB_DIMENSION_DIRECTION: Record<SubDimensionKey, string> = {
 // The word a row uses for "more of this", so the reading below can say what a high
 // rank means in this row's own terms.
 const SUB_DIMENSION_QUALITY: Record<SubDimensionKey, { high: string; low: string }> = {
-  momentum: { high: "a stronger trend", low: "a weaker trend" },
+  momentum: { high: "a stronger rise", low: "less of a rise" },
   risk_adjusted_return: {
     high: "more return per unit of turbulence",
     low: "less return per unit of turbulence",
