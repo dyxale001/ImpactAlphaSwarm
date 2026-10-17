@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],
+ ['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -14,7 +14,6 @@ it.each([
 it('removes layout/footer and nested calculator/widget duplicates',()=>{
  for(const path of ['../layout/AppLayout.tsx','../dashboard/widgets/learningWidgets.tsx','./InvestmentPlanner.tsx'])expect(read(path)).not.toContain('<LearnMore ');
  expect(read('../../pages/Settings.tsx')).toContain('tab !== "account"');
- expect(read('../../pages/Ask.tsx')).toContain('!hasHistory && !loading && <LearnMore');
 });
 
 it('uses existing Funds spacing and preserves one Dashboard contextual entry point',()=>{
@@ -88,4 +87,11 @@ it('puts the Financial Tools lessons behind a book button in its header', () => 
  const page = read('./FinancialTools.tsx');
  expect(page).not.toContain('<LearnMore ');
  expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the Ask lessons behind a book button in its header', () => {
+ const page = read('../../pages/Ask.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('<LearnPopover context="ask" onDark />');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('AskLandingCards onSelect'));
 });
