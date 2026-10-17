@@ -285,8 +285,12 @@ export default function SentimentCalculation({
                   role="img"
                   aria-label={`News adds ${fmt(newsPoints)} and social adds ${fmt(socialPoints)}, making ${blendedShown} out of 100`}
                 >
-                  <div className="h-full bg-forest-700" style={{ width: `${newsPoints}%` }} />
-                  <div className="h-full bg-lime-500" style={{ width: `${socialPoints}%` }} />
+                  {/* One rounded fill sized to the score, holding both contributions,
+                      so the bar ends in a round cap at the score itself. */}
+                  <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${Math.min(100, newsPoints + socialPoints)}%` }}>
+                    <div className="h-full bg-forest-700" style={{ flexGrow: newsPoints }} />
+                    <div className="h-full bg-lime-500" style={{ flexGrow: socialPoints }} />
+                  </div>
                   <div className="absolute inset-y-0 left-1/2 w-px bg-forest-900/40" aria-hidden="true" />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm tabular-nums text-forest-900">
