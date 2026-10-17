@@ -571,7 +571,7 @@ export default function AssetDetailsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
         to={backTo}
         className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg inline-flex items-center gap-2 transition-colors"

@@ -364,7 +364,7 @@ export function FundDetailView({
  *  funds page this is reached from is `max-w-7xl`. */
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="animate-fade-up mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
+    <div className="animate-fade-up mx-auto flex max-w-7xl flex-col gap-4 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
       {children}
     </div>
   );

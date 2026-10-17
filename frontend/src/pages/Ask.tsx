@@ -16,7 +16,9 @@ export default function AskAlphaSwarmPage() {
   }, [turns.length, pendingQuestion])
 
   return (
-    <div className="max-w-3xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 flex flex-col min-h-[calc(100dvh-2rem)]">
+    // Reading width (768px) inside the shared 1280px frame, pinned to the same
+    // left edge as every other page rather than centred.
+    <div className="max-w-7xl mx-auto *:max-w-3xl pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 flex flex-col min-h-[calc(100dvh-2rem)]">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-6">
         <div>

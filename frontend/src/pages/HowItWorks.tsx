@@ -31,7 +31,9 @@ export default function HowItWorks() {
   }, [hash]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8 pb-20 pt-6 lg:pt-10 animate-fade-in-up">
+    // Reading width (768px) inside the shared 1280px frame, pinned to the same
+    // left edge as every other page rather than centred.
+    <div className="mx-auto max-w-7xl *:max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8 pb-20 pt-6 lg:pt-10 animate-fade-in-up">
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-brand-fg"
