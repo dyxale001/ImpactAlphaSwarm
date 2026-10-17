@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 /**
  * The five button shapes the Settings page uses, so every card's footer reads
@@ -9,7 +9,8 @@ import type { ButtonHTMLAttributes } from "react";
  * red means "leaves the account" and nothing else.
  */
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement>;
+// Full button props, ref included, so a window can hand focus back to its button.
+type Props = ComponentProps<"button">;
 
 export function PrimaryButton({ className = "", ...props }: Props) {
   return <button type="button" {...props} className={`as-btn as-btn-primary ${className}`} />;

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Clock } from "lucide-react";
 import QuestionBlock from "../onboarding/QuestionBlock";
 import SettingsCard, { CardChip, Consequence } from "./SettingsCard";
+import PageExplanationDialog from "../guidance/PageExplanationDialog";
 import { PrimaryButton, SecondaryButton, TextButton } from "./SettingsButtons";
 import { useFundMatches } from "../../hooks/useFundCatalogue";
 import type { useProfileAnswers } from "../../hooks/useProfileAnswers";
@@ -32,7 +33,6 @@ import {
   RISK_CARD_LEAD,
   RISK_CARD_TITLE,
   RISK_CEILING_LABEL,
-  RISK_CLOSE_ACTION,
   RISK_CONSEQUENCE,
   RISK_NOT_ANSWERED,
   RISK_NOT_ANSWERED_LEAD,
@@ -78,6 +78,14 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const navigatingRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Each step starts at its first question, not wherever the last was scrolled to.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [step]);
 
   const total = SURVEY_QUESTIONS.length;
   const reasoning = riskProfileReasoning(profile.savedSurveyAnswers, riskLabel);
@@ -117,12 +125,8 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
         <Consequence icon={<Clock className="h-3.5 w-3.5" />}>{RISK_CONSEQUENCE}</Consequence>
       }
       actions={
-        <SecondaryButton
-          onClick={open ? closeRetake : openRetake}
-          aria-expanded={open}
-          aria-controls="risk-retake"
-        >
-          {open ? RISK_CLOSE_ACTION : RISK_REVIEW_ACTION}
+        <SecondaryButton ref={triggerRef} onClick={openRetake} aria-haspopup="dialog" aria-expanded={open}>
+          {RISK_REVIEW_ACTION}
         </SecondaryButton>
       }
     >
@@ -172,113 +176,129 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
         </details>
       )}
 
-      {/* ── The retake, in steps ── */}
+      {/* ── The retake, in a window ──
+          The step, its progress and the step pills stay pinned at the top; the
+          questions scroll; Back, Next and Save sit in the footer. Closing the
+          window any way is Cancel: unsaved answers are discarded. */}
       {open && (
-        <div id="risk-retake" className="flex flex-col gap-4 border-t border-forest-900/8 pt-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <p className="text-sm font-bold text-forest-900">
-              Step {step + 1} of {RETAKE_STEPS.length}{" "}
-              <span className="font-semibold text-brand-muted-fg">· {current.title}</span>
-            </p>
-            <p className="text-xs tabular-nums text-brand-muted-fg">
-              Questions {current.from + 1} to {current.to} · {answeredSurvey} of {total} answered
-            </p>
-          </div>
+        <PageExplanationDialog
+          title={RISK_REVIEW_ACTION}
+          eyebrow={RISK_CARD_TITLE}
+          onClose={closeRetake}
+          triggerRef={triggerRef}
+          navigatingRef={navigatingRef}
+          bodyRef={bodyRef}
+          toolbar={
+            <div id="risk-retake" className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <p className="text-sm font-bold text-forest-900">
+                      Step {step + 1} of {RETAKE_STEPS.length}{" "}
+                      <span className="font-semibold text-brand-muted-fg">· {current.title}</span>
+                    </p>
+                    <p className="text-xs tabular-nums text-brand-muted-fg">
+                      Questions {current.from + 1} to {current.to} · {answeredSurvey} of {total} answered
+                    </p>
+                  </div>
 
-          <div
-            className="h-1.5 overflow-hidden rounded-full bg-forest-50"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={retakeProgress(step)}
-          >
-            <div
-              className="h-full rounded-full bg-forest-700 transition-[width] duration-300 ease-[cubic-bezier(0.2,0.6,0.2,1)]"
-              style={{ width: `${retakeProgress(step)}%` }}
-            />
-          </div>
+                  <div
+                    className="h-1.5 overflow-hidden rounded-full bg-forest-50"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={retakeProgress(step)}
+                  >
+                    <div
+                      className="h-full rounded-full bg-forest-700 transition-[width] duration-300 ease-[cubic-bezier(0.2,0.6,0.2,1)]"
+                      style={{ width: `${retakeProgress(step)}%` }}
+                    />
+                  </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {RETAKE_STEPS.map((s, i) => {
-              const done = stepComplete(surveyAnswers, i);
-              return (
-                <button
-                  key={s.title}
-                  type="button"
-                  onClick={() => setStep(i)}
-                  aria-current={i === step ? "step" : undefined}
-                  // The step in view is forest; a finished step is lime with a tick;
-                  // the rest are outlined, as the platform's chips are.
-                  className={`chip cursor-pointer ${
-                    i === step ? "chip-dark" : done ? "chip-accent" : "chip-line text-brand-muted-fg hover:text-forest-900"
-                  }`}
-                >
-                  {done && i !== step && <Check className="h-3 w-3" aria-hidden="true" />}
-                  {s.title}
-                </button>
-              );
-            })}
-          </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RETAKE_STEPS.map((s, i) => {
+                      const done = stepComplete(surveyAnswers, i);
+                      return (
+                        <button
+                          key={s.title}
+                          type="button"
+                          onClick={() => setStep(i)}
+                          aria-current={i === step ? "step" : undefined}
+                          // The step in view is forest; a finished step is lime with a tick;
+                          // the rest are outlined, as the platform's chips are.
+                          className={`chip cursor-pointer ${
+                            i === step ? "chip-dark" : done ? "chip-accent" : "chip-line text-brand-muted-fg hover:text-forest-900"
+                          }`}
+                        >
+                          {done && i !== step && <Check className="h-3 w-3" aria-hidden="true" />}
+                          {s.title}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-          {preview && (
-            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[12px] bg-forest-50 px-3 py-2.5 text-sm text-brand-fg">
-              <span>
-                {RETAKE_PREVIEW_PREFIX} <strong className="text-forest-900">{preview}</strong>
-              </span>
-              <span className="text-xs text-brand-muted-fg">
-                {riskLabel && preview !== riskLabel
-                  ? RETAKE_PREVIEW_CHANGED.replace("{current}", riskLabel)
-                  : RETAKE_PREVIEW_SAME}
-              </span>
-            </p>
-          )}
-
-          <p className="text-xs text-brand-muted-fg">{RETAKE_PREFILLED}</p>
-
-          <div className="flex flex-col divide-y divide-forest-900/8">
-            {questions.map((q, i) => (
-              <QuestionBlock
-                key={q.id}
-                question={q}
-                value={surveyAnswers[q.id]}
-                onAnswer={setSurveyAnswer}
-                appearance="embedded"
-                number={current.from + i + 1}
-              />
-            ))}
-          </div>
-
-          {error && (
-            <p role="alert" className="text-xs text-down">
-              {error}
-            </p>
-          )}
-
-          <div className="flex flex-col gap-3 border-t border-forest-900/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <TextButton onClick={closeRetake} disabled={isSaving}>
-                {RETAKE_CANCEL}
-              </TextButton>
-              {lastStep && !complete && (
-                <span className="text-xs text-brand-muted-fg">{RETAKE_INCOMPLETE}</span>
-              )}
+                  {preview && (
+                    <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[12px] bg-forest-50 px-3 py-2.5 text-sm text-brand-fg">
+                      <span>
+                        {RETAKE_PREVIEW_PREFIX} <strong className="text-forest-900">{preview}</strong>
+                      </span>
+                      <span className="text-xs text-brand-muted-fg">
+                        {riskLabel && preview !== riskLabel
+                          ? RETAKE_PREVIEW_CHANGED.replace("{current}", riskLabel)
+                          : RETAKE_PREVIEW_SAME}
+                      </span>
+                    </p>
+                  )}
             </div>
-            <div className="flex items-center gap-2 sm:justify-end">
-              {step > 0 && (
-                <SecondaryButton onClick={() => setStep((s) => s - 1)} disabled={isSaving}>
-                  {RETAKE_BACK}
-                </SecondaryButton>
+          }
+          footer={
+                  <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <TextButton onClick={closeRetake} disabled={isSaving}>
+                        {RETAKE_CANCEL}
+                      </TextButton>
+                      {lastStep && !complete && (
+                        <span className="text-xs text-brand-muted-fg">{RETAKE_INCOMPLETE}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {step > 0 && (
+                        <SecondaryButton onClick={() => setStep((s) => s - 1)} disabled={isSaving}>
+                          {RETAKE_BACK}
+                        </SecondaryButton>
+                      )}
+                      {lastStep ? (
+                        <PrimaryButton onClick={() => void submit()} disabled={isSaving || !complete}>
+                          {isSaving ? RETAKE_SAVING : RETAKE_SAVE}
+                        </PrimaryButton>
+                      ) : (
+                        <PrimaryButton onClick={() => setStep((s) => s + 1)}>{RETAKE_NEXT}</PrimaryButton>
+                      )}
+                    </div>
+                  </div>
+          }
+        >
+          <div className="flex flex-col gap-4">
+              <p className="text-xs text-brand-muted-fg">{RETAKE_PREFILLED}</p>
+
+              <div className="flex flex-col divide-y divide-forest-900/8">
+                {questions.map((q, i) => (
+                  <QuestionBlock
+                    key={q.id}
+                    question={q}
+                    value={surveyAnswers[q.id]}
+                    onAnswer={setSurveyAnswer}
+                    appearance="embedded"
+                    number={current.from + i + 1}
+                  />
+                ))}
+              </div>
+
+              {error && (
+                <p role="alert" className="text-xs text-down">
+                  {error}
+                </p>
               )}
-              {lastStep ? (
-                <PrimaryButton onClick={() => void submit()} disabled={isSaving || !complete}>
-                  {isSaving ? RETAKE_SAVING : RETAKE_SAVE}
-                </PrimaryButton>
-              ) : (
-                <PrimaryButton onClick={() => setStep((s) => s + 1)}>{RETAKE_NEXT}</PrimaryButton>
-              )}
-            </div>
           </div>
-        </div>
+        </PageExplanationDialog>
       )}
     </SettingsCard>
   );

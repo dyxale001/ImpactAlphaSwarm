@@ -4,13 +4,15 @@ import { X } from 'lucide-react';
 
 /** Native modal top layer prevents background interaction. The explicit focus
  * loop also handles keyboard wrapping consistently across supported browsers. */
-export default function PageExplanationDialog({ title, onClose, children, triggerRef, navigatingRef, eyebrow = 'About this page', toolbar, bodyRef }: {
+export default function PageExplanationDialog({ title, onClose, children, triggerRef, navigatingRef, eyebrow = 'About this page', toolbar, bodyRef, footer }: {
   title: string; onClose: () => void; children: ReactNode; triggerRef: RefObject<HTMLButtonElement | null>; navigatingRef: RefObject<boolean>;
   eyebrow?: string;
   /** Pinned under the header, outside the scrolling body: e.g. section tabs. */
   toolbar?: ReactNode;
   /** The scrolling body, so a caller can reset its scroll (e.g. on a tab change). */
   bodyRef?: RefObject<HTMLDivElement | null>;
+  /** The window's own actions (e.g. Cancel / Save), in place of "Got it". */
+  footer?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -60,7 +62,7 @@ export default function PageExplanationDialog({ title, onClose, children, trigge
       {toolbar && <div className="shrink-0 border-b border-forest-900/10 px-5 py-3 sm:px-6">{toolbar}</div>}
       <div ref={bodyRef} className="min-h-0 space-y-8 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6">{children}</div>
       <footer className="flex shrink-0 justify-end border-t border-forest-900/10 px-5 py-3 sm:px-6">
-        <button type="button" onClick={onClose} className="as-btn as-btn-sm as-btn-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary">Got it</button>
+        {footer ?? <button type="button" onClick={onClose} className="as-btn as-btn-sm as-btn-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary">Got it</button>}
       </footer>
     </div>
   </dialog>, document.body);
