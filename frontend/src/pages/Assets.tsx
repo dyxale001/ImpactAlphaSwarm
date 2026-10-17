@@ -67,6 +67,70 @@ function ordinal(n: number): string {
   return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 }
 
+// The quant percentile and sentiment verdict for one "Also scored" row, shared by
+// the desktop table and the phone list so the two cannot drift apart.
+function scoredReadings(asset: AssetRecommendation) {
+  // quant_lean is the mean peer percentile mapped to [-1,+1].
+  const percentile =
+    asset.quantLean !== null
+      ? Math.round(((asset.quantLean + 1) / 2) * 100)
+      : null;
+  const verdict = sentimentVerdict(asset.sentimentScore);
+  const verdictTone =
+    verdict.tone === "positive"
+      ? "chip-up"
+      : verdict.tone === "negative"
+        ? "chip-down"
+        : "";
+  return { percentile, verdict, verdictTone };
+}
+
+function ScoredSignals({ asset }: { asset: AssetRecommendation }) {
+  return (
+    <>
+      {asset.isHype ? (
+        <span className="chip chip-caution">
+          <Flame className="h-3 w-3" /> Hype flagged
+        </span>
+      ) : asset.convergenceState ? (
+        <span
+          className={`chip ${
+            asset.convergenceState === "agree_strongly"
+              ? "chip-up"
+              : asset.convergenceState === "conflict"
+                ? "chip-caution"
+                : ""
+          }`}
+        >
+          {CONVERGENCE_HEADLINE[asset.convergenceState]}
+        </span>
+      ) : null}
+      {asset.isDiscovered ? (
+        <span
+          className="chip chip-accent"
+          title={discoveryProvenance(asset.discoverySources)}
+        >
+          <Sparkles className="h-3 w-3" /> Discovered
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function UniverseLine({ asset }: { asset: AssetRecommendation }) {
+  if (!asset.universe) return null;
+  return (
+    <span className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-brand-muted-fg">
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 rounded-full ${sectorColour(asset.universe).fill}`}
+      />
+      {asset.universe}
+      {asset.exchange ? ` · ${asset.exchange}` : ""}
+    </span>
+  );
+}
+
 export default function AssetsPage() {
   // Names this as the page an asset's "Back to X" link should return to. See
   // lastHubPage.ts: every route into /asset/:ticker shares this without being
@@ -686,7 +750,69 @@ export default function AssetsPage() {
           ) : null}
 
           <div className="as-card overflow-hidden p-0">
-            <div className="overflow-x-auto">
+            {/* Phones: one stacked row per stock. The table needs 800px, and on a
+                phone it scrolled sideways with sentiment, quant and the watchlist
+                button all off the edge. */}
+            <ul className="divide-y divide-forest-900/8 md:hidden">
+              {visibleScored.length === 0 ? (
+                <li className="px-4 py-8 text-center text-sm text-brand-muted-fg">
+                  No other {scoredUniverse} stocks in this run.
+                </li>
+              ) : (
+                visibleScored.map((asset: AssetRecommendation) => {
+                  const { percentile, verdict, verdictTone } = scoredReadings(asset);
+                  return (
+                    <li key={asset.ticker} className="flex gap-3 px-4 py-3.5">
+                      <span className="w-5 shrink-0 pt-0.5 text-right text-xs font-semibold tabular-nums text-brand-muted-fg">
+                        {asset.rank}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Link
+                          to={`/asset/${asset.ticker}`}
+                          className="group block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                        >
+                          <span className="flex items-baseline justify-between gap-3">
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                              <span className="font-bold text-forest-900 group-hover:underline">
+                                {asset.ticker}
+                              </span>
+                              <span className="truncate text-sm font-medium text-brand-muted-fg" title={asset.name}>
+                                {asset.name}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-sm tabular-nums text-forest-900">
+                              R {asset.currentPrice.toFixed(2)}
+                            </span>
+                          </span>
+                          <UniverseLine asset={asset} />
+                        </Link>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                          <span className={`chip ${verdictTone}`}>
+                            <span className="tabular-nums">{asset.sentimentScore}</span>
+                            {verdict.label}
+                          </span>
+                          <span className="tabular-nums text-brand-muted-fg">
+                            {percentile !== null
+                              ? `${ordinal(percentile)} percentile vs peers`
+                              : "No quant percentile"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <ScoredSignals asset={asset} />
+                          </span>
+                          <span className="shrink-0">
+                            <AddToWatchlistButton ticker={asset.ticker} />
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[800px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-forest-900/8 text-left text-xs font-semibold text-brand-muted-fg">
@@ -710,18 +836,7 @@ export default function AssetsPage() {
                     </tr>
                   ) : (
                     visibleScored.map((asset: AssetRecommendation) => {
-                      // quant_lean is the mean peer percentile mapped to [-1,+1].
-                      const percentile =
-                        asset.quantLean !== null
-                          ? Math.round(((asset.quantLean + 1) / 2) * 100)
-                          : null;
-                      const verdict = sentimentVerdict(asset.sentimentScore);
-                      const verdictTone =
-                        verdict.tone === "positive"
-                          ? "chip-up"
-                          : verdict.tone === "negative"
-                            ? "chip-down"
-                            : "";
+                      const { percentile, verdict, verdictTone } = scoredReadings(asset);
                       return (
                         <tr
                           key={asset.ticker}
@@ -746,16 +861,7 @@ export default function AssetsPage() {
                                   {asset.name}
                                 </span>
                               </span>
-                              {asset.universe ? (
-                                <span className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-brand-muted-fg">
-                                  <span
-                                    aria-hidden="true"
-                                    className={`h-2 w-2 rounded-full ${sectorColour(asset.universe).fill}`}
-                                  />
-                                  {asset.universe}
-                                  {asset.exchange ? ` · ${asset.exchange}` : ""}
-                                </span>
-                              ) : null}
+                              <UniverseLine asset={asset} />
                             </Link>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
@@ -776,31 +882,7 @@ export default function AssetsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              {asset.isHype ? (
-                                <span className="chip chip-caution">
-                                  <Flame className="h-3 w-3" /> Hype flagged
-                                </span>
-                              ) : asset.convergenceState ? (
-                                <span
-                                  className={`chip ${
-                                    asset.convergenceState === "agree_strongly"
-                                      ? "chip-up"
-                                      : asset.convergenceState === "conflict"
-                                        ? "chip-caution"
-                                        : ""
-                                  }`}
-                                >
-                                  {CONVERGENCE_HEADLINE[asset.convergenceState]}
-                                </span>
-                              ) : null}
-                              {asset.isDiscovered ? (
-                                <span
-                                  className="chip chip-accent"
-                                  title={discoveryProvenance(asset.discoverySources)}
-                                >
-                                  <Sparkles className="h-3 w-3" /> Discovered
-                                </span>
-                              ) : null}
+                              <ScoredSignals asset={asset} />
                             </span>
                           </td>
                           <td className="px-4 py-3">
