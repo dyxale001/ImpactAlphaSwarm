@@ -65,16 +65,16 @@ export function bullBearTag(
   if (lean === "Positive")
     return {
       label: "Bullish",
-      cls: "bg-emerald-500/12 text-emerald-600",
+      cls: "bg-up-bg text-up",
       Icon: TrendingUp,
     };
   if (lean === "Negative")
     return {
       label: "Bearish",
-      cls: "bg-rose-500/12 text-rose-600",
+      cls: "bg-down-bg text-down",
       Icon: TrendingDown,
     };
-  return { label: "Neutral", cls: "bg-slate-400/15 text-slate-500", Icon: null };
+  return { label: "Neutral", cls: "bg-forest-100 text-forest-700", Icon: null };
 }
 
 // A post timestamp the way a social client shows one: hours for anything inside a
@@ -187,7 +187,7 @@ export function SocialPostRow({
             {when && <span className="text-brand-muted-fg">· {when}</span>}
             {tag && (
               <span
-                className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tag.cls}`}
+                className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tag.cls}`}
               >
                 {tag.Icon && <tag.Icon className="h-3 w-3" />}
                 {tag.label}
