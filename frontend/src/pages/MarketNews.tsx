@@ -264,17 +264,19 @@ export default function MarketNewsPage() {
                       onSeeAll={() => seeAll(group)}
                     />
                   ))}
+                  {/* News that touches every sector, whichever ones the reader chose, as
+                      the grid's last card: it fills the gap an odd number of sectors
+                      leaves, and spans both columns when it would sit alone. */}
+                  <SectorSummary
+                    group={mw}
+                    stories={storiesFor(feed.tagged, mw, mw)}
+                    overview={feed.overviews?.[mw]}
+                    marketWideLabel={mw}
+                    onSeeAll={() => seeAll(mw)}
+                    className={sectors.length % 2 === 0 ? "lg:col-span-2" : ""}
+                  />
                 </div>
               </section>
-
-              {/* News that touches every sector, whichever ones the reader chose. */}
-              <SectorSummary
-                group={mw}
-                stories={storiesFor(feed.tagged, mw, mw)}
-                overview={feed.overviews?.[mw]}
-                marketWideLabel={mw}
-                onSeeAll={() => seeAll(mw)}
-              />
             </div>
           )}
 

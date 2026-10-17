@@ -104,6 +104,7 @@ export default function SectorSummary({
   overview,
   marketWideLabel,
   onSeeAll,
+  className = "",
 }: {
   group: string;
   /** The group's tagged stories, most relevant first. */
@@ -111,6 +112,7 @@ export default function SectorSummary({
   overview: MacroOverview | undefined;
   marketWideLabel: string;
   onSeeAll: () => void;
+  className?: string;
 }) {
   const marketWide = group === marketWideLabel;
   const tint = marketWide ? MARKET_WIDE_TINT : sectorColour(group).tint;
@@ -124,7 +126,7 @@ export default function SectorSummary({
   // relevant stories in the bordered list the stock page's Market news tab uses, and
   // a way into the rest.
   return (
-    <article className="as-card flex flex-col gap-4 p-4 sm:p-6">
+    <article className={`as-card flex flex-col gap-4 p-4 sm:p-6 ${className}`}>
       <header>
         <h3 className="flex items-center gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${sectorDot(group, marketWide)}`} aria-hidden />
