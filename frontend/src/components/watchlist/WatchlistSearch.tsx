@@ -28,7 +28,7 @@ export default function WatchlistSearch({
           onChange={e => setSearch(e.target.value)}
           placeholder="Search any ticker or company name…"
           aria-label="Search stocks"
-          className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
+          className="h-10 w-full rounded-full border border-forest-900/15 bg-white pl-9 pr-9 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none"
         />
         {search && (
           <button
@@ -53,25 +53,20 @@ export default function WatchlistSearch({
             searchResults.map(result => (
               <button
                 key={result.ticker}
+                type="button"
+                aria-label={`Add ${result.ticker} to your watchlist`}
                 onClick={() => onAdd(result)}
-                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-brand-primary/10 transition-colors text-left group"
+                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-forest-50 transition-colors text-left group"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-brand-surface border border-brand-border flex items-center justify-center text-[10px] font-bold font-mono text-brand-fg shrink-0">
-                    {result.ticker.slice(0, 4)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold text-brand-fg">{result.ticker}</p>
-                    </div>
-                    <p className="text-xs text-brand-muted-fg">
+                <div className="min-w-0">
+                    <p className="text-sm font-bold text-forest-900">{result.ticker}</p>
+                    <p className="truncate text-xs text-brand-muted-fg">
                       {result.name}
                       {result.universe ? ` · ${result.universe}` : ''}
                       {result.current_price > 0 ? ` · R ${result.current_price.toFixed(2)}` : ''}
                     </p>
-                  </div>
                 </div>
-                <Plus className="w-4 h-4 text-brand-muted-fg group-hover:text-brand-fg transition-colors shrink-0" />
+                <Plus className="w-4 h-4 text-brand-muted-fg group-hover:text-forest-900 transition-colors shrink-0" aria-hidden="true" />
               </button>
             ))
           )}

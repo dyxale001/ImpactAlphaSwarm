@@ -15,8 +15,10 @@ import { useLearningArticles } from '../../hooks/useLearningArticles';
  * the button can sit anywhere in a wrapped action row and an anchored panel
  * would run off the left edge.
  */
-export default function LearnPopover({ context, className = '' }: {
+export default function LearnPopover({ context, onDark = false, className = '' }: {
   context: LearningContext;
+  /** On a forest header: the outline button the header's other controls use. */
+  onDark?: boolean;
   className?: string;
 }) {
   const { articles } = useLearningArticles();
@@ -56,7 +58,11 @@ export default function LearnPopover({ context, className = '' }: {
         aria-controls={panelId}
         aria-label="Learn as you explore"
         title="Learn as you explore"
-        className="flex h-8 w-8 items-center justify-center rounded-full border border-forest-900/12 bg-white text-forest-700 transition-colors hover:bg-forest-50 aria-expanded:bg-forest-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+        className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          onDark
+            ? 'border-white/25 bg-white/5 text-brand-bg hover:bg-white/15 aria-expanded:bg-white/15 focus-visible:outline-brand-accent'
+            : 'border-forest-900/12 bg-white text-forest-700 hover:bg-forest-50 aria-expanded:bg-forest-50 focus-visible:outline-brand-primary'
+        }`}
       >
         <BookOpen className="h-4 w-4" aria-hidden="true" />
       </button>

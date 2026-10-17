@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Watchlist.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
+ ['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -75,4 +75,11 @@ it('moves the Whale Watching lessons into its About dialog', () => {
  const page = read('../../pages/WhaleWatching.tsx');
  expect(page).not.toContain('<LearnMore ');
  expect(page).toContain('learnContext="whales"');
+});
+
+it('puts the Watchlist lessons behind a book button in its header', () => {
+ const page = read('../../pages/Watchlist.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('<LearnPopover context="watchlist" onDark />');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('Toolbar'));
 });
