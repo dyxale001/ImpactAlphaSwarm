@@ -198,6 +198,10 @@ export const MATCH_INPUT_HORIZON_LABEL = "When you need the money";
 export const MATCH_INPUT_PURPOSE_LABEL = "What the money is for";
 export const MATCH_INPUT_CEILING_LABEL = "Highest published risk label shown";
 
+/** The match callout's headline, with the derived ceiling filled in. */
+export const MATCH_CALLOUT_HEADLINE = "Showing funds with a published risk label up to {ceiling}";
+export const MATCH_CALLOUT_HEADLINE_NO_CEILING = "Showing the funds your answers match";
+
 export const MATCH_INPUT_UNANSWERED = "Not answered yet";
 
 /** Shown only when the horizon or the purpose narrowed the bracket below what
@@ -308,11 +312,11 @@ export const RISK_NO_SHEET_NOTE =
  * be this page telling somebody what to do about a fund.
  */
 
-export const STALENESS_CURRENT = "current";
+export const STALENESS_CURRENT = "Current";
 
-export const STALENESS_AGEING = "worth re-checking";
+export const STALENESS_AGEING = "Worth re-checking";
 
-export const STALENESS_STALE = "sheet is out of date";
+export const STALENESS_STALE = "Sheet is out of date";
 
 export const VEHICLE_LABEL: Record<string, string> = {
   unit_trust: "Unit trust",
@@ -571,6 +575,8 @@ export function allStrings(): string[] {
     LOAD_FAILED,
     MATCHES_LOAD_FAILED,
     MATCH_INPUTS_TITLE,
+    MATCH_CALLOUT_HEADLINE,
+    MATCH_CALLOUT_HEADLINE_NO_CEILING,
     MATCH_INPUTS_LEAD,
     MATCH_INPUT_RISK_LABEL,
     MATCH_INPUT_HORIZON_LABEL,

@@ -185,7 +185,7 @@ export default function FundCard({
             href={factSheetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-brand-primary hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
           >
             {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
             <ExternalLink className="h-3 w-3" />

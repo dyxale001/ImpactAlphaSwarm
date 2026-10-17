@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Funds.tsx','hero-card'],['../../pages/Compare.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/FundDetail.tsx','<Hero fund='],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
+ ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Compare.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/FundDetail.tsx','<Hero fund='],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -18,7 +18,9 @@ it('removes layout/footer and nested calculator/widget duplicates',()=>{
 });
 
 it('uses existing Funds spacing and preserves one Dashboard contextual entry point',()=>{
- expect(read('../../pages/Funds.tsx')).toContain('<LearnMore context="funds" className="mt-6" />');
+ const funds=read('../../pages/Funds.tsx');
+ expect(funds).not.toContain('<LearnMore ');
+ expect(funds).toContain('learnContext="funds"');
  const dashboard=read('../../pages/Dashboard.tsx');
  expect(dashboard.match(/<LearnMore /g)).toHaveLength(1);
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningNextWidget');

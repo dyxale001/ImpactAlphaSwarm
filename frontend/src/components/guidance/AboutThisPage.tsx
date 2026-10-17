@@ -4,6 +4,7 @@ import type { LearningContext } from '../../data/learningContexts';
 import { PAGE_EXPLANATIONS, type ExplanationPage, type PageExplanation } from './pageExplanations';
 import PageExplanationDialog from './PageExplanationDialog';
 import StocksAbout from './StocksAbout';
+import FundsAbout from './FundsAbout';
 import AboutLessons from './AboutLessons';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -74,6 +75,8 @@ export default function AboutThisPage({ page, rankingMode, methodologyHref, lear
     {open && <PageExplanationDialog title={content.title} onClose={close} triggerRef={triggerRef} navigatingRef={navigatingRef}>
       {page === 'stocks'
         ? <StocksAbout content={content} rankingMode={rankingMode} methodologyHref={methodologyHref} learnContext={learnContext} onNavigate={leave} />
+        : page === 'funds'
+        ? <FundsAbout content={content} learnContext={learnContext} onNavigate={leave} />
         : <>
           <StandardAbout page={page} content={content} />
           {learnContext && <AboutLessons context={learnContext} title="Lessons for this page" onNavigate={leave} />}

@@ -77,7 +77,8 @@ it('uses a forest header, readable panels, mobile scrolling and no animation', a
   expect(dialog().querySelector('.as-inset')).toBeTruthy();
   expect(dialog().className).not.toContain('animate');
 });
-it.each(Object.keys(PAGE_EXPLANATIONS) as ExplanationPage[])('renders accurate contextual content for %s', async page => {
+// Funds has its own illustrated dialog (FundsAbout), tested below.
+it.each((Object.keys(PAGE_EXPLANATIONS) as ExplanationPage[]).filter(page => page !== 'funds'))('renders accurate contextual content for %s', async page => {
   await open(page);
   const content = PAGE_EXPLANATIONS[page];
   expect(dialog().textContent).toContain(content.introduction);
@@ -147,7 +148,7 @@ it('distinguishes whale transactions, dates, coverage and sources without fixed 
   for (const phrase of ['Open-market Buy/Sell', 'grants, exercises', 'not a ranking of investment quality', 'not the whole market', 'transaction date', 'filing or reporting date', 'information was fetched', 'Finnhub', 'yfinance', 'may be cached', 'does not establish that no activity occurred', 'does not determine']) expect(text).toContain(phrase);
   expect(text).not.toMatch(/every \d|every hour|every day|live feed/i);
 });
-it.each(['stocks', 'funds', 'whales'] as const)('orders the %s purpose, process, example and caveats clearly', async page => {
+it.each(['stocks', 'whales'] as const)('orders the %s purpose, process, example and caveats clearly', async page => {
   await open(page);
   const content = PAGE_EXPLANATIONS[page]; const text = dialog().textContent!;
   expect(text.indexOf(content.introduction)).toBeLessThan(text.indexOf(content.process.title));
@@ -186,4 +187,20 @@ it('lets the Stocks worked example switch between agreeing and conflicting evide
   await act(async () => stockB.click());
   expect(stockB.getAttribute('aria-selected')).toBe('true');
   expect(dialog().textContent).toContain('the signals disagree');
+});
+
+it('shows the illustrated Funds explainer with every match limit kept', async () => {
+  const copy = await import('../../utils/fundsCopy');
+  await open('funds'); const text = dialog().textContent!;
+  const content = PAGE_EXPLANATIONS.funds;
+  expect(document.getElementById(dialog().getAttribute('aria-labelledby')!)?.textContent).toBe(copy.FUND_ABOUT_TITLE);
+  expect(text).toContain(copy.FUND_ABOUT_INTRO);
+  for (const step of copy.FUND_ABOUT_STEPS) expect(text).toContain(step.title);
+  expect(text).toContain(copy.FUND_ABOUT_COST_TITLE);
+  expect(text).toContain(content.example.body);
+  for (const paragraph of content.limitations.paragraphs.slice(0, 2)) expect(text).toContain(paragraph);
+  expect(text).toContain(content.caveat);
+  expect(text).toContain(copy.FUND_ABOUT_FOOTER);
+  expect(text.indexOf(copy.FUND_ABOUT_INTRO)).toBeLessThan(text.indexOf(content.example.body));
+  expect(text.indexOf(content.example.body)).toBeLessThan(text.indexOf(content.caveat));
 });
