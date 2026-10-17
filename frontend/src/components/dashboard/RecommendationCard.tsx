@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Flame, Sparkles, BrainCircuit, MessageCircleQuestion } from "lucide-react";
+import { ArrowRight, Flame, Sparkles, MessageCircleQuestion } from "lucide-react";
 import {
   type AssetRecommendation,
   SCORECARD_ENABLED,
@@ -144,7 +144,7 @@ export default function RecommendationCard({
 
       <div className="as-inset p-4">
         <p className="text-sm text-forest-900 mb-2 font-bold flex items-center gap-2">
-          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800"><BrainCircuit className="w-3.5 h-3.5" /></span>
+          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800"><Sparkles className="w-3.5 h-3.5" /></span>
           Why it ranks here
         </p>
         <p className="text-xs text-forest-900 leading-relaxed">

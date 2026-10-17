@@ -11,7 +11,6 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
-  BrainCircuit,
   CandlestickChart,
   ChevronDown,
   CircleAlert,
@@ -522,7 +521,7 @@ export default function AssetsPage() {
             </div>
             <div className="rounded-[14px] border border-white/12 bg-white/[0.06] p-3 w-full h-auto">
               <p className="text-xs text-brand-accent mb-2 font-bold flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3" />
+                <Sparkles className="w-3 h-3" />
                 Why it ranks here
               </p>
               <p className="text-xs text-brand-bg/85 leading-relaxed w-full">
