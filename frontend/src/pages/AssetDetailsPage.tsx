@@ -5,8 +5,6 @@ import {
   ArrowLeft,
   Sparkles,
   Flame,
-  BarChart3,
-  MessageSquare,
   TriangleAlert,
   ArrowRight,
   Columns2,
@@ -294,14 +292,12 @@ function WhaleCaveat() {
 function SectionCard({
   title,
   description,
-  icon: Icon,
   badge,
   action,
   children,
 }: {
   title: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
   // Optional qualifier shown beside the title, for context that applies to the
   // whole card (e.g. the time window a score covers).
   badge?: React.ReactNode;
@@ -309,26 +305,22 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    // p-4 on a phone. The tabs nest an accent panel and an inner box inside this
-    // card, and at p-5 on all three the AI summaries read in a column about 260px
-    // wide on a 393px screen.
-    <div className="soft-card w-full p-4 sm:p-5 space-y-4 hover:border-brand-primary/30 transition-all">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-            <Icon className="w-3 h-3 text-brand-primary" />
+    // The same card and heading as the overview tab: a 16px title with a short
+    // subtitle, and the "How is this calculated?" button opposite. p-4 on a phone,
+    // where the panels nested inside would otherwise read in a narrow column.
+    <section className="as-card w-full space-y-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex flex-wrap items-center gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
             {title}
             {badge}
-          </p>
-          {/* Same weight as the body text in the panels below, not the muted grey the
-              label above it uses. It is a sentence the reader is meant to read, and at
-              muted it sat closer to the eyebrow label than to the prose it introduces. */}
-          <p className="text-sm text-brand-fg/90">{description}</p>
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-brand-muted-fg">{description}</p>
         </div>
         {action}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -398,7 +390,7 @@ function SentimentVerdict({
           {verdict.label}
         </p>
         <p
-          className="text-[10px] uppercase tracking-widest font-semibold mt-1"
+          className="text-xs mt-1"
           style={{ color: "rgba(255,255,255,0.55)" }}
         >
           Blended sentiment
@@ -743,17 +735,8 @@ export default function AssetDetailsPage() {
       {recommendation && tab === "sentiment" && (
         <>
           <SectionCard
-            title="Sentiment Data"
-            description={`A blend of trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
-            icon={MessageSquare}
-            badge={
-              <span
-                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-fg font-medium"
-                title={`News from the last ${NEWS_LOOKBACK_DAYS} days and social posts from the last ${SOCIAL_LOOKBACK_DAYS} days. Older items are not counted at all. The trend chart covers a longer window than the score does, because history is filled in outside the run.`}
-              >
-                News {NEWS_LOOKBACK_DAYS}d · social {SOCIAL_LOOKBACK_DAYS}d
-              </span>
-            }
+            title="Sentiment"
+            description={`Trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days, with news weighted higher. Older items are not counted.`}
             action={
               <MethodologyDialog section="sentiment" />
             }
@@ -793,26 +776,13 @@ export default function AssetDetailsPage() {
                 }
               />
 
-              {/* Outside the forest panel, not inside it: this is a light detail table
-                  of a dozen rows, and the disclosure it opens has no business being
-                  rendered on a dark ground. It stays directly under the score it
-                  derives, which is the only adjacency that matters. */}
-              <SentimentCalculation
-                newsArticles={recommendation.news_articles ?? []}
-                socialPosts={recommendation.social_posts ?? []}
-                newsScore={recommendation.news_sentiment_score}
-                socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
-                blendedScore={recommendation.sentiment_score}
-                newsCarried={newsCarried}
-              />
-
               {/* Only what nothing else on the card says. The windows are already in
                   the badge and the description above, so repeating them here would be
                   the third telling; what is genuinely new is that the chart reaches
                   further back than the scores do, and that its news line is not the
                   news score the reader just looked at. */}
               <div className="space-y-2">
-                <p className="text-[11px] text-brand-muted-fg">
+                <p className="text-xs text-brand-muted-fg">
                   The chart covers {SOCIAL_HISTORY_DAYS} days. Its news line is each
                   day's own coverage, not the weighted news score above.
                 </p>
@@ -832,6 +802,7 @@ export default function AssetDetailsPage() {
                   selectedDay={activeDay}
                   onSelectDay={setSelectedDay}
                   selectHint="Choose a day to read what happened"
+                  tone="light"
                 />
                 {/* Held back until the chart itself has something to show. While the
                     history is loading or still being built the chart draws its own
@@ -848,11 +819,23 @@ export default function AssetDetailsPage() {
                 )}
               </div>
 
+              {/* The working, at the foot of the card: the score, the week and the
+                  day come first, and the arithmetic behind the score is there for
+                  whoever wants to check it. A light table, so outside the forest panel. */}
+              <div className="border-t border-forest-900/10 pt-4">
+                <SentimentCalculation
+                  newsArticles={recommendation.news_articles ?? []}
+                  socialPosts={recommendation.social_posts ?? []}
+                  newsScore={recommendation.news_sentiment_score}
+                  socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
+                  blendedScore={recommendation.sentiment_score}
+                  newsCarried={newsCarried}
+                />
+              </div>
+
               {/* Sources apply to the whole card, not just one signal. On one line at
-                  footnote weight: it is provenance, not a fourth signal, and the
-                  uppercase label it used to carry gave it the same billing as News
-                  and Social. */}
-              <div className="pt-3 border-t border-brand-border/50 text-[11px] text-brand-muted-fg">
+                  footnote weight: it is provenance, not a fourth signal. */}
+              <div className="text-xs text-brand-muted-fg">
                 Sources:{" "}
                 <span className="text-brand-fg font-medium">
                   {recommendation.sources ? String(recommendation.sources) : "—"}
@@ -867,7 +850,6 @@ export default function AssetDetailsPage() {
         <SectionCard
           title="Quantitative Data"
           description="What the price history shows: measurements and peer context, not a recommendation."
-          icon={BarChart3}
           action={<MethodologyDialog section="quant" />}
         >
           {/* One wrapper, for the same reason the sentiment card has one: the card's

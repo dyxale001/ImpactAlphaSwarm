@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Sigma } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { NewsArticle } from "./NewsArticles";
 import type { SocialPost } from "./SocialPosts";
 import { tierMeta } from "./sentimentDisplay";
@@ -201,12 +201,11 @@ export default function SentimentCalculation({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full border border-forest-200 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-700 transition-colors hover:border-lime-500 hover:bg-lime-100"
+        className="inline-flex items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
       >
-        <Sigma className="h-3.5 w-3.5" />
         {open ? "Hide the calculation" : "Show how this score was calculated"}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 

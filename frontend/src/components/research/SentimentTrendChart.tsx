@@ -97,6 +97,44 @@ const MIN_DAYS_TO_PLOT = 3;
 // the news line is already dashed and a dashed link would read as more news. Faint, so
 // it says "the trend carries on, nothing was measured here" and can never be taken
 // for a stretch of the line itself.
+// The chart's colours, for the forest panel (dark, the default) and for a white
+// card (light). On white the neon lime is unreadable, so the light palette draws
+// social in forest-700 and news in forest-400, separated by shade and by the dash.
+const DARK = {
+  LINE_COLOR, NEWS_LINE_COLOR, BAR_COLOR, AXIS_TEXT, GRID_LINE, NEUTRAL_LINE,
+  BAR_SELECTED, WEEKEND_BAND, HOLIDAY_BAND, SELECTED_BAND, CLOSED_LABEL,
+  DOT_STROKE: "#10221e",
+  TOOLTIP_BG: "rgba(16, 34, 30, 0.96)",
+  TOOLTIP_BORDER: "rgba(255,255,255,0.14)",
+  TOOLTIP_TEXT: "#f4f7f2",
+  CHIP_BG: "rgba(255,255,255,0.1)",
+  CURSOR: "rgba(255,255,255,0.06)",
+  SWATCH_BORDER: "rgba(255,255,255,0.18)",
+  PANEL: "hero-card overflow-hidden p-4",
+};
+type Palette = typeof DARK;
+const LIGHT: Palette = {
+  LINE_COLOR: "#1b3530", // forest-700
+  NEWS_LINE_COLOR: "#6a8b82", // forest-400
+  BAR_COLOR: "#e4ece9", // forest-100
+  AXIS_TEXT: "#566a64",
+  GRID_LINE: "rgba(17,35,32,0.08)",
+  NEUTRAL_LINE: "rgba(17,35,32,0.35)",
+  BAR_SELECTED: "#c7f269", // lime-500
+  WEEKEND_BAND: "rgba(17,35,32,0.035)",
+  HOLIDAY_BAND: "rgba(17,35,32,0.075)",
+  SELECTED_BAND: "rgba(199,242,105,0.28)",
+  CLOSED_LABEL: "rgba(17,35,32,0.45)",
+  DOT_STROKE: "#ffffff",
+  TOOLTIP_BG: "#ffffff",
+  TOOLTIP_BORDER: "rgba(17,35,32,0.12)",
+  TOOLTIP_TEXT: "#112320",
+  CHIP_BG: "rgba(17,35,32,0.06)",
+  CURSOR: "rgba(17,35,32,0.04)",
+  SWATCH_BORDER: "rgba(17,35,32,0.18)",
+  PANEL: "overflow-hidden rounded-[16px] border border-forest-900/10 bg-white p-4",
+};
+
 const LINK_DASH = "0 5";
 const LINK_OPACITY = 0.45;
 
@@ -190,6 +228,7 @@ function closedLabel(closure: MarketClosure, width: number): string | null {
 
 function ClosedBand(props: any) {
   const { x, y, width, height, payload } = props;
+  const p: Palette = props.palette ?? DARK;
   const closure: MarketClosure | null = payload?.closure ?? null;
   const selected = Boolean(payload?.selected);
   // Recharts wants an element back, never null.
@@ -206,7 +245,7 @@ function ClosedBand(props: any) {
           width={width}
           height={height}
           stroke="none"
-          fill={closure.kind === "holiday" ? HOLIDAY_BAND : WEEKEND_BAND}
+          fill={closure.kind === "holiday" ? p.HOLIDAY_BAND : p.WEEKEND_BAND}
         />
       ) : null}
       {selected ? (
@@ -216,7 +255,7 @@ function ClosedBand(props: any) {
           width={width}
           height={height}
           stroke="none"
-          fill={SELECTED_BAND}
+          fill={p.SELECTED_BAND}
         />
       ) : null}
       {label ? (
@@ -226,7 +265,7 @@ function ClosedBand(props: any) {
           y={y - LABEL_GAP}
           textAnchor="middle"
           fontSize={10}
-          fill={CLOSED_LABEL}
+          fill={p.CLOSED_LABEL}
           // The column is the click target for selecting a day. Without this the
           // label swallows the clicks that land on the letters.
           pointerEvents="none"
@@ -260,7 +299,9 @@ function TooltipRow({
   score,
   volume,
   volumeSwatch,
+  p,
 }: {
+  p: Palette;
   colour: string;
   label: string;
   score: number | null | undefined;
@@ -284,7 +325,7 @@ function TooltipRow({
       </span>
       <span
         className="flex items-center gap-1.5 whitespace-nowrap"
-        style={{ color: AXIS_TEXT }}
+        style={{ color: p.AXIS_TEXT }}
       >
         {/* Rendered either way, so the counts stay aligned whether or not the series
             has a bar. Empty when it does not. */}
@@ -301,7 +342,8 @@ function TooltipRow({
 // One tooltip for the day, not one per series: the bar and the line are two readings
 // of the same column, so Recharts is given a single Tooltip on the composed chart and
 // it renders both from the shared datum.
-function TrendTooltip({ active, payload, variant = "social" }: any) {
+function TrendTooltip({ active, payload, variant = "social", palette }: any) {
+  const p: Palette = palette ?? DARK;
   if (!active || !payload?.length) return null;
   const point: PlottedPoint = payload[0].payload;
   const closure = point.closure;
@@ -321,9 +363,9 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
       // a cap only forces the aligned columns to wrap out of alignment.
       className="rounded-xl px-3 py-2 text-xs"
       style={{
-        background: "rgba(16, 34, 30, 0.96)",
-        border: "1px solid rgba(255,255,255,0.14)",
-        color: "#f4f7f2",
+        background: p.TOOLTIP_BG,
+        border: `1px solid ${p.TOOLTIP_BORDER}`,
+        color: p.TOOLTIP_TEXT,
       }}
     >
       <div className="font-semibold mb-1 flex items-center gap-1.5">
@@ -336,7 +378,7 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
         {closure ? (
           <span
             className="font-normal rounded-full px-1.5 py-px text-[10px] whitespace-nowrap"
-            style={{ background: "rgba(255,255,255,0.1)", color: AXIS_TEXT }}
+            style={{ background: p.CHIP_BG, color: p.AXIS_TEXT }}
             title={
               closure.kind === "holiday"
                 ? "The New York Stock Exchange does not trade on this public holiday."
@@ -355,13 +397,14 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
           // while the market is shut, so that a quiet weekend was not read as collapsing
           // interest, but the "Market closed" badge one line above already says exactly
           // that and says it on every weekend day rather than only the empty ones.
-          <span className="col-span-3" style={{ color: AXIS_TEXT }}>
+          <span className="col-span-3" style={{ color: p.AXIS_TEXT }}>
             No {unitPlural} that day
           </span>
         ) : (
           <TooltipRow
+            p={p}
             // The dot matches the line: lime for social, forest-100 for news.
-            colour={variant === "news" ? NEWS_LINE_COLOR : LINE_COLOR}
+            colour={variant === "news" ? p.NEWS_LINE_COLOR : p.LINE_COLOR}
             // Named "Social" only where there is a news line to tell it apart from.
             // On its own it is the only sentiment in the panel, and qualifying it
             // there would invite the reader to look for the other one.
@@ -369,7 +412,7 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
             score={point.score}
             volume={`${point.post_count} ${point.post_count === 1 ? unit : unitPlural}`}
             // The only count on this chart with a bar behind it.
-            volumeSwatch={BAR_COLOR}
+            volumeSwatch={p.BAR_COLOR}
           />
         )}
 
@@ -379,13 +422,14 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
         {hasNews &&
           (typeof point.newsScore === "number" ? (
             <TooltipRow
-              colour={NEWS_LINE_COLOR}
+              p={p}
+              colour={p.NEWS_LINE_COLOR}
               label="News"
               score={Math.round(point.newsScore)}
               volume={`${point.newsCount} ${point.newsCount === 1 ? "article" : "articles"}`}
             />
           ) : (
-            <span className="col-span-3" style={{ color: AXIS_TEXT }}>
+            <span className="col-span-3" style={{ color: p.AXIS_TEXT }}>
               No articles that day
             </span>
           ))}
@@ -401,7 +445,7 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
           whole thing feel crowded, and it was the least load bearing thing in it: the
           social page lists a day's posts properly when you click its bar. */}
       {point.score !== null && (point.bullish > 0 || point.bearish > 0) ? (
-        <div className="mt-1.5 text-[11px]" style={{ color: AXIS_TEXT }}>
+        <div className="mt-1.5 text-[11px]" style={{ color: p.AXIS_TEXT }}>
           {point.bullish} bullish, {point.bearish} bearish
         </div>
       ) : null}
@@ -437,6 +481,8 @@ interface Props {
   // series into `points`, so this only switches the copy from posts to articles and
   // suppresses the separate news line, which would otherwise double the series.
   variant?: "social" | "news";
+  // "dark" (the default) is the forest panel; "light" draws on a white card.
+  tone?: "dark" | "light";
 }
 
 export function SentimentTrendChart({
@@ -451,7 +497,9 @@ export function SentimentTrendChart({
   selectHint,
   newsDays,
   variant = "social",
+  tone = "dark",
 }: Props) {
+  const p = tone === "light" ? LIGHT : DARK;
   const unitPlural = variant === "news" ? "articles" : "posts";
   const isNews = variant === "news";
   if (isLoading) {
@@ -540,7 +588,7 @@ export function SentimentTrendChart({
 
   return (
     <div>
-      <div className="hero-card overflow-hidden p-4">
+      <div className={p.PANEL}>
         {/* Recharts 3 makes the chart and its bars keyboard focusable, so clicking a
             day focused them and the browser drew its default outline: a box around the
             whole plot and another around the bar. Suppressed for pointer focus only.
@@ -577,17 +625,17 @@ export function SentimentTrendChart({
                 maxBarSize={9999}
                 // Fill and label both come from the column's own closure, so weekends
                 // and holidays share one series rather than splitting the column.
-                shape={<ClosedBand />}
+                shape={<ClosedBand palette={p} />}
               />
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke={GRID_LINE}
+                stroke={p.GRID_LINE}
                 vertical={false}
               />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatDay}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: p.AXIS_TEXT, fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -604,7 +652,7 @@ export function SentimentTrendChart({
                 domain={[0, 100]}
                 ticks={[0, 50, 100]}
                 width={AXIS_WIDTH}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: p.AXIS_TEXT, fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -623,19 +671,19 @@ export function SentimentTrendChart({
               <ReferenceLine
                 yAxisId="score"
                 y={50}
-                stroke={NEUTRAL_LINE}
+                stroke={p.NEUTRAL_LINE}
                 strokeDasharray="4 4"
               />
               <Tooltip
-                content={<TrendTooltip variant={variant} />}
-                cursor={{ fill: "rgba(255,255,255,0.06)" }}
+                content={<TrendTooltip variant={variant} palette={p} />}
+                cursor={{ fill: p.CURSOR }}
               />
               {/* Bars first: in a ComposedChart, paint order is declaration order,
                   and the line has to sit on top of the volume. */}
               <Bar
                 yAxisId="volume"
                 dataKey="post_count"
-                fill={BAR_COLOR}
+                fill={p.BAR_COLOR}
                 radius={[4, 4, 0, 0]}
                 maxBarSize={38}
                 // Per-bar colour through `shape` rather than <Cell>, which this
@@ -654,8 +702,8 @@ export function SentimentTrendChart({
                     stroke="none"
                     fill={
                       props.payload?.date === selectedDay
-                        ? BAR_SELECTED
-                        : BAR_COLOR
+                        ? p.BAR_SELECTED
+                        : p.BAR_COLOR
                     }
                   />
                 )}
@@ -672,7 +720,7 @@ export function SentimentTrendChart({
                     yAxisId="score"
                     type="linear"
                     dataKey={(p: PlottedPoint) => p.newsLinks[k]}
-                    stroke={NEWS_LINE_COLOR}
+                    stroke={p.NEWS_LINE_COLOR}
                     strokeOpacity={LINK_OPACITY}
                     strokeWidth={2}
                     strokeDasharray={LINK_DASH}
@@ -689,7 +737,7 @@ export function SentimentTrendChart({
                   yAxisId="score"
                   type="linear"
                   dataKey={(p: PlottedPoint) => p.scoreLinks[k]}
-                  stroke={isNews ? NEWS_LINE_COLOR : LINE_COLOR}
+                  stroke={isNews ? p.NEWS_LINE_COLOR : p.LINE_COLOR}
                   strokeOpacity={LINK_OPACITY}
                   strokeWidth={2}
                   strokeDasharray={LINK_DASH}
@@ -707,18 +755,18 @@ export function SentimentTrendChart({
                   // The drawn series, carried across shut days. The real score stays
                   // in newsScore, which is what the dots and the tooltip read.
                   dataKey="newsLine"
-                  stroke={NEWS_LINE_COLOR}
+                  stroke={p.NEWS_LINE_COLOR}
                   strokeWidth={2}
                   strokeDasharray={NEWS_LINE_DASH}
                   // Dotted, unlike the social line. Coverage is sparse for most
                   // tickers, so the dots mark which days actually carried articles
                   // rather than leaving the reader to infer it from the curve.
-                  dot={realDot("newsScore", { r: 2, fill: NEWS_LINE_COLOR })}
+                  dot={realDot("newsScore", { r: 2, fill: p.NEWS_LINE_COLOR })}
                   activeDot={realDot("newsScore", {
                     r: 4,
-                    fill: NEWS_LINE_COLOR,
+                    fill: p.NEWS_LINE_COLOR,
                     strokeWidth: 2,
-                    stroke: "#10221e",
+                    stroke: p.DOT_STROKE,
                   })}
                   connectNulls={false}
                 />
@@ -732,15 +780,15 @@ export function SentimentTrendChart({
                 // news line's look: forest-100 rather than lime, dashed, and dotted
                 // because coverage is patchy enough that a lone day between two blanks
                 // would otherwise draw nothing.
-                stroke={isNews ? NEWS_LINE_COLOR : LINE_COLOR}
+                stroke={isNews ? p.NEWS_LINE_COLOR : p.LINE_COLOR}
                 strokeWidth={isNews ? 2 : 2.5}
                 strokeDasharray={isNews ? NEWS_LINE_DASH : undefined}
-                dot={isNews ? realDot("score", { r: 2, fill: NEWS_LINE_COLOR }) : false}
+                dot={isNews ? realDot("score", { r: 2, fill: p.NEWS_LINE_COLOR }) : false}
                 activeDot={realDot("score", {
                   r: 4,
-                  fill: isNews ? NEWS_LINE_COLOR : LINE_COLOR,
+                  fill: isNews ? p.NEWS_LINE_COLOR : p.LINE_COLOR,
                   strokeWidth: 2,
-                  stroke: "#10221e",
+                  stroke: p.DOT_STROKE,
                 })}
                 // Open quiet days are gaps in the record, not a sentiment of zero, so
                 // the solid line breaks there and the faint link above spans it.
@@ -756,7 +804,7 @@ export function SentimentTrendChart({
             on white is nothing at all. */}
         <div
           className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-[11px]"
-          style={{ color: AXIS_TEXT }}
+          style={{ color: p.AXIS_TEXT }}
         >
           <span className="flex items-center gap-1.5">
             {/* Matches whatever the line is actually drawn as: a solid lime rule for
@@ -764,12 +812,12 @@ export function SentimentTrendChart({
             {isNews ? (
               <span
                 className="inline-block w-3.5"
-                style={{ borderTop: `2px dashed ${NEWS_LINE_COLOR}` }}
+                style={{ borderTop: `2px dashed ${p.NEWS_LINE_COLOR}` }}
               />
             ) : (
               <span
                 className="inline-block w-3.5 rounded-full"
-                style={{ height: 2.5, background: LINE_COLOR }}
+                style={{ height: 2.5, background: p.LINE_COLOR }}
               />
             )}
             {/* Same rule as the tooltip: only qualified as "social" where there is a
@@ -786,7 +834,7 @@ export function SentimentTrendChart({
                   exists to identify. */}
               <span
                 className="inline-block w-3.5"
-                style={{ borderTop: `2px dashed ${NEWS_LINE_COLOR}` }}
+                style={{ borderTop: `2px dashed ${p.NEWS_LINE_COLOR}` }}
               />
               News sentiment
             </span>
@@ -794,14 +842,14 @@ export function SentimentTrendChart({
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-2.5 h-2.5 rounded-sm"
-              style={{ background: BAR_COLOR }}
+              style={{ background: p.BAR_COLOR }}
             />
             {isNews ? "Articles per day" : "Posts per day"}
           </span>
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-3.5"
-              style={{ borderTop: `1px dashed ${NEUTRAL_LINE}` }}
+              style={{ borderTop: `1px dashed ${p.NEUTRAL_LINE}` }}
             />
             Neutral 50
           </span>
@@ -815,7 +863,7 @@ export function SentimentTrendChart({
                   key={i}
                   className="inline-block w-[3px] h-[3px] rounded-full"
                   style={{
-                    background: isNews ? NEWS_LINE_COLOR : LINE_COLOR,
+                    background: isNews ? p.NEWS_LINE_COLOR : p.LINE_COLOR,
                     opacity: LINK_OPACITY,
                   }}
                 />
@@ -830,8 +878,8 @@ export function SentimentTrendChart({
             <span
               className="inline-block w-2.5 h-2.5 rounded-sm"
               style={{
-                background: WEEKEND_BAND,
-                border: "1px solid rgba(255,255,255,0.18)",
+                background: p.WEEKEND_BAND,
+                border: `1px solid ${p.SWATCH_BORDER}`,
               }}
             />
             Weekend
@@ -844,8 +892,8 @@ export function SentimentTrendChart({
               <span
                 className="inline-block w-2.5 h-2.5 rounded-sm"
                 style={{
-                  background: HOLIDAY_BAND,
-                  border: "1px solid rgba(255,255,255,0.18)",
+                  background: p.HOLIDAY_BAND,
+                  border: `1px solid ${p.SWATCH_BORDER}`,
                 }}
               />
               Public holiday
