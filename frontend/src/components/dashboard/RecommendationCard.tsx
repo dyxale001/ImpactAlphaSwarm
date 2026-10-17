@@ -81,9 +81,9 @@ export default function RecommendationCard({
             </p>
           </div>
         </div>
-        {/* Accent green behind dark text, the same fill the Discovered chip
-            uses. The tinted versions read as grey. */}
-        <div className="chip chip-accent">
+        {/* The same pale green as the "Why it ranks here" panel below, so the
+            rank reads as part of the card rather than a second accent. */}
+        <div className="chip">
           Rank {asset.rank}
         </div>
       </div>
@@ -97,11 +97,8 @@ export default function RecommendationCard({
           // The disclosed replacement for the score: a STATE, not a grade. No
           // number, because a number is what invited "how good a buy is this".
           <div className="relative group" tabIndex={0}>
-            <p className="text-xs text-primary font-semibold">
-              Signals
-            </p>
             <span
-              className={`chip ${CONVERGENCE_TONE[asset.convergenceState]} font-semibold mt-1`}
+              className={`chip ${CONVERGENCE_TONE[asset.convergenceState]} font-semibold`}
             >
               {CONVERGENCE_HEADLINE[asset.convergenceState]}
             </span>
