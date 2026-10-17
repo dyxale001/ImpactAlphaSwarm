@@ -87,7 +87,7 @@ export default function DualBar({
             reads as middling, when it is in fact on the positive side. */}
         <div className={`relative h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
           <div
-            className={`h-full ${fillTone}`}
+            className={`h-full rounded-full ${fillTone}`}
             style={{ width: `${sentimentScore}%` }}
           />
           <div
@@ -139,7 +139,7 @@ export default function DualBar({
         ) : (
           <div className={`h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
             <div
-              className={`h-full ${fillTone}`}
+              className={`h-full rounded-full ${fillTone}`}
               style={{ width: `${quantitativeScore}%` }}
             />
           </div>
