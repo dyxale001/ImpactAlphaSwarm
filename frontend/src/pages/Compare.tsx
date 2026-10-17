@@ -337,7 +337,7 @@ function Tabs({
     <div
       role="tablist"
       aria-label={label}
-      className="as-tabs as-tabs-sm shrink-0 self-start sm:self-auto"
+      className="as-tabs grid w-full grid-flow-col auto-cols-fr rounded-[20px] sm:inline-flex sm:w-auto sm:shrink-0 sm:rounded-full"
     >
       {options.map((o) => (
         <button
@@ -348,7 +348,7 @@ function Tabs({
           onClick={() => onChange(o.id)}
           className="as-tab"
         >
-          {o.Icon && <o.Icon className="h-3.5 w-3.5" />}
+          {o.Icon && <o.Icon className="h-4 w-4" aria-hidden="true" />}
           {o.label}
         </button>
       ))}

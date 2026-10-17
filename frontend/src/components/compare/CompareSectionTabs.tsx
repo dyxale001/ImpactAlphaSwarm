@@ -3,7 +3,7 @@ import { TAB_OVERVIEW, TAB_TONE, TAB_YOURS } from "../../data/compareCopy";
 // The three panels under the written comparison: the price and listing figures,
 // what people are saying, and the reader's own run. The stock page's section tabs
 // (AnalysisTabs), copied rather than shared because that one is local to its page:
-// lime for the chosen tab, one pill that scrolls sideways rather than wrapping.
+// an even grid on a phone so all three show, one pill from sm up.
 // The trace sits above these, outside any tab, because it speaks to all three.
 
 export const COMPARE_TABS = ["overview", "tone", "yours"] as const;
@@ -33,7 +33,7 @@ export default function CompareSectionTabs({
     <div
       role="tablist"
       aria-label="Comparison sections"
-      className="as-tabs self-start"
+      className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:self-start sm:rounded-full"
     >
       {COMPARE_TABS.map((tab) => (
         <button
@@ -47,7 +47,7 @@ export default function CompareSectionTabs({
             onChange(tab);
             event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}
-          className="as-tab shrink-0"
+          className="as-tab shrink-0 px-2 sm:px-4"
         >
           {LABELS[tab]}
         </button>

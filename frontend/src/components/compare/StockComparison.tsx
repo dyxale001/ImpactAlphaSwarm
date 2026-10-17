@@ -176,7 +176,6 @@ export default function StockComparison({
       <CompareRow
         key={row}
         label={ROW_LABELS[row]}
-        emphasis={most === row}
         tag={
           most === row ? (
             <RowTag kind="differs">{DIFFERS_MOST}</RowTag>
