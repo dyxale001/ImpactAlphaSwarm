@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Funds.tsx','hero-card'],['../../pages/Compare.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/FundDetail.tsx','<Hero fund='],['../../pages/HowItWorks.tsx','<h1'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
+ ['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Funds.tsx','hero-card'],['../../pages/Compare.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/FundDetail.tsx','<Hero fund='],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -45,6 +45,12 @@ it('folds the stock page lessons into a header book button', () => {
 
 it('puts the sentiment evidence lessons behind the header book button', () => {
  const page = read('../../pages/SentimentEvidencePage.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the How it works lessons behind the header book button', () => {
+ const page = read('../../pages/HowItWorks.tsx');
  expect(page).not.toContain('<LearnMore ');
  expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
 });

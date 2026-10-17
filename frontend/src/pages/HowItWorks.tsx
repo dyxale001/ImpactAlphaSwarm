@@ -1,4 +1,4 @@
-import LearnMore from '../components/learning/LearnMore';
+import LearnPopover from '../components/learning/LearnPopover';
 import { useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -43,7 +43,8 @@ export default function HowItWorks() {
         {ticker ? `Back to ${ticker.toUpperCase()} analysis` : "Back"}
       </button>
 
-      <div>
+      <header className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
         <p className="mb-2 text-xs font-semibold text-brand-muted-fg">
           How it works
         </p>
@@ -76,7 +77,9 @@ export default function HowItWorks() {
           )}
         </p>
       </div>
-      <LearnMore context="stock.methodology" />
+      {/* The lessons behind the book button, as on the stock page. */}
+      <LearnPopover context="stock.methodology" className="shrink-0" />
+      </header>
 
       {/* The same sections the stock page's "How is this calculated?" dialog shows
           one at a time, stacked, with the ordering first: it is the question users
