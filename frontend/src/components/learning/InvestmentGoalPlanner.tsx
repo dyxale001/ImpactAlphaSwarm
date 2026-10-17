@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import PurchasingPower from './PurchasingPower';
 import { Target } from 'lucide-react';
-import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { calculateInvestmentGoal } from '../../utils/investmentGoal';
 import { MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
+import { FIELD_ERROR, FIELD_INPUT, FIELD_LABEL, FIELD_RANGE, HowWorkedOut, RESULT_CARD, RESULT_LABEL, TOOL_CARD, ToolChart } from './toolChrome';
 
 const currency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
-const compactCurrency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', notation: 'compact', maximumFractionDigits: 1 });
 const fields = [
   { key: 'targetValue', label: 'Target value at the end of your plan (R)', min: 0.01, max: MAX_INVESTMENT_AMOUNT, step: 0.01 },
   { key: 'currentInvestment', label: 'Current investment (R)', min: 0, max: MAX_INVESTMENT_AMOUNT, step: 0.01 },
@@ -14,7 +13,7 @@ const fields = [
   { key: 'years', label: 'Time horizon (years)', min: 1, max: 60, step: 1 },
 ] as const;
 
-export default function InvestmentGoalPlanner({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
+export default function InvestmentGoalPlanner({ inflationRate, onInflationChange, modeSwitch }: { inflationRate: string; onInflationChange?: (value: string) => void; /** The Project growth / Plan a goal tray, in the card's header. */ modeSwitch?: ReactNode }) {
   const [inputs, setInputs] = useState({ targetValue: '1000000', currentInvestment: '10000', annualRate: '7', years: '20' });
   const values = { targetValue: Number(inputs.targetValue), currentInvestment: Number(inputs.currentInvestment), annualRate: Number(inputs.annualRate), years: Number(inputs.years) };
   const errors = fields.map(field => {
@@ -25,15 +24,18 @@ export default function InvestmentGoalPlanner({ inflationRate, onInflationChange
   });
   const result = errors.some(Boolean) ? null : calculateInvestmentGoal(values);
   return (
-    <section aria-labelledby="goal-title" className="min-w-0 space-y-6 rounded-3xl border border-brand-border bg-brand-card p-5 shadow-card sm:p-8">
-      <div className="space-y-2">
-        <h3 id="goal-title" className="flex items-center gap-2 text-xl font-semibold text-brand-fg"><Target className="h-5 w-5 text-brand-primary" aria-hidden="true" />How much might I need to invest to reach my target?</h3>
-        <p className="text-sm leading-relaxed text-brand-muted-fg">Start with a target and explore the monthly investment that could help you reach it.</p>
+    <section aria-labelledby="goal-title" className={TOOL_CARD}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 id="goal-title" className="flex items-center gap-2 text-lg font-bold tracking-[-0.015em] text-forest-900"><Target className="h-5 w-5 text-forest-700" aria-hidden="true" />How much might I need to invest to reach my target?</h3>
+          <p className="text-sm leading-relaxed text-brand-muted-fg">Start with a target and explore the monthly investment that could help you reach it.</p>
+        </div>
+        {modeSwitch}
       </div>
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-        <div className="space-y-5">
+        <div className="grid content-start gap-x-4 gap-y-5 sm:grid-cols-2">
           {fields.map((field, index) => <div key={field.key} className="space-y-2">
-            <label htmlFor={`goal-${field.key}`} className="block text-sm font-medium text-brand-fg">{field.label}</label>
+            <label htmlFor={`goal-${field.key}`} className={FIELD_LABEL}>{field.label}</label>
             <input id={`goal-${field.key}`} type="number" inputMode={field.key === 'years' ? 'numeric' : 'decimal'} min={field.key === 'targetValue' ? 0 : field.min} max={field.max} step={field.step} value={inputs[field.key]}
               onKeyDown={event => { if (event.key === '-') event.preventDefault(); }}
               onPaste={event => { if (event.clipboardData.getData('text').includes('-')) event.preventDefault(); }}
@@ -47,45 +49,40 @@ export default function InvestmentGoalPlanner({ inflationRate, onInflationChange
                 }
                 setInputs(current => ({ ...current, [field.key]: value }));
               }} aria-invalid={Boolean(errors[index])} aria-describedby={errors[index] ? `goal-${field.key}-error` : undefined}
-              className="min-h-11 w-full rounded-xl border border-brand-border bg-brand-bg/60 px-4 py-3 text-brand-fg outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15" />
+              className={FIELD_INPUT} />
             {(field.key === 'annualRate' || field.key === 'years') && <input type="range" aria-label={`${field.label} slider`} min={field.min} max={field.max} step={field.step}
               value={Number.isFinite(values[field.key]) ? Math.min(field.max, Math.max(field.min, values[field.key])) : field.min}
-              onChange={event => setInputs(current => ({ ...current, [field.key]: event.target.value }))} className="h-6 w-full cursor-pointer accent-brand-primary" />}
-            {errors[index] && <p id={`goal-${field.key}-error`} className="text-xs text-semantic-danger">{errors[index]}</p>}
+              onChange={event => setInputs(current => ({ ...current, [field.key]: event.target.value }))} className={FIELD_RANGE} />}
+            {errors[index] && <p id={`goal-${field.key}-error`} className={FIELD_ERROR}>{errors[index]}</p>}
           </div>)}
         </div>
-        <div className="min-w-0 self-start space-y-5 rounded-3xl bg-brand-primary p-5 text-brand-bg sm:p-7" aria-live="polite" aria-atomic="true">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-bg/75">Required monthly contribution</p>
+        <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
+          <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><Target className="h-4 w-4 text-lime-500" aria-hidden="true" />Required monthly contribution</p>
           {result ? <>
-            <p className="break-words text-3xl font-semibold tracking-tight text-brand-accent sm:text-4xl">{result.monthlyContribution > 0 && result.monthlyContribution < 0.01 ? `Less than ${currency.format(0.01)}` : currency.format(result.monthlyContribution)}</p>
-            <p className="text-sm leading-relaxed text-brand-bg/85">{result.achievableWithoutContributions ? 'Your current investment alone is projected to meet or exceed the target under these assumptions.' : `Approximately this amount each month could target ${currency.format(result.targetValue)} in ${values.years} years.`}</p>
+            <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{result.monthlyContribution > 0 && result.monthlyContribution < 0.01 ? `Less than ${currency.format(0.01)}` : currency.format(result.monthlyContribution)}</p>
+            <p className="text-sm leading-relaxed text-white/85">{result.achievableWithoutContributions ? 'Your current investment alone is projected to meet or exceed the target under these assumptions.' : `Approximately this amount each month could target ${currency.format(result.targetValue)} in ${values.years} years.`}</p>
 
-            <dl className="space-y-4 border-t border-white/15 pt-5 text-sm">
-              <div><dt className="text-brand-bg/70">Total future contributions</dt><dd className="break-words font-semibold">{currency.format(result.futureContributions)}</dd></div>
-              <div><dt className="text-brand-bg/70">Estimated investment growth</dt><dd className="break-words font-semibold">{currency.format(result.investmentGrowth)}</dd></div>
+            <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
+              <div><dt className={RESULT_LABEL}>Total future contributions</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.futureContributions)}</dd></div>
+              <div><dt className={RESULT_LABEL}>Estimated investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
             </dl>
           </> : <p className="text-sm">Complete the inputs with valid values to see your plan.</p>}
         </div>
       </div>
       {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.currentInvestment} monthlyContribution={result.monthlyContribution} targetValue={result.targetValue} />}
-      {result && <div className="min-w-0 space-y-3 border-t border-brand-border pt-6">
-        <h4 className="font-semibold text-brand-fg">Your path toward the target</h4>
-        <div className="h-72 w-full min-w-0 sm:h-80" role="img" aria-label={`Projected final value ${currency.format(result.projectedValue)} toward a target of ${currency.format(result.targetValue)}.`}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <LineChart data={result.timeline} margin={{ top: 25, right: 14, bottom: 8, left: 0 }}>
-              <CartesianGrid stroke="var(--color-brand-border)" strokeDasharray="3 3" opacity={0.5} />
-              <XAxis dataKey="year" tickFormatter={year => `Year ${year}`} minTickGap={25} tick={{ fill: 'var(--color-brand-muted-fg)', fontSize: 11 }} />
-              <YAxis width={72} tickFormatter={value => compactCurrency.format(value)} tick={{ fill: 'var(--color-brand-muted-fg)', fontSize: 11 }} />
-              <Tooltip labelFormatter={year => `Year ${year}`} formatter={(value, name) => [currency.format(Number(value)), name]} contentStyle={{ background: 'var(--color-brand-card)', border: '1px solid var(--color-brand-border)', borderRadius: 12, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <ReferenceLine y={result.targetValue} ifOverflow="extendDomain" stroke="var(--color-brand-muted-fg)" strokeDasharray="5 4" label={{ value: 'Target', position: 'insideTopRight', fill: 'var(--color-brand-muted-fg)' }} />
-              <Line name="Projected Portfolio Value" dataKey="projectedValue" stroke="var(--color-brand-primary)" strokeWidth={3} dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>}
-      <p className="text-sm leading-relaxed text-brand-muted-fg">Try increasing the time horizon or starting investment and watch the required monthly amount change. A higher assumed return can reduce that amount, but does not make the outcome more certain.</p>
-      <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p>
+      {result && (
+        <ToolChart
+          title="Your path toward the target"
+          data={result.timeline}
+          series={[{ key: 'projectedValue', name: 'Projected portfolio value' }]}
+          target={result.targetValue}
+          label={`Projected final value ${currency.format(result.projectedValue)} toward a target of ${currency.format(result.targetValue)}.`}
+          caption="Try increasing the time horizon or starting investment and watch the required monthly amount change. A higher assumed return can reduce that amount, but does not make the outcome more certain."
+        />
+      )}
+      <HowWorkedOut>
+        <p>Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p>
+      </HowWorkedOut>
     </section>
   );
 }

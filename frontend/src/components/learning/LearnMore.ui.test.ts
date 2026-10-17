@@ -55,12 +55,14 @@ it('switches calculator contexts without changing entered amounts or projections
   await act(async()=>root.render(createElement(MemoryRouter,{},createElement(FinancialTools))));
   const input=container.querySelector('#compound-initialInvestment') as HTMLInputElement;
   const nominal=container.querySelector('[aria-live="polite"]')!.textContent;
-  const find=(label:string)=>[...container.querySelectorAll('button')].find(button=>button.textContent===label)!;
-  await click(find('Plan a Goal'));expect(container.querySelector('a')?.textContent).toContain('Goals');
-  await click(find('TFSA Planner'));expect(container.querySelector('a')?.textContent).toContain('TFSA');
-  await click(find('Investment Growth & Goal Planner'));await click(find('Project Growth'));
+  const find=(label:string)=>[...container.querySelectorAll('button')].find(button=>button.textContent===label||button.getAttribute('aria-label')===label)!;
+  // The lessons sit behind the header's book button; open it to read them.
+  const lessons=async()=>{const book=container.querySelector('button[aria-label="Learn as you explore"]') as HTMLButtonElement;if(book.getAttribute('aria-expanded')!=='true')await click(book);return container.querySelector('section[aria-label="Learn as you explore"] a')?.textContent;};
+  await click(find('Plan a goal'));expect(await lessons()).toContain('Goals');
+  await click(find('Tax-free savings (TFSA)'));expect(await lessons()).toContain('TFSA');
+  await click(find('Growth and goals'));await click(find('Project growth'));
   expect(input.value).toBe('10000');expect(container.querySelector('[aria-live="polite"]')!.textContent).toBe(nominal);
-  expect(container.querySelector('a')?.textContent).toContain('Growth');
+  expect(await lessons()).toContain('Growth');
   expect(container.querySelectorAll('section[aria-label="Learn as you explore"]')).toHaveLength(1);
 });
 
@@ -69,14 +71,14 @@ it('applies optional spacing only when matching content exists',async()=>{
  expect(container.querySelector('section')?.className).toContain('mt-6');
  await render({context:'ask',className:'mt-6'});expect(container.textContent).toBe('');expect(container.querySelector('section')).toBeNull();
 });
-it('uses one forest page header followed by the callout and calculator controls',async()=>{
+it('uses one forest page header with the lessons button, followed by the calculator controls',async()=>{
  await act(async()=>root.render(createElement(MemoryRouter,{},createElement(FinancialTools))));
  const header=container.querySelector('header')!;
- expect(header.className).toContain('hero-card');expect(header.className).toContain('px-5 sm:px-7 pt-8 pb-12 sm:pb-16');
+ expect(header.className).toContain('hero-card');
  expect(header.querySelector('h1')?.textContent).toBe('Financial Tools');expect(container.querySelectorAll('h1')).toHaveLength(1);
- expect(header.textContent).toContain('Plan your investments, explore potential growth, and understand your financial future.');
- expect(header.nextElementSibling?.getAttribute('aria-label')).toBe('Learn as you explore');
- expect(header.nextElementSibling?.nextElementSibling?.getAttribute('aria-label')).toBe('Choose a financial tool');
+ expect(header.textContent).toContain('Illustrations, not forecasts.');
+ expect(header.querySelector('button[aria-label="Learn as you explore"]')).not.toBeNull();
+ expect(header.nextElementSibling?.getAttribute('aria-label')).toBe('Choose a financial tool');
  expect(header.parentElement?.className).toContain('space-y-6');
  expect(container.textContent).not.toContain('Put your learning into practice');
 });

@@ -37,7 +37,7 @@ it('hides computed purchasing power when inflation is invalid', () => {
 });
 it('retains both investment modes and TFSA on the dedicated page', () => {
   const html = renderToStaticMarkup(createElement(MemoryRouter, {}, createElement(FinancialToolsPage)));
-  for (const text of ['Project Growth', 'Plan a Goal', 'TFSA Planner', 'Assumed annual inflation', 'Based on 5% assumed annual inflation']) expect(html).toContain(text);
+  for (const text of ['Project growth', 'Plan a goal', 'Tax-free savings (TFSA)', 'TFSA Planner', 'Assumed annual inflation', 'Based on 5% assumed annual inflation']) expect(html).toContain(text);
 });
 it('routes tools independently and keeps Learning Centre entry points', () => {
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -76,9 +76,9 @@ it('shows validation within the editor without calculating invalid values', () =
   expect(html).not.toContain('Projected final value in today');
 });
 
-it('renders the Financial Tools eyebrow using the Learning Centre label pattern', () => {
+it('renders the Financial Tools eyebrow as the other hub headers do, without a motif', () => {
   const html = renderToStaticMarkup(createElement(MemoryRouter, {}, createElement(FinancialToolsPage)));
-  expect(html).toContain('<p class="absolute bottom-full left-0 text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">Financial Tools</p>');
+  expect(html).toContain('<p class="band-eyebrow mb-2">Plan and explore</p>');
   expect(html.match(/<h1\b/g)).toHaveLength(1);
-  expect(html).toContain('pointer-events-none absolute inset-x-0 bottom-0');
+  expect(html).not.toContain('pointer-events-none absolute inset-x-0 bottom-0');
 });
