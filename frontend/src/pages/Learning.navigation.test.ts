@@ -47,7 +47,8 @@ async function mountLayout() {
  expect(main.scrollTop).toBe(900);
  return main;
 }
-it.each(['link','button'])('opens tools at the top through the Learning %s after a scrolled visit',async kind=>{
+// The foot-of-page link went with the redesign; the roadmap's button is the way across.
+it.each(['button'])('opens tools at the top through the Learning %s after a scrolled visit',async kind=>{
  const main=await mountLayout();
  const entry=[...container.querySelectorAll(kind==='link'?'a':'button')].find(el=>el.textContent==='Explore Financial Tools') as HTMLElement;
  expect(entry).toBeTruthy();

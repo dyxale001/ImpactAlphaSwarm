@@ -43,7 +43,8 @@ it('routes tools independently and keeps Learning Centre entry points', () => {
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
   expect(source('../../App.tsx')).toContain('path="/financial-tools" element={<FinancialToolsPage />}');
   const learning = source('../../pages/Learning.tsx');
-  expect(learning).toContain('navigate("/financial-tools")'); expect(learning).toContain('to="/financial-tools"');
+  // The roadmap's "Explore Financial Tools" button is the entry point; the foot link went in the redesign.
+  expect(learning).toContain('navigate("/financial-tools")');
   expect(learning).not.toContain('learning-panel-tools');
   expect(source('../../data/appNavigation.ts')).toContain("name: 'Financial Tools', path: '/financial-tools'");
 });
