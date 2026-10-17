@@ -565,51 +565,16 @@ export default function AssetsPage() {
                 {topPickReasoning}
               </p>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <Link
-                to={`/asset/${topPick?.ticker}`}
-                className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-              >
-                Full analysis <ArrowRight className="w-3 h-3" />
-              </Link>
-              {/* The same two controls every other ranked stock carries
-                  (RecommendationCard, ScoredAssetRow), so rank 1 is not the
-                  one stock you cannot ask about or watch from this page. The
-                  ask button takes a dark-ground variant of the card's
-                  styling; the watchlist chip is the shared component. */}
-              {topPick?.ticker ? (
-                <div className="flex items-center gap-1.5">
-                  <div className="relative group">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openAskChatbot(`Tell me about ${topPick.ticker}`);
-                      }}
-                      aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-brand-bg/70 hover:text-brand-accent hover:bg-white/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-                    >
-                      <MessageCircleQuestion className="w-4 h-4" />
-                    </button>
-                    <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
-                      <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
-                        Ask AlphaSwarm about this
-                      </div>
-                    </div>
-                  </div>
-                  <AddToWatchlistButton ticker={topPick.ticker} />
-                </div>
-              ) : null}
-            </div>
           </div>
           {/* The scorecard is NOT wrapped in the asset Link: it contains its own
               explainer buttons, and nesting <button> inside <a> is invalid markup
               — it also made tapping an explainer navigate away instead of opening
               it. Only the plain ring stays clickable. */}
           {showTopPickScorecard ? (
-            <div className="w-full self-start rounded-[14px] border border-white/12 bg-white/[0.06] p-4">
+            <div className="h-full w-full rounded-[14px] border border-white/12 bg-white/[0.06] p-4">
               <SignalScorecard
                 onDark
+                fill
                 terms={{
                   signalStrength: topPick!.signalStrength,
                   signalDirection: topPick!.signalDirection,
@@ -633,6 +598,44 @@ export default function AssetsPage() {
               />
             </Link>
           )}
+        </div>
+        {/* Bottom row of the card: the link to the full analysis on the left,
+            ask and watchlist on the bottom right. */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/12 pt-4">
+          <Link
+            to={`/asset/${topPick?.ticker}`}
+            className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            Full analysis <ArrowRight className="w-3 h-3" />
+          </Link>
+          {/* The same two controls every other ranked stock carries
+              (RecommendationCard, ScoredAssetRow), so rank 1 is not the
+              one stock you cannot ask about or watch from this page. The
+              ask button takes a dark-ground variant of the card's
+              styling; the watchlist chip is the shared component. */}
+          {topPick?.ticker ? (
+            <div className="flex items-center gap-1.5">
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAskChatbot(`Tell me about ${topPick.ticker}`);
+                  }}
+                  aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-brand-bg/70 hover:text-brand-accent hover:bg-white/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                >
+                  <MessageCircleQuestion className="w-4 h-4" />
+                </button>
+                <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
+                  <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
+                    Ask AlphaSwarm about this
+                  </div>
+                </div>
+              </div>
+              <AddToWatchlistButton ticker={topPick.ticker} onDark />
+            </div>
+          ) : null}
         </div>
       </div>
 

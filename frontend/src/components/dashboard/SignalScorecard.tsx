@@ -63,11 +63,14 @@ export default function SignalScorecard({
   terms,
   compact = false,
   onDark = false,
+  fill = false,
 }: {
   terms: SignalTerms;
   compact?: boolean;
   /** Render on a dark (forest) surface: lime labels, light text, tinted tracks. */
   onDark?: boolean;
+  /** Fill the parent's height, spreading the four rows evenly down it. */
+  fill?: boolean;
 }) {
   const [open, setOpen] = useState<TermKey | "headline" | null>(null);
 
@@ -92,7 +95,7 @@ export default function SignalScorecard({
     // rather than the screen's. It sits in a phone-width card and in the 256px
     // Top Pick column on desktop alike, and both are too narrow for a label and
     // its question side by side.
-    <div className="@container space-y-3">
+    <div className={fill ? "@container flex h-full flex-col gap-4" : "@container space-y-3"}>
       {/* Headline: a STATE, not a grade. */}
       {state && (
         <div>
@@ -118,7 +121,7 @@ export default function SignalScorecard({
       )}
 
       {/* Why it sits where it does — one row per disclosed factor. */}
-      <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className={fill ? "flex flex-1 flex-col justify-between gap-3" : compact ? "space-y-2" : "space-y-3"}>
         {rows.map(({ key, value }) => {
           const copy = TERM_COPY[key];
           const isOpen = open === key;

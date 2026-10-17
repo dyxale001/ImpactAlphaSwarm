@@ -5,9 +5,11 @@ import { useAuthStore } from '../../store/authStore'
 
 interface Props {
   ticker: string
+  /** On a dark forest card: light text and outline when not watched. */
+  onDark?: boolean
 }
 
-export default function AddToWatchlistButton({ ticker }: Props) {
+export default function AddToWatchlistButton({ ticker, onDark = false }: Props) {
   const { session } = useAuthStore()
   const userId = session?.user?.id
 
@@ -94,7 +96,9 @@ export default function AddToWatchlistButton({ ticker }: Props) {
       className={`chip transition-all disabled:opacity-50 ${
         isWatched
           ? 'chip-accent hover:bg-lime-300'
-          : 'chip-line hover:bg-forest-50'
+          : onDark
+            ? 'bg-white/10 text-white ring-1 ring-inset ring-white/30 hover:bg-white/20'
+            : 'chip-line hover:bg-forest-50'
       }`}
     >
       {loading || working ? (
