@@ -20,12 +20,14 @@ function Section({
   description,
   marketWideLabel,
   seeAllLabel,
+  footnote,
 }: {
   section: StockMacroSection;
   title: string;
   description: string;
   marketWideLabel: string;
   seeAllLabel: string;
+  footnote?: string;
 }) {
   const marketWide = section.group === marketWideLabel;
   const tint = marketWide ? MARKET_WIDE_TINT : sectorColour(section.group).tint;
@@ -33,14 +35,14 @@ function Section({
   const href = `/news?tab=stories&filter=${encodeURIComponent(section.group)}`;
 
   return (
-    <div className="soft-card w-full space-y-4 p-5">
-      {/* The stock page's section header: an eyebrow with an icon, then a sentence. */}
+    <section className="as-card w-full space-y-5 p-4 sm:p-6">
+      {/* The heading every stock page tab uses: 16px title, short subtitle. */}
       <div>
-        <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-          <Icon className="h-3 w-3 text-brand-primary" />
+        <h2 className="flex items-center gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
+          <Icon className="h-4 w-4 text-forest-700" aria-hidden="true" />
           {title}
-        </p>
-        <p className="text-sm text-brand-fg/90">{description}</p>
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-brand-muted-fg">{description}</p>
       </div>
 
       {section.total === 0 ? (
@@ -57,22 +59,25 @@ function Section({
             </p>
           )}
           {section.stories.length > 0 && (
-            <ul className="flex flex-col border-t border-brand-border/50 pt-2">
+            <ul className="divide-y divide-forest-900/8 overflow-hidden rounded-[12px] border border-forest-900/10">
               {section.stories.map((a) => (
-                <StoryRow key={a.id} article={a} group={section.group} marketWideLabel={marketWideLabel} tint={tint} />
+                <StoryRow key={a.id} article={a} group={section.group} marketWideLabel={marketWideLabel} tint={tint} variant="list" />
               ))}
             </ul>
           )}
           <Link
             to={href}
-            className="inline-flex w-fit items-center gap-1.5 rounded-full text-xs font-semibold text-forest-500 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+            className="inline-flex w-fit items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
           >
             {seeAllLabel}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         </>
       )}
-    </div>
+      {footnote ? (
+        <p className="border-t border-forest-900/10 pt-4 text-xs leading-relaxed text-brand-muted-fg">{footnote}</p>
+      ) : null}
+    </section>
   );
 }
 
@@ -80,7 +85,7 @@ function TabSkeleton() {
   return (
     <div className="space-y-3" aria-hidden>
       {[0, 1].map((i) => (
-        <div key={i} className="soft-card h-64 animate-pulse p-5">
+        <div key={i} className="as-card h-64 animate-pulse p-5">
           <div className="h-3 w-40 rounded-full bg-brand-border/50" />
           <div className="mt-3 h-4 w-3/4 rounded-full bg-brand-border/50" />
           <div className="mt-5 h-24 rounded-2xl bg-brand-border/30" />
@@ -126,7 +131,7 @@ export default function StockMarketNewsTab({ ticker }: { ticker: string }) {
           seeAllLabel={`See all ${count(sector.total)} on Market News`}
         />
       ) : (
-        <div className="soft-card p-5 text-sm text-brand-fg/90">
+        <div className="as-card p-4 text-sm text-brand-muted-fg sm:p-6">
           {data.ticker} isn't placed in one of AlphaSwarm's sectors, so there's no sector news to show. News that
           affects every sector is below.
         </div>
@@ -134,17 +139,13 @@ export default function StockMarketNewsTab({ ticker }: { ticker: string }) {
 
       <Section
         section={marketWide}
-        title="Affecting every sector"
-        description="Market-wide news such as interest rates, trade, oil and major world events, which touches every stock, including this one."
+        title="Market-wide news"
+        description="Interest rates, trade, oil and major world events: news that touches every stock, including this one."
         marketWideLabel={mw}
         seeAllLabel={`See all ${marketWide.total} market-wide ${marketWide.total === 1 ? "story" : "stories"} on Market News`}
+        // The tab's caveat, at the foot of its last card like the other tabs'.
+        footnote={`These stories are matched to a sector by how relevant they are, not whether they are good or bad news, and they don't affect ${data.ticker}'s ranking.`}
       />
-
-      {/* The tab's own caveat, as Whale Watching carries one under its tabs. */}
-      <p className="text-xs text-brand-muted-fg">
-        These stories are matched to a sector by how relevant they are, not whether they are good or bad news, and
-        they don't affect {data.ticker}'s ranking.
-      </p>
     </div>
   );
 }

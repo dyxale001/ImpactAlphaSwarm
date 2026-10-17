@@ -1,4 +1,4 @@
-import { ArrowRight, BrainCircuit } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import type { MacroArticle, MacroOverview } from "../../services/api/macroNews";
 import { sectorColour } from "../../utils/sectorColours";
 import { displayHeadline, formatProbability, groupProbability, shortWhen } from "../../utils/macroNews";
@@ -17,13 +17,41 @@ export function StoryRow({
   group,
   marketWideLabel,
   tint,
+  variant = "plain",
 }: {
   article: MacroArticle;
   group: string;
   marketWideLabel: string;
   tint: string;
+  /** "list": a row inside a bordered list, its relevance spelled out in a neutral
+   *  chip so the figure cannot be read as a score or a probability of anything. */
+  variant?: "plain" | "list";
 }) {
   const p = groupProbability(article, group, marketWideLabel);
+  if (variant === "list") {
+    return (
+      <li>
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-forest-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-primary"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 text-sm font-semibold leading-snug text-forest-900">
+              {displayHeadline(article.headline, article.source)}
+            </span>
+            <span className="mt-0.5 block text-xs text-brand-muted-fg">
+              {article.source} · {shortWhen(article.published_at)}
+            </span>
+          </span>
+          <span className="chip shrink-0 tabular-nums" title={`How closely this story concerns ${group}, not whether it is good or bad news.`}>
+            {formatProbability(p)} relevant
+          </span>
+        </a>
+      </li>
+    );
+  }
   return (
     <li>
       <a
@@ -51,19 +79,21 @@ export function StoryRow({
   );
 }
 
-/** The AI overview, framed as the platform's reasoning-trace box. */
+/** The AI overview, in the soft Sparkles box every AI-written paragraph uses. */
 export function AIOverviewBox({ summary }: { summary: string }) {
   // The reasoning-trace box, exactly as the stock page, the sentiment and quant
   // panels and Whale Watching frame theirs, so AI-written prose reads as the
   // same kind of object wherever it appears.
   return (
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-        <BrainCircuit className="w-3 h-3 text-brand-primary" />
+    <div className="as-inset p-4">
+      <p className="mb-2 flex items-center gap-2 text-sm font-bold text-forest-900">
+        <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
         AI overview
-      </div>
-      <p className="text-sm leading-relaxed text-brand-fg/90">{summary}</p>
-      <p className="mt-2 text-[11px] text-brand-muted-fg">
+      </p>
+      <p className="text-sm leading-relaxed text-forest-900">{summary}</p>
+      <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
         Written from the stories below. It can contain mistakes, so check the source.
       </p>
     </div>
