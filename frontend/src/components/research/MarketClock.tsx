@@ -33,13 +33,13 @@ export function MarketClock({ tone = "light", bare = false }: Props) {
   return (
     <span className="inline-flex items-center gap-2 text-xs">
       <span
-        className={`font-mono tabular-nums ${dark ? "text-brand-bg/70" : "text-brand-muted-fg"}`}
+        className={`tabular-nums ${dark ? "text-brand-bg/70" : "text-brand-muted-fg"}`}
         title="Current time in New York"
       >
         {newYork.time}
         {/* The zone is what says this is not your clock. Without it a reader in
             Johannesburg sees a time seven hours off their own and reads it as a bug. */}
-        <span className="ml-1 text-[10px] uppercase tracking-wide">{newYork.zone}</span>
+        <span className="ml-1 text-xs">{newYork.zone}</span>
       </span>
       <span
         className={`inline-flex items-center gap-1.5 font-medium ${
@@ -51,10 +51,10 @@ export function MarketClock({ tone = "light", bare = false }: Props) {
                 status.isOpen
                   ? dark
                     ? "bg-brand-accent/15 text-brand-accent"
-                    : "bg-emerald-500/10 text-emerald-600"
+                    : "bg-up-bg text-up"
                   : dark
                     ? "bg-white/10 text-brand-bg/60"
-                    : "bg-slate-400/15 text-slate-500"
+                    : "bg-forest-50 text-brand-muted-fg"
               }`
         }`}
         title={status.detail}
@@ -64,10 +64,10 @@ export function MarketClock({ tone = "light", bare = false }: Props) {
             status.isOpen
               ? dark
                 ? "bg-brand-accent"
-                : "bg-emerald-500"
+                : "bg-up"
               : dark
                 ? "bg-brand-bg/40"
-                : "bg-slate-400"
+                : "bg-forest-300"
           }`}
           aria-hidden="true"
         />

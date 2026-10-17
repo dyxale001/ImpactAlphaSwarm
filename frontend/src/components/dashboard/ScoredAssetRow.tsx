@@ -36,14 +36,14 @@ export default function ScoredAssetRow({
     (asset.convergenceState ? CONVERGENCE_DETAIL[asset.convergenceState] : "");
 
   return (
-    <li className="grid grid-cols-1 md:grid-cols-12 gap-y-5 p-5 md:divide-x md:divide-brand-border/40 hover:bg-brand-bg/40 transition-colors">
+    <li className="grid grid-cols-1 md:grid-cols-12 gap-y-5 p-5 md:divide-x md:divide-brand-border/40 hover:bg-forest-50 transition-colors">
       {/* Identity. Narrower than the other two: a ticker, a name and a price do
           not need a third of the row, and the width it was taking pushed the
           signals column away from it. */}
       <div className="md:col-span-3 flex items-start gap-3 min-w-0 md:pr-5">
         {/* Solid forest, number knocked out in the page background, matching the
             universe tiles on Whale Watching. A tinted circle read as grey. */}
-        <span className="w-7 h-7 shrink-0 rounded-full bg-brand-primary flex items-center justify-center text-[11px] font-mono font-semibold text-brand-bg">
+        <span className="w-7 h-7 shrink-0 rounded-full bg-brand-primary flex items-center justify-center text-xs tabular-nums font-semibold text-brand-bg">
           {asset.rank}
         </span>
         <div className="min-w-0">
@@ -51,7 +51,7 @@ export default function ScoredAssetRow({
             {asset.ticker}
           </p>
           <p className="text-xs text-brand-muted-fg truncate">{asset.name}</p>
-          <p className="text-sm font-mono text-primary mt-1">
+          <p className="text-sm tabular-nums text-primary mt-1">
             R {asset.currentPrice.toFixed(2)}
           </p>
           <ListingLine
@@ -62,14 +62,14 @@ export default function ScoredAssetRow({
           <div className="flex flex-wrap gap-1.5 mt-2 empty:hidden">
             {asset.isDiscovered ? (
               <span
-                className="chip bg-brand-accent text-brand-fg"
+                className="chip chip-accent"
                 title={discoveryProvenance(asset.discoverySources)}
               >
                 <Sparkles className="w-2.5 h-2.5" /> Discovered
               </span>
             ) : null}
             {asset.isHype ? (
-              <span className="chip bg-semantic-warning/15 text-semantic-warning">
+              <span className="chip bg-caution-bg text-caution">
                 <Flame className="w-3 h-3" /> Hype flagged
               </span>
             ) : null}
@@ -103,7 +103,7 @@ export default function ScoredAssetRow({
         <div className="flex items-center justify-between gap-3 mt-auto pt-1">
           <Link
             to={`/asset/${asset.ticker}`}
-            className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold shrink-0"
+            className="text-sm text-forest-700 hover:underline flex items-center gap-1 font-bold shrink-0"
           >
             Full analysis <ArrowRight className="w-3 h-3" />
           </Link>

@@ -93,8 +93,8 @@ export default function AddToWatchlistButton({ ticker }: Props) {
       // control does not change size when it is toggled.
       className={`chip transition-all disabled:opacity-50 ${
         isWatched
-          ? 'bg-brand-accent text-brand-fg hover:bg-brand-accent/80'
-          : 'bg-brand-bg border border-brand-border/60 text-brand-muted-fg hover:text-brand-fg hover:border-brand-primary/40'
+          ? 'chip-accent hover:bg-lime-300'
+          : 'chip-line hover:bg-forest-50'
       }`}
     >
       {loading || working ? (

@@ -38,7 +38,7 @@ export function ListingLine({
         <>
           <span
             aria-hidden="true"
-            className={`font-bold ${onDark ? "text-lime-500" : "text-lime-700"}`}
+            className={`font-bold ${onDark ? "text-lime-500" : "text-forest-700"}`}
           >
             |
           </span>

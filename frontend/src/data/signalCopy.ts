@@ -40,10 +40,10 @@ export const CONVERGENCE_DETAIL: Record<ConvergenceState, string> = {
  *  confidence, not a sell signal; the others stay deliberately muted so the card
  *  never reads as a traffic light. */
 export const CONVERGENCE_TONE: Record<ConvergenceState, string> = {
-  agree_strongly: "bg-brand-primary/15 text-brand-primary",
-  lean_together: "bg-brand-primary/10 text-brand-primary",
-  mixed: "bg-slate-500/15 text-slate-400",
-  conflict: "bg-semantic-warning/15 text-semantic-warning",
+  agree_strongly: "bg-up-bg text-up",
+  lean_together: "bg-forest-50 text-forest-700",
+  mixed: "bg-forest-50 text-brand-muted-fg",
+  conflict: "bg-caution-bg text-caution",
 };
 
 // Tones for the scorecard's on-dark variant (the forest hero card): the
@@ -52,7 +52,7 @@ export const CONVERGENCE_TONE_ON_DARK: Record<ConvergenceState, string> = {
   agree_strongly: "bg-brand-accent/15 text-brand-accent",
   lean_together: "bg-brand-accent/10 text-brand-accent",
   mixed: "bg-white/10 text-brand-bg/70",
-  conflict: "bg-semantic-warning/15 text-semantic-warning",
+  conflict: "bg-caution-bg text-caution",
 };
 
 export type TermKey =

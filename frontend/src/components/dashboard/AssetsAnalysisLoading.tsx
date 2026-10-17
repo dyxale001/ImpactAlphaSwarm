@@ -125,7 +125,7 @@ export default function AssetsAnalysisLoading({
       aria-busy="true"
     >
       <div className="pointer-events-none fixed inset-y-0 left-0 lg:left-64 right-0 z-30 flex items-center justify-center px-4 sm:px-6">
-        <section className="w-full max-w-lg space-y-4 rounded-lg border border-brand-border bg-brand-card p-4 sm:p-6 text-center text-brand-fg">
+        <section className="as-card w-full max-w-lg space-y-4 p-5 sm:p-6 text-center text-brand-fg">
           <div
             role="status"
             aria-atomic="true"
@@ -190,7 +190,7 @@ export default function AssetsAnalysisLoading({
             })}
           </ol>
           <div className="space-y-1 border-t border-brand-border/60 pt-3 text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-muted-fg">
+            <p className="text-xs font-semibold text-brand-muted-fg">
               Live analysis
             </p>
             <div className="space-y-2" aria-live="polite">
@@ -205,12 +205,12 @@ export default function AssetsAnalysisLoading({
                     {currentDetailGroup.items.map((milestone) => (
                       <li
                         key={milestone.id}
-                        className={`flex items-center gap-2 text-[11px] leading-relaxed ${
+                        className={`flex items-center gap-2 text-xs leading-relaxed ${
                           milestone.status === "complete"
                             ? "text-brand-primary"
                             : milestone.status === "active"
                               ? "font-semibold text-brand-primary"
-                              : "text-brand-muted-fg/60"
+                              : "text-brand-muted-fg"
                         }`}
                       >
                         {milestone.status === "complete" ? (
@@ -273,7 +273,7 @@ export default function AssetsAnalysisLoading({
             {Array.from({ length: 4 }, (_, index) => (
               <div
                 key={index}
-                className="rounded-lg border border-brand-border/40 bg-brand-bg/70 p-4 space-y-3"
+                className="as-inset p-4 space-y-3"
               >
                 <div className="h-5 w-20 rounded bg-brand-border/35" />
                 <div className="h-3 w-3/4 rounded bg-brand-border/25" />
@@ -282,7 +282,7 @@ export default function AssetsAnalysisLoading({
               </div>
             ))}
           </div>
-          <div className="rounded-lg border border-brand-border/40 bg-brand-bg/60 divide-y divide-brand-border/40 px-4">
+          <div className="as-inset divide-y divide-brand-border/40 px-4">
             {Array.from({ length: 3 }, (_, index) => (
               <div key={index} className="flex items-center gap-5 py-5">
                 <div className="h-4 w-12 rounded bg-brand-border/30" />

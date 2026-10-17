@@ -44,7 +44,7 @@ function TermTrack({
   return (
     <div
       className={`relative h-1.5 w-full rounded-full mt-1.5 ${
-        onDark ? "bg-white/15" : "bg-background"
+        onDark ? "bg-white/15" : "bg-forest-100"
       }`}
     >
       <div
@@ -75,7 +75,7 @@ export default function SignalScorecard({
   const mutedTone = onDark ? "text-brand-bg/60" : "text-brand-muted-fg";
   const explainerTone = onDark
     ? "text-brand-bg/75 bg-white/10 border-white/10"
-    : "text-brand-muted-fg bg-brand-bg/55 border-brand-border/50";
+    : "text-forest-900 bg-forest-50 border-transparent";
 
   const state = terms.convergenceState;
   const rows: { key: TermKey; value: number | null }[] = [
@@ -135,12 +135,12 @@ export default function SignalScorecard({
                     us?" each wrapped to two ragged lines against each other. */}
                 <div className="flex flex-col items-start gap-0.5 @sm:flex-row @sm:items-baseline @sm:justify-between @sm:gap-2">
                   <span
-                    className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+                    className={`text-xs font-semibold ${labelTone}`}
                   >
                     {copy.label}
                   </span>
                   <span
-                    className={`inline-flex items-center gap-1 text-[11px] ${mutedTone}`}
+                    className={`inline-flex items-center gap-1 text-xs ${mutedTone}`}
                   >
                     {value === null ? "not measured" : copy.question}
                     <Info className="w-3 h-3 shrink-0 opacity-60 group-hover:opacity-100" />
@@ -161,7 +161,7 @@ export default function SignalScorecard({
       </div>
 
       {quantNote && (
-        <p className={`text-[11px] ${onDark ? "text-brand-bg/60" : "text-slate-400"}`}>
+        <p className={`text-xs ${onDark ? "text-brand-bg/60" : "text-brand-muted-fg"}`}>
           {quantNote}
         </p>
       )}
