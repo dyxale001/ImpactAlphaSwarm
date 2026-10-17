@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
+import { HelpCircle } from 'lucide-react';
+import PageExplanationDialog from '../guidance/PageExplanationDialog';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   CHART_AXIS_TEXT,
@@ -12,7 +13,7 @@ import {
 // The pieces the three calculators share, so they read as one family with the rest
 // of the platform: the field classes, the dark result card, the dark chart (the
 // forest panel every chart on the stock and Compare pages sits on) and the
-// "How this is worked out" fold for the assumptions and limits.
+// "How is this worked out?" window for the assumptions and limits.
 
 export const FIELD_LABEL = 'block text-sm font-semibold text-forest-900';
 export const FIELD_INPUT =
@@ -23,7 +24,7 @@ export const FIELD_ERROR = 'text-xs text-down';
 /** The calculator card itself. */
 export const TOOL_CARD = 'as-card min-w-0 space-y-6 p-5 sm:p-6';
 /** The dark card the answer sits on. */
-export const RESULT_CARD = 'min-w-0 self-start space-y-4 rounded-[20px] bg-forest-800 p-5 text-white sm:p-6';
+export const RESULT_CARD = 'min-w-0 space-y-4 rounded-[20px] bg-forest-800 p-5 text-white sm:p-6';
 export const RESULT_LABEL = 'text-xs font-semibold text-white/70';
 
 const currency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
@@ -97,15 +98,33 @@ export function ToolChart({ title, data, series, target, label, caption }: {
   );
 }
 
-/** The assumptions and limits, folded away under one heading, wording unchanged. */
-export function HowWorkedOut({ children }: { children: ReactNode }) {
+/**
+ * "How is this worked out?": a small button in the calculator card's header that
+ * opens the assumptions and limits in the shared explanation window, as the stock
+ * page's "How is this calculated?" does. The wording inside is unchanged.
+ */
+export function HowWorkedOut({ title, sections }: { title: string; sections: { heading: string; body: ReactNode }[] }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const navigatingRef = useRef(false);
   return (
-    <details className="group as-inset p-4">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-bold text-forest-900 [&::-webkit-details-marker]:hidden">
-        How this is worked out, and its limits
-        <ChevronDown className="h-4 w-4 shrink-0 text-forest-700 transition-transform group-open:rotate-180" aria-hidden="true" />
-      </summary>
-      <div className="mt-3 space-y-2 text-xs leading-relaxed text-brand-muted-fg">{children}</div>
-    </details>
+    <>
+      <button ref={triggerRef} type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}
+        className="as-btn as-btn-sm as-btn-secondary shrink-0">
+        <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="hidden sm:inline">How is this worked out?</span>
+        <span className="sm:hidden">How it’s worked out</span>
+      </button>
+      {open && (
+        <PageExplanationDialog title={title} eyebrow="How it’s worked out" onClose={() => setOpen(false)} triggerRef={triggerRef} navigatingRef={navigatingRef}>
+          {sections.map(section => (
+            <section key={section.heading} className="flex flex-col gap-3">
+              <h3 className="text-base font-bold tracking-[-0.01em] text-forest-900">{section.heading}</h3>
+              <div className="space-y-2 text-sm leading-relaxed text-brand-muted-fg">{section.body}</div>
+            </section>
+          ))}
+        </PageExplanationDialog>
+      )}
+    </>
   );
 }

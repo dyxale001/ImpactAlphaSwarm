@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import PurchasingPower from './PurchasingPower';
+import PurchasingPower, { InflationNotes } from './PurchasingPower';
 import { Leaf, TrendingUp } from 'lucide-react';
 import { calculateCompoundInterest, MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
 import { FIELD_ERROR, FIELD_HINT, FIELD_INPUT, FIELD_LABEL, FIELD_RANGE, HowWorkedOut, RESULT_CARD, RESULT_LABEL, TOOL_CARD, ToolChart } from './toolChrome';
@@ -32,7 +32,10 @@ export default function CompoundInterestCalculator({ inflationRate, onInflationC
           <h3 id="compound-title" className="flex items-center gap-2 text-lg font-bold tracking-[-0.015em] text-forest-900"><Leaf className="h-5 w-5 text-forest-700" aria-hidden="true" />What could my investment grow to?</h3>
           <p className="text-sm text-brand-muted-fg">See how time, regular contributions and reinvested growth can work together. These example inputs are yours to explore.</p>
         </div>
-        {modeSwitch}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {modeSwitch}
+          <HowWorkedOut title="Projecting growth" sections={[{ heading: 'Assumptions and limits', body: <p>Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Actual investment returns will vary.</p> }, { heading: 'In today’s money', body: <InflationNotes /> }]} />
+        </div>
       </div>
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         <div className="grid content-start gap-x-4 gap-y-5 sm:grid-cols-2">
@@ -68,22 +71,24 @@ export default function CompoundInterestCalculator({ inflationRate, onInflationC
             </div>
           ))}
         </div>
-        <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
-          <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><TrendingUp className="h-4 w-4 text-lime-500" aria-hidden="true" />Projected value</p>
-          {result ? <>
-            <div>
-              <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{currency.format(result.projectedValue)}</p>
-              <p className="mt-1 text-sm text-white/70">After {values.years} {values.years === 1 ? 'year' : 'years'}</p>
-            </div>
-            <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
-              <div><dt className={RESULT_LABEL}>Total contributed</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.totalContributed)}</dd></div>
-              <div><dt className={RESULT_LABEL}>Investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
-            </dl>
-            <p className="text-sm leading-relaxed text-white/85">{result.projectedValue > 0 ? `${result.growthPercentage.toFixed(1)}% of the projected final value comes from investment growth.` : 'Add a starting investment or monthly contribution to explore growth.'}</p>
-          </> : <p className="text-sm text-white/85">Complete the inputs with valid values to see your projection.</p>}
+        <div className="min-w-0 space-y-4 self-start">
+          <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
+            <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><TrendingUp className="h-4 w-4 text-lime-500" aria-hidden="true" />Projected value</p>
+            {result ? <>
+              <div>
+                <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{currency.format(result.projectedValue)}</p>
+                <p className="mt-1 text-sm text-white/70">After {values.years} {values.years === 1 ? 'year' : 'years'}</p>
+              </div>
+              <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
+                <div><dt className={RESULT_LABEL}>Total contributed</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.totalContributed)}</dd></div>
+                <div><dt className={RESULT_LABEL}>Investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
+              </dl>
+              <p className="text-sm leading-relaxed text-white/85">{result.projectedValue > 0 ? `${result.growthPercentage.toFixed(1)}% of the projected final value comes from investment growth.` : 'Add a starting investment or monthly contribution to explore growth.'}</p>
+            </> : <p className="text-sm text-white/85">Complete the inputs with valid values to see your projection.</p>}
+          </div>
+          {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.initialInvestment} monthlyContribution={values.monthlyContribution} />}
         </div>
       </div>
-      {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.initialInvestment} monthlyContribution={values.monthlyContribution} />}
       {result ? (
         <ToolChart
           title="Your growth over time"
@@ -93,9 +98,6 @@ export default function CompoundInterestCalculator({ inflationRate, onInflationC
           caption="Contributions show the money you put in. The gap to projected value shows investment growth, including growth on earlier returns."
         />
       ) : <p className="as-inset p-5 text-sm text-brand-muted-fg">Your chart will appear when all inputs are valid.</p>}
-      <HowWorkedOut>
-        <p>Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Actual investment returns will vary.</p>
-      </HowWorkedOut>
     </section>
   );
 }

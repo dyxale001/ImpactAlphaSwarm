@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import PurchasingPower from './PurchasingPower';
+import PurchasingPower, { InflationNotes } from './PurchasingPower';
 import { Target } from 'lucide-react';
 import { calculateInvestmentGoal } from '../../utils/investmentGoal';
 import { MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
@@ -30,7 +30,10 @@ export default function InvestmentGoalPlanner({ inflationRate, onInflationChange
           <h3 id="goal-title" className="flex items-center gap-2 text-lg font-bold tracking-[-0.015em] text-forest-900"><Target className="h-5 w-5 text-forest-700" aria-hidden="true" />How much might I need to invest to reach my target?</h3>
           <p className="text-sm leading-relaxed text-brand-muted-fg">Start with a target and explore the monthly investment that could help you reach it.</p>
         </div>
-        {modeSwitch}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {modeSwitch}
+          <HowWorkedOut title="Planning a goal" sections={[{ heading: 'Assumptions and limits', body: <p>Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p> }, { heading: 'In today’s money', body: <InflationNotes /> }]} />
+        </div>
       </div>
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         <div className="grid content-start gap-x-4 gap-y-5 sm:grid-cols-2">
@@ -56,20 +59,22 @@ export default function InvestmentGoalPlanner({ inflationRate, onInflationChange
             {errors[index] && <p id={`goal-${field.key}-error`} className={FIELD_ERROR}>{errors[index]}</p>}
           </div>)}
         </div>
-        <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
-          <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><Target className="h-4 w-4 text-lime-500" aria-hidden="true" />Required monthly contribution</p>
-          {result ? <>
-            <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{result.monthlyContribution > 0 && result.monthlyContribution < 0.01 ? `Less than ${currency.format(0.01)}` : currency.format(result.monthlyContribution)}</p>
-            <p className="text-sm leading-relaxed text-white/85">{result.achievableWithoutContributions ? 'Your current investment alone is projected to meet or exceed the target under these assumptions.' : `Approximately this amount each month could target ${currency.format(result.targetValue)} in ${values.years} years.`}</p>
+        <div className="min-w-0 space-y-4 self-start">
+          <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
+            <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><Target className="h-4 w-4 text-lime-500" aria-hidden="true" />Required monthly contribution</p>
+            {result ? <>
+              <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{result.monthlyContribution > 0 && result.monthlyContribution < 0.01 ? `Less than ${currency.format(0.01)}` : currency.format(result.monthlyContribution)}</p>
+              <p className="text-sm leading-relaxed text-white/85">{result.achievableWithoutContributions ? 'Your current investment alone is projected to meet or exceed the target under these assumptions.' : `Approximately this amount each month could target ${currency.format(result.targetValue)} in ${values.years} years.`}</p>
 
-            <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
-              <div><dt className={RESULT_LABEL}>Total future contributions</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.futureContributions)}</dd></div>
-              <div><dt className={RESULT_LABEL}>Estimated investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
-            </dl>
-          </> : <p className="text-sm">Complete the inputs with valid values to see your plan.</p>}
+              <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
+                <div><dt className={RESULT_LABEL}>Total future contributions</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.futureContributions)}</dd></div>
+                <div><dt className={RESULT_LABEL}>Estimated investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
+              </dl>
+            </> : <p className="text-sm">Complete the inputs with valid values to see your plan.</p>}
+          </div>
+          {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.currentInvestment} monthlyContribution={result.monthlyContribution} targetValue={result.targetValue} />}
         </div>
       </div>
-      {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.currentInvestment} monthlyContribution={result.monthlyContribution} targetValue={result.targetValue} />}
       {result && (
         <ToolChart
           title="Your path toward the target"
@@ -80,9 +85,6 @@ export default function InvestmentGoalPlanner({ inflationRate, onInflationChange
           caption="Try increasing the time horizon or starting investment and watch the required monthly amount change. A higher assumed return can reduce that amount, but does not make the outcome more certain."
         />
       )}
-      <HowWorkedOut>
-        <p>Illustrative target, not a guarantee. Assumes a constant nominal annual return, monthly compounding, reinvested growth and month-end contributions. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Displayed amounts are rounded; projections use full precision. Actual returns will vary.</p>
-      </HowWorkedOut>
     </section>
   );
 }
