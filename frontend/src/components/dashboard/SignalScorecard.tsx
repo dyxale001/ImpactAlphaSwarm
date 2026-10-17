@@ -64,6 +64,7 @@ export default function SignalScorecard({
   compact = false,
   onDark = false,
   fill = false,
+  title,
 }: {
   terms: SignalTerms;
   compact?: boolean;
@@ -71,6 +72,8 @@ export default function SignalScorecard({
   onDark?: boolean;
   /** Fill the parent's height, spreading the four rows evenly down it. */
   fill?: boolean;
+  /** A heading set on the headline chip's row, chip to the right. */
+  title?: string;
 }) {
   const [open, setOpen] = useState<TermKey | "headline" | null>(null);
 
@@ -97,8 +100,13 @@ export default function SignalScorecard({
     // its question side by side.
     <div className={fill ? "@container flex h-full flex-col gap-4" : "@container space-y-3"}>
       {/* Headline: a STATE, not a grade. */}
+      {title && !state && (
+        <p className="text-sm font-bold text-forest-900">{title}</p>
+      )}
       {state && (
         <div>
+          <div className={title ? "flex flex-wrap items-center justify-between gap-2" : undefined}>
+          {title && <p className="text-sm font-bold text-forest-900">{title}</p>}
           <button
             type="button"
             onClick={() => setOpen(open === "headline" ? null : "headline")}
@@ -110,6 +118,7 @@ export default function SignalScorecard({
             {CONVERGENCE_HEADLINE[state]}
             <Info className="w-3 h-3 shrink-0" />
           </button>
+          </div>
           {open === "headline" && (
             <p
               className={`mt-2 text-xs leading-relaxed border rounded-xl px-3 py-2 ${explainerTone}`}

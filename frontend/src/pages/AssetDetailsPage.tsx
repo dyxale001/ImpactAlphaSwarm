@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
-  BrainCircuit,
+  Sparkles,
   Flame,
   BarChart3,
   MessageSquare,
@@ -21,7 +21,8 @@ import SignalScorecard, {
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
-import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
+import QuantMetricsPanel, { ordinal } from "../components/research/QuantMetricsPanel";
+import KeyReadings from "../components/research/KeyReadings";
 import {
   HorizonPicker,
   QuantTrendChart,
@@ -215,7 +216,7 @@ function ExplainerLink({
   return (
     <Link
       to={`/asset/${ticker}/how-it-works#${section}`}
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-primary/90"
+      className="as-btn as-btn-sm as-btn-secondary shrink-0"
       title="How is this calculated?"
     >
       <HelpCircle className="w-3.5 h-3.5" />
@@ -267,6 +268,7 @@ function AnalysisTabs({
 
   return (
     <div
+      id="analysis-tabs"
       role="tablist"
       aria-label="Analysis sections"
       // The shared tab pill. self-start, not just inline-flex: the parent is a flex
@@ -456,7 +458,7 @@ function SentimentVerdict({
 export default function AssetDetailsPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
-  const { asset, recommendation, isLoading, latestRunCreatedAt } =
+  const { asset, recommendation, isLoading, latestRunCreatedAt, runSize } =
     useAssetDetails(ticker);
 
   // Read once per mount, not on every render: it only changes by navigating to a
@@ -641,95 +643,112 @@ export default function AssetDetailsPage() {
           the header's flex gap and the other two in the page's, and the spacing
           jumped as you switched tabs. */}
       {recommendation && tab === "ranking" ? (
-          <div className="soft-card w-full p-4 sm:p-5 space-y-5">
-            {/* The top card had no explainer of its own, even though it carries the
-                headline judgement. It gets the ranking walkthrough. */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                {showScorecard ? "Why it ranks here" : "Overall Assessment"}
-              </div>
-              <ExplainerLink ticker={asset.ticker} section="ranking" />
+        <section className="as-card w-full space-y-6 p-5 sm:p-6">
+          {/* Where it placed and when, then the ranking walkthrough. */}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">
+                {showScorecard ? "Why it ranks here" : "Overall assessment"}
+              </h2>
+              <p className="mt-1 text-xs text-brand-muted-fg">
+                {recommendation.rank
+                  ? `${ordinal(recommendation.rank)}${runSize ? ` of ${runSize}` : ""} in your latest run · `
+                  : ""}
+                Last AI run{" "}
+                {latestRunCreatedAt
+                  ? new Date(latestRunCreatedAt).toLocaleString()
+                  : "—"}
+              </p>
+            </div>
+            <ExplainerLink ticker={asset.ticker} section="ranking" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <div className="as-inset p-4">
+              {showScorecard ? (
+                <SignalScorecard terms={signalTerms} title="How the evidence lines up" />
+              ) : (
+                <ConfidenceRing
+                  score={recommendation.confidence_score || 0}
+                  label="Confidence Score"
+                />
+              )}
             </div>
 
-            <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-              <div className="shrink-0 w-full lg:w-72">
-                {showScorecard ? (
-                  <SignalScorecard terms={signalTerms} />
-                ) : (
-                  <ConfidenceRing
-                    score={recommendation.confidence_score || 0}
-                    label="Confidence Score"
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="as-inset flex-1 p-4">
+                <p className="mb-2 flex items-center gap-2 text-sm font-bold text-forest-900">
+                  <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                  Reasoning trace
+                </p>
+                <p className="text-sm leading-relaxed text-forest-900">
+                  {reasoningTrace || "No reasoning trace available."}
+                </p>
+                {/* The 0-100 chip is only shown under the legacy score. With the
+                    disclosed factors there is deliberately no single figure. */}
+                {!showScorecard && (
+                  <span className="chip mt-3 bg-brand-primary/15 text-brand-primary">
+                    Score {formatMetric(recommendation.confidence_score)}/100
+                  </span>
                 )}
               </div>
 
-              <div className="flex-1 space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm text-brand-muted-fg">
-                    Last AI run:{" "}
-                    {latestRunCreatedAt
-                      ? new Date(latestRunCreatedAt).toLocaleString()
-                      : "—"}
+              {/* The legacy penalty panel, for rows without the disclosed factors.
+                  Under the disclosed factors the trace stands alone: the
+                  "what moved this asset" notes were cut on review, since the
+                  scorecard beside the trace already names each factor. */}
+              {!showScorecard && (
+                <div className="as-inset space-y-3 p-4">
+                  <p className="flex items-center gap-2 text-sm font-bold text-forest-900">
+                    <Flame className="h-4 w-4 text-forest-700" aria-hidden="true" />
+                    Risk and hype
+                  </p>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="text-brand-muted-fg">Hype penalty</span>
+                    <span className="font-semibold tabular-nums text-forest-900">
+                      {formatMetric(hypePenalty)}
+                    </span>
                   </div>
-                  {/* The 0-100 chip is only shown under the legacy score. With the
-                      disclosed factors there is deliberately no single figure. */}
-                  {!showScorecard && (
-                    <div className="chip bg-brand-primary/15 text-brand-primary">
-                      Score {formatMetric(recommendation.confidence_score)}/100
-                    </div>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="text-brand-muted-fg">Risk penalty</span>
+                    <span className="font-semibold tabular-nums text-forest-900">
+                      {formatMetric(riskPenalty)}
+                    </span>
+                  </div>
+                  {/* Stored penalties are negative (synthesize_rankings writes -25),
+                      so the old `> 0` test never fired. Any non-zero penalty counts. */}
+                  {(hypePenalty !== 0 || riskPenalty !== 0) && (
+                    <span className="chip chip-caution">
+                      <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                      Penalties applied to the final score
+                    </span>
                   )}
                 </div>
-
-                <div className={showScorecard ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
-                  <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
-                    <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-                      <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                      Reasoning Trace
-                    </div>
-                    <p className="text-sm leading-relaxed text-brand-fg/90">
-                      {reasoningTrace || "No reasoning trace available."}
-                    </p>
-                  </div>
-
-                  {/* The legacy penalty panel, for rows without the disclosed factors.
-                      Under the disclosed factors the trace stands alone: the
-                      "what moved this asset" notes were cut on review, since the
-                      scorecard beside the trace already names each factor. */}
-                  {!showScorecard && (
-                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
-                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                        <Flame className="w-3 h-3 text-brand-primary" />
-                        Risk and Hype
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="text-brand-muted-fg">Hype penalty</span>
-                        <span className="font-semibold text-brand-fg">
-                          {formatMetric(hypePenalty)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="text-brand-muted-fg">Risk penalty</span>
-                        <span className="font-semibold text-brand-fg">
-                          {formatMetric(riskPenalty)}
-                        </span>
-                      </div>
-
-                      {(hypePenalty > 0 || riskPenalty > 0) && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                          <TriangleAlert className="w-4 h-4" />
-                          Penalties applied to the final score
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </div>
-        ) : null}
+
+          <div className="border-t border-forest-900/8 pt-5">
+            <KeyReadings
+              ticker={asset.ticker}
+              sentimentScore={recommendation.sentiment_score ?? null}
+              quantPercentile={
+                recommendation.quant_lean != null
+                  ? ((recommendation.quant_lean + 1) / 2) * 100
+                  : null
+              }
+              onOpen={(next) => {
+                setTab(next);
+                document
+                  .getElementById("analysis-tabs")
+                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {!recommendation && (
         <div className="soft-card w-full p-4 sm:p-5">
