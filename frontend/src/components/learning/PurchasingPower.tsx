@@ -1,24 +1,39 @@
 import { useId } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { purchasingPower, purchasingPowerComparison, validateInflation } from '../../utils/purchasingPower';
 const currency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
 
 /**
- * "In today's money": the answer read a second way, so it sits under the result
- * card rather than folded away at the foot of the calculator. The rate and its
- * Edit are on its first line; the longer explanation is in the calculator's
- * "How is this worked out?" window (InflationNotes below).
+ * "In today's money": the answer read a second way, as a dropdown under the result
+ * card. Closed, its row still carries the headline figure, so the one number most
+ * people want is never hidden; open, it shows the breakdown, the inflation rate to
+ * edit and the footnote. The longer explanation is in the calculator's "How is this
+ * worked out?" window (InflationNotes below).
  */
 export default function PurchasingPower({ futureValue, years, inflationRate, onInflationChange, startingCapital = 0, monthlyContribution = 0, targetValue, tfsa = false, scheduleAvailable = true }: {
   futureValue: number; years: number; inflationRate: string; onInflationChange?: (value: string) => void; startingCapital?: number; monthlyContribution?: number; targetValue?: number; tfsa?: boolean; scheduleAvailable?: boolean;
 }) {
   const inputId = useId();
   const inflationError = validateInflation(inflationRate);
+  const rate = Number(inflationRate);
+  const comparison = !inflationError && scheduleAvailable
+    ? purchasingPowerComparison(futureValue, startingCapital, monthlyContribution, rate, years)
+    : null;
+
   return (
-    <section aria-label="In today’s money" className="as-inset space-y-3 p-4 text-sm text-forest-900">
-      <div className="space-y-1">
-        <h4 className="text-sm font-bold">In today’s money</h4>
+    <details aria-label="In today’s money" className="group as-inset text-sm text-forest-900">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-[16px] p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="block whitespace-nowrap font-bold">In today’s money</span>
+          <span className="block text-xs text-brand-muted-fg">{inflationError ? 'Set an inflation rate' : `At ${rate}% inflation a year`}</span>
+        </span>
+        {comparison && <span className="shrink-0 text-base font-bold tabular-nums sm:text-lg">≈ {currency.format(comparison.finalValue)}</span>}
+        <ChevronDown className="h-4 w-4 shrink-0 text-forest-700 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+
+      <div className="space-y-3 border-t border-forest-900/8 px-4 pb-4 pt-3">
         <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-brand-muted-fg">
-          <p>{inflationError ? 'Set an assumed annual inflation rate.' : `Based on ${Number(inflationRate)}% assumed annual inflation.`}</p>
+          <p>{inflationError ? 'Set an assumed annual inflation rate.' : `Based on ${rate}% assumed annual inflation.`}</p>
           {onInflationChange && <details className="min-w-0">
             <summary className="cursor-pointer font-bold text-forest-700 underline underline-offset-4">Edit</summary>
             <div className="space-y-2 pt-2">
@@ -28,21 +43,19 @@ export default function PurchasingPower({ futureValue, years, inflationRate, onI
             </div>
           </details>}
         </div>
-      </div>
-      {inflationError ? <p className="text-xs text-brand-muted-fg">Enter a valid inflation assumption to see purchasing power.</p> : !scheduleAvailable ? <p className="text-xs text-brand-muted-fg">This TFSA plan uses a different planning date. A comparison in today’s money requires a plan starting today; historical deposit dates are not available.</p> : (() => {
-        const rate = Number(inflationRate);
-        const comparison = purchasingPowerComparison(futureValue, startingCapital, monthlyContribution, rate, years);
-        return <>
+
+        {inflationError ? <p className="text-xs text-brand-muted-fg">Enter a valid inflation assumption to see purchasing power.</p> : !scheduleAvailable ? <p className="text-xs text-brand-muted-fg">This TFSA plan uses a different planning date. A comparison in today’s money requires a plan starting today; historical deposit dates are not available.</p> : comparison && <>
           {targetValue !== undefined && <p className="text-xs text-brand-muted-fg">Future target: {currency.format(targetValue)}. Target equivalent: approximately {currency.format(purchasingPower(targetValue, rate, years))} in today’s money. The comparison below uses the projected balance, not the target.</p>}
-          <dl className="divide-y divide-forest-900/8">
-            <div className="flex items-baseline justify-between gap-3 pb-2"><dt className="text-xs text-brand-muted-fg">Projected final value in today’s money</dt><dd className="shrink-0 text-lg font-bold tabular-nums">{currency.format(comparison.finalValue)}</dd></div>
-            <div className="flex items-baseline justify-between gap-3 py-2"><dt className="text-xs text-brand-muted-fg">{tfsa ? 'Starting account value + future deposits in today’s money' : 'Starting capital + contributions in today’s money'}</dt><dd className="shrink-0 font-bold tabular-nums">{currency.format(comparison.contributions)}</dd></div>
-            <div className="flex items-baseline justify-between gap-3 pt-2"><dt className="text-xs text-brand-muted-fg">Illustrative inflation-adjusted {comparison.gain < 0 ? 'loss' : 'gain'}{tfsa ? ' from this plan' : ''}</dt><dd className={`shrink-0 font-bold tabular-nums ${comparison.gain < 0 ? 'text-down' : 'text-up'}`}>{currency.format(Math.abs(comparison.gain))}</dd></div>
+          {/* The breakdown as rows on a white panel: label left, figure right. */}
+          <dl className="divide-y divide-forest-900/8 rounded-[12px] bg-white px-3">
+            <div className="flex items-baseline justify-between gap-3 py-2.5"><dt className="text-xs text-brand-muted-fg">Projected final value in today’s money</dt><dd className="shrink-0 font-bold tabular-nums">{currency.format(comparison.finalValue)}</dd></div>
+            <div className="flex items-baseline justify-between gap-3 py-2.5"><dt className="text-xs text-brand-muted-fg">{tfsa ? 'Starting account value + future deposits in today’s money' : 'Starting capital + contributions in today’s money'}</dt><dd className="shrink-0 font-bold tabular-nums">{currency.format(comparison.contributions)}</dd></div>
+            <div className="flex items-baseline justify-between gap-3 py-2.5"><dt className="text-xs text-brand-muted-fg">Illustrative inflation-adjusted {comparison.gain < 0 ? 'loss' : 'gain'}{tfsa ? ' from this plan' : ''}</dt><dd className={`shrink-0 font-bold tabular-nums ${comparison.gain < 0 ? 'text-down' : 'text-up'}`}>{comparison.gain < 0 ? '−' : '+'}{currency.format(Math.abs(comparison.gain))}</dd></div>
           </dl>
           <p className="text-xs text-brand-muted-fg">Assuming {rate}% annual inflation over {years} {years === 1 ? 'year' : 'years'}. Illustrative, not a forecast.</p>
-        </>;
-      })()}
-    </section>
+        </>}
+      </div>
+    </details>
   );
 }
 

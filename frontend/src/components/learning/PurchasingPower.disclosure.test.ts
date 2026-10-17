@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import PurchasingPower from './PurchasingPower';
 
-it('shows the panel with Edit closed, and keeps edited assumptions, values and validation across reopening', async () => {
+it('starts closed with the headline figure in view, and keeps edited assumptions, values and validation across reopening', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const container = document.createElement('div');
   document.body.append(container);
@@ -15,9 +15,13 @@ it('shows the panel with Edit closed, and keeps edited assumptions, values and v
   }
   try {
     await act(async () => root.render(createElement(Harness)));
-    // The panel is always in view under the result; only the inflation editor folds.
-    expect(container.querySelector('section[aria-label="In today’s money"]')).not.toBeNull();
-    const editor = container.querySelector('details')!;
+    // A dropdown under the result: closed, its row still shows the figure in today's money.
+    const outer = container.querySelector('details[aria-label="In today’s money"]') as HTMLDetailsElement;
+    expect(outer.open).toBe(false);
+    expect(outer.querySelector('summary')?.textContent).toContain('In today’s money');
+    expect(outer.querySelector('summary')?.textContent).toContain('≈ R');
+    outer.open = true;
+    const editor = outer.querySelector('details')!;
     expect(editor.open).toBe(false);
     expect(editor.querySelector('summary')?.textContent).toBe('Edit');
     editor.open = true;
