@@ -54,7 +54,7 @@ export default function FundPerformance({
   if (entries.length === 0) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-bold text-brand-primary">{DETAIL_PERFORMANCE_TITLE}</h2>
         {asAt && <span className="text-xs text-forest-500">to {asAt}</span>}

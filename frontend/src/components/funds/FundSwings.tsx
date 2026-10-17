@@ -46,7 +46,7 @@ export default function FundSwings({
   if (!strongest && !weakest) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_SWINGS_TITLE}</h2>
       <p className="text-xs leading-relaxed text-forest-500">{DETAIL_SWINGS_LEAD}</p>
       {/* Side by side, without a box each: two figures in one card do not need

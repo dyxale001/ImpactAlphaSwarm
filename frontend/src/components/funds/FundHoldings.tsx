@@ -55,7 +55,7 @@ export default function FundHoldings({
   const largest = Math.max(...rows.map((row) => row.share), 0) || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_HOLDINGS_TITLE}</h2>
       <p className="text-xs leading-relaxed text-forest-500">{DETAIL_HOLDINGS_LEAD}</p>
       {dated && (

@@ -180,7 +180,7 @@ function Sources({ fund, sheet }: { fund: UploadedFundDetail; sheet: UploadedShe
   const rows = FIELD_NAMES.filter((key) => describeSource(key, sheet.provenance[key]));
 
   return (
-    <section className="soft-card col-span-6 flex flex-col gap-3 p-5 sm:p-6">
+    <section className="as-card col-span-6 flex flex-col gap-3 p-5 sm:p-6">
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_PROVENANCE_TITLE}</h2>
       <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_UPLOADED}</p>
       <h3 className="pt-1 text-sm font-bold text-brand-primary">{DETAIL_SOURCES_TITLE}</h3>

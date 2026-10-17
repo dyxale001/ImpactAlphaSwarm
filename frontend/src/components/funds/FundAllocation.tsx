@@ -73,7 +73,7 @@ export default function FundAllocation({
   const rows = groups.flatMap((group) => group.rows);
 
   return (
-    <section className={`soft-card flex flex-col gap-4 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-4 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-base font-bold text-brand-primary">{DETAIL_ALLOCATION_TITLE}</h2>
         {dated && <DatedChip>{dated}</DatedChip>}

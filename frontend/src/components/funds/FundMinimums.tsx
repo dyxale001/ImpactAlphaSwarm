@@ -49,7 +49,7 @@ export default function FundMinimums({
   if (!lump && !debit) return null;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_MINIMUMS_TITLE}</h2>
 
       <dl className="flex flex-col gap-2.5">

@@ -46,7 +46,7 @@ export default function FundPriceChart({
   const pad = (high - low) * 0.08 || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-bold text-brand-primary">{DETAIL_PRICE_TITLE}</h2>
         <span className="text-[11px] text-forest-500">

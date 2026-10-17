@@ -577,6 +577,7 @@ export function allStrings(): string[] {
     LOAD_FAILED,
     MATCHES_LOAD_FAILED,
     MATCH_INPUTS_TITLE,
+    DETAIL_CURATION_LABEL,
     CARD_COST_LABEL,
     CARD_TER_LABEL,
     CARD_MIN_TERM_LABEL,
@@ -1159,6 +1160,8 @@ export const FUND_ABOUT_DONE = "Got it";
 // it is among the reader's matches and why (D-218).
 
 export const FUND_TRACE_TITLE = "This fund and your profile";
+/** Leads the fund's catalogue rule under "Why this fund appears here". */
+export const DETAIL_CURATION_LABEL = "Why it's in our catalogue:";
 export const FUND_TRACE_LABEL = "Reasoning trace";
 export const FUND_TRACE_INVITE =
   "Get a short explanation of this fund in plain words: what it is, what it costs and how its manager rates its risk, and whether it is among the funds matched to your profile, and why.";

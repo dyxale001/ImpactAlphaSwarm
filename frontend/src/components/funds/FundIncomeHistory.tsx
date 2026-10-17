@@ -31,7 +31,7 @@ export default function FundIncomeHistory({
   const largest = Math.max(...entries.map((entry) => entry.cents), 0);
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_INCOME_TITLE}</h2>
       <p className="text-xs leading-relaxed text-forest-500">{DETAIL_INCOME_LEAD}</p>
       {/* A bar per payment, scaled to the largest, so a reader sees whether the
