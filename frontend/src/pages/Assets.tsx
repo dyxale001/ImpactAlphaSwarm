@@ -713,8 +713,11 @@ export default function AssetsPage() {
           </p>
 
           {scoredUniverses.length > 1 ? (
+            // The same tabs as the stock page: the pill from sm up, a grid on a phone
+            // so every universe is in view. Two columns, not three: universe names
+            // run to "Media & Communications".
             <div
-              className="as-tabs as-tabs-sm mb-4"
+              className="as-tabs mb-4 grid w-full grid-cols-2 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full"
               role="tablist"
               aria-label="Filter by investment universe"
             >
@@ -733,16 +736,17 @@ export default function AssetsPage() {
                       setScoredUniverse(universe);
                       setShowAllScored(false);
                     }}
-                    className="as-tab"
+                    title={universe}
+                    className="as-tab min-w-0 px-3 sm:px-4"
                   >
                     {universe !== "All" ? (
                       <span
                         aria-hidden="true"
-                        className={`h-2 w-2 rounded-full ${sectorColour(universe).fill}`}
+                        className={`h-2 w-2 shrink-0 rounded-full ${sectorColour(universe).fill}`}
                       />
                     ) : null}
-                    {universe}
-                    <span className="as-tab-ct">{count}</span>
+                    <span className="truncate">{universe}</span>
+                    <span className="as-tab-ct shrink-0">{count}</span>
                   </button>
                 );
               })}
