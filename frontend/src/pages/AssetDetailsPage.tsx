@@ -256,14 +256,18 @@ function AnalysisTabs({
   onChange: (tab: AnalysisTab) => void;
   rankingLabel: string;
 }) {
-  const tabs: { key: AnalysisTab; label: string }[] = [
-    { key: "ranking", label: rankingLabel },
-    { key: "sentiment", label: "Sentiment" },
-    { key: "quant", label: "Quant" },
-    { key: "investors", label: "Big investors" },
-    { key: "insiders", label: "Insider trading" },
+  // `short` is the phone label: six full labels need about 700px, so on a phone
+  // the tabs become a 3x2 grid and every label has to fit a third of the width.
+  const tabs: { key: AnalysisTab; label: string; short: string }[] = [
+    { key: "ranking", label: rankingLabel, short: "Overview" },
+    { key: "sentiment", label: "Sentiment", short: "Sentiment" },
+    { key: "quant", label: "Quant", short: "Quant" },
+    { key: "investors", label: "Big investors", short: "Investors" },
+    { key: "insiders", label: "Insider trading", short: "Insiders" },
     // Sector-level news (D-223), behind the Market News flag like the page itself.
-    ...(MACRO_NEWS_ENABLED ? [{ key: "news" as const, label: "Market news" }] : []),
+    ...(MACRO_NEWS_ENABLED
+      ? [{ key: "news" as const, label: "Market news", short: "News" }]
+      : []),
   ];
 
   return (
@@ -271,12 +275,11 @@ function AnalysisTabs({
       id="analysis-tabs"
       role="tablist"
       aria-label="Analysis sections"
-      // The shared tab pill. self-start, not just inline-flex: the parent is a flex
-      // column, and a flex child stretches to the full line width unless told
-      // otherwise. .as-tabs keeps one row that scrolls sideways on a phone rather
-      // than wrapping into a two-row box, and the tab cut off at the right edge
-      // says there is more.
-      className="as-tabs self-start"
+      // The shared tab pill from sm up. self-start, not just inline-flex: the parent
+      // is a flex column, and a flex child stretches to the full line width unless
+      // told otherwise. On a phone a single scrolling row hid half the tabs off the
+      // edge, so there it is a 3x2 grid with every section in view.
+      className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:self-start sm:rounded-full"
     >
       {tabs.map((tab) => (
         <button
@@ -288,9 +291,10 @@ function AnalysisTabs({
             // A tab half off the edge comes fully into view once chosen.
             event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}
-          className="as-tab shrink-0"
+          className="as-tab shrink-0 px-2 sm:px-4"
         >
-          {tab.label}
+          <span className="sm:hidden">{tab.short}</span>
+          <span className="hidden sm:inline">{tab.label}</span>
         </button>
       ))}
     </div>
