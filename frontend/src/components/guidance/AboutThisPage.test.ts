@@ -30,11 +30,11 @@ async function open(page: ExplanationPage = 'stocks', rankingMode?: 'legacy' | '
   await act(async () => trigger.click()); return trigger;
 }
 function dialog() { return document.querySelector('dialog')!; }
-it('starts closed with one accent pill trigger and opens a named native modal', async () => {
+it('starts closed with one outline pill trigger and opens a named native modal', async () => {
   const trigger = await mount();
   expect(document.querySelector('dialog')).toBeNull(); expect(trigger.textContent).toBe('About this page');
   expect(trigger.getAttribute('aria-haspopup')).toBe('dialog'); expect(trigger.getAttribute('aria-expanded')).toBe('false');
-  expect(trigger.className).toContain('bg-brand-accent'); expect(trigger.className).toContain('focus-visible:outline');
+  expect(trigger.className).toContain('as-btn-ghost-dark'); expect(trigger.className).toContain('focus-visible:outline');
   trigger.focus(); await act(async () => trigger.click());
   expect(showModal).toHaveBeenCalledOnce(); expect(dialog().open).toBe(true);
   expect(document.getElementById(dialog().getAttribute('aria-labelledby')!)?.textContent).toBe(PAGE_EXPLANATIONS.stocks.title);
@@ -74,7 +74,7 @@ it('uses a forest header, readable panels, mobile scrolling and no animation', a
   expect(dialog().querySelector('header')?.className).toContain('hero-card');
   expect(dialog().className).toContain('90dvh');
   expect(dialog().querySelector('.overflow-y-auto')).toBeTruthy();
-  expect(dialog().querySelector('.bg-brand-bg')).toBeTruthy();
+  expect(dialog().querySelector('.as-inset')).toBeTruthy();
   expect(dialog().className).not.toContain('animate');
 });
 it.each(Object.keys(PAGE_EXPLANATIONS) as ExplanationPage[])('renders accurate contextual content for %s', async page => {
@@ -154,8 +154,9 @@ it.each(['stocks', 'funds', 'whales'] as const)('orders the %s purpose, process,
   expect(text.indexOf(content.process.title)).toBeLessThan(text.indexOf(content.example.title));
   expect(text.indexOf(content.example.title)).toBeLessThan(text.indexOf(content.limitations.title));
   expect(text.indexOf(content.limitations.title)).toBeLessThan(text.indexOf(content.caveat));
-  expect(dialog().querySelectorAll('ol > li')).toHaveLength(3);
-  expect(dialog().querySelector('ol')?.className).toContain('sm:grid-cols-3');
+  const steps = dialog().querySelector('ol')!;
+  expect(steps.querySelectorAll(':scope > li')).toHaveLength(content.process.steps.length);
+  expect(steps.className).toContain(`sm:grid-cols-${content.process.steps.length}`);
 });
 it('shows no methodology link without a valid destination', async () => {
   await act(async () => root.render(createElement(AboutThisPage, { page: 'stocks' })));
@@ -176,4 +177,13 @@ it('does not restore Stocks scroll onto the methodology destination', async () =
     expect(main.scrollTop).toBe(0); expect(main.style.overflow).toBe('auto');
     expect(document.querySelector('dialog')).toBeNull();
   } finally { router.dispose(); }
+});
+
+it('lets the Stocks worked example switch between agreeing and conflicting evidence', async () => {
+  await open('stocks', 'scorecard');
+  expect(dialog().textContent).toContain('Signals agree strongly');
+  const stockB = [...dialog().querySelectorAll('button')].find(button => button.textContent === 'Stock B')!;
+  await act(async () => stockB.click());
+  expect(stockB.getAttribute('aria-selected')).toBe('true');
+  expect(dialog().textContent).toContain('the signals disagree');
 });

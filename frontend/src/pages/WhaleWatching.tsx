@@ -129,7 +129,7 @@ export default function WhaleWatchingPage() {
             Informational only; this never affects your asset rankings.
           </p>
         </div>
-        <AboutThisPage page="whales" />
+        <AboutThisPage page="whales" className="mt-5" />
       </div>
       <LearnMore context="whales" />
 

@@ -1,5 +1,4 @@
 import AboutThisPage from "../components/guidance/AboutThisPage";
-import LearnMore from '../components/learning/LearnMore';
 import type {
   AnalysisLoadingStage,
   AnalysisProgress,
@@ -33,7 +32,6 @@ import { CONVERGENCE_DETAIL, CONVERGENCE_HEADLINE } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import AssetsAnalysisLoading from "../components/dashboard/AssetsAnalysisLoading";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
-import LadderMotif from "../components/dashboard/LadderMotif";
 import { sentimentVerdict } from "../components/research/sentimentDisplay";
 import { sectorColour } from "../utils/sectorColours";
 
@@ -353,13 +351,12 @@ export default function AssetsPage() {
 
   return (
     <div className="space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto">
-      {/* Header band. Forest ground with columns climbing toward the
-          bottom-right corner — the ranked universe, tallest column first.
-          Content sits on a relative layer so it clears the SVG. */}
-      <div className="hero-card overflow-hidden px-5 py-6 sm:px-8 sm:py-7">
-        <LadderMotif className="h-16" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
-          <div>
+      {/* Header band. Title and "About this page" on top; one status row along
+          the foot: the market and FX footing every price relies on, on the left,
+          and the run's freshness with its Refresh button on the right. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="band-eyebrow mb-2">
               Personalised Asset Analysis
             </p>
@@ -376,71 +373,40 @@ export default function AssetsPage() {
                 </span>
               ) : null}
             </p>
-            {/* Market and FX footing for every price on the page, so it reads
-                as part of the run rather than a stray note below the header. The
-                market clock joins it, separated rather than in a pill of its own:
-                both lines are footing for the SAME prices, exchange, currency and
-                now whether the exchange trading them is open, so one strip reads
-                as one fact about the page rather than two competing pills. */}
-            {/* Full-width block on a phone, pill from sm. The strip carries about
-                470px of text against roughly 290px of hero on a 360px screen, so it
-                has to wrap — and `inline-flex` + `w-fit` cannot wrap cleanly. Width
-                resolves from the items' max-content size capped by max-w-full, but
-                the wrapped lines then lay out wider than the box that sizing
-                produced, so the text spilled straight through the px-4 padding and
-                out the right edge. A full-width block has a width to wrap inside,
-                and the rounded-full curve is dropped while it is multi-line because
-                a 30px radius on a three-line box eats its own corner words. From sm
-                there is room for one line and the original pill returns. */}
-            <div className="mt-3 flex w-full max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[14px] border border-white/12 bg-white/[0.06] px-4 py-2 text-xs text-brand-bg/70 sm:inline-flex sm:w-fit sm:rounded-full sm:py-1.5">
-              {exchangeRate !== null ? (
-                <>
-                  US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
-                  <span className="font-medium text-brand-bg">
-                    1 USD = R{exchangeRate.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <span className="animate-pulse">
-                  US Stock Exchanges • Fetching USD/ZAR rate...
+          </div>
+          <AboutThisPage page="stocks"
+            rankingMode={SCORECARD_ENABLED ? "scorecard" : "legacy"}
+            methodologyHref={topPick ? `/asset/${encodeURIComponent(topPick.ticker)}/how-it-works` : undefined}
+            learnContext="stocks"
+            className="shrink-0 self-start"
+          />
+        </div>
+
+        <div className="mt-6 flex flex-col gap-4 border-t border-white/12 pt-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+          {/* Market and FX footing for every price on the page. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-brand-bg/70">
+            {exchangeRate !== null ? (
+              <>
+                US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
+                <span className="font-semibold text-brand-bg">
+                  1 USD = R{exchangeRate.toFixed(2)}
                 </span>
-              )}
-              <span className="text-brand-bg/30" aria-hidden="true">
-                •
+              </>
+            ) : (
+              <span className="animate-pulse">
+                US Stock Exchanges • Fetching USD/ZAR rate...
               </span>
-              <MarketClock tone="dark" bare />
-            </div>
+            )}
+            <span className="text-brand-bg/30" aria-hidden="true">
+              •
+            </span>
+            <MarketClock tone="dark" bare />
           </div>
 
-          {/* Run time and its refresh share one pill: the button acts on the
-              timestamp beside it, so they read as a single control. The sentiment
-              line joins it rather than getting a pill of its own, because "Last AI
-              run" stopped being a sufficient freshness answer the day the intraday
-              tick shipped: a run can be hours old while the sentiment behind it was
-              topped up an hour ago, and a reader needs both dates to know which one
-              answers which question. */}
-          {/* Two shapes, because the row does not fit a phone. The freshness grid
-              is about 245px and the button another 105px, against roughly 290px of
-              hero on a 360px screen: the button wrapped under the grid, leaving a
-              rounded-full box two rows tall whose pl-5 / pr-1.5 padding — measured
-              for text-then-button on ONE line — left the wrapped button jammed
-              against the right edge. Below sm it is a plain rounded block with even
-              padding and a full-width button; from sm the single-row pill returns
-              unchanged. */}
-          <div className="lg:shrink-0 flex w-full max-w-full flex-col items-stretch gap-3 rounded-[14px] border border-white/12 bg-white/[0.06] p-3 sm:w-fit sm:flex-row sm:flex-wrap sm:items-center sm:rounded-full sm:p-0 sm:py-2 sm:pl-5 sm:pr-1.5">
-            {/* A two-column grid, not two lines of inline text: "Last AI run" and
-                "Sentiment updated" are different lengths, so as plain text the two
-                values started at two different x positions and the pair read as
-                unrelated rather than as one small table of freshness facts. The grid
-                gives both labels one shared column width, sized to the longer of the
-                two, and the divider marks where that column ends: grid items stretch
-                to fill their track by default, so a border on the label spans draws
-                one continuous vertical rule rather than a short underline per row. */}
-            {/* minmax(0,auto) on the value track: a locale timestamp is ~120px and
-                the labels ~105px, which is wider than a small phone leaves once the
-                block's own padding is out. A bare `auto` track refuses to go below
-                its content and pushed the grid past the card; this lets the value
-                wrap under itself instead. */}
+          {/* The run's freshness beside the button that renews it. Two dates,
+              because a run can be hours old while the sentiment behind it was
+              topped up an hour ago. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5 lg:shrink-0">
             <div className="grid grid-cols-[auto_minmax(0,auto)] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
               <span className="border-r border-brand-bg/15 pr-2 mr-2">
                 Last AI run
@@ -471,9 +437,7 @@ export default function AssetsPage() {
             </button>
           </div>
         </div>
-        <AboutThisPage page="stocks" rankingMode={SCORECARD_ENABLED ? "scorecard" : "legacy"} methodologyHref={topPick ? `/asset/${encodeURIComponent(topPick.ticker)}/how-it-works` : undefined} />
       </div>
-      <LearnMore context="stocks" />
 
       <div
         className={

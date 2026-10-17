@@ -180,7 +180,7 @@ export default function FundsPage() {
             {FUND_ABOUT_BUTTON}
           </button>
         </div>
-        <AboutThisPage page="funds" />
+        <AboutThisPage page="funds" className="mt-5" />
       </div>
       <LearnMore context="funds" className="mt-6" />
 
