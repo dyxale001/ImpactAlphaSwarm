@@ -2,8 +2,7 @@ import LearnPopover from '../components/learning/LearnPopover';
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
-  ChevronRight,
-  Sparkles,
+  ArrowLeft,
   BrainCircuit,
   Flame,
   BarChart3,
@@ -35,7 +34,7 @@ import { carriedNews } from "../components/research/NewsArticles";
 import { formatDay } from "../components/research/sentimentDays";
 import { MarketClock } from "../components/research/MarketClock";
 import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
-import { useAskChatbotStore } from "../store/askChatbotStore";
+import { ListingLine } from "../components/research/ListingLine";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
 import StockMarketNewsTab from "../components/macroNews/StockMarketNewsTab";
@@ -463,7 +462,6 @@ export default function AssetDetailsPage() {
   // Read once per mount, not on every render: it only changes by navigating to a
   // different hub page, which unmounts this page anyway.
   const [backTo] = useState(readLastHubPage);
-  const openAskChatbot = useAskChatbotStore((s) => s.openWithPrompt);
 
   // Called before the early returns below, as every hook must be. The history loads
   // independently of the AI run, so the card renders without waiting on it and the
@@ -574,61 +572,44 @@ export default function AssetDetailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
-      {/* Detail header: where you came from, what the stock is, the one figure
-          that matters most, and what you can do with it. */}
+      <Link
+        to={backTo}
+        className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg inline-flex items-center gap-2 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to {HUB_PAGE_LABELS[backTo]}
+      </Link>
+
+      {/* Detail header: what the stock is and its price on the left, the market
+          status and what you can do with it on the right. */}
       <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
         <div className="min-w-0 flex-[1_1_360px]">
-          <nav aria-label="Breadcrumb" className="mb-2.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand-muted-fg">
-            <Link to={backTo} className="font-bold text-forest-700 hover:underline">
-              {HUB_PAGE_LABELS[backTo]}
-            </Link>
-            <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            <span aria-current="page">{asset.ticker}</span>
-          </nav>
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-forest-900 text-balance">
-            {asset.name || asset.ticker}
-          </h1>
-          {/* Either listing fact is left out when unknown: no universe yet, or an
-              exchange the lookup could not find. Nothing is better than a guess. */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-brand-muted-fg">
-            <span className="chip chip-line">{asset.ticker}</span>
-            {asset.universe?.trim() && (
-              <span className="chip" title={`Part of the ${asset.universe} universe`}>{asset.universe}</span>
-            )}
-            {exchangeName && <span title={`Listed on the ${exchangeName}`}>{exchangeName}</span>}
-            {/* The dot travels with the clock, so a wrapped row never ends on it,
-                and drops on a phone, where the clock always wraps to its own line. */}
-            <span className="inline-flex items-center gap-2">
-              <span aria-hidden="true" className="hidden sm:inline">·</span>
-              <MarketClock />
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-forest-900">{asset.ticker}</h1>
+            {asset.name && <span className="chip chip-line max-w-full truncate">{asset.name}</span>}
           </div>
+          <ListingLine universe={asset.universe} exchange={exchangeName} className="mt-2" />
+          {/* Guarded: `recommendation` is nullable, and an asset only has one once
+              it has reached a top 5. Dereferencing it here crashed the whole page
+              for every asset that never has — 48 of 88 rows at the time of
+              writing, both seeds and discovered names. price_at_run itself can
+              also be null when the price lookup fails. */}
+          <p className="mt-3 text-2xl lg:text-3xl font-bold tabular-nums tracking-[-0.02em] text-forest-900">
+            {typeof recommendation?.price_at_run === "number"
+              ? `R ${recommendation.price_at_run.toFixed(2)}`
+              : "Price unavailable"}
+          </p>
           {/* Same cached one-liner the whale-watching company panel shows, so an
               asset reads the same way wherever you meet it. Absent for assets
               whose description hasn't been generated yet. */}
           {asset.description && (
-            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-3">
+            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-2">
               {asset.description}
             </p>
           )}
         </div>
 
         <div className="flex flex-col items-start gap-3 lg:items-end">
-          {/* Guarded: `recommendation` is nullable, and an asset only has one once
-              it has reached a top 5. Dereferencing it here crashed the whole page
-              for every asset that never has — 48 of 88 rows at the time of
-              writing, both seeds and discovered names. price_at_run itself can
-              also be null when the price lookup fails. */}
-          {typeof recommendation?.price_at_run === "number" ? (
-            <div className="lg:text-right">
-              <p className="text-2xl lg:text-3xl font-bold tabular-nums tracking-[-0.02em] text-forest-900">
-                R {recommendation.price_at_run.toFixed(2)}
-              </p>
-              <p className="text-xs text-brand-muted-fg">Price at the last AI run</p>
-            </div>
-          ) : (
-            <p className="text-sm text-brand-muted-fg">Price unavailable</p>
-          )}
+          <MarketClock />
           <div className="flex flex-wrap items-center gap-2">
             <AddToWatchlistButton ticker={asset.ticker} size="button" />
             {/* Opens Compare with this stock already in the first column and the
@@ -637,19 +618,9 @@ export default function AssetDetailsPage() {
             {COMPARE_ENABLED && (
               <Link to={compareHref("stocks", [asset.ticker])} className="as-btn as-btn-sm as-btn-secondary">
                 <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Compare
+                Compare with…
               </Link>
             )}
-            <button
-              type="button"
-              onClick={() => openAskChatbot(`Tell me about ${asset.ticker}`)}
-              aria-label={`Ask AlphaSwarm about ${asset.ticker}`}
-              className="as-btn as-btn-sm as-btn-text px-2"
-            >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              {/* "Ask" alone on a phone keeps the four actions on one row. */}
-              Ask<span className="hidden sm:inline">&nbsp;about {asset.ticker}</span>
-            </button>
             <LearnPopover context={`stock.${tab}`} />
           </div>
         </div>
