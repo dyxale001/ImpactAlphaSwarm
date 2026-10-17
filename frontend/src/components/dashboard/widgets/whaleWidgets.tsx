@@ -29,9 +29,9 @@ const MAX_ROWS = 5;
  *
  * The single most actionable thing on the dashboard, and until now it was buried
  * three levels into the whale-watching page. Several different insiders buying
- * on the open market inside a month is historically a stronger signal than any
- * one of them buying alone, so it earns being the thing a reader sees rather
- * than the thing they find.
+ * on the open market inside a month is worth noting, so it earns being the thing
+ * a reader sees rather than the thing they find. It is stated as a fact, never as
+ * a forecast: the page does not predict prices.
  *
  * The threshold and the count both come from whaleFormat, shared with the panel
  * on the asset page, so the two can never disagree about what a cluster is.
@@ -92,8 +92,8 @@ export function WhaleClusterWidget({
           <p className="text-xs leading-snug text-brand-fg">
             <span className="font-semibold">Cluster buying:</span> {clusterCount}{" "}
             different insiders bought on the open market in the last{" "}
-            {CLUSTER_WINDOW_DAYS} days. Several insiders buying at once is
-            historically a stronger signal than a single trade.
+            {CLUSTER_WINDOW_DAYS} days. Several insiders buying around the same
+            time is worth noting. It doesn't say what the price will do.
           </p>
         </div>
       ) : (

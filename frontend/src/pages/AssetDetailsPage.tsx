@@ -918,7 +918,6 @@ export default function AssetDetailsPage() {
         <InstitutionalOwners
           ticker={asset.ticker}
           limit={5}
-          variant="asset"
           showSummary
         />
       )}
@@ -931,7 +930,6 @@ export default function AssetDetailsPage() {
         <WhaleWatching
           ticker={asset.ticker}
           showTradeDate
-          variant="asset"
           showSummary
         />
       )}
