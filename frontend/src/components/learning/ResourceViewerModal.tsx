@@ -1,4 +1,3 @@
-import { equivalentArticleTitleOffset } from "../../utils/learningArticleTitle";
 import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
 import LearningVideo from "./LearningVideo";
 import MarkdownRenderer from "./MarkdownRenderer";
@@ -44,7 +43,6 @@ export default function ArticleViewerModal({
   quizStatus,
 }: Props) {
   if (!article) return null;
-  const titleOffset = equivalentArticleTitleOffset(article.content, article.title);
   const video = <LearningVideo url={article.video_url} />;
 
   return (
@@ -101,11 +99,10 @@ flex-col
 
           <div className="article-viewer-scrollbar overflow-y-auto px-6 py-7">
             <div className="mx-auto max-w-3xl space-y-8 text-brand-fg">
-              {titleOffset === undefined && (
-                <h1 className="text-2xl font-semibold">{article.title}</h1>
-              )}
-              {titleOffset === undefined && video}
-              <MarkdownRenderer content={article.content} afterHeading={titleOffset === undefined ? undefined : { offset: titleOffset, content: video }} />
+              <MarkdownRenderer
+                content={article.content}
+                articleTitle={{ title: article.title, afterTitle: video }}
+              />
               <section className="space-y-3 rounded-2xl border border-brand-border/60 bg-brand-bg/70 p-5">
                 <h2 className="text-lg font-semibold text-brand-fg">
                   {quizStatus === "COMPLETED"
