@@ -4,8 +4,6 @@ import {
   SUB_DIMENSIONS,
   SUB_DIMENSION_ORDER,
   CONTEXT_METRICS,
-  RSI_BANDS,
-  BETA_BANDS,
   RAW_METRICS,
   PERCENTILE_CAPTION,
   // MODEL_SCORE_LABEL / MODEL_SCORE_DISCLOSURE are no longer imported: the
@@ -56,7 +54,7 @@ export function ordinal(n: number) {
 export function PercentileTrack({ pctile }: { pctile: number }) {
   const pos = Math.max(2, Math.min(98, pctile));
   return (
-    <div className="relative h-1.5 w-full bg-background rounded-full mt-2">
+    <div className="relative h-1.5 w-full bg-forest-200 rounded-full mt-2">
       <div
         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-brand-primary border-2 border-brand-surface shadow-sm"
         style={{ left: `${pos}%` }}
@@ -67,7 +65,7 @@ export function PercentileTrack({ pctile }: { pctile: number }) {
 
 function ExplainerBody({ text }: { text: string }) {
   return (
-    <p className="mt-2 text-sm leading-relaxed text-brand-fg/75 bg-brand-bg/55 border border-brand-border/50 rounded-xl px-3 py-2">
+    <p className="rounded-[12px] border border-forest-900/10 bg-white px-3 py-2 text-xs leading-relaxed text-brand-muted-fg">
       {text}
     </p>
   );
@@ -92,6 +90,91 @@ function InfoToggle({
     >
       <Info className="w-3.5 h-3.5" />
     </button>
+  );
+}
+
+type Band = { key: string; name: string; range: string; from: number; to: number };
+
+// The conventional ranges, drawn at equal widths: the labels matter, not the scale.
+const RSI_SCALE: Band[] = [
+  { key: "oversold", name: "Oversold", range: "Below 30", from: 0, to: 30 },
+  { key: "neutral", name: "Neutral", range: "30 to 70", from: 30, to: 70 },
+  { key: "overbought", name: "Overbought", range: "Above 70", from: 70, to: 100 },
+];
+const BETA_SCALE: Band[] = [
+  { key: "inverse", name: "Moves opposite", range: "Below 0", from: -1, to: 0 },
+  { key: "low", name: "Moves less", range: "0 to 0.8", from: 0, to: 0.8 },
+  { key: "market", name: "In step", range: "0.8 to 1.2", from: 0.8, to: 1.2 },
+  { key: "high", name: "Moves more", range: "Above 1.2", from: 1.2, to: 2.5 },
+];
+
+// A context reading on its band strip: the stock's band filled, a marker where the
+// reading sits inside it, and what the band means. Neutral tones throughout, on
+// purpose: colouring "oversold" green would re-encode the buy signal the bands replace.
+function BandCard({
+  title,
+  value,
+  reading,
+  bands,
+  active,
+  meaning,
+  open,
+  onToggle,
+  detail,
+}: {
+  title: string;
+  value: string;
+  reading: number;
+  bands: Band[];
+  active: string;
+  meaning: string;
+  open: boolean;
+  onToggle: () => void;
+  detail: string;
+}) {
+  const index = Math.max(0, bands.findIndex((b) => b.key === active));
+  const band = bands[index];
+  const within = Number.isFinite(reading)
+    ? Math.max(0.08, Math.min(0.92, (reading - band.from) / (band.to - band.from)))
+    : 0.5;
+  const left = ((index + within) / bands.length) * 100;
+  return (
+    <div className="as-inset flex flex-col gap-3 p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-forest-900">
+          {title}
+          <InfoToggle open={open} onToggle={onToggle} label={title} />
+        </p>
+        <p className="text-xl font-bold tabular-nums text-forest-900">{value}</p>
+      </div>
+      <div role="img" aria-label={`${title} ${value}: ${band.name}, ${band.range}`}>
+        <div className="relative" aria-hidden="true">
+          <div className="flex gap-1">
+            {bands.map((b, i) => (
+              <div
+                key={b.key}
+                className={`flex h-8 min-w-0 flex-1 items-center justify-center rounded-lg px-1 text-center text-[11px] font-semibold leading-tight ${
+                  i === index ? "bg-forest-700 text-white" : "bg-white text-brand-muted-fg"
+                }`}
+              >
+                {b.name}
+              </div>
+            ))}
+          </div>
+          <span
+            className="absolute -bottom-1.5 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[2px] bg-lime-500 ring-2 ring-forest-50"
+            style={{ left: `${left}%` }}
+          />
+        </div>
+        <div className="mt-2 flex gap-1" aria-hidden="true">
+          {bands.map((b) => (
+            <span key={b.key} className="min-w-0 flex-1 text-center text-[11px] tabular-nums text-brand-muted-fg">{b.range}</span>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs leading-relaxed text-brand-muted-fg">{meaning}</p>
+      {open && <ExplainerBody text={detail} />}
+    </div>
   );
 }
 
@@ -127,134 +210,100 @@ export default function QuantMetricsPanel({
   const [showRaw, setShowRaw] = useState(isLegacyRow);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {normalisation === "no_data" && (
         <p className="text-sm text-brand-muted-fg italic">{NO_DATA_NOTE}</p>
       )}
 
       {hasPercentiles ? (
-        <div className="space-y-4">
-          {SUB_DIMENSION_ORDER.map((key) => {
-            const copy = SUB_DIMENSIONS[key];
-            const pctile = subDimValues[key];
-            const open = openExplainer === key;
-            return (
-              <div key={key}>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-2">
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-forest-900">Position among peers</h3>
+            <p className="mt-0.5 text-xs text-brand-muted-fg">
+              From the latest analysis run. {PERCENTILE_CAPTION}
+            </p>
+          </div>
+          {/* One card per reading, side by side so the three positions can be
+              compared at a glance; they stack on a phone. */}
+          <div className="grid gap-3 md:grid-cols-3">
+            {SUB_DIMENSION_ORDER.map((key) => {
+              const copy = SUB_DIMENSIONS[key];
+              const pctile = subDimValues[key];
+              const open = openExplainer === key;
+              return (
+                <div key={key} className="as-inset flex flex-col gap-2 p-4">
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-forest-900">
                     {copy.label}
-                    <InfoToggle
-                      open={open}
-                      onToggle={() => toggle(key)}
-                      label={copy.label}
-                    />
-                  </span>
-                  <span className="text-foreground font-mono font-semibold text-sm whitespace-nowrap">
-                    {pctile !== null
-                      ? `${ordinal(Math.round(pctile))} percentile`
-                      : "—"}
-                  </span>
-                </div>
-                <p className="text-sm text-brand-fg/75 mt-0.5">
-                  {copy.subtitle}
-                </p>
-                {pctile !== null && <PercentileTrack pctile={pctile} />}
-                {/* D-122: the direction of "good" differs per row and was never
-                    stated, so "78th percentile" on stability could not be read.
-                    One line says which way is which; a second turns the ordinal
-                    into a comparison a beginner can picture. Neither is a verdict:
-                    whether steadiness is wanted depends on the reader. */}
-                {pctile !== null && (
-                  <p className="mt-1.5 text-xs text-brand-fg/80">
-                    <span className="font-medium text-brand-fg">
-                      {sentenceCase(percentileReading(key, pctile))}.
-                    </span>{" "}
-                    <span className="text-brand-muted-fg">
-                      {SUB_DIMENSION_DIRECTION[key]}
-                    </span>
+                    <InfoToggle open={open} onToggle={() => toggle(key)} label={copy.label} />
                   </p>
-                )}
-                {open && <ExplainerBody text={copy.detail} />}
-              </div>
-            );
-          })}
-          <p className="text-xs text-brand-fg/70">
-            {PERCENTILE_CAPTION}
-          </p>
-        </div>
+                  <p className="text-xs text-brand-muted-fg">{copy.subtitle}</p>
+                  <p className="text-2xl font-bold tabular-nums tracking-[-0.01em] text-forest-900">
+                    {pctile !== null ? ordinal(Math.round(pctile)) : "—"}
+                    {pctile !== null && (
+                      <span className="text-xs font-semibold text-brand-muted-fg"> percentile</span>
+                    )}
+                  </p>
+                  {pctile !== null && <PercentileTrack pctile={pctile} />}
+                  {/* D-122: the direction of "good" differs per reading, so each card
+                      says which way is which, plus a comparison a beginner can
+                      picture. Neither is a verdict. */}
+                  {pctile !== null && (
+                    <>
+                      <p className="text-xs font-semibold text-forest-900">
+                        {sentenceCase(percentileReading(key, pctile))}.
+                      </p>
+                      <p className="text-xs text-brand-muted-fg">{SUB_DIMENSION_DIRECTION[key]}</p>
+                    </>
+                  )}
+                  {open && <ExplainerBody text={copy.detail} />}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ) : (
         normalisation === "insufficient_universe" && (
-          <p className="text-sm text-brand-muted-fg">
-            {INSUFFICIENT_UNIVERSE_NOTE}
-          </p>
+          <p className="text-sm text-brand-muted-fg">{INSUFFICIENT_UNIVERSE_NOTE}</p>
         )
       )}
 
       {hasBands && (
-        <div className="space-y-2">
-          <span className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold">
-            Context readings
-          </span>
-          <div className="flex flex-wrap gap-2">
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-forest-900">Context readings</h3>
+            <p className="mt-0.5 text-xs text-brand-muted-fg">
+              Shown as ranges and never ranked, because neither extreme is simply better.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
             {rsiBand && (
-              <button
-                type="button"
-                onClick={() => toggle("rsi")}
-                aria-expanded={openExplainer === "rsi"}
-                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-sm transition-colors hover:border-brand-primary/40"
-              >
-                <span className="font-mono font-semibold text-brand-fg">
-                  RSI {formatMetric(recommendation.rsi, 0)}
-                </span>
-                {/* Neutral slate on purpose: colouring "oversold" green would
-                    re-encode the buy signal the bands replace. */}
-                <span className="text-slate-600 font-medium">
-                  {RSI_BANDS[rsiBand]}
-                </span>
-                <Info className="w-3 h-3 text-brand-muted-fg shrink-0" />
-              </button>
+              <BandCard
+                title="RSI"
+                value={formatMetric(recommendation.rsi, 0)}
+                reading={Number(recommendation.rsi)}
+                bands={RSI_SCALE}
+                active={rsiBand}
+                meaning={RSI_BAND_MEANING[rsiBand]}
+                open={openExplainer === "rsi"}
+                onToggle={() => toggle("rsi")}
+                detail={CONTEXT_METRICS.rsi.detail}
+              />
             )}
             {betaBand && (
-              <button
-                type="button"
-                onClick={() => toggle("beta")}
-                aria-expanded={openExplainer === "beta"}
-                className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1.5 text-sm transition-colors hover:border-brand-primary/40"
-              >
-                <span className="font-mono font-semibold text-brand-fg">
-                  Beta {formatMetric(recommendation.beta)}
-                </span>
-                <span className="text-slate-600 font-medium">
-                  {BETA_BANDS[betaBand]}
-                </span>
-                <Info className="w-3 h-3 text-brand-muted-fg shrink-0" />
-              </button>
+              <BandCard
+                title="Beta"
+                value={formatMetric(recommendation.beta)}
+                reading={Number(recommendation.beta)}
+                bands={BETA_SCALE}
+                active={betaBand}
+                meaning={BETA_BAND_MEANING[betaBand]}
+                open={openExplainer === "beta"}
+                onToggle={() => toggle("beta")}
+                detail={CONTEXT_METRICS.beta.detail}
+              />
             )}
           </div>
-          {/* D-122: RSI and beta need plain-language explanation for a reader
-              who has not met the terms. Said under the chips, always, in the
-              chip's own band; the fuller definition stays behind the toggle. */}
-          <div className="space-y-1 text-xs text-brand-fg/80">
-            {rsiBand && (
-              <p>
-                <span className="font-medium text-brand-fg">RSI:</span>{" "}
-                {RSI_BAND_MEANING[rsiBand]}
-              </p>
-            )}
-            {betaBand && (
-              <p>
-                <span className="font-medium text-brand-fg">Beta:</span>{" "}
-                {BETA_BAND_MEANING[betaBand]}
-              </p>
-            )}
-          </div>
-          {openExplainer === "rsi" && (
-            <ExplainerBody text={CONTEXT_METRICS.rsi.detail} />
-          )}
-          {openExplainer === "beta" && (
-            <ExplainerBody text={CONTEXT_METRICS.beta.detail} />
-          )}
-        </div>
+        </section>
       )}
 
       <div>
@@ -262,34 +311,22 @@ export default function QuantMetricsPanel({
           type="button"
           onClick={() => setShowRaw((v) => !v)}
           aria-expanded={showRaw}
-          className="text-xs text-brand-primary font-medium hover:underline flex items-center gap-1"
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
         >
-          <ChevronDown
-            className={`w-3.5 h-3.5 transition-transform ${showRaw ? "rotate-180" : ""}`}
-          />
           {showRaw ? "Hide raw metrics" : "Show raw metrics"}
+          <ChevronDown className={`h-4 w-4 transition-transform ${showRaw ? "rotate-180" : ""}`} />
         </button>
         {showRaw && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-3">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {RAW_METRICS.map((m) => (
-              <div
-                key={m.key}
-                tabIndex={0}
-                className="relative group rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-3"
-              >
-                <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1">
-                  {m.label}
+              <div key={m.key} className="as-inset flex flex-col gap-1 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-semibold text-brand-muted-fg">{m.label}</span>
+                  <span className="text-sm font-bold tabular-nums text-forest-900">
+                    {formatMetric(recommendation[m.key], m.digits)}
+                  </span>
                 </div>
-                <div className="text-sm font-semibold text-brand-fg">
-                  {formatMetric(recommendation[m.key], m.digits)}
-                </div>
-                {/* Same hover tooltip treatment as ConfidenceRing, but above the
-                    pill — a side flyout would overflow the grid's outer columns. */}
-                <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 max-w-[calc(100vw-2rem)] z-50">
-                  <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border">
-                    {m.detail}
-                  </div>
-                </div>
+                <p className="text-xs leading-relaxed text-brand-muted-fg">{m.detail}</p>
               </div>
             ))}
           </div>

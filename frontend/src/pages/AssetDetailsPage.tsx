@@ -20,6 +20,8 @@ import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
 import QuantMetricsPanel, { ordinal } from "../components/research/QuantMetricsPanel";
 import KeyReadings from "../components/research/KeyReadings";
+import { SummaryStrip } from "../components/research/sourcePageControls";
+import { formatChange, formatDrawdown, formatPrice } from "../components/research/quantSeries";
 import MethodologyDialog from "../components/howItWorks/MethodologyDialog";
 import {
   HorizonPicker,
@@ -53,6 +55,7 @@ import { useQuantHistory } from "../hooks/useQuantHistory";
 import { useListing } from "../hooks/useListing";
 import {
   DEFAULT_QUANT_HORIZON,
+  QUANT_HORIZON_LABELS,
   type QuantHorizon,
 } from "../data/quantExplainers";
 import { HUB_PAGE_LABELS, readLastHubPage } from "../utils/lastHubPage";
@@ -847,29 +850,41 @@ export default function AssetDetailsPage() {
 
       {recommendation && tab === "quant" && (
         <SectionCard
-          title="Quantitative Data"
-          description="What the price history shows: measurements and peer context, not a recommendation."
+          title="Quant"
+          description="How the price has behaved, shown in rand, and where this stock sits among the others in the run. Measurements, not a recommendation."
           action={<MethodologyDialog section="quant" />}
         >
           {/* One wrapper, for the same reason the sentiment card has one: the card's
               uniform space-y would otherwise put the window switch, the chart and the
               measurements all exactly as far apart as each other. */}
           <div className="space-y-5">
-            {/* The window switch first, then the chart, then the tab's own reasoning
-                trace of that chart, then the run's own measurements. The chart leads
-                so the paragraph is read against the line it describes (a departure
-                from D-125's trace-first order, chosen on review). The switch sits
-                above both rather than on the chart so it is found before the two
-                things it changes. */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-brand-muted-fg">
-                Price history over a window you choose, shown in rand. The
-                measurements further down come from the most recent analysis run.
-              </p>
-              <HorizonPicker value={horizon} onChange={setHorizon} />
-            </div>
+            {/* The window's headline figures, then the chart, then the tab's own
+                reasoning trace of that chart, then the run's own measurements. The
+                chart leads the paragraph so it is read against the line it describes
+                (a departure from D-125's trace-first order, chosen on review). The
+                window switch sits in the chart's top row, beside what it changes. */}
+            {quantHistory.available && quantHistory.facts && !quantHistory.isLoading && (
+              <SummaryStrip
+                pills={[
+                  {
+                    label: `Change over ${QUANT_HORIZON_LABELS[horizon]}`,
+                    value: formatChange(quantHistory.facts.change_pct),
+                    hint: `${formatPrice(quantHistory.facts.first_close, quantHistory.displayCurrency)} to ${formatPrice(quantHistory.facts.last_close, quantHistory.displayCurrency)}`,
+                  },
+                  { label: "High", value: formatPrice(quantHistory.facts.high, quantHistory.displayCurrency) },
+                  { label: "Low", value: formatPrice(quantHistory.facts.low, quantHistory.displayCurrency) },
+                  {
+                    label: "Largest fall",
+                    value: formatDrawdown(quantHistory.facts.max_drawdown_pct),
+                    hint: "From a peak to a later low",
+                  },
+                ]}
+              />
+            )}
 
             <QuantTrendChart
+              showFigures={false}
+              toolbar={<HorizonPicker value={horizon} onChange={setHorizon} tone="dark" />}
               points={quantHistory.points}
               facts={quantHistory.facts}
               currency={quantHistory.currency}
@@ -894,10 +909,7 @@ export default function AssetDetailsPage() {
               />
             )}
 
-            <div className="pt-4 border-t border-brand-border/50">
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-3">
-                From the latest analysis run
-              </p>
+            <div className="border-t border-forest-900/10 pt-5">
               <QuantMetricsPanel recommendation={recommendation} />
             </div>
           </div>

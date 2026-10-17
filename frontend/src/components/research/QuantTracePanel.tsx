@@ -1,4 +1,4 @@
-import { BrainCircuit } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useQuantTrace } from "../../hooks/useQuantTrace";
 import { conversionNote } from "./quantSeries";
 import {
@@ -46,14 +46,19 @@ export function QuantTracePanel({ ticker, horizon, active }: Props) {
     : null;
 
   return (
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h4 className="text-sm font-semibold text-brand-fg">
+    // The soft box with the lime Sparkles mark that every AI-written paragraph on the
+    // stock page uses, so this reads as the same kind of object as the reasoning trace.
+    <div className="as-inset p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-bold text-forest-900">
+          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
           What the price did over {QUANT_HORIZON_LABELS[horizon]}
-        </h4>
+        </p>
         {source && (
           <span
-            className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-accent text-brand-primary font-semibold"
+            className={`chip ${source === "model" ? "chip-accent" : ""}`}
             title={
               source === "model"
                 ? "Written by a language model from the window's figures, then checked: every number in it appears in those figures, and advice or forward-looking wording fails it."
@@ -65,20 +70,16 @@ export function QuantTracePanel({ ticker, horizon, active }: Props) {
         )}
       </div>
 
-      <div className="mt-3 rounded-xl border border-brand-border/60 bg-brand-surface/70 p-3">
-        <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-          <BrainCircuit className="w-3 h-3 text-brand-primary" />
-          Reasoning trace
-        </div>
+      <div className="mt-3">
         {isLoading || (!trace && !error) ? (
           <Skeleton />
         ) : error ? (
           <p className="text-sm text-brand-muted-fg italic">{error}</p>
         ) : trace?.trace ? (
           <>
-            <p className="text-sm text-brand-fg leading-relaxed">{trace.trace}</p>
+            <p className="text-sm text-forest-900 leading-relaxed">{trace.trace}</p>
             {/* Said plainly, once, and never in a tone that asks to be trusted. */}
-            <p className="text-[10px] text-brand-muted-fg mt-2">
+            <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
               {note ? `${note} ` : ""}
               {QUANT_TRACE_DISCLOSURE}
             </p>

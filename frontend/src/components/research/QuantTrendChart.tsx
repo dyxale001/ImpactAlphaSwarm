@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   CartesianGrid,
   Line,
@@ -74,6 +75,11 @@ interface Props {
   available: boolean;
   isLoading: boolean;
   error: string | null;
+  /** The change, high, low and largest fall on the panel. Off where the page shows
+   *  them as tiles of their own. */
+  showFigures?: boolean;
+  /** Controls set in the panel's top row, opposite the listing line. */
+  toolbar?: ReactNode;
 }
 
 export function QuantTrendChart({
@@ -88,6 +94,8 @@ export function QuantTrendChart({
   available,
   isLoading,
   error,
+  showFigures = true,
+  toolbar,
 }: Props) {
   if (isLoading) {
     return <div className="h-72 rounded-lg bg-brand-muted/10 animate-pulse" />;
@@ -126,6 +134,8 @@ export function QuantTrendChart({
           converted={converted}
           exchangeName={exchangeName}
           horizon={horizon}
+          showFigures={showFigures}
+          toolbar={toolbar}
         />
 
         {/* Recharts 3 makes the chart keyboard focusable, so a click drew the browser's
@@ -246,7 +256,11 @@ function WindowStrip({
   converted,
   exchangeName,
   horizon,
+  showFigures,
+  toolbar,
 }: {
+  showFigures: boolean;
+  toolbar?: ReactNode;
   facts: QuantWindowFacts;
   currency: string;
   displayCurrency: string;
@@ -265,6 +279,17 @@ function WindowStrip({
     .filter(Boolean)
     .join(" · ");
   const line = [listing ? `${listing}.` : null, note].filter(Boolean).join(" ");
+
+  if (!showFigures) {
+    return (
+      // On a phone the controls take their own line above the note, rather than
+      // squeezing the note into a narrow column beside them.
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        {line ? <p className="min-w-0 flex-1 text-[11px] text-white/60 sm:order-1">{line}</p> : <span />}
+        {toolbar ? <div className="order-first self-start sm:order-2 sm:self-auto">{toolbar}</div> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -340,15 +365,19 @@ function WindowTooltip({
 export function HorizonPicker({
   value,
   onChange,
+  tone = "light",
 }: {
   value: QuantHorizon;
   onChange: (horizon: QuantHorizon) => void;
+  /** "dark" when it sits on the forest chart panel. */
+  tone?: "light" | "dark";
 }) {
   return (
+    // The shared small tab pill; lime on forest when it sits on the chart itself.
     <div
       role="radiogroup"
       aria-label="Historical window"
-      className="inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5"
+      className={`as-tabs as-tabs-sm ${tone === "dark" ? "as-tabs-dark" : ""}`}
     >
       {QUANT_HORIZONS.map((h) => (
         <button
@@ -357,11 +386,7 @@ export function HorizonPicker({
           role="radio"
           aria-checked={value === h}
           onClick={() => onChange(h)}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-            value === h
-              ? "bg-brand-primary text-white"
-              : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className={`as-tab ${value === h ? "is-on" : ""}`}
         >
           {h}
         </button>
