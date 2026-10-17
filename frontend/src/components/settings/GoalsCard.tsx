@@ -97,20 +97,21 @@ export default function GoalsCard({ profile }: { profile: Profile }) {
       {editing ? (
         <GoalQuestions answers={goalAnswers} onAnswer={setGoalAnswer} appearance="embedded" />
       ) : (
-        <dl className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        // Four tiles, a label over the answer, as the conservative stat tiles.
+        <dl className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
           {GOAL_QUESTIONS.map((q) => {
             const answer = q.options.find((o) => o.value === goalAnswers[q.id]);
             return (
               <div
                 key={q.id}
-                className="rounded-lg border border-forest-900/8 bg-brand-primary/[0.03] px-3 py-2.5"
+                className="as-inset min-w-0 p-3 sm:p-4"
               >
-                <dt className="text-xs font-semibold text-brand-muted-fg">
+                <dt className="text-xs font-medium text-brand-muted-fg">
                   {GOAL_LABELS[q.id] ?? q.question}
                 </dt>
                 <dd
-                  className={`mt-0.5 text-sm font-semibold leading-snug ${
-                    answer ? "text-brand-fg" : "text-brand-muted-fg"
+                  className={`mt-1 text-base font-bold leading-snug tracking-[-0.01em] sm:text-lg ${
+                    answer ? "text-forest-900" : "text-brand-muted-fg"
                   }`}
                 >
                   {answer?.label ?? GOALS_NOT_ANSWERED}

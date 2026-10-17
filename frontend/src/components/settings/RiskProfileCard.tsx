@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Clock } from "lucide-react";
+import { ChevronDown, Clock } from "lucide-react";
 import QuestionBlock from "../onboarding/QuestionBlock";
-import RiskScale from "../funds/RiskScale";
 import SettingsCard, { CardChip, Consequence } from "./SettingsCard";
 import { PrimaryButton, SecondaryButton, TextButton } from "./SettingsButtons";
 import { useFundMatches } from "../../hooks/useFundCatalogue";
@@ -127,45 +126,35 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
         </SecondaryButton>
       }
     >
-      {/* ── The rating, and the ceiling it sets ── */}
-      <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-x-8">
-        <div>
-          <p className="text-xs font-semibold text-brand-muted-fg">
-            {RISK_RATING_LABEL}
-          </p>
-          <p className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-forest-900">
+      {/* ── The rating, and the ceiling it sets ──
+          The conservative layout: the rating large on the left with when it was
+          saved and how many questions are answered under it, and the ceiling it
+          sets in a light box on the right. */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-brand-muted-fg">{RISK_RATING_LABEL}</p>
+          <p className="mt-0.5 text-3xl font-bold leading-tight tracking-[-0.02em] text-forest-900">
             {riskLabel ?? RISK_NOT_ANSWERED}
           </p>
+          {riskLabel ? (
+            <p className="mt-1.5 text-xs text-brand-muted-fg">
+              {savedDate && <>{RISK_ANSWERED_LABEL}: {savedDate} · </>}
+              {RISK_QUESTIONS_LABEL}: <span className="tabular-nums">{answeredSurvey} of {total}</span>
+            </p>
+          ) : (
+            <p className="mt-1.5 text-sm text-brand-muted-fg">{RISK_NOT_ANSWERED_LEAD}</p>
+          )}
         </div>
         {FUNDS_ENABLED && riskLabel && <CeilingScale />}
       </div>
 
-      {riskLabel ? (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs sm:grid-cols-3">
-          {savedDate && (
-            <div>
-              <dt className="text-xs font-semibold text-brand-muted-fg">
-                {RISK_ANSWERED_LABEL}
-              </dt>
-              <dd className="mt-0.5 font-semibold text-brand-fg">{savedDate}</dd>
-            </div>
-          )}
-          <div>
-            <dt className="text-xs font-semibold text-brand-muted-fg">
-              {RISK_QUESTIONS_LABEL}
-            </dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-brand-fg">
-              {answeredSurvey} of {total}
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className="text-sm text-brand-muted-fg">{RISK_NOT_ANSWERED_LEAD}</p>
-      )}
-
       {riskLabel && (
-        <details className="rounded-[12px] bg-forest-50 px-3 py-2.5 text-xs text-brand-fg">
-          <summary className="cursor-pointer font-bold text-forest-900">Why this risk level?</summary>
+        // A fold under a hairline, its chevron turning when open.
+        <details className="group border-t border-forest-900/8 pt-3 text-sm text-forest-900">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-sm font-bold text-forest-700 [&::-webkit-details-marker]:hidden">
+            Why this risk level?
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
           <div className="mt-3 space-y-3 leading-relaxed">
             {reasoning ? (
               <>
@@ -305,13 +294,18 @@ export default function RiskProfileCard({ profile }: { profile: Profile }) {
 function CeilingScale() {
   const { bracket, isLoading, error } = useFundMatches();
   if (isLoading || error || !bracket) return null;
+  const level = bracket.ceiling ?? 0;
   return (
-    <div>
-      <p className="text-xs font-semibold text-brand-muted-fg">
-        {RISK_CEILING_LABEL}
-      </p>
-      <div className="mt-1.5">
-        <RiskScale level={bracket.ceiling} label={bracket.ceiling_label} compact />
+    <div className="as-inset p-4">
+      <p className="text-xs font-medium text-brand-muted-fg">{RISK_CEILING_LABEL}</p>
+      <div className="mt-2 flex items-center gap-2.5">
+        <span className="inline-flex gap-[3px]" role="img" aria-label={`${level} of 5`}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <i key={i} className={`h-1.5 w-[18px] rounded-full ${i <= level ? "bg-forest-700" : "bg-forest-100"}`} />
+          ))}
+        </span>
+        <b className="text-sm tabular-nums text-forest-900">{level} of 5</b>
+        {bracket.ceiling_label && <span className="text-xs text-brand-muted-fg">{bracket.ceiling_label}</span>}
       </div>
     </div>
   );
