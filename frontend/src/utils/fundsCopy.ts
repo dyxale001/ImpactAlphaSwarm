@@ -277,6 +277,12 @@ export const COST_PER_YEAR = "a year";
 
 export const FUND_SIZE_LABEL = "Fund size";
 
+/** The card's short figure labels; the full wording sits in each one's title. */
+export const CARD_COST_LABEL = "Cost a year";
+export const CARD_TER_LABEL = "Expenses a year";
+export const CARD_MIN_TERM_LABEL = "Minimum term";
+export const CARD_SHEET_LABEL = "Fact sheet";
+
 export const DISTRIBUTIONS_LABEL = "Distributions";
 
 /** Printed where a fact sheet does not state a figure the card has a slot for.
@@ -576,6 +582,10 @@ export function allStrings(): string[] {
     MATCHES_LOAD_FAILED,
     MATCH_INPUTS_TITLE,
     MATCH_CALLOUT_HEADLINE,
+    CARD_COST_LABEL,
+    CARD_TER_LABEL,
+    CARD_MIN_TERM_LABEL,
+    CARD_SHEET_LABEL,
     MATCH_CALLOUT_HEADLINE_NO_CEILING,
     MATCH_INPUTS_LEAD,
     MATCH_INPUT_RISK_LABEL,
