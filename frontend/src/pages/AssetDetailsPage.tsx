@@ -280,18 +280,6 @@ function AnalysisTabs({
   );
 }
 
-// Sits under the whale tabs. Ownership and insider dealings are reference data kept
-// out of the score, and a famous fund's name next to a ticker reads as an endorsement
-// unless something says otherwise.
-function WhaleCaveat() {
-  return (
-    <p className="text-xs text-brand-muted-fg">
-      A big investor holding or trading a stock doesn't by itself mean it's a good
-      investment.
-    </p>
-  );
-}
-
 function SectionCard({
   title,
   description,
@@ -940,15 +928,12 @@ export default function AssetDetailsPage() {
       )}
 
       {recommendation && tab === "insiders" && (
-        <div className="space-y-3">
-          <WhaleWatching
-            ticker={asset.ticker}
-            showTradeDate
-            variant="asset"
-            showSummary
-          />
-          <WhaleCaveat />
-        </div>
+        <WhaleWatching
+          ticker={asset.ticker}
+          showTradeDate
+          variant="asset"
+          showSummary
+        />
       )}
     </div>
   );

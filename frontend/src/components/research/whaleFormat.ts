@@ -168,9 +168,11 @@ export function filingAge(asOf: string | null, now: Date = new Date()): string |
 // each kind the note was written from. Counted from the same SEC codes the backend uses
 // (P a purchase, S a sale, anything else routine pay admin), so the line and the note
 // cannot disagree. Every count is worded: none, one, several.
-export function dealingFigures(
+// Open-market purchases (P), open-market sales (S) and everything else, which is pay
+// or paperwork. Shared by the figures line and the stock page's tiles.
+export function dealingCounts(
   transactions: { transaction_code?: string | null }[],
-): string {
+): { purchases: number; sales: number; routine: number } {
   let purchases = 0;
   let sales = 0;
   let routine = 0;
@@ -180,6 +182,13 @@ export function dealingFigures(
     else if (code === "S") sales += 1;
     else routine += 1;
   }
+  return { purchases, sales, routine };
+}
+
+export function dealingFigures(
+  transactions: { transaction_code?: string | null }[],
+): string {
+  const { purchases, sales, routine } = dealingCounts(transactions);
   const count = (n: number, one: string, many: string) =>
     n === 0 ? `no ${many}` : `${n} ${n === 1 ? one : many}`;
   const parts = [

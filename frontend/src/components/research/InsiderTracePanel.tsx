@@ -13,9 +13,11 @@ import { dealingFigures } from "./whaleFormat";
 interface Props {
   ticker: string;
   transactions: WhaleTransactionDTO[];
+  /** The counts line; off where the same counts sit in tiles above the box. */
+  showFigures?: boolean;
 }
 
-export function InsiderTracePanel({ ticker, transactions }: Props) {
+export function InsiderTracePanel({ ticker, transactions, showFigures = true }: Props) {
   const { trace, isLoading, error } = useWhaleTrace(ticker, "insiders");
 
   return (
@@ -27,7 +29,7 @@ export function InsiderTracePanel({ ticker, transactions }: Props) {
       fallbackHeading="Latest insider filings"
       ageTitle="Insiders report their dealings in filings after the trade, so part of any move may already have happened."
       badge="Insider filings"
-      figures={dealingFigures(transactions)}
+      figures={showFigures ? dealingFigures(transactions) : undefined}
       footnote={{
         model:
           "Written by AI from this stock's latest insider filings. It describes what insiders did, not what you should do.",
