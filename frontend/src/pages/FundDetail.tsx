@@ -61,9 +61,6 @@ import {
   DETAIL_OBJECTIVE_ATTRIB,
   DETAIL_OBJECTIVE_TITLE,
   DETAIL_PLATFORM_FEE_NOTE,
-  DETAIL_PROVENANCE_GAPS,
-  DETAIL_PROVENANCE_MANUAL,
-  DETAIL_PROVENANCE_TITLE,
   DETAIL_REG28_LABEL,
   DETAIL_REG28_NO,
   DETAIL_REG28_YES,
@@ -348,17 +345,6 @@ export function FundDetailView({
 
       {after}
 
-      {/* ── The statements the documents themselves require ──
-          Outside the tabs, on every tab. A page listing what a fund costs and
-          what it returned, with the statement that we are not licensed to
-          advise on it one click away, is the state the funds-list footer was
-          un-gated to prevent. The provenance block is in "The document"
-          because it explains the data; these two are not explanations. */}
-      <footer className="max-w-[90ch] px-1 pt-2 text-xs leading-relaxed text-brand-muted-fg">
-        <p>
-          {fund.disclaimer} {fund.not_licensed}
-        </p>
-      </footer>
     </Shell>
   );
 }
@@ -853,7 +839,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
   return (
     <div className="bento-grid grid-flow-row-dense">
       <Tile span={SPAN.wide} title={DETAIL_FACTS_TITLE}>
-        <dl className="flex flex-col gap-2.5">
+        <dl className="flex flex-col divide-y divide-forest-900/8">
           {/* The management company, not just the brand: it is the party that
               issues the fact sheet, and for a co-named boutique fund the two
               are different companies. */}
@@ -877,9 +863,9 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
             {fund.snapshot_history.map((entry) => (
               <li
                 key={entry.as_of}
-                className="flex items-center justify-between gap-3 border-b border-brand-border/30 py-1.5 text-xs last:border-0"
+                className="flex items-center justify-between gap-3 border-b border-forest-900/8 py-2.5 text-sm last:border-0"
               >
-                <span className="tabular-nums text-forest-600">
+                <span className="tabular-nums text-forest-900">
                   {formatAsAt(entry.as_of) ?? entry.as_of}
                 </span>
                 {entry.mdd_url && (
@@ -887,7 +873,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
                     href={entry.mdd_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1 font-semibold text-brand-primary hover:underline"
+                    className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
                   >
                     {FACT_SHEET_ACTION}
                     <ExternalLink className="h-3 w-3" />
@@ -900,12 +886,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
         </Tile>
       )}
 
-      {provenance ?? (
-        <Tile span={SPAN.full} title={DETAIL_PROVENANCE_TITLE}>
-          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_MANUAL}</p>
-          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_GAPS}</p>
-        </Tile>
-      )}
+      {provenance}
     </div>
   );
 }
@@ -959,11 +940,11 @@ function Quote({ label, children }: { label: string; children: React.ReactNode }
 /** A label and its value on one line, for a tile's list of published facts. */
 function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-[11px] text-forest-500">{label}</dt>
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="text-xs text-brand-muted-fg">{label}</dt>
       <dd
-        className={`min-w-0 text-right text-xs font-semibold text-brand-primary ${
-          mono ? "font-mono text-[11px]" : ""
+        className={`min-w-0 text-right text-sm font-semibold text-forest-900 ${
+          mono ? "font-mono tabular-nums" : ""
         }`}
       >
         {value}
