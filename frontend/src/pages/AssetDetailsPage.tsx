@@ -1,8 +1,9 @@
-import LearnMore from '../components/learning/LearnMore';
+import LearnPopover from '../components/learning/LearnPopover';
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
-  ArrowLeft,
+  ChevronRight,
+  Sparkles,
   BrainCircuit,
   Flame,
   BarChart3,
@@ -33,7 +34,8 @@ import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
 import { carriedNews } from "../components/research/NewsArticles";
 import { formatDay } from "../components/research/sentimentDays";
 import { MarketClock } from "../components/research/MarketClock";
-import { ListingLine } from "../components/research/ListingLine";
+import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
+import { useAskChatbotStore } from "../store/askChatbotStore";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
 import StockMarketNewsTab from "../components/macroNews/StockMarketNewsTab";
@@ -268,15 +270,12 @@ function AnalysisTabs({
     <div
       role="tablist"
       aria-label="Analysis sections"
-      // self-start, not just inline-flex: the parent is a flex column, and a flex
-      // child stretches to the full line width unless told otherwise, which turned
-      // the pill into a full page-width bar.
-      // One row that scrolls sideways rather than wrapping: the five labels are
-      // about 450px against 361px of phone, and wrapped they made a two-row box
-      // whose rounded-full ends no longer read as one pill. max-w-full caps the
-      // pill at the column so the overflow scrolls inside it, and the tab cut off
-      // at the right edge says there is more.
-      className="self-start inline-flex max-w-full items-center overflow-x-auto no-scrollbar rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5"
+      // The shared tab pill. self-start, not just inline-flex: the parent is a flex
+      // column, and a flex child stretches to the full line width unless told
+      // otherwise. .as-tabs keeps one row that scrolls sideways on a phone rather
+      // than wrapping into a two-row box, and the tab cut off at the right edge
+      // says there is more.
+      className="as-tabs self-start"
     >
       {tabs.map((tab) => (
         <button
@@ -288,11 +287,7 @@ function AnalysisTabs({
             // A tab half off the edge comes fully into view once chosen.
             event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}
-          className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-            value === tab.key
-              ? "bg-brand-accent text-brand-fg"
-              : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className="as-tab shrink-0"
         >
           {tab.label}
         </button>
@@ -468,6 +463,7 @@ export default function AssetDetailsPage() {
   // Read once per mount, not on every render: it only changes by navigating to a
   // different hub page, which unmounts this page anyway.
   const [backTo] = useState(readLastHubPage);
+  const openAskChatbot = useAskChatbotStore((s) => s.openWithPrompt);
 
   // Called before the early returns below, as every hook must be. The history loads
   // independently of the AI run, so the card renders without waiting on it and the
@@ -578,39 +574,35 @@ export default function AssetDetailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
-      <Link
-        to={backTo}
-        className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to {HUB_PAGE_LABELS[backTo]}
-      </Link>
-
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h1 className="text-3xl lg:text-4xl font-bold text-brand-fg">{asset.ticker}</h1>
-            <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary max-w-full truncate">
-              {asset.name}
-            </span>
-            {/* Right aligned from sm up, so on a wide header it reads as a status strip
-                opposite the ticker. On a phone it wraps onto its own line under the name
-                instead of being squeezed against it. */}
-            <div className="w-full sm:w-auto sm:ml-auto">
+      {/* Detail header: where you came from, what the stock is, the one figure
+          that matters most, and what you can do with it. */}
+      <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+        <div className="min-w-0 flex-[1_1_360px]">
+          <nav aria-label="Breadcrumb" className="mb-2.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand-muted-fg">
+            <Link to={backTo} className="font-bold text-forest-700 hover:underline">
+              {HUB_PAGE_LABELS[backTo]}
+            </Link>
+            <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            <span aria-current="page">{asset.ticker}</span>
+          </nav>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-forest-900 text-balance">
+            {asset.name || asset.ticker}
+          </h1>
+          {/* Either listing fact is left out when unknown: no universe yet, or an
+              exchange the lookup could not find. Nothing is better than a guess. */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-brand-muted-fg">
+            <span className="chip chip-line">{asset.ticker}</span>
+            {asset.universe?.trim() && (
+              <span className="chip" title={`Part of the ${asset.universe} universe`}>{asset.universe}</span>
+            )}
+            {exchangeName && <span title={`Listed on the ${exchangeName}`}>{exchangeName}</span>}
+            {/* The dot travels with the clock, so a wrapped row never ends on it,
+                and drops on a phone, where the clock always wraps to its own line. */}
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden="true" className="hidden sm:inline">·</span>
               <MarketClock />
-            </div>
+            </span>
           </div>
-          <ListingLine universe={asset.universe} exchange={exchangeName} className="mb-3" />
-          {/* Guarded: `recommendation` is nullable (see the checks below and the
-              optional chaining above), and an asset only has one once it has
-              reached a top 5. Dereferencing it here crashed the whole page for
-              every asset that never has — 48 of 88 rows at the time of writing,
-              both seeds and discovered names. price_at_run itself can also be null
-              when the price lookup fails. */}
-          <p className="text-2xl lg:text-3xl font-mono text-brand-fg">
-            {typeof recommendation?.price_at_run === "number"
-              ? `R ${recommendation.price_at_run.toFixed(2)}`
-              : "Price unavailable"}
-          </p>
           {/* Same cached one-liner the whale-watching company panel shows, so an
               asset reads the same way wherever you meet it. Absent for assets
               whose description hasn't been generated yet. */}
@@ -619,22 +611,51 @@ export default function AssetDetailsPage() {
               {asset.description}
             </p>
           )}
-          {/* Opens Compare with this stock already in the first column and the
-              search ready for the next. Every stock can be compared, analysed or
-              not: the page's price and tone rows do not depend on a run. */}
-          {COMPARE_ENABLED && (
-            <Link
-              to={compareHref("stocks", [asset.ticker])}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-card px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
-            >
-              <Columns2 className="h-4 w-4 text-brand-primary" />
-              Compare with…
-            </Link>
-          )}
         </div>
 
-        <LearnMore context={`stock.${tab}`} />
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          {/* Guarded: `recommendation` is nullable, and an asset only has one once
+              it has reached a top 5. Dereferencing it here crashed the whole page
+              for every asset that never has — 48 of 88 rows at the time of
+              writing, both seeds and discovered names. price_at_run itself can
+              also be null when the price lookup fails. */}
+          {typeof recommendation?.price_at_run === "number" ? (
+            <div className="lg:text-right">
+              <p className="text-2xl lg:text-3xl font-bold tabular-nums tracking-[-0.02em] text-forest-900">
+                R {recommendation.price_at_run.toFixed(2)}
+              </p>
+              <p className="text-xs text-brand-muted-fg">Price at the last AI run</p>
+            </div>
+          ) : (
+            <p className="text-sm text-brand-muted-fg">Price unavailable</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <AddToWatchlistButton ticker={asset.ticker} size="button" />
+            {/* Opens Compare with this stock already in the first column and the
+                search ready for the next. Every stock can be compared, analysed or
+                not: the page's price and tone rows do not depend on a run. */}
+            {COMPARE_ENABLED && (
+              <Link to={compareHref("stocks", [asset.ticker])} className="as-btn as-btn-sm as-btn-secondary">
+                <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Compare
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => openAskChatbot(`Tell me about ${asset.ticker}`)}
+              aria-label={`Ask AlphaSwarm about ${asset.ticker}`}
+              className="as-btn as-btn-sm as-btn-text px-2"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {/* "Ask" alone on a phone keeps the four actions on one row. */}
+              Ask<span className="hidden sm:inline">&nbsp;about {asset.ticker}</span>
+            </button>
+            <LearnPopover context={`stock.${tab}`} />
+          </div>
+        </div>
+      </header>
 
+      <div className="flex flex-col gap-6">
         {recommendation ? (
           <AnalysisTabs
             value={tab}
