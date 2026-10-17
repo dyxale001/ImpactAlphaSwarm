@@ -280,8 +280,12 @@ export default function FundsPage() {
         role="tabpanel"
         aria-labelledby="funds-tab-browse"
         hidden={tab !== "browse"}
-        className="as-card mt-5 flex flex-col gap-4 p-4 sm:p-6"
+        className="mt-5 flex flex-col gap-5"
       >
+        {/* The filters in a card of their own, and the funds they narrow on the
+            page beneath, as the conservative design laid it out: fund cards are
+            never nested inside another card. */}
+        <div className="as-card flex flex-col gap-4 p-4 sm:p-6">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{BROWSE_TITLE}</h2>
           <p className="max-w-[60ch] text-xs leading-relaxed text-brand-muted-fg">{BROWSE_LEAD}</p>
@@ -303,6 +307,7 @@ export default function FundsPage() {
             onPatch={patch}
             onClearAll={clearAll}
           />
+        </div>
         </div>
 
         {isLoading && <FundsSkeleton />}

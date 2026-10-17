@@ -69,8 +69,8 @@ export default function MyFundsPanel({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{MY_FUNDS_TITLE}</h2>
-        <p className="max-w-[70ch] text-xs leading-relaxed text-brand-muted-fg">{MY_FUNDS_LEAD}</p>
-        <p className="flex max-w-[70ch] items-start gap-1.5 text-xs leading-relaxed text-brand-muted-fg">
+        <p className="text-xs leading-relaxed text-brand-muted-fg">{MY_FUNDS_LEAD}</p>
+        <p className="flex items-start gap-1.5 text-xs leading-relaxed text-brand-muted-fg">
           <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           {MY_FUNDS_PRIVATE_NOTE}
         </p>

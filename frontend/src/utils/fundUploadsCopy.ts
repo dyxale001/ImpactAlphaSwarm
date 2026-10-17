@@ -6,12 +6,9 @@
 export const MY_FUNDS_TAB = "My funds";
 
 export const MY_FUNDS_TITLE = "Your uploaded funds";
-export const MY_FUNDS_LEAD =
-  "Following a fund the catalogue does not cover? Upload its fact sheet (the Minimum Disclosure Document). " +
-  "AI reads it, you check every figure it was unsure of, and the fund is kept here, visible only to you.";
+export const MY_FUNDS_LEAD = "Upload a fund's fact sheet to see it laid out like the funds we cover.";
 export const MY_FUNDS_PRIVATE_NOTE =
-  "Uploaded funds stay private to your account. They are never added to the catalogue or to anyone's matches, " +
-  "and the PDF itself is not kept once it has been read.";
+  "Uploaded funds stay private to your account, and the PDF isn't kept once it's been read.";
 
 export const DROPZONE_TITLE = "Upload a fact sheet";
 export const DROPZONE_HINT = "Drop a PDF here, or choose one. Fact sheets up to 10 MB.";
