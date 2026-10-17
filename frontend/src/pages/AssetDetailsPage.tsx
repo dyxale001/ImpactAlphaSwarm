@@ -802,7 +802,6 @@ export default function AssetDetailsPage() {
                   selectedDay={activeDay}
                   onSelectDay={setSelectedDay}
                   selectHint="Choose a day to read what happened"
-                  tone="light"
                 />
                 {/* Held back until the chart itself has something to show. While the
                     history is loading or still being built the chart draws its own
