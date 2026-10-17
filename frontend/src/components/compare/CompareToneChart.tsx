@@ -70,15 +70,15 @@ export default function CompareToneChart({
   const rows = toneRows(series, source);
   const plotted = series.some((s) => rows.some((r) => typeof r[s.ticker] === "number"));
 
-  // ds-allow-hardcode:start text-[11px] is the platform's caption size, as on the price and quant charts
+  // ds-allow-hardcode:start text-xs is the platform's caption size, as on the price and quant charts
   return (
     <figure className="hero-card overflow-hidden p-4">
       <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <span className="text-xs font-semibold uppercase tracking-widest text-brand-accent">
+        <span className="text-sm font-bold text-white">
           {TONE_CHART_TITLE}
         </span>
         <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             {series.map((s, i) => (
               <span key={s.ticker} className="flex items-center gap-1.5">
                 <Swatch index={i} />
@@ -108,7 +108,7 @@ export default function CompareToneChart({
               <XAxis
                 dataKey="date"
                 tickFormatter={(d: string) => formatDay(d)}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -118,7 +118,7 @@ export default function CompareToneChart({
                 domain={[0, 100]}
                 ticks={[0, 50, 100]}
                 width={32}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -132,7 +132,7 @@ export default function CompareToneChart({
                       className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white shadow-lg"
                       style={{ background: CHART_TOOLTIP_GROUND }}
                     >
-                      <p className="mb-1 text-[11px] text-white/60">{formatDay(String(label))}</p>
+                      <p className="mb-1 text-xs text-white/60">{formatDay(String(label))}</p>
                       {series.map((s, i) => {
                         const v = payload.find((p) => p.dataKey === s.ticker)?.value;
                         const score = typeof v === "number" ? v : null;
@@ -180,7 +180,7 @@ export default function CompareToneChart({
           {isSeeding ? TONE_CHART_BUILDING : TONE_CHART_EMPTY}
         </p>
       )}
-      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: AXIS_TEXT }}>
+      <p className="mt-2 text-xs leading-relaxed" style={{ color: AXIS_TEXT }}>
         {TONE_CHART_NOTE}
       </p>
     </figure>

@@ -1,9 +1,7 @@
-import LearnMore from '../components/learning/LearnMore';
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, type ComponentType, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, CandlestickChart, Columns2, Info } from "lucide-react";
-import AboutCompareModal from "../components/compare/AboutCompareModal";
-import CompareMotif from "../components/compare/CompareMotif";
+import { Building2, CandlestickChart, Columns2, Plus } from "lucide-react";
+import AboutCompare from "../components/compare/AboutCompare";
 import ComparePicks, { type Pick } from "../components/compare/ComparePicks";
 import StockComparison from "../components/compare/StockComparison";
 import FundComparison, { fundColumn } from "../components/compare/FundComparison";
@@ -27,7 +25,6 @@ import {
 } from "../utils/compareUrl";
 import type { QuantHorizon } from "../data/quantExplainers";
 import {
-  ABOUT_BUTTON,
   COMPARE_EYEBROW,
   COMPARE_LEAD,
   COMPARE_TITLE,
@@ -67,8 +64,6 @@ export default function ComparePage() {
   const [params, setParams] = useSearchParams();
   const state = parseCompareParams(params);
   const kind: CompareKind = FUNDS_ENABLED ? state.kind : "stocks";
-  const [showAbout, setShowAbout] = useState(false);
-  const closeAbout = useCallback(() => setShowAbout(false), []);
 
   // Registered as a hub, so a stock page opened from a column's ticker says
   // "Back to Compare" and returns to this exact comparison.
@@ -88,49 +83,37 @@ export default function ComparePage() {
   };
   const remove = (id: string) => update({ ids: state.ids.filter((x) => x !== id) });
 
+  // What to compare, set in the picker's toolbar beside the picks it governs.
+  const kindSwitch = FUNDS_ENABLED ? (
+    <Tabs
+      label="What to compare"
+      value={kind}
+      onChange={(v) => setKind(v as CompareKind)}
+      options={[
+        { id: "stocks", label: KIND_LABELS.stocks, Icon: CandlestickChart },
+        { id: "funds", label: KIND_LABELS.funds, Icon: Building2 },
+      ]}
+    />
+  ) : null;
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 pb-20 pt-6 animate-fade-in-up sm:px-6 lg:px-8 lg:pt-10">
-      {/* ── Header ── */}
-      <div className="hero-card overflow-hidden px-5 pb-12 pt-8 sm:px-7 sm:pb-14">
-        <CompareMotif className="h-16 sm:h-full" />
-        <div className="relative">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-accent">
-            {COMPARE_EYEBROW}
-          </span>
-          <h1 className="mt-1 flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl">
-            <Columns2 className="h-7 w-7 shrink-0 text-brand-accent" />
-            {COMPARE_TITLE}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">{COMPARE_LEAD}</p>
-          {/* The same About pill as Market News, opening this page's explainer. */}
-          <button
-            type="button"
-            onClick={() => setShowAbout(true)}
-            aria-haspopup="dialog"
-            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden />
-            {ABOUT_BUTTON}
-          </button>
+      {/* ── Header ──
+          The same title card as Stocks and Funds: title and "About this page"
+          on top, no motif. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">{COMPARE_EYEBROW}</p>
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+              <Columns2 className="h-7 w-7 shrink-0 text-brand-accent" />
+              {COMPARE_TITLE}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">{COMPARE_LEAD}</p>
+          </div>
+          <AboutCompare fundsEnabled={FUNDS_ENABLED} learnContext={`compare.${kind}`} className="shrink-0 self-start" />
         </div>
       </div>
-
-      <AboutCompareModal open={showAbout} onClose={closeAbout} fundsEnabled={FUNDS_ENABLED} />
-
-      {/* ── What kind. The price window lives on the Overview chart it changes. ── */}
-      <LearnMore context={`compare.${kind}`} />
-
-      {FUNDS_ENABLED && (
-        <Tabs
-          label="What to compare"
-          value={kind}
-          onChange={(v) => setKind(v as CompareKind)}
-          options={[
-            { id: "stocks", label: KIND_LABELS.stocks, Icon: CandlestickChart },
-            { id: "funds", label: KIND_LABELS.funds, Icon: Building2 },
-          ]}
-        />
-      )}
 
       {kind === "stocks" ? (
         <StocksSide
@@ -139,9 +122,10 @@ export default function ComparePage() {
           onHorizon={(h) => update({ horizon: h })}
           onAdd={add}
           onRemove={remove}
+          kindSwitch={kindSwitch}
         />
       ) : (
-        <FundsSide ids={state.ids} onAdd={add} onRemove={remove} />
+        <FundsSide ids={state.ids} onAdd={add} onRemove={remove} kindSwitch={kindSwitch} />
       )}
     </div>
   );
@@ -153,7 +137,9 @@ function StocksSide({
   onHorizon,
   onAdd,
   onRemove,
+  kindSwitch,
 }: {
+  kindSwitch: ReactNode;
   ids: string[];
   horizon: QuantHorizon;
   onHorizon: (h: QuantHorizon) => void;
@@ -187,6 +173,7 @@ function StocksSide({
   return (
     <>
       <ComparePicks
+        kindSwitch={kindSwitch}
         picks={picks}
         onRemove={onRemove}
         search={
@@ -217,7 +204,9 @@ function FundsSide({
   ids,
   onAdd,
   onRemove,
+  kindSwitch,
 }: {
+  kindSwitch: ReactNode;
   ids: string[];
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
@@ -269,6 +258,7 @@ function FundsSide({
   return (
     <>
       <ComparePicks
+        kindSwitch={kindSwitch}
         picks={picks}
         onRemove={onRemove}
         search={
@@ -292,7 +282,7 @@ function FundsSide({
       {ids.length < 2 ? (
         <StartPanel title={ids.length === 1 ? START_ONE_MORE : START_TITLE_FUNDS} body={START_BODY_FUNDS} />
       ) : isLoading && loaded.length < ids.length ? (
-        <div className="soft-card h-72 animate-pulse" />
+        <div className="as-card h-72 animate-pulse" />
       ) : loaded.length >= 2 ? (
         <FundComparison funds={loaded} key={loaded.map((f) => fundColumn(f).id).join(",")} />
       ) : null}
@@ -312,22 +302,16 @@ function StartPanel({
   onPick?: (id: string) => void;
 }) {
   return (
-    <div className="rounded-[var(--radius-brand)] border border-dashed border-brand-border bg-brand-card/70 p-6 sm:p-8">
-      <h2 className="text-base font-semibold text-brand-fg">{title}</h2>
+    <div className="as-card p-6 sm:p-8">
+      <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{title}</h2>
       <p className="mt-1 max-w-xl text-sm leading-relaxed text-brand-muted-fg">{body}</p>
       {suggestions.length > 0 && onPick && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-            {FROM_WATCHLIST}
-          </span>
+          <span className="text-xs font-semibold text-brand-muted-fg">{FROM_WATCHLIST}</span>
           {suggestions.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => onPick(t)}
-              className="rounded-full border border-brand-border/60 bg-brand-card px-3 py-1 font-mono text-xs font-bold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
-            >
-              + {t}
+            <button key={t} type="button" onClick={() => onPick(t)} className="as-fchip">
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              {t}
             </button>
           ))}
         </div>
@@ -353,7 +337,7 @@ function Tabs({
     <div
       role="tablist"
       aria-label={label}
-      className="inline-flex flex-wrap items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1"
+      className="as-tabs as-tabs-sm shrink-0 self-start sm:self-auto"
     >
       {options.map((o) => (
         <button
@@ -362,9 +346,7 @@ function Tabs({
           role="tab"
           aria-selected={value === o.id}
           onClick={() => onChange(o.id)}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-            value === o.id ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className="as-tab"
         >
           {o.Icon && <o.Icon className="h-3.5 w-3.5" />}
           {o.label}

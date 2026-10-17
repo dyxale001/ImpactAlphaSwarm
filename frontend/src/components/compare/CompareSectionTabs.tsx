@@ -33,7 +33,7 @@ export default function CompareSectionTabs({
     <div
       role="tablist"
       aria-label="Comparison sections"
-      className="self-start inline-flex max-w-full items-center overflow-x-auto no-scrollbar rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5"
+      className="as-tabs self-start"
     >
       {COMPARE_TABS.map((tab) => (
         <button
@@ -47,9 +47,7 @@ export default function CompareSectionTabs({
             onChange(tab);
             event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}
-          className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-            value === tab ? "bg-brand-accent text-brand-fg" : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className="as-tab shrink-0"
         >
           {LABELS[tab]}
         </button>

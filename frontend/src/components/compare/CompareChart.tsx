@@ -73,10 +73,10 @@ export default function CompareChart({
   return (
     <figure className="hero-card overflow-hidden p-4">
       <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <span className="text-xs font-semibold uppercase tracking-widest text-brand-accent">
+        <span className="text-sm font-bold text-white">
           {CHART_TITLE}
         </span>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]" style={{ color: AXIS_TEXT }}>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: AXIS_TEXT }}>
           {series.map((s, i) => (
             <span key={s.ticker} className="flex items-center gap-1.5">
               <Swatch index={i} />
@@ -106,7 +106,7 @@ export default function CompareChart({
               <XAxis
                 dataKey="date"
                 tickFormatter={(d: string) => formatAxisDate(d, horizon)}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -115,7 +115,7 @@ export default function CompareChart({
               <YAxis
                 domain={domain}
                 width={48}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 tickFormatter={axisPercent}
                 axisLine={false}
                 tickLine={false}
@@ -130,7 +130,7 @@ export default function CompareChart({
                         className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white shadow-lg"
                         style={{ background: CHART_TOOLTIP_GROUND }}
                       >
-                      <p className="mb-1 text-[11px] text-white/60">{formatFullDate(String(label))}</p>
+                      <p className="mb-1 text-xs text-white/60">{formatFullDate(String(label))}</p>
                       {series.map((s, i) => {
                         const v = payload.find((p) => p.dataKey === s.ticker)?.value;
                         return (
@@ -169,7 +169,7 @@ export default function CompareChart({
           </ResponsiveContainer>
         )}
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: AXIS_TEXT }}>
+      <p className="mt-2 text-xs leading-relaxed" style={{ color: AXIS_TEXT }}>
         {CHART_NOTE}
       </p>
     </figure>

@@ -17,7 +17,6 @@ import {
 } from "../../utils/compareFunds";
 import {
   DIFFERS_MOST,
-  FUNDS_DISCLAIMER,
   FUND_COST_MEANING,
   FUND_HOLDINGS_MEANING,
   FUND_RETURNS_MEANING,
@@ -260,7 +259,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
         />
       </CompareGrid>
 
-      <p className="max-w-3xl text-[11px] leading-relaxed text-brand-muted-fg">{FUNDS_DISCLAIMER}</p>
     </div>
   );
 }

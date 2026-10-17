@@ -129,7 +129,7 @@ export default function FundSearch({
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={onKeyDown}
-          className="w-full rounded-full border border-brand-border/60 bg-brand-card py-2 pl-9 pr-9 text-sm text-brand-fg transition-colors placeholder:text-brand-muted-fg focus:border-brand-primary/50 focus:outline-none disabled:opacity-50"
+          className="h-10 w-full rounded-full border border-forest-900/15 bg-white pl-9 pr-9 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none disabled:opacity-50"
         />
         {query && (
           <button
@@ -154,7 +154,7 @@ export default function FundSearch({
               .filter((g) => g.funds.length)
               .map((g) => (
                 <div key={g.label}>
-                  <p className="sticky top-0 bg-brand-card px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+                  <p className="sticky top-0 bg-brand-card px-4 pb-1 pt-2.5 text-xs font-bold text-brand-muted-fg">
                     {g.label}
                   </p>
                   {g.funds.map((f) => {
@@ -224,7 +224,7 @@ function FundRow({
         {fund.jse_code && <span className="shrink-0 font-mono text-sm font-bold text-brand-fg">{fund.jse_code}</span>}
         <span className="min-w-0 truncate text-sm text-brand-fg">{fund.name}</span>
       </span>
-      <span className="text-[11px] text-brand-muted-fg">
+      <span className="text-xs text-brand-muted-fg">
         {[
           fund.vehicle ? (VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle) : null,
           fund.fund_house,

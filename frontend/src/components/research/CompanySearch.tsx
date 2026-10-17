@@ -133,7 +133,7 @@ export default function CompanySearch({
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={onKeyDown}
-          className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 disabled:opacity-50 transition-colors"
+          className="h-10 w-full rounded-full border border-forest-900/15 bg-white pl-9 pr-9 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none disabled:opacity-50"
         />
         {query && (
           <button
@@ -158,7 +158,7 @@ export default function CompanySearch({
               .filter((g) => g.assets.length)
               .map((g) => (
                 <div key={g.label}>
-                  <p className="sticky top-0 bg-brand-card px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
+                  <p className="sticky top-0 bg-brand-card px-4 pb-1 pt-2.5 text-xs font-bold text-brand-muted-fg">
                     {g.label}
                   </p>
                   {g.assets.map((a) => {
@@ -210,7 +210,7 @@ export default function CompanySearch({
                   {a.name}
                 </span>
                 {a.isNew && (
-                  <span className="ml-auto shrink-0 rounded-full bg-brand-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-primary">
+                  <span className="ml-auto shrink-0 rounded-full bg-brand-primary/15 px-1.5 py-0.5 text-xs font-semibold text-brand-primary">
                     New
                   </span>
                 )}
