@@ -15,6 +15,7 @@ import {
   VerdictChip,
 } from "./sourcePageControls";
 import { useSentimentSources } from "../../hooks/useSentimentSources";
+import { SOCIAL_HISTORY_DAYS } from "../../data/sentimentMethodology";
 import type { useSentimentHistory } from "../../hooks/useSentimentHistory";
 import type { SentimentHistoryPoint } from "../../services/api/analysis";
 
@@ -111,8 +112,11 @@ export default function NewsEvidencePanel({
         selectHint="Choose a day to read its articles"
       />
 
-      {!recommendation || !hasAnyArticles ? (
-        <EmptyStateCard message="No news articles were used in the latest analysis for this stock." />
+      {/* Only an absence of articles empties the page. The list and chart come from
+          the stored daily history, so requiring the latest run's recommendation as
+          well hid a week of stored coverage whenever that row was missing. */}
+      {!hasAnyArticles ? (
+        <EmptyStateCard message={`No news articles have been collected for this stock in the last ${SOCIAL_HISTORY_DAYS} days.`} />
       ) : (
         <>
           {/* The day's totals, beside a day total. Counting labels in the listed
