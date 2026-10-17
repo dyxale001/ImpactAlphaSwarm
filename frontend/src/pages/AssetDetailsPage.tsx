@@ -123,7 +123,7 @@ function AnchoredBar({
 // articles and posts inline, which made it long and duplicated pages that already do
 // the job properly.
 //
-// That route is a named, underlined link saying what it opens, not the row itself with
+// That route is a named lime link with an arrow saying what it opens (underlined on hover), not the row itself with
 // a chevron on it. A whole row that happens to navigate is only discoverable by
 // hovering it, which never happens on touch and rarely happens on a panel where
 // nothing else is interactive: the reader has to already suspect the link is there to
@@ -192,7 +192,7 @@ function ContributorRow({
           anywhere near it. */}
       <Link
         to={to}
-        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-lime-500 underline underline-offset-2 decoration-lime-500/50 transition-colors hover:text-lime-400 hover:decoration-lime-400"
+        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-lime-500 underline-offset-2 transition-colors hover:text-lime-400 hover:underline focus-visible:underline"
       >
         {linkText}
         <ArrowRight className="w-3 h-3 shrink-0" />
