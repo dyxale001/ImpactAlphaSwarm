@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BrainCircuit } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { WhaleTraceResponse } from "../../services/api/analysis";
 import { filingAge, formatDate } from "./whaleFormat";
 
@@ -20,8 +20,9 @@ interface Props {
   ageTitle: string;
   /** The lime pill on the right, naming the source: "13F filing", "Form 4 filings". */
   badge: string;
-  /** The figures line, from data the tab already has, so it cannot disagree with it. */
-  figures: ReactNode;
+  /** The figures line, from data the tab already has, so it cannot disagree with it.
+   *  Left out where the same figures already sit in tiles right above the box. */
+  figures?: ReactNode;
   footnote: { model: string; template: string };
 }
 
@@ -42,49 +43,37 @@ export function WhaleSummaryBox({
   const age = filingAge(trace?.as_of ?? null);
 
   return (
-    // The neon lime border and forest toned ground are the reasoning trace boxes' own
-    // styling, the same frame the day summary and the Quant trace use. p-3 on a
-    // phone, as on those: this box is the middle of three nested frames on the
-    // asset page, and the summary is the text the whole tab is read for.
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <h4 className="text-sm font-semibold text-brand-fg">
-            {trace?.as_of
-              ? `${headingPrefix} ${formatDate(trace.as_of)}`
-              : fallbackHeading}
-          </h4>
+    // The soft box with the lime Sparkles mark that every AI-written paragraph on the
+    // stock page uses: the reasoning trace, the day summary and the Quant trace.
+    <div className="as-inset p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-forest-900">
+          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          {trace?.as_of
+            ? `${headingPrefix} ${formatDate(trace.as_of)}`
+            : fallbackHeading}
           {age && (
-            <span
-              className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-primary text-white font-semibold"
-              title={ageTitle}
-            >
+            <span className="chip chip-dark" title={ageTitle}>
               {age}
             </span>
           )}
-        </div>
-        <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-accent text-brand-primary font-semibold">
-          {badge}
-        </span>
+        </p>
+        <span className="chip chip-accent">{badge}</span>
       </div>
 
-      <p className="text-[11px] text-brand-muted-fg mt-1">{figures}</p>
+      {figures ? <p className="mt-1 text-xs text-brand-muted-fg">{figures}</p> : null}
 
-      {/* The AI summary box. The brain logo lives here rather than on the heading, so
-          the machine-written prose is the thing marked as machine-written. */}
-      <div className="mt-3 rounded-xl border border-brand-border/60 bg-brand-surface/70 p-3">
-        <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-          <BrainCircuit className="w-3 h-3 text-brand-primary" />
-          AI summary
-        </div>
+      <div className="mt-3">
         {isLoading ? (
           <Skeleton />
         ) : error ? (
           <p className="text-sm text-brand-muted-fg italic">{error}</p>
         ) : trace?.trace ? (
           <>
-            <p className="text-sm text-brand-fg leading-relaxed">{trace.trace}</p>
-            <p className="text-[10px] text-brand-muted-fg mt-2">
+            <p className="text-sm text-forest-900 leading-relaxed">{trace.trace}</p>
+            <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
               {trace.source === "template" ? footnote.template : footnote.model}
             </p>
           </>

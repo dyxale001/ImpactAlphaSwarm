@@ -67,7 +67,7 @@ export function SummaryStrip({
   }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <dl className={`grid grid-cols-2 gap-2 ${pills.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
       {pills.map((pill) => (
         <div key={pill.label} className="as-inset flex flex-col gap-1 p-3 sm:p-4">
           <dt className="text-xs text-brand-muted-fg">{pill.label}</dt>

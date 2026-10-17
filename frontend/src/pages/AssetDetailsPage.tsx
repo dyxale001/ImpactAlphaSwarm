@@ -927,15 +927,12 @@ export default function AssetDetailsPage() {
       {/* Mounted only while the tab is showing, so the holders are fetched on demand,
           the same way the Quant tab gates its price history. */}
       {recommendation && tab === "investors" && (
-        <div className="space-y-3">
-          <InstitutionalOwners
-            ticker={asset.ticker}
-            limit={5}
-            variant="asset"
-            showSummary
-          />
-          <WhaleCaveat />
-        </div>
+        <InstitutionalOwners
+          ticker={asset.ticker}
+          limit={5}
+          variant="asset"
+          showSummary
+        />
       )}
 
       {recommendation && tab === "news" && MACRO_NEWS_ENABLED && (
