@@ -838,23 +838,6 @@ export default function AssetsPage() {
         </section>
       ) : null}
 
-      {/* Disclaimer Footer */}
-      <div className="mt-12 pt-8 border-t border-brand-border/30">
-        <div className="as-inset p-4">
-          <p className="text-xs text-brand-muted-fg leading-relaxed">
-            <strong className="text-brand-fg block mb-2">Disclaimer:</strong>
-            AlphaSwarm is an AI-powered analytical tool designed for
-            informational and educational purposes only. Every figure shown is a
-            measurement of public data produced by automated analysis, and the
-            ordering of this list reflects those measurements plus a weighting
-            we choose and disclose. Nothing here constitutes professional
-            financial, investment or legal advice, and nothing predicts future
-            prices. All trading involves risk; past performance is not
-            indicative of future results. Please consult with a licensed
-            financial advisor before making any investment decisions.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
