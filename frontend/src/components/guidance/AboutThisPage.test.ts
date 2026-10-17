@@ -100,11 +100,18 @@ it.each([
   let found = false;
   function walk(node: ts.Node) {
     if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(a => ts.isJsxAttribute(a) && a.name.getText(sf) === 'className' && a.initializer?.getText(sf).includes('hero-card'))) {
-      if (node.getText(sf).includes(`<AboutThisPage page="${page}"`)) found = true;
+      const trigger = page === 'funds' ? '{FUND_ABOUT_BUTTON}' : `<AboutThisPage page="${page}"`;
+      if (node.getText(sf).includes(trigger)) found = true;
     }
     ts.forEachChild(node, walk);
   }
-  walk(sf); expect(found).toBe(true); expect(source.match(/<AboutThisPage /g)).toHaveLength(1);
+  walk(sf); expect(found).toBe(true);
+  if (page === 'funds') {
+    expect(source.match(/<AboutThisPage /g) ?? []).toHaveLength(0);
+    expect(source.match(/<AboutFundModal /g)).toHaveLength(1);
+  } else {
+    expect(source.match(/<AboutThisPage /g)).toHaveLength(1);
+  }
 });
 it('restores the actual trigger even when pointer activation did not focus it', async () => {
   const trigger = await mount();

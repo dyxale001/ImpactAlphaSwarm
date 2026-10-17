@@ -1,12 +1,17 @@
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { remarkArticleTitle } from "../../utils/learningArticleTitle";
 import ReactMarkdown, { type Components } from "react-markdown";
 
-const markdownComponents: Components = {
-  h1: ({ children }) => (
+function ArticleHeading({ children }: { children?: ReactNode }) {
+  return (
     <h1 className="mt-2 rounded-2xl border border-brand-accent/60 bg-brand-accent/15 px-5 py-5 text-2xl font-semibold tracking-tight text-brand-primary md:text-3xl">
       {children}
     </h1>
-  ),
+  );
+}
+
+const markdownComponents: Components = {
+  h1: ArticleHeading,
 
   h2: ({ children }) => (
     <h2 className="mt-8 border-l-4 border-brand-accent pl-4 text-xl font-semibold tracking-tight text-brand-primary md:text-2xl first:mt-0">
@@ -77,21 +82,21 @@ const markdownComponents: Components = {
 
     if (isBlockCode || className?.includes("language-")) {
       return (
-        <code className="block overflow-x-auto rounded-2xl border border-brand-border/60 bg-brand-forest-950 px-4 py-3 font-mono text-[13px] leading-7 text-brand-bg">
+        <code className="block overflow-x-auto rounded-2xl border border-brand-border/60 bg-brand-bg px-4 py-3 font-mono text-[13px] leading-7 text-brand-fg">
           {children}
         </code>
       );
     }
 
     return (
-      <code className="rounded-md border border-brand-accent/60 bg-brand-accent/15 px-1.5 py-0.5 font-mono text-[0.92em] text-brand-primary">
+      <code className="rounded-md border border-brand-accent/60 bg-brand-accent/15 px-1.5 py-0.5 font-mono text-[0.92em] text-brand-fg">
         {children}
       </code>
     );
   },
 
   pre: ({ children }) => (
-    <pre className="my-8 overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-forest-950 shadow-sm">
+    <pre className="my-8 overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-bg text-brand-fg shadow-sm">
       {children}
     </pre>
   ),
@@ -129,21 +134,23 @@ const markdownComponents: Components = {
 
 type MarkdownRendererProps = {
   content: string;
-  afterHeading?: { offset: number; content: ReactNode };
+  articleTitle?: { title: string; afterTitle: ReactNode };
 };
 
-export default function MarkdownRenderer({ content, afterHeading }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, articleTitle }: MarkdownRendererProps) {
   const components = { ...markdownComponents };
-  if (afterHeading) {
-    // Insert alongside the rendered heading, without splitting or rewriting
-    // Markdown: reference links and subsequent headings keep their context.
-    for (const tag of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
-      const Heading = markdownComponents[tag] ?? tag;
-      components[tag] = ({ node, ...props }) => <>
-        {createElement(Heading, props)}
-        {node?.position?.start.offset === afterHeading.offset && afterHeading.content}
-      </>;
-    }
+  if (articleTitle) {
+    components.h1 = ({ node, ...props }) => <>
+      <ArticleHeading>{props.children}</ArticleHeading>
+      {node?.properties?.["data-article-title"] && articleTitle.afterTitle}
+    </>;
   }
-  return <ReactMarkdown components={components}>{content}</ReactMarkdown>;
+  return (
+    <ReactMarkdown
+      components={components}
+      remarkPlugins={articleTitle ? [[remarkArticleTitle, { title: articleTitle.title }]] : []}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
