@@ -102,10 +102,10 @@ const RSI_SCALE: Band[] = [
   { key: "overbought", name: "Overbought", range: "Above 70", from: 70, to: 100 },
 ];
 const BETA_SCALE: Band[] = [
-  { key: "inverse", name: "Moves opposite", range: "Below 0", from: -1, to: 0 },
-  { key: "low", name: "Moves less", range: "0 to 0.8", from: 0, to: 0.8 },
+  { key: "inverse", name: "Opposite", range: "Below 0", from: -1, to: 0 },
+  { key: "low", name: "Less", range: "0 to 0.8", from: 0, to: 0.8 },
   { key: "market", name: "In step", range: "0.8 to 1.2", from: 0.8, to: 1.2 },
-  { key: "high", name: "Moves more", range: "Above 1.2", from: 1.2, to: 2.5 },
+  { key: "high", name: "More", range: "Above 1.2", from: 1.2, to: 2.5 },
 ];
 
 // A context reading on its band strip: the stock's band filled, a marker where the
@@ -153,7 +153,7 @@ function BandCard({
             {bands.map((b, i) => (
               <div
                 key={b.key}
-                className={`flex h-8 min-w-0 flex-1 items-center justify-center rounded-lg px-1 text-center text-[11px] font-semibold leading-tight ${
+                className={`flex h-8 min-w-0 flex-1 items-center justify-center rounded-lg px-1 text-center text-xs font-semibold leading-tight ${
                   i === index ? "bg-forest-700 text-white" : "bg-white text-brand-muted-fg"
                 }`}
               >
@@ -168,7 +168,7 @@ function BandCard({
         </div>
         <div className="mt-2 flex gap-1" aria-hidden="true">
           {bands.map((b) => (
-            <span key={b.key} className="min-w-0 flex-1 text-center text-[11px] tabular-nums text-brand-muted-fg">{b.range}</span>
+            <span key={b.key} className="min-w-0 flex-1 text-center text-xs tabular-nums text-brand-muted-fg">{b.range}</span>
           ))}
         </div>
       </div>

@@ -335,7 +335,7 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
             columns to establish. */}
         {closure ? (
           <span
-            className="font-normal rounded-full px-1.5 py-px text-[10px] whitespace-nowrap"
+            className="font-normal rounded-full px-1.5 py-px text-xs whitespace-nowrap"
             style={{ background: "rgba(255,255,255,0.1)", color: AXIS_TEXT }}
             title={
               closure.kind === "holiday"
@@ -401,7 +401,7 @@ function TrendTooltip({ active, payload, variant = "social" }: any) {
           whole thing feel crowded, and it was the least load bearing thing in it: the
           social page lists a day's posts properly when you click its bar. */}
       {point.score !== null && (point.bullish > 0 || point.bearish > 0) ? (
-        <div className="mt-1.5 text-[11px]" style={{ color: AXIS_TEXT }}>
+        <div className="mt-1.5 text-xs" style={{ color: AXIS_TEXT }}>
           {point.bullish} bullish, {point.bearish} bearish
         </div>
       ) : null}
@@ -587,7 +587,7 @@ export function SentimentTrendChart({
               <XAxis
                 dataKey="date"
                 tickFormatter={formatDay}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -604,7 +604,7 @@ export function SentimentTrendChart({
                 domain={[0, 100]}
                 ticks={[0, 50, 100]}
                 width={AXIS_WIDTH}
-                tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -755,7 +755,7 @@ export function SentimentTrendChart({
             light page behind this card, and the neutral line is white at 28%, which
             on white is nothing at all. */}
         <div
-          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-[11px]"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs"
           style={{ color: AXIS_TEXT }}
         >
           <span className="flex items-center gap-1.5">

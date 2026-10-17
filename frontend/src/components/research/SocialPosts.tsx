@@ -143,7 +143,7 @@ export function SocialPostRow({
         <p className="text-sm text-brand-fg break-words line-clamp-3">
           <PostText text={p.text} ticker={ticker} />
         </p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-brand-muted-fg">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-brand-muted-fg">
           <span className="font-mono">{p.date || "—"}</span>
           <span className="min-w-0 truncate">
             {p.author ? `@${p.author}` : "StockTwits"}
@@ -174,20 +174,20 @@ export function SocialPostRow({
       <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className="mt-0.5 grid h-9 w-9 shrink-0 select-none place-items-center rounded-full text-[11px] font-bold text-white"
+          className="mt-0.5 grid h-9 w-9 shrink-0 select-none place-items-center rounded-full text-xs font-bold text-white"
           style={{ background: `hsl(${hue} 42% 42%)` }}
         >
           {avatarInitials(p.author)}
         </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
             <span className="font-semibold text-brand-fg">{handle}</span>
             <span className="text-brand-muted-fg">· StockTwits</span>
             {when && <span className="text-brand-muted-fg">· {when}</span>}
             {tag && (
               <span
-                className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tag.cls}`}
+                className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${tag.cls}`}
               >
                 {tag.Icon && <tag.Icon className="h-3 w-3" />}
                 {tag.label}
@@ -195,7 +195,7 @@ export function SocialPostRow({
             )}
           </div>
 
-          <p className="mt-1.5 break-words text-[15px] leading-relaxed text-brand-fg">
+          <p className="mt-1.5 break-words text-sm leading-relaxed text-brand-fg">
             <PostText text={p.text} ticker={ticker} />
           </p>
 
@@ -205,7 +205,7 @@ export function SocialPostRow({
               the avatar have taken theirs on a 360px phone. Unwrapped, the counts
               squashed and "of score" spilled past the card. The influence figure
               keeps its ml-auto, so on a wide screen the row is unchanged. */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-brand-muted-fg">
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-brand-muted-fg">
             <span className="flex items-center gap-1.5" title="Likes">
               <Heart className="h-4 w-4" />
               {p.likes ?? 0}
@@ -283,7 +283,7 @@ export default function SocialPosts({
     <div className="space-y-2">
       {/* Sentence case at footnote weight, matching NewsArticles: both lists are
           evidence under their signal bar, not sections in their own right. */}
-      <div className="flex items-center justify-between gap-2 text-[11px] text-brand-muted-fg">
+      <div className="flex items-center justify-between gap-2 text-xs text-brand-muted-fg">
         <span>
           {day ? `Top posts · ${formatDayLabel(day)}` : "Top posts by influence"}
         </span>

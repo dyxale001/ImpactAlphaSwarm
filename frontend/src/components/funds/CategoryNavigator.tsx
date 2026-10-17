@@ -79,14 +79,14 @@ export default function CategoryNavigator({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-brand-primary">{BROWSE_META_FAILED_TITLE}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-forest-600">
+          <p className="mt-1 text-xs leading-relaxed text-forest-600">
             {BROWSE_META_FAILED_BODY}
           </p>
         </div>
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-full border border-brand-border/60 bg-brand-surface px-3 py-1.5 text-[11px] font-bold text-brand-primary transition-colors hover:border-brand-primary/40"
+          className="shrink-0 rounded-full border border-brand-border/60 bg-brand-surface px-3 py-1.5 text-xs font-bold text-brand-primary transition-colors hover:border-brand-primary/40"
         >
           {RETRY_ACTION}
         </button>
@@ -150,7 +150,7 @@ export default function CategoryNavigator({
           holds. */}
       {geography && assetClasses.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-forest-500">
+          <p className="text-xs font-bold text-brand-muted-fg">
             {FILTER_ASSET_CLASS}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -168,7 +168,7 @@ export default function CategoryNavigator({
 
       {focuses.length > 0 && assetClass && (
         <div className="flex flex-col gap-2 border-l-2 border-forest-200 pl-3.5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-forest-500">
+          <p className="text-xs font-bold text-brand-muted-fg">
             {BROWSE_FOCUS_LABEL.replace("{assetClass}", assetClass)}
           </p>
           <div className="flex flex-wrap gap-1.5">

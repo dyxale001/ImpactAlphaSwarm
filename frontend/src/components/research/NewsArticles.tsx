@@ -66,7 +66,7 @@ export function NewsArticleRow({
       >
         {a.headline || "—"}
       </p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-brand-muted-fg">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-brand-muted-fg">
         <span className="font-mono">{a.date || "—"}</span>
         <span className={`px-1.5 py-0.5 rounded-full font-medium ${t.cls}`}>
           {t.label}
@@ -119,7 +119,7 @@ export default function NewsArticles({
     return (
       <div className="space-y-2">
         {day && (
-          <p className="text-[11px] text-brand-muted-fg">
+          <p className="text-xs text-brand-muted-fg">
             No articles published on {formatDayLabel(day)}.
           </p>
         )}
@@ -142,7 +142,7 @@ export default function NewsArticles({
           be. That eyebrow style marks the card's own sections, and wearing it here
           announced the list as a new section rather than as the evidence under the
           News bar directly above it. */}
-      <div className="flex items-center justify-between gap-2 text-[11px] text-brand-muted-fg">
+      <div className="flex items-center justify-between gap-2 text-xs text-brand-muted-fg">
         <span>
           {day
             ? `Articles · ${formatDayLabel(day)}`

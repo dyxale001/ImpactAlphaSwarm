@@ -172,7 +172,7 @@ function RiskSteps() {
       {FUND_ABOUT_RISK_STEPS.map((label, i) => (
         <li key={label} className="flex flex-col gap-1.5">
           <span className="h-1.5 rounded-full bg-lime-500" style={{ opacity: 0.35 + i * 0.16 }} aria-hidden="true" />
-          <span className="text-[11px] leading-snug text-brand-muted-fg">
+          <span className="text-xs leading-snug text-brand-muted-fg">
             <span className="font-bold tabular-nums text-forest-900">{i + 1}</span> {label}
           </span>
         </li>

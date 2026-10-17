@@ -45,14 +45,14 @@ function Decay() {
           const weight = Math.pow(0.5, d / RECENCY_HALFLIFE_DAYS);
           return (
             <div key={d} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="text-[11px] font-semibold tabular-nums text-forest-900">{Math.round(weight * 100)}%</span>
+              <span className="text-xs font-semibold tabular-nums text-forest-900">{Math.round(weight * 100)}%</span>
               <div className="w-full rounded-t-md bg-forest-700" style={{ height: `${weight * 80}px` }} />
             </div>
           );
         })}
       </div>
-      <div className="mt-1.5 flex gap-2 text-center text-[11px] text-brand-muted-fg" aria-hidden="true">
-        {days.map(d => <span key={d} className="min-w-0 flex-1">{d === 0 ? 'Today' : `${d}d ago`}</span>)}
+      <div className="mt-1.5 flex gap-2 text-center text-xs text-brand-muted-fg" aria-hidden="true">
+        {days.map(d => <span key={d} className="min-w-0 flex-1">{d === 0 ? 'Today' : `${d}d`}</span>)}
       </div>
     </div>
   );
@@ -106,7 +106,7 @@ export default function SentimentMethodology() {
             const meta = tierMeta(t.tier);
             return (
               <li key={t.tier} className="as-inset flex items-start gap-3 p-3">
-                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>{meta.label}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-forest-900">{t.label}</span>
                   <span className="block text-xs leading-relaxed text-brand-muted-fg">{t.examples}</span>

@@ -27,9 +27,9 @@ function PercentileDemo() {
           <span key={p} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-forest-500/60" style={{ left: `${p}%` }} />
         ))}
         <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-forest-700 shadow" style={{ left: `${DEMO_PCT}%` }} />
-        <span className="absolute -top-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold text-forest-900" style={{ left: `${DEMO_PCT}%` }}>This stock</span>
+        <span className="absolute -top-1 -translate-x-1/2 whitespace-nowrap text-xs font-bold text-forest-900" style={{ left: `${DEMO_PCT}%` }}>This stock</span>
       </div>
-      <div className="mx-2 flex justify-between text-[11px] text-brand-muted-fg" aria-hidden="true">
+      <div className="mx-2 flex justify-between text-xs text-brand-muted-fg" aria-hidden="true">
         <span>Lowest in the run</span>
         <span>Highest</span>
       </div>
@@ -93,10 +93,10 @@ export default function QuantMethodology() {
         ]} />
         <p className="pt-1 text-sm font-semibold text-forest-900">Beta, how the price moves with the S&amp;P 500</p>
         <BandStrip label="Beta ranges" bands={[
-          { name: 'Moves opposite', range: 'Below 0', className: 'bg-forest-100 text-forest-700' },
-          { name: 'Moves less', range: '0 to 0.8', className: 'bg-forest-50 text-forest-700' },
+          { name: 'Opposite', range: 'Below 0', className: 'bg-forest-100 text-forest-700' },
+          { name: 'Less', range: '0 to 0.8', className: 'bg-forest-50 text-forest-700' },
           { name: 'In step', range: '0.8 to 1.2', className: 'bg-forest-50 text-forest-700' },
-          { name: 'Moves more', range: 'Above 1.2', className: 'bg-forest-100 text-forest-700' },
+          { name: 'More', range: 'Above 1.2', className: 'bg-forest-100 text-forest-700' },
         ]} />
         <Body>
           Saying "RSI 28 is in the conventional oversold range" is true by convention,

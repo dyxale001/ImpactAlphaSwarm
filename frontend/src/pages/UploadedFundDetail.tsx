@@ -152,7 +152,7 @@ function Loaded({ fund }: { fund: UploadedFundDetail }) {
             type="button"
             onClick={remove}
             disabled={deleting}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-warning/50 bg-brand-surface px-4 py-2 text-[13px] font-bold text-warning-strong transition-colors hover:bg-warning/10 disabled:opacity-50"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-warning/50 bg-brand-surface px-4 py-2 text-sm font-bold text-warning-strong transition-colors hover:bg-warning/10 disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden />
             {DETAIL_DELETE}
@@ -216,7 +216,7 @@ function Sources({ fund, sheet }: { fund: UploadedFundDetail; sheet: UploadedShe
                           {describeSource(key, p)}
                         </span>
                         {p?.quote && (
-                          <span className="mt-0.5 block break-words text-[11px] text-forest-500">“{p.quote}”</span>
+                          <span className="mt-0.5 block break-words text-xs text-forest-500">“{p.quote}”</span>
                         )}
                       </td>
                     </tr>

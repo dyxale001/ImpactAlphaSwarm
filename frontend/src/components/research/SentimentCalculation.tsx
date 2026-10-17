@@ -209,7 +209,7 @@ export default function SentimentCalculation({
                       <li key={t.tier} className="space-y-1">
                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs">
                           <span className="flex items-center gap-2">
-                            <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${meta.cls}`}>
+                            <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${meta.cls}`}>
                               {meta.label}
                             </span>
                             <span className="text-brand-muted-fg">

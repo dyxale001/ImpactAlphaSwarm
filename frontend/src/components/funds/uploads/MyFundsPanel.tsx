@@ -78,7 +78,7 @@ export default function MyFundsPanel({
 
       {saved && (
         <div className="as-card flex flex-col gap-2 p-4" role="status">
-          <p className="flex items-center gap-2 text-[13px] font-bold text-brand-primary">
+          <p className="flex items-center gap-2 text-sm font-bold text-brand-primary">
             <CheckCircle2 className="h-4 w-4 text-lime-700" aria-hidden />
             {SAVED_TITLE}: {saved.fund.name}
           </p>

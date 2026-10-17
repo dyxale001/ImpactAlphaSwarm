@@ -160,11 +160,11 @@ function ContributorRow({
               back to whichever signal had data, so a fixed 70 / 30 badge claimed a
               weight for a signal that contributed nothing. */}
           {weightPct != null ? (
-            <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-[10px] font-medium text-forest-900">
+            <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-xs font-medium text-forest-900">
               {weightPct}%
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-medium text-white/70">
+            <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-xs font-medium text-white/70">
               Not in score
             </span>
           )}
@@ -186,7 +186,7 @@ function ContributorRow({
       </div>
       <AnchoredBar score={rightText ? null : score} tone={verdict.tone} />
       {note ? (
-        <p className="mt-1.5 text-[11px]" style={{ color: "rgba(255,255,255,0.6)" }}>
+        <p className="mt-1.5 text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
           {note}
         </p>
       ) : null}
@@ -195,7 +195,7 @@ function ContributorRow({
           anywhere near it. */}
       <Link
         to={to}
-        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-lime-500 underline-offset-2 transition-colors hover:text-lime-400 hover:underline focus-visible:underline"
+        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-lime-500 underline-offset-2 transition-colors hover:text-lime-400 hover:underline focus-visible:underline"
       >
         {linkText}
         <ArrowRight className="w-3 h-3 shrink-0" />

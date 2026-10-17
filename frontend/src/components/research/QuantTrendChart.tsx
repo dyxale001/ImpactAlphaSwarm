@@ -149,7 +149,7 @@ export function QuantTrendChart({
                 <XAxis
                   dataKey="date"
                   tickFormatter={(d: string) => formatAxisDate(d, horizon)}
-                  tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                  tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
                   interval="preserveStartEnd"
@@ -158,7 +158,7 @@ export function QuantTrendChart({
                 <YAxis
                   domain={domain}
                   width={AXIS_WIDTH}
-                  tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                  tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                   tickFormatter={(v: number) => compactPrice(v)}
                   axisLine={false}
                   tickLine={false}
@@ -192,7 +192,7 @@ export function QuantTrendChart({
                     domain={[0, 100]}
                     ticks={[30, 70]}
                     width={AXIS_WIDTH}
-                    tick={{ fill: AXIS_TEXT, fontSize: 11 }}
+                    tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -220,7 +220,7 @@ export function QuantTrendChart({
         {/* A key, inside the panel so each swatch is the colour actually drawn: the
             lime is unreadable on the light page behind this card. */}
         <div
-          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-[11px]"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs"
           style={{ color: AXIS_TEXT }}
         >
           <span className="flex items-center gap-1.5">
@@ -237,7 +237,7 @@ export function QuantTrendChart({
           )}
         </div>
       </div>
-      <p className="text-[11px] text-brand-muted-fg mt-2">
+      <p className="text-xs text-brand-muted-fg mt-2">
         {displayCurrency === "ZAR" ? QUANT_CHART_NOTE_RAND : QUANT_CHART_NOTE}
       </p>
     </div>
@@ -285,7 +285,7 @@ function WindowStrip({
       // On a phone the controls take their own line above the note, rather than
       // squeezing the note into a narrow column beside them.
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        {line ? <p className="min-w-0 flex-1 text-[11px] text-white/60 sm:order-1">{line}</p> : <span />}
+        {line ? <p className="min-w-0 flex-1 text-xs text-white/60 sm:order-1">{line}</p> : <span />}
         {toolbar ? <div className="order-first self-start sm:order-2 sm:self-auto">{toolbar}</div> : null}
       </div>
     );
@@ -302,7 +302,7 @@ function WindowStrip({
           {formatPrice(facts.last_close, displayCurrency)}
         </span>
       </div>
-      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/70">
+      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/70">
         <div>
           <dt className="inline">High </dt>
           <dd className="inline text-white font-medium">{formatPrice(facts.high, displayCurrency)}</dd>
@@ -317,7 +317,7 @@ function WindowStrip({
         </div>
       </dl>
       {line && (
-        <p className="basis-full text-[11px] text-white/60">{line}</p>
+        <p className="basis-full text-xs text-white/60">{line}</p>
       )}
     </div>
   );

@@ -112,8 +112,8 @@ export function BandStrip({ bands, label }: { bands: { name: string; range: stri
       <div className="flex gap-1" aria-hidden="true">
         {bands.map(b => (
           <div key={b.name} className="min-w-0 flex-1">
-            <div className={`flex h-9 items-center justify-center rounded-lg px-1 text-center text-[11px] font-semibold leading-tight ${b.className}`}>{b.name}</div>
-            <p className="mt-1 text-center text-[11px] tabular-nums text-brand-muted-fg">{b.range}</p>
+            <div className={`flex h-9 items-center justify-center rounded-lg px-1 text-center text-xs font-semibold leading-tight ${b.className}`}>{b.name}</div>
+            <p className="mt-1 text-center text-xs tabular-nums text-brand-muted-fg">{b.range}</p>
           </div>
         ))}
       </div>
