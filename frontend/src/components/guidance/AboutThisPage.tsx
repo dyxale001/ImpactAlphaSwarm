@@ -5,6 +5,7 @@ import { PAGE_EXPLANATIONS, type ExplanationPage, type PageExplanation } from '.
 import PageExplanationDialog from './PageExplanationDialog';
 import StocksAbout from './StocksAbout';
 import FundsAbout from './FundsAbout';
+import WhalesAbout from './WhalesAbout';
 import AboutLessons from './AboutLessons';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -77,6 +78,8 @@ export default function AboutThisPage({ page, rankingMode, methodologyHref, lear
         ? <StocksAbout content={content} rankingMode={rankingMode} methodologyHref={methodologyHref} learnContext={learnContext} onNavigate={leave} />
         : page === 'funds'
         ? <FundsAbout content={content} learnContext={learnContext} onNavigate={leave} />
+        : page === 'whales'
+        ? <WhalesAbout content={content} learnContext={learnContext} onNavigate={leave} />
         : <>
           <StandardAbout page={page} content={content} />
           {learnContext && <AboutLessons context={learnContext} title="Lessons for this page" onNavigate={leave} />}

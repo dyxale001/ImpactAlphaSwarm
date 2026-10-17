@@ -51,22 +51,23 @@ export const PAGE_EXPLANATIONS = {
   },
   whales: {
     title: 'How Whale Watching works',
-    introduction: 'Explore reported insider activity and institutional holdings around the stocks AlphaSwarm tracks.',
-    process: { title: 'Choose a view', steps: [
-      { title: 'Find a company', body: 'Browse a universe or search for a company. Open its research to switch between insider transactions and institutional ownership.' },
-      { title: 'Read insider transactions', body: 'These records describe reported changes in company insiders’ shareholdings. An insider is someone connected to the company, such as an executive or director. Open-market Buy/Sell labels differ from grants, exercises and other activity.' },
-      { title: 'Read institutional holdings', body: 'These records show reported positions held by investment organisations. Top Funds brings together available positions across tracked companies; it is not a ranking of investment quality or a complete view of every fund.' },
+    introduction: 'Company insiders and big investors have to report what they own and what they trade. Whale Watching gathers those reports for the stocks AlphaSwarm tracks, so you can see who owns a company and who has been buying or selling it.',
+    process: { title: 'What the page brings together', steps: [
+      { title: 'Find a company', body: 'Browse a universe or search by name or ticker. A company opens with two tabs: Insider Trading and Big Investors.' },
+      { title: 'Insider trading', body: 'Directors and executives report their own trades to the SEC on a Form 4. Open-market Buy/Sell labels differ from grants, exercises and other routine entries.' },
+      { title: 'Big investors', body: 'Funds, banks and pension managers report what they hold once a quarter on a 13F filing, up to 45 days after the quarter ends.' },
+      { title: 'Top funds', body: 'The largest holders across the companies we cover, and where each one is most invested. It is not a ranking of investment quality or a complete view of every fund.' },
     ] },
-    interpretation: { title: 'Understand the dates', cards: [
-      { title: 'Activity and disclosure', body: 'A transaction date describes when activity happened. A filing or reporting date describes the disclosure or reported position. These dates are not interchangeable.' },
-      { title: 'Retrieval and caching', body: 'The date information was fetched describes when AlphaSwarm obtained it. A newly retrieved record may still describe older activity. Reported holdings are a delayed snapshot, so a position may already have changed.' },
+    interpretation: { title: 'Three dates on every record', cards: [
+      { title: 'Traded', body: 'The transaction date: when the activity happened.' },
+      { title: 'Filed', body: 'The filing or reporting date: when it was disclosed, or the date a reported holding describes. These dates are not interchangeable.' },
+      { title: 'Fetched', body: 'When the information was fetched by AlphaSwarm. A newly retrieved record may still describe older activity, and reported holdings are a delayed snapshot, so a position may already have changed.' },
     ] },
     example: { title: 'More shares does not always mean a purchase', body: 'A share grant can increase an insider’s holding without an open-market purchase. An option exercise is also different from an ordinary share purchase. Likewise, a reported institutional holding does not establish that the institution still holds those shares today.' },
     limitations: { title: 'Sources and coverage', paragraphs: [
       'Insider records are obtained through Finnhub; institutional-holder information is obtained through yfinance. Results may be cached. Check the source and dates shown in the relevant panel. An empty result does not establish that no activity occurred.',
       'Disclosures do not reveal every transaction or an investor’s reasons. Top Funds reflects the reported positions available for tracked companies, not the whole market or each organisation’s complete portfolio.',
     ] },
-    nextSteps: { title: 'Find your way around', body: 'Use Universes to browse companies, open a company’s research for its disclosures, or choose Top Funds to explore the available holdings by institution.' },
     caveat: 'Observed disclosures do not predict future prices or provide a reason to copy a trade. Whale Watching research does not determine AlphaSwarm’s stock rankings.',
   },
 } satisfies Record<string, PageExplanation>;
