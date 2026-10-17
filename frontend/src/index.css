@@ -439,6 +439,42 @@
     color: var(--color-forest-700);
   }
 
+  /* Select (dropdown). The closed control in the platform's own style: a 40px
+     pill with a hairline and a forest chevron. The list that opens stays the
+     browser's own, so phones keep their native picker and long lists keep
+     type-to-jump. .is-on marks a filter that is set, as on .as-fchip. */
+  .as-select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 40px;
+    max-width: 100%;
+    padding: 0 36px 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-default);
+    background-color: var(--color-neutral-0);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231b3530' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-forest-900);
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+  }
+  .as-select:hover {
+    border-color: var(--border-strong);
+  }
+  .as-select:focus-visible {
+    outline: 2px solid var(--color-forest-700);
+    outline-offset: 2px;
+  }
+  .as-select.is-on {
+    background-color: var(--color-forest-50);
+    border-color: var(--color-forest-700);
+    color: var(--color-forest-700);
+  }
+
   /* Buttons. Primary (forest) on light, secondary (white + hairline), text
      (forest bold), lime only on dark surfaces. */
   .as-btn {

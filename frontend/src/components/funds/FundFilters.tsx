@@ -68,8 +68,8 @@ export default function FundFilters({
     (value) => value !== undefined && value !== "" && value !== false,
   );
 
-  const selectClass =
-    "min-h-10 max-w-full rounded-full border border-brand-border/60 bg-brand-surface px-3.5 py-2 text-[13px] font-semibold text-forest-600 transition-colors hover:border-brand-border";
+  // The platform's select, marked "on" while it narrows the list.
+  const selectClass = (active: boolean) => `as-select ${active ? "is-on" : ""}`;
 
   // `relative` is not decoration. The two sr-only labels below are
   // position:absolute, and an absolute box with no positioned ancestor sits at
@@ -87,7 +87,7 @@ export default function FundFilters({
           onChange={(e) => setText(e.target.value)}
           placeholder={FILTER_SEARCH_PLACEHOLDER}
           aria-label={FILTER_SEARCH_PLACEHOLDER}
-          className="min-h-10 w-full rounded-full border border-brand-border/60 bg-brand-surface py-2 pl-9 pr-9 text-[13px] text-brand-primary transition-colors placeholder:text-forest-400 focus:border-brand-primary/50 focus:outline-none"
+          className="h-10 w-full rounded-full border border-forest-900/15 bg-white py-2 pl-9 pr-9 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none"
         />
         {text && (
           <button
@@ -106,7 +106,7 @@ export default function FundFilters({
       </label>
       <select
         id="funds-vehicle"
-        className={selectClass}
+        className={selectClass(Boolean(filters.vehicle))}
         value={filters.vehicle ?? ""}
         onChange={(e) => onPatch({ vehicle: e.target.value || undefined })}
       >
@@ -125,7 +125,7 @@ export default function FundFilters({
           </label>
           <select
             id="funds-manco"
-            className={selectClass}
+            className={selectClass(Boolean(filters.manco))}
             value={filters.manco ?? ""}
             onChange={(e) => onPatch({ manco: e.target.value || undefined })}
           >
@@ -142,17 +142,15 @@ export default function FundFilters({
       {/* A real checkbox in a pill the size of the selects beside it, so the
           row reads as one set of controls and the whole pill is the target. */}
       <label
-        className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-primary ${
-          filters.tfsa
-            ? "border-brand-accent bg-brand-accent text-brand-fg"
-            : "border-brand-border/60 bg-brand-surface text-forest-600 hover:border-brand-border"
+        className={`as-fchip h-10 cursor-pointer px-3.5 text-sm focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-forest-700 ${
+          filters.tfsa ? "is-on" : ""
         }`}
       >
         <input
           type="checkbox"
           checked={Boolean(filters.tfsa)}
           onChange={(e) => onPatch({ tfsa: e.target.checked || undefined })}
-          className="h-3.5 w-3.5 rounded border-brand-border/60 accent-brand-primary"
+          className="h-3.5 w-3.5 rounded accent-forest-700"
         />
         {FILTER_TFSA}
       </label>
