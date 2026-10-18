@@ -80,7 +80,6 @@ const FEATURE_GROUPS: { label: string; items: Feature[] }[] = [
 
 const FAQS: { q: string; a: string; flag?: Flag }[] = [
   { q: 'Is AlphaSwarm financial advice?', a: 'No. It gathers the evidence and explains it, and is designed to stay on the informational side. There are no buy, hold or sell calls and no price predictions, and the decision always stays with you.' },
-  { q: 'Is it free?', a: 'Yes. The web app is free to use: open an account, set your profile and your first list is ready after one analysis run.' },
   { q: 'Do I need investing experience?', a: 'No. Onboarding places you from novice to advanced, explanations match your level, and the Learning Centre teaches the ideas in short lessons with quizzes.' },
   { q: 'How does AlphaSwarm decide the order of stocks?', a: 'Two independent engines, one reading sentiment and one reading price behaviour, measure each stock. Four disclosed factors then decide the order: signal strength, agreement, evidence depth and fit with your profile. There is no single hidden score.' },
   { q: 'What does it cover?', a: 'US stocks listed on the NYSE and Nasdaq in six sectors: Technology, Green Energy, Finance, AI & Robotics, Healthcare, and Media & Communications. Each run scores up to 30 stocks for you.' },
@@ -153,16 +152,13 @@ function SectorDot({ sector }: { sector: string }) {
   return <span className={`h-2 w-2 shrink-0 rounded-full ${sectorColour(sector).fill}`} aria-hidden="true" />
 }
 
-/** A forest ribbon carrying a line of copy, drawn in by the shared ribbon CSS. */
-function Ribbon({ id, d, viewBox, width, text, size, className, band = 'stroke-forest-700', copy = 'fill-lime-200' }: {
-  id: string; d: string; viewBox: string; width: number; text: string; size: number; className: string; band?: string; copy?: string
-}) {
+/** A plain forest ribbon, drawn in by the shared ribbon CSS. It keeps its
+ *  proportions (the panel crops it rather than stretching it) and is hidden on
+ *  phones, where it would only cut across the copy. */
+function Ribbon({ d, viewBox, width, className }: { d: string; viewBox: string; width: number; className: string }) {
   return (
-    <svg viewBox={viewBox} preserveAspectRatio="none" className={`pointer-events-none absolute ${className}`} aria-hidden="true">
-      <path id={id} pathLength={1} strokeDasharray="1" d={d} fill="none" className={`ribbon-draw ${band}`} strokeWidth={width} strokeLinecap="round" />
-      <text className={`ribbon-text font-bold uppercase ${copy}`} style={{ fontSize: size, letterSpacing: '0.14em' }} dominantBaseline="middle">
-        <textPath href={`#${id}`} startOffset="2%">{text}</textPath>
-      </text>
+    <svg viewBox={viewBox} preserveAspectRatio="xMidYMid slice" className={`pointer-events-none absolute hidden lg:block ${className}`} aria-hidden="true">
+      <path pathLength={1} strokeDasharray="1" d={d} fill="none" className="ribbon-draw stroke-forest-700" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -429,29 +425,6 @@ export default function Landing() {
   const [tab, setTab] = useState(tourItems[0].key)
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
-  // The closing ribbon draws in when its band scrolls into view, not on load,
-  // when nobody would see it happen.
-  const ctaRef = useRef<HTMLDivElement>(null)
-  const [ctaSeen, setCtaSeen] = useState(false)
-  useEffect(() => {
-    const el = ctaRef.current
-    if (!el || typeof IntersectionObserver === 'undefined') {
-      setCtaSeen(true)
-      return
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setCtaSeen(true)
-          observer.disconnect()
-        }
-      },
-      { threshold: 0.35 },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
     onScroll()
@@ -517,20 +490,19 @@ export default function Landing() {
       <main id="top">
         {/* ═══ Hero ═══ */}
         <section aria-labelledby="hero-title" className="mx-auto max-w-[1200px] px-4 pt-5 sm:px-8">
-          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-36 pt-9 sm:px-10 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-40 lg:pt-[72px]">
+          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-9 pt-9 sm:px-10 sm:pb-14 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-40 lg:pt-[72px]">
+            {/* One unhurried sweep: along the foot under the copy, then up and
+                away behind the preview cards. */}
             <Ribbon
-              id="rb-hero"
-              viewBox="0 0 1400 760"
-              d="M-80,712 C180,742 420,700 640,690 C820,682 860,560 930,470 C1020,350 1160,320 1250,210 C1320,125 1380,60 1490,10"
-              width={56}
-              size={20}
-              text="See the evidence · Understand it · Decide for yourself · Explainable signals · No black boxes · See the evidence · Understand it · Decide for yourself"
-              className="-left-[40%] bottom-0 z-[1] h-[34%] w-[180%] lg:left-0 lg:top-0 lg:h-full lg:w-full"
+              viewBox="0 0 1200 680"
+              d="M-60,585 C170,625 380,615 560,565 C720,520 800,450 870,380 C960,290 1040,240 1130,205 C1185,185 1235,176 1290,172"
+              width={34}
+              className="inset-0 z-[1] h-full w-full"
             />
             <div className="relative z-[3] flex flex-col gap-5">
               <span className="inline-flex items-center gap-2 self-start rounded-full bg-white py-1.5 pl-2 pr-3.5 text-xs font-bold text-forest-700 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)]">
                 <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-forest-700 text-lime-500"><Sparkles className="h-3 w-3" aria-hidden="true" /></span>
-                Free for South African investors
+                For first-time South African investors
               </span>
               <h1 id="hero-title" className="text-balance text-[clamp(40px,4.6vw,56px)] font-bold leading-[1.05] tracking-[-0.02em] text-forest-900">
                 See the evidence, understand it, decide for yourself.
@@ -681,7 +653,7 @@ export default function Landing() {
                     <li key={t} className="flex gap-2.5 text-sm leading-relaxed"><Check className="mt-0.5 h-4 w-4 shrink-0 text-up" strokeWidth={2.4} aria-hidden="true" />{t}</li>
                   ))}
                 </ul>
-                <Link to={SIGNUP} className="as-btn as-btn-primary w-fit">Try it free <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+                <Link to={SIGNUP} className="as-btn as-btn-primary w-fit">Open account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
               </div>
               <div className="grid min-w-0 gap-3.5 rounded-[24px] bg-brand-bg p-3.5 sm:p-7" aria-hidden="true">{active.stage}</div>
             </div>
@@ -784,30 +756,12 @@ export default function Landing() {
 
         {/* ═══ Closing call to action ═══ */}
         <section aria-labelledby="cta-title" className="mx-auto max-w-[1200px] px-4 sm:px-8">
-          <div ref={ctaRef} className="relative isolate grid grid-cols-1 items-center gap-8 overflow-hidden rounded-[32px] bg-forest-900 p-[clamp(36px,6vw,80px)] text-white lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            {ctaSeen && (
-              <Ribbon
-                id="rb-cta"
-                viewBox="0 0 1200 420"
-                d="M520,470 C600,360 700,330 820,300 C960,264 1040,190 1110,90 C1150,30 1190,-10 1260,-40"
-                width={44}
-                size={16}
-                text="Research without the noise · Join the Swarm · Research without the noise"
-                band="stroke-lime-500"
-                copy="fill-forest-900"
-                // Wide screens only: on a narrow card it would cross the copy.
-                className="inset-0 z-[1] hidden h-full w-full opacity-90 lg:block"
-              />
-            )}
-            <div className="relative z-[2] flex flex-col gap-3.5">
-              <span className="text-xs font-bold uppercase tracking-[0.1em] text-lime-500">Ready when you are</span>
-              <h2 id="cta-title" className={`${H2} text-white`}>Let the Swarm do the homework</h2>
-              <p className="text-base text-white/75">Open your account, set your profile, and get your first explained list today.</p>
-            </div>
-            <div className="relative z-[2] flex flex-col items-start gap-3">
-              <Link to={SIGNUP} className="as-btn as-btn-lime h-12 px-6 text-base">Open account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-              <span className="text-xs text-white/65">Free to use · Research and education only, not financial advice</span>
-            </div>
+          <div className="flex flex-col items-start gap-3.5 rounded-[32px] bg-forest-900 p-[clamp(36px,6vw,80px)] text-white">
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-lime-500">Ready when you are</span>
+            <h2 id="cta-title" className={`${H2} text-white`}>Let the Swarm do the homework</h2>
+            <p className="max-w-[52ch] text-base text-white/75">Open your account, set your profile, and get your first explained list today.</p>
+            <Link to={SIGNUP} className="as-btn as-btn-lime mt-2 h-12 px-6 text-base">Open account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            <span className="text-xs text-white/65">Research and education only, not financial advice</span>
           </div>
         </section>
       </main>
