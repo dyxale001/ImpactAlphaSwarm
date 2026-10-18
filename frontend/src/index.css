@@ -692,13 +692,4 @@ body {
     font-family: var(--font-mono) !important;
   }
 
-  /* Background used on auth pages. Place your image at `public/backgrounds/auth-bg.png` */
-  .auth-bg {
-    /* original auth artwork used for login/signup */
-    background-image: url("/backgrounds/untitled-design-1.png");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: cover;
-  }
-
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { ShieldAlert, X, Check, ArrowRight } from 'lucide-react'
+import { X, Check, ArrowRight } from 'lucide-react'
 import { useForgotPassword } from '../hooks/useForgotPassword'
-import { authInputClass, AUTH_LABEL, AUTH_SUBMIT } from './AuthLayout'
+import { AuthError, AuthSpinner, authInputClass, AUTH_LABEL, AUTH_SUBMIT } from './AuthLayout'
 
 interface ForgotPasswordModalProps {
   onClose: () => void
@@ -28,16 +28,19 @@ export default function ForgotPasswordModal({ onClose }: ForgotPasswordModalProp
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-forest-900/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-forest-950/40 p-4 backdrop-blur-[2px]"
       onClick={handleClose}
     >
       <div
-        className="animate-fade-up relative my-auto w-full max-w-[420px] rounded-2xl bg-white p-6 sm:p-8 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="forgot-title"
+        className="animate-fade-up relative my-auto w-full max-w-[420px] rounded-[20px] bg-white p-6 shadow-float sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 flex p-1.5 text-muted-foreground transition-colors hover:text-forest-900"
+          className="absolute right-4 top-4 flex rounded-full p-1.5 text-brand-muted-fg transition-colors hover:bg-forest-50 hover:text-forest-900"
           aria-label="Close"
         >
           <X size={18} />
@@ -45,39 +48,39 @@ export default function ForgotPasswordModal({ onClose }: ForgotPasswordModalProp
 
         {sent ? (
           <div className="py-2 text-center">
-            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border border-lime-500 bg-lime-500/15">
-              <Check className="h-7 w-7 text-forest-700" />
-            </div>
-            <h2 className="mb-2 text-[22px] font-semibold text-forest-900">Check your inbox</h2>
-            <p className="text-sm leading-relaxed text-muted">
+            <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-up-bg text-up">
+              <Check className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <h2 id="forgot-title" className="mb-2 text-xl font-bold tracking-[-0.01em] text-forest-900">Check your inbox</h2>
+            <p className="text-sm leading-relaxed text-brand-muted-fg">
               We sent a password reset link to <span className="font-semibold text-forest-900">{email}</span>.
               The link expires in 1 hour.
             </p>
             <button
               onClick={handleClose}
-              className="mt-6 w-full rounded-full border border-forest-900/14 py-3 text-sm font-semibold text-forest-700 transition-colors hover:border-forest-900/28"
+              className="as-btn as-btn-secondary mt-6 w-full"
             >
-              Back to Login
+              Back to sign in
             </button>
           </div>
         ) : (
           <>
-            <h2 className="mb-1.5 text-[22px] font-semibold text-forest-900">Reset Your Password</h2>
-            <p className="mb-6 text-sm leading-relaxed text-muted">
+            <h2 id="forgot-title" className="mb-1.5 text-xl font-bold tracking-[-0.01em] text-forest-900">Reset your password</h2>
+            <p className="mb-5 text-sm leading-relaxed text-brand-muted-fg">
               Enter your account email and we'll send you a reset link.
             </p>
 
             {error && (
-              <div className="mb-5 flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-medium text-danger">
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="leading-relaxed">{error}</span>
+              <div className="mb-5">
+                <AuthError>{error}</AuthError>
               </div>
             )}
 
             <form onSubmit={handleSendReset} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <label className={AUTH_LABEL}>Email Address</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="forgot-email" className={AUTH_LABEL}>Email address</label>
                 <input
+                  id="forgot-email"
                   ref={inputRef}
                   type="email"
                   placeholder="investor@example.com"
@@ -89,22 +92,15 @@ export default function ForgotPasswordModal({ onClose }: ForgotPasswordModalProp
                 />
               </div>
 
-              <button type="submit" disabled={loading} className={`${AUTH_SUBMIT} disabled:opacity-70`}>
+              <button type="submit" disabled={loading} className={AUTH_SUBMIT}>
                 {loading ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Sending...
-                  </span>
+                  <>
+                    <AuthSpinner />
+                    Sending…
+                  </>
                 ) : (
                   <>
-                    Send Reset Link <ArrowRight className="h-4 w-4" />
+                    Send reset link <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </>
                 )}
               </button>
