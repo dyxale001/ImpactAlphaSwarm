@@ -291,8 +291,11 @@ export default function Onboarding() {
           {/* ── STEP 3: assessment ── */}
           {step === 3 && (
             <div key="step3" className="animate-fade-up flex flex-col gap-4">
-              <div className="sticky top-0 z-5 -mx-4 bg-brand-bg/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
-                <div className="as-inset flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+              {/* Only the pill sticks, a little below the top edge. Solid white with
+                  a hairline and a soft shadow, so it stays legible over the white
+                  question cards scrolling under it. */}
+              <div className="sticky top-3 z-5">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[16px] border border-forest-900/10 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(17,35,32,0.10)] sm:rounded-full sm:px-5">
                   <span className="text-sm">
                     <b className="text-forest-900">Assessment progress</b>
                     <span className="text-brand-muted-fg"> · {answeredCount} of {totalQuestions} answered</span>
