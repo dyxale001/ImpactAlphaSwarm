@@ -62,20 +62,23 @@ function Tour({ steps, dismiss }: { steps: SpotlightStep[]; dismiss: (status: 's
     };
   }, [current]);
   return createPortal(<>
-    {position.highlight && <div aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-[20px] border-2 border-lime-500 shadow-[0_0_0_3px_rgba(190,242,100,0.15)]" style={position.highlight} />}
+    {/* The ring around the highlighted item, whose outer shadow shades the rest
+        of the page so the item reads as spotlit. It takes no clicks, so the page
+        underneath stays usable while the tour is open. */}
+    {position.highlight && <div aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-[20px] border-2 border-lime-500 shadow-[0_0_0_4px_rgba(199,242,105,0.35),0_0_0_9999px_rgba(17,35,32,0.32)] transition-[left,top,width,height] duration-200" style={position.highlight} />}
     <section ref={cardRef} role="dialog" aria-modal="false" aria-labelledby={id}
-      className="fixed z-[55] w-80 max-w-[calc(100vw_-_2rem)] overflow-y-auto rounded-[20px] bg-brand-primary p-5 text-brand-bg shadow-float"
+      className="fixed z-[55] w-80 max-w-[calc(100vw_-_2rem)] overflow-y-auto rounded-[20px] border border-forest-900/10 bg-white p-5 text-forest-900 shadow-float"
       style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 16}px)` }}>
-      <p className="band-eyebrow">Quick tour · {step + 1} of {steps.length}</p>
-      <h2 ref={headingRef} tabIndex={-1} id={id} className="mt-2 rounded-sm text-lg font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent">{current.title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-brand-bg/85">{current.body}</p>
-      {position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">Find {current.title} in the navigation menu. You can explore it after the tour; the menu stays closed.</p>}
-      {position.missing && current.target === 'assistant' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">The quick-help button is not currently available as an opening control. You can finish the tour and use Ask AlphaSwarm in navigation.</p>}
-      {position.missing && !position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">This entry is not currently visible. Find {current.title} in navigation when it is available.</p>}
+      <p className="text-xs font-medium text-brand-muted-fg">Quick tour · {step + 1} of {steps.length}</p>
+      <h2 ref={headingRef} tabIndex={-1} id={id} className="mt-1.5 text-lg font-bold tracking-[-0.01em] text-forest-900 outline-none">{current.title}</h2>
+      <p className="mt-1.5 text-sm leading-relaxed text-forest-900">{current.body}</p>
+      {position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">Find {current.title} in the navigation menu. You can explore it after the tour; the menu stays closed.</p>}
+      {position.missing && current.target === 'assistant' && <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">The quick-help button is not currently available as an opening control. You can finish the tour and use Ask AlphaSwarm in navigation.</p>}
+      {position.missing && !position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">This entry is not currently visible. Find {current.title} in navigation when it is available.</p>}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => dismiss('skipped')} className="min-h-11 rounded-full px-2 text-xs font-semibold text-brand-bg/80 underline underline-offset-4 hover:text-brand-bg focus-visible:outline-2 focus-visible:outline-lime-500">Skip tour</button>
-        {step > 0 && <button type="button" onClick={() => setStep(value => value - 1)} className="as-btn as-btn-sm as-btn-ghost-dark">Back</button>}
-        <button type="button" onClick={() => step === steps.length - 1 ? dismiss('finished') : setStep(value => value + 1)} className="as-btn as-btn-sm as-btn-lime ml-auto">{step === steps.length - 1 ? 'Finish' : 'Next'}</button>
+        <button type="button" onClick={() => dismiss('skipped')} className="min-h-11 rounded-full px-1 text-xs font-semibold text-brand-muted-fg underline underline-offset-4 hover:text-forest-900 focus-visible:outline-2 focus-visible:outline-forest-700">Skip tour</button>
+        {step > 0 && <button type="button" onClick={() => setStep(value => value - 1)} className="as-btn as-btn-sm as-btn-secondary">Back</button>}
+        <button type="button" onClick={() => step === steps.length - 1 ? dismiss('finished') : setStep(value => value + 1)} className="as-btn as-btn-sm as-btn-primary ml-auto">{step === steps.length - 1 ? 'Finish' : 'Next'}</button>
       </div>
     </section>
   </>, document.body);
@@ -83,7 +86,7 @@ function Tour({ steps, dismiss }: { steps: SpotlightStep[]; dismiss: (status: 's
 
 export default function UserSpotlightTour() {
   const { open, error, dismiss, clearError, userId } = useSpotlightTour();
-  if (error) return <div role="status" className="rounded-xl border border-brand-border bg-brand-card p-3 text-xs text-brand-muted-fg">{error} <button type="button" onClick={clearError} className="min-h-11 rounded px-2 underline focus-visible:outline-2 focus-visible:outline-brand-primary">Dismiss</button></div>;
+  if (error) return <div role="status" className="rounded-[12px] border border-forest-900/10 bg-white p-3 text-xs text-brand-muted-fg">{error} <button type="button" onClick={clearError} className="min-h-11 rounded px-2 font-semibold text-forest-700 underline focus-visible:outline-2 focus-visible:outline-forest-700">Dismiss</button></div>;
   if (!open) return null;
   return <Tour key={userId} steps={spotlightSteps()} dismiss={status => void dismiss(status)} />;
 }

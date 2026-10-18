@@ -274,7 +274,7 @@ it("ends on the real floating button without activating it", async () => {
   for (let index = 1; index < spotlightSteps().length; index++)
     await click("Next");
   expect(document.querySelector("h2")?.textContent).toBe(
-    "Ask AlphaSwarm — Quick Help",
+    "Ask AlphaSwarm: quick help",
   );
   expect(rect).toHaveBeenCalled();
   expect(activated).not.toHaveBeenCalled();

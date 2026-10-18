@@ -18,7 +18,7 @@ it("matches the exact displayed navigation order with separate welcome and assis
     "Ask AlphaSwarm",
     "Whale Watching",
     "Settings",
-    "Ask AlphaSwarm — Quick Help",
+    "Ask AlphaSwarm: quick help",
   ]);
   expect(steps[0].target).toBe("welcome");
   expect(steps.at(-1)?.target).toBe("assistant");
