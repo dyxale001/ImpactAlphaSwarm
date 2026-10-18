@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
 import { previewBracket, type BracketPreview } from "../../services/api/fundCatalogue";
 
 /**
@@ -77,13 +75,6 @@ export default function BracketPanel({
             : "No fund we cover qualifies today."}
         </p>
       )}
-
-      <Link
-        to="/funds"
-        className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
-      >
-        Explore them in Funds <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
 
       <p className="mt-3 text-xs leading-relaxed text-brand-muted-fg">{preview.not_licensed}</p>
     </div>

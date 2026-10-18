@@ -134,7 +134,7 @@ CIS_DISCLAIMER = (
 # describes a filter over labels other people published — which is all it is.
 ONBOARDING_PANEL = (
     "Based on your answers, these ASISA fund categories carry a published risk "
-    "label at or below yours. Explore them in Funds."
+    "label at or below yours."
 )
 
 # Attached to the price chart. It exists to stop the line being read as a return:
