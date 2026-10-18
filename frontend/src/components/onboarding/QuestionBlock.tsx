@@ -9,8 +9,7 @@
  *
  * Two appearances, one component, and the same answer rows in both: the
  * platform's selectable-tile look, a fine outline that darkens on hover, and
- * when chosen a forest outline on light green with a forest radio holding a
- * lime dot.
+ * when chosen a forest outline on light green with a forest radio and dot.
  *
  * - `onboarding`: each question is its own platform card on the page.
  * - `embedded`: for a question that sits inside a card that already has a
@@ -116,13 +115,18 @@ function AnswerRows({
                 : "border-forest-900/12 bg-white text-forest-900 hover:border-forest-900/30"
             }`}
           >
+            {/* A plain radio: a ring that turns forest with a forest dot. Even
+                sizes (20px ring, 2px border, 8px dot) so the dot sits exactly
+                in the middle. */}
             <span
-              className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
-                selected ? "border-forest-700 bg-forest-700" : "border-forest-900/25 bg-white"
+              className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 bg-white transition-colors duration-150 ${
+                selected ? "border-forest-700" : "border-forest-900/25"
               }`}
               aria-hidden="true"
             >
-              {selected && <span className="h-2 w-2 rounded-full bg-lime-500" />}
+              <span
+                className={`h-2 w-2 rounded-full bg-forest-700 transition-transform duration-150 ${selected ? "scale-100" : "scale-0"}`}
+              />
             </span>
             <span className="leading-snug">{opt.label}</span>
           </button>
