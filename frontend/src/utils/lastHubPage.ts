@@ -1,7 +1,7 @@
 // Which top-level list page an asset's page was opened from, so its "Back to X" link
 // names the page the reader actually came from rather than always assuming Dashboard.
 //
-// RecommendationCard and ScoredAssetRow render identically on both Dashboard and
+// The shortlist and the scored rows appear on both Dashboard and
 // Assets, and each page links into /asset/:ticker from several places — the shortlist
 // cards, the scored rows, and four separate links inside the "top pick" hero alone.
 // Threading a `state` prop through every one of those Links is a lot of surface for

@@ -474,6 +474,15 @@
     border-color: var(--color-forest-700);
     color: var(--color-forest-700);
   }
+  /* The compact select, for a choice inside a card header (a widget's stock). */
+  .as-select-sm {
+    height: 28px;
+    padding: 0 26px 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background-position: right 8px center;
+    background-size: 14px 14px;
+  }
 
   /* Buttons. Primary (forest) on light, secondary (white + hairline), text
      (forest bold), lime only on dark surfaces. */

@@ -1,9 +1,49 @@
-import type { ReactNode } from "react";
-import { Target } from "lucide-react";
+import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
+import { ArrowRight, Target } from "lucide-react";
 import { useSignals } from "../../../dashboard/DashboardDataContext";
 
 // Small pieces every widget shares, so an empty whale panel and an empty news
 // panel read as the same product rather than as two people's work.
+
+/**
+ * The two places in a widget's frame header the widget itself fills: before the
+ * subtitle (the stock picker) and top right (the link to the full page). Null
+ * while the frame is in edit mode, where the header is the move and size bar.
+ * Outside a frame (a widget rendered on its own, as in tests) there is no
+ * provider and the pieces render where they are written.
+ */
+export const WidgetSlots = createContext<{ subtitle: HTMLElement | null; action: HTMLElement | null } | undefined>(
+  undefined,
+);
+
+function useSlot(which: "subtitle" | "action") {
+  const slots = useContext(WidgetSlots);
+  return slots === undefined ? undefined : slots[which];
+}
+
+/** Puts children into the frame's header slot, or in place when there is no frame. */
+function InSlot({ which, children }: { which: "subtitle" | "action"; children: ReactNode }) {
+  const slot = useSlot(which);
+  if (slot === undefined) return <>{children}</>;
+  return slot ? createPortal(children, slot) : null;
+}
+
+/** The widget's way to the full page, shown top right in its header. */
+export function WidgetHeaderLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <InSlot which="action">
+      <Link
+        to={to}
+        className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
+      >
+        {children}
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+    </InSlot>
+  );
+}
 
 export function WidgetEmpty({
   message,
@@ -30,11 +70,11 @@ export function WidgetEmpty({
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-8 text-center ${
-        dark ? "border-brand-accent/80 bg-brand-fg/[0.03]" : "border-brand-accent"
+      className={`flex flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed px-4 py-8 text-center ${
+        dark ? "border-forest-900/25 bg-forest-50" : "border-forest-900/15"
       } ${grow ? "flex-1" : ""}`}
     >
-      <p className={`text-xs leading-relaxed max-w-xs ${dark ? "text-brand-fg/80" : "text-brand-muted-fg"}`}>
+      <p className={`text-xs leading-relaxed max-w-xs ${dark ? "text-forest-900/80" : "text-brand-muted-fg"}`}>
         {message}
       </p>
       {action}
@@ -48,7 +88,7 @@ export function WidgetLoading({ rows = 3 }: { rows?: number }) {
       <span className="sr-only">Loading widget content…</span>
       <div className="space-y-2" aria-hidden="true">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-12 rounded-2xl bg-brand-bg/70 animate-pulse" />
+        <div key={i} className="h-12 rounded-[12px] bg-forest-50 animate-pulse" />
       ))}
       </div>
     </div>
@@ -85,15 +125,17 @@ export function PinPrompt({
     // flex-1 without a height: this box is always the whole of its widget, and
     // the frame gives it a flex column to grow inside. That is what keeps the
     // dashed outline the full height of a card stretched by a taller neighbour.
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-brand-accent px-4 py-7 text-center">
-      <Target className="h-4 w-4 text-brand-muted-fg" />
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-[14px] border border-dashed border-forest-900/15 px-4 py-7 text-center">
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-forest-50 text-forest-700">
+        <Target className="h-4 w-4" aria-hidden="true" />
+      </span>
       <p className="text-xs text-brand-muted-fg leading-relaxed max-w-xs">
         Choose a stock to see {what} for it. This sets the stock for this
         widget only, so the rest of your dashboard stays where it is.
       </p>
 
       {isLoadingRecs ? (
-        <p className="text-[11px] text-brand-muted-fg">Loading the latest run…</p>
+        <p className="text-xs text-brand-muted-fg">Loading the latest run…</p>
       ) : recommendations.length > 0 ? (
         // A run scores about thirty names, which is more than fits in a widget
         // that is often two columns wide, so the list scrolls rather than
@@ -106,7 +148,7 @@ export function PinPrompt({
                 type="button"
                 onClick={() => setTicker(asset.ticker)}
                 title={asset.name}
-                className="rounded-full bg-brand-primary px-2.5 py-1 text-[11px] font-semibold font-mono text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                className="chip chip-line cursor-pointer font-mono transition-colors hover:border-forest-700 hover:bg-forest-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
               >
                 {asset.ticker}
               </button>
@@ -114,7 +156,7 @@ export function PinPrompt({
           </div>
         </div>
       ) : (
-        <p className="text-[11px] text-brand-muted-fg">
+        <p className="text-xs text-brand-muted-fg">
           {isRunInProgress
             ? "An analysis run is in progress. The stocks it scores appear here as soon as it lands."
             : "No completed analysis run yet. Once one finishes, everything it scores can be chosen here."}
@@ -124,9 +166,9 @@ export function PinPrompt({
   );
 }
 
-/** This widget's chosen ticker, with a way out of it. Sits at the top of every
- *  ticker-scoped widget so the reader always knows which asset THIS card is
- *  showing, now that two of them can differ. */
+/** This widget's chosen ticker, as a small select in front of the header's
+ *  subtitle, so the reader always knows which stock THIS card is showing (two
+ *  can differ) and can move it to another of the run's stocks in one step. */
 export function PinnedHeader({
   ticker,
   setTicker,
@@ -134,19 +176,24 @@ export function PinnedHeader({
   ticker: string;
   setTicker: (ticker: string | null) => void;
 }) {
+  const { recommendations } = useSignals();
+  const tickers = recommendations.map((r) => r.ticker);
+  // A stock chosen from an older run stays selectable until it is changed.
+  if (!tickers.includes(ticker)) tickers.unshift(ticker);
   return (
-    <div className="flex items-center gap-2">
-      <span className="chip font-mono">
-        <Target className="h-2.5 w-2.5" />
-        {ticker}
-      </span>
-      <button
-        type="button"
-        onClick={() => setTicker(null)}
-        className="text-[11px] text-brand-muted-fg transition-colors hover:text-brand-fg hover:underline"
+    <InSlot which="subtitle">
+      <select
+        aria-label="Stock for this widget"
+        value={ticker}
+        onChange={(e) => setTicker(e.target.value)}
+        className="as-select as-select-sm font-mono"
       >
-        Change
-      </button>
-    </div>
+        {tickers.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </InSlot>
   );
 }

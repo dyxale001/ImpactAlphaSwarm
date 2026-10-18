@@ -14,7 +14,6 @@ import {
   CandlestickChart,
   ChevronDown,
   CircleAlert,
-  Flame,
   MessageCircleQuestion,
 } from "lucide-react";
 import { useDashboardStats } from "../hooks/useDashboardStats";
@@ -27,11 +26,10 @@ import DualBar from "../components/dashboard/DualBar";
 import RecommendationCard from "../components/dashboard/RecommendationCard";
 import SignalScorecard from "../components/dashboard/SignalScorecard";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
-import { CONVERGENCE_DETAIL, CONVERGENCE_HEADLINE } from "../data/signalCopy";
+import { CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import AssetsAnalysisLoading from "../components/dashboard/AssetsAnalysisLoading";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
-import { sentimentVerdict } from "../components/research/sentimentDisplay";
 import { sectorColour } from "../utils/sectorColours";
 
 import {
@@ -46,6 +44,7 @@ import { rememberHubPage } from "../utils/lastHubPage";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
+import { ScoredSignals, UniverseLine, ordinal, scoredReadings } from "../components/dashboard/scoredStock";
 import { MarketClock } from "../components/research/MarketClock";
 import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
 import { useAskChatbotStore } from "../store/askChatbotStore";
@@ -60,76 +59,6 @@ const SHORTLIST_SIZE = 5;
  *  FundHoldingsView. */
 const INITIAL_ROWS = 12;
 
-/** 84 -> "84th", 1 -> "1st", 12 -> "12th". */
-function ordinal(n: number): string {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
-}
-
-// The quant percentile and sentiment verdict for one "Also scored" row, shared by
-// the desktop table and the phone list so the two cannot drift apart.
-function scoredReadings(asset: AssetRecommendation) {
-  // quant_lean is the mean peer percentile mapped to [-1,+1].
-  const percentile =
-    asset.quantLean !== null
-      ? Math.round(((asset.quantLean + 1) / 2) * 100)
-      : null;
-  const verdict = sentimentVerdict(asset.sentimentScore);
-  const verdictTone =
-    verdict.tone === "positive"
-      ? "chip-up"
-      : verdict.tone === "negative"
-        ? "chip-down"
-        : "";
-  return { percentile, verdict, verdictTone };
-}
-
-function ScoredSignals({ asset }: { asset: AssetRecommendation }) {
-  return (
-    <>
-      {asset.isHype ? (
-        <span className="chip chip-caution">
-          <Flame className="h-3 w-3" /> Hype flagged
-        </span>
-      ) : asset.convergenceState ? (
-        <span
-          className={`chip ${
-            asset.convergenceState === "agree_strongly"
-              ? "chip-up"
-              : asset.convergenceState === "conflict"
-                ? "chip-caution"
-                : ""
-          }`}
-        >
-          {CONVERGENCE_HEADLINE[asset.convergenceState]}
-        </span>
-      ) : null}
-      {asset.isDiscovered ? (
-        <span
-          className="chip chip-accent"
-          title={discoveryProvenance(asset.discoverySources)}
-        >
-          <Sparkles className="h-3 w-3" /> Discovered
-        </span>
-      ) : null}
-    </>
-  );
-}
-
-function UniverseLine({ asset }: { asset: AssetRecommendation }) {
-  if (!asset.universe) return null;
-  return (
-    <span className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-brand-muted-fg">
-      <span
-        aria-hidden="true"
-        className={`h-2 w-2 rounded-full ${sectorColour(asset.universe).fill}`}
-      />
-      {asset.universe}
-      {asset.exchange ? ` · ${asset.exchange}` : ""}
-    </span>
-  );
-}
 
 export default function AssetsPage() {
   // Names this as the page an asset's "Back to X" link should return to. See
@@ -636,7 +565,7 @@ export default function AssetsPage() {
             Full analysis <ArrowRight className="w-3 h-3" />
           </Link>
           {/* The same two controls every other ranked stock carries
-              (RecommendationCard, ScoredAssetRow), so rank 1 is not the
+              (RecommendationCard, the scored rows), so rank 1 is not the
               one stock you cannot ask about or watch from this page. The
               ask button takes a dark-ground variant of the card's
               styling; the watchlist chip is the shared component. */}
