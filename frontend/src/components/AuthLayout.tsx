@@ -5,18 +5,19 @@ import { Check, Eye, EyeOff, ShieldAlert, Terminal } from 'lucide-react'
 // The way in: sign in, open an account and reset a password share this one
 // split layout, the platform's fields and buttons, and the lime brand panel.
 
-/** The platform field, as in Settings and the planners. Error keeps the down tone. */
+/** The way in keeps its own pill fields, focusing with the lime halo. Error
+ *  keeps the down tone. */
 export function authInputClass(hasError: boolean) {
-  return `h-11 w-full min-w-0 rounded-[12px] border bg-white px-3.5 text-sm text-forest-900 outline-none transition-colors placeholder:text-brand-muted-fg disabled:opacity-60 ${
+  return `h-12 w-full min-w-0 rounded-full border bg-white px-[22px] text-sm text-forest-900 outline-none transition-[box-shadow,border-color] duration-200 placeholder:text-brand-muted-fg disabled:opacity-60 ${
     hasError
-      ? 'border-down focus:border-down'
-      : 'border-forest-900/15 hover:border-forest-900/30 focus:border-forest-700'
+      ? 'border-down focus:border-down focus:ring-4 focus:ring-down/25'
+      : 'border-forest-900/14 focus:border-lime-500 focus:ring-4 focus:ring-lime-500/45'
   }`
 }
 
 export const AUTH_LABEL = 'text-sm font-semibold text-forest-900'
 
-export const AUTH_SUBMIT = 'as-btn as-btn-primary h-11 w-full'
+export const AUTH_SUBMIT = 'as-btn as-btn-primary h-12 w-full'
 
 export function AuthSpinner() {
   return (
@@ -84,7 +85,7 @@ export function PasswordField({
           type={show ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`${authInputClass(hasError)} pr-11`}
+          className={`${authInputClass(hasError)} pr-12`}
           autoComplete={autoComplete}
           required
           disabled={disabled}
@@ -96,7 +97,7 @@ export function PasswordField({
           onMouseUp={() => setShow(false)}
           onMouseLeave={() => setShow(false)}
           onBlur={() => setShow(false)}
-          className="absolute right-2 top-1/2 flex -translate-y-1/2 rounded-full p-1.5 text-brand-muted-fg transition-colors hover:text-forest-700"
+          className="absolute right-3 top-1/2 flex -translate-y-1/2 rounded-full p-1.5 text-brand-muted-fg transition-colors hover:text-forest-700"
         >
           {show ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -203,8 +204,31 @@ export default function AuthLayout({ view, children }: AuthLayoutProps) {
       {/* ── Right: sticky lime brand panel ── */}
       <div className="sticky top-0 hidden h-screen p-4 lg:block">
         <div className="relative flex h-full flex-col justify-end gap-6 overflow-hidden rounded-[28px] bg-gradient-to-b from-lime-500 to-lime-200 p-12">
+          {/* The ribbon draws itself in across the panel, then its words fade in. */}
+          <svg viewBox="0 0 700 900" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+            <path
+              id="rb-auth"
+              pathLength={1}
+              d="M-60,120 C160,220 340,60 520,180 C700,300 620,420 540,470 C480,510 560,620 760,640"
+              fill="none"
+              className="ribbon-draw stroke-forest-700"
+              strokeWidth={54}
+              strokeLinecap="round"
+              strokeDasharray="1"
+            />
+            <text
+              className="ribbon-text fill-lime-200 font-semibold uppercase"
+              style={{ fontSize: 19, letterSpacing: '0.14em' }}
+              dominantBaseline="middle"
+            >
+              <textPath href="#rb-auth" startOffset="3%">
+                Emotionless Research · Explainable Signals · One Committee · Zero Emotions · Emotionless Research
+              </textPath>
+            </text>
+          </svg>
+
           {/* An example of what the product shows, in the platform's own card. */}
-          <div className="animate-fade-up-delayed flex max-w-[360px] flex-col gap-3 rounded-[20px] bg-white p-5 shadow-float" aria-hidden="true">
+          <div className="animate-fade-up-delayed relative z-2 flex max-w-[360px] flex-col gap-3 rounded-[20px] bg-white p-5 shadow-float" aria-hidden="true">
             <p className="text-xs font-medium text-brand-muted-fg">Today's top pick</p>
             <div className="flex items-center gap-3">
               <span className="grid h-9 min-w-9 shrink-0 place-items-center rounded-[11px] bg-forest-700 px-1.5 text-xs font-bold text-white">
@@ -230,7 +254,7 @@ export default function AuthLayout({ view, children }: AuthLayoutProps) {
             </p>
           </div>
 
-          <div>
+          <div className="relative z-2">
             <h2 className="max-w-[14ch] text-[40px] font-bold leading-[1.1] tracking-[-0.02em] text-forest-800">
               Let the Swarm Do the Homework
             </h2>
