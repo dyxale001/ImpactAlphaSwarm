@@ -155,9 +155,9 @@ function SectorDot({ sector }: { sector: string }) {
 /** A plain forest ribbon, drawn in by the shared ribbon CSS. It keeps its
  *  proportions (the panel crops it rather than stretching it) and is hidden on
  *  phones, where it would only cut across the copy. */
-function Ribbon({ d, viewBox, width, className }: { d: string; viewBox: string; width: number; className: string }) {
+function Ribbon({ d, viewBox, width, className, anchor = 'xMidYMid' }: { d: string; viewBox: string; width: number; className: string; anchor?: string }) {
   return (
-    <svg viewBox={viewBox} preserveAspectRatio="xMidYMid slice" className={`pointer-events-none absolute hidden lg:block ${className}`} aria-hidden="true">
+    <svg viewBox={viewBox} preserveAspectRatio={`${anchor} slice`} className={`pointer-events-none absolute hidden lg:block ${className}`} aria-hidden="true">
       <path pathLength={1} strokeDasharray="1" d={d} fill="none" className="ribbon-draw stroke-forest-700" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -498,13 +498,16 @@ export default function Landing() {
       <main id="top">
         {/* ═══ Hero ═══ */}
         <section aria-labelledby="hero-title" className="mx-auto max-w-[1200px] px-4 pt-5 sm:px-8">
-          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-9 pt-9 sm:px-10 sm:pb-14 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-40 lg:pt-[72px]">
-            {/* One unhurried sweep: along the foot under the copy, then up and
-                away behind the preview cards. */}
+          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-9 pt-9 sm:px-10 sm:pb-14 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-48 lg:pt-[72px]">
+            {/* A squiggle like the sign-in panel's: alternating bends along the
+                open band at the foot, then a hook that curls back on itself under
+                the cards before it leaves. Pinned to the bottom so its bends keep
+                their shape. */}
             <Ribbon
-              viewBox="0 0 1200 680"
-              d="M-60,585 C170,625 380,615 560,565 C720,520 800,450 870,380 C960,290 1040,240 1130,205 C1185,185 1235,176 1290,172"
-              width={34}
+              viewBox="0 0 1140 880"
+              anchor="xMidYMax"
+              d="M-60,800 C80,735 190,705 305,745 C425,787 470,850 590,835 C700,821 725,745 805,705 C885,665 965,700 985,770 C1000,828 935,860 902,822 C872,787 915,724 1010,722 C1090,720 1130,768 1220,758"
+              width={38}
               className="inset-0 z-[1] h-full w-full"
             />
             <div className="relative z-[3] flex flex-col gap-5">
