@@ -203,7 +203,7 @@ export default function AuthLayout({ view, children }: AuthLayoutProps) {
 
       {/* ── Right: sticky lime brand panel ── */}
       <div className="sticky top-0 hidden h-screen p-4 lg:block">
-        <div className="relative flex h-full flex-col justify-end gap-6 overflow-hidden rounded-[28px] bg-gradient-to-b from-lime-500 to-lime-200 p-12">
+        <div className="relative flex h-full flex-col justify-end gap-6 overflow-hidden rounded-[28px] bg-lime-200 p-12">
           {/* The ribbon draws itself in across the panel, then its words fade in. */}
           <svg viewBox="0 0 700 900" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
             <path
