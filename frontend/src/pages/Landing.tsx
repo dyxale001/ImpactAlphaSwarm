@@ -207,12 +207,13 @@ function DarkChart() {
 
 const ROW = 'flex min-w-0 items-center gap-3 border-t border-forest-900/8 py-2.5 first:border-t-0 first:pt-0 last:pb-0'
 
-type TourItem = { key: string; label: string; flag?: Flag; title: string; body: string; ticks: string[]; stage: ReactNode }
+type TourItem = { key: string; label: string; short: string; flag?: Flag; title: string; body: string; ticks: string[]; stage: ReactNode }
 
 const TOUR: TourItem[] = [
   {
     key: 'dash',
     label: 'Dashboard',
+    short: 'Board',
     title: 'Your board, arranged your way',
     body: 'A starter board is ready the moment you finish setup. Add, move and resize widgets for the parts you use most.',
     ticks: ['Your shortlist and the stocks ranked below it', 'Your watchlist with 14-day charts', 'Sector news, big investors and insider buying for any stock', 'Learning progress and your next lesson'],
@@ -236,6 +237,7 @@ const TOUR: TourItem[] = [
   {
     key: 'stocks',
     label: 'Stocks',
+    short: 'Stocks',
     title: 'A ranked list, with the reasons written down',
     body: 'Each run ranks up to 30 US stocks in your chosen sectors. Four disclosed factors decide the order, shown as positions rather than a hidden score.',
     ticks: ['Signal strength, agreement, evidence depth and fit with your profile', 'A plain-language “Why it ranks here” on every stock', 'Stock pages with sentiment, quant, big investors, insider trading and news', 'Hype flagged when buzz outruns the evidence'],
@@ -267,6 +269,7 @@ const TOUR: TourItem[] = [
   {
     key: 'funds',
     label: 'Funds',
+    short: 'Funds',
     flag: 'funds',
     title: 'South African funds matched to you, plus any fund you upload',
     body: 'Unit trusts and ETFs, described from the fact sheets their managers publish and matched when their published risk label fits your answers.',
@@ -298,6 +301,7 @@ const TOUR: TourItem[] = [
   {
     key: 'news',
     label: 'Market News',
+    short: 'News',
     flag: 'news',
     title: 'The week’s news, sorted by what it means for your sectors',
     body: 'Stories from Reuters, CNBC and Bloomberg, updated through the day. Each one shows how relevant it is to each sector, never whether it is good or bad news.',
@@ -323,6 +327,7 @@ const TOUR: TourItem[] = [
   {
     key: 'whale',
     label: 'Whale Watching',
+    short: 'Whales',
     title: 'Follow the big money, with the context explained',
     body: 'See which institutions own each stock and what company insiders have been buying and selling, with when it was filed and what that means.',
     ticks: ['Institutional owners from quarterly 13F filings', 'Insider dealings from SEC Form 4, routine entries labelled', 'The largest fund positions we track', 'Information only: it never changes your rankings'],
@@ -347,6 +352,7 @@ const TOUR: TourItem[] = [
   {
     key: 'compare',
     label: 'Compare',
+    short: 'Compare',
     flag: 'compare',
     title: 'Two or three side by side, with the difference marked',
     body: 'Line up stocks or funds on the same measures. Compare uses change rather than price, so a R40 share and an R800 share can be read together.',
@@ -376,6 +382,7 @@ const TOUR: TourItem[] = [
   {
     key: 'learn',
     label: 'Learn and plan',
+    short: 'Learn',
     title: 'Learn the ideas, then try them with your own numbers',
     body: 'A roadmap of short lessons matched to your level, with a quiz at the end of each. Financial Tools let you test growth, goals and your tax-free allowance.',
     ticks: ['Lessons from beginner to advanced, each with a quiz', 'XP and badges as you go', 'Growth and goal calculators, with inflation shown in today’s money', 'A TFSA planner for your yearly and lifetime allowance'],
@@ -398,6 +405,7 @@ const TOUR: TourItem[] = [
   {
     key: 'ask',
     label: 'Ask AlphaSwarm',
+    short: 'Ask',
     title: 'Ask in plain English, get the evidence back',
     body: 'Ask about your results, any stock or fund we cover, or what a term means. Answers list where they came from and never predict prices.',
     ticks: ['Questions about your own results and rankings', 'Comparisons and definitions on request', 'Sources listed under every answer', 'On every page from the Ask button'],
@@ -621,7 +629,16 @@ export default function Landing() {
             <p className={SUB}>Pick an area. These are the same screens you’ll use, filled with example figures.</p>
           </div>
           <div className="rounded-[32px] border border-forest-900/8 bg-white p-4 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)] sm:p-8">
-            <div role="tablist" aria-label="Areas of the platform" onKeyDown={onTabKey} className="as-tabs">
+            {/* Below lg: an even grid of pills, as on the stock page (short labels
+                on phones, full ones from sm); from lg up, the one-row pill bar. */}
+            <div
+              role="tablist"
+              aria-label="Areas of the platform"
+              onKeyDown={onTabKey}
+              className={`as-tabs grid w-full rounded-[20px] lg:inline-flex lg:w-auto lg:rounded-full ${
+                tourItems.length <= 4 ? 'grid-cols-2' : tourItems.length <= 6 ? 'grid-cols-3' : 'grid-cols-4'
+              }`}
+            >
               {tourItems.map((t) => (
                 <button
                   key={t.key}
@@ -633,9 +650,11 @@ export default function Landing() {
                   aria-selected={tab === t.key}
                   tabIndex={tab === t.key ? 0 : -1}
                   onClick={() => setTab(t.key)}
-                  className="as-tab"
+                  aria-label={t.label}
+                  className="as-tab px-1 sm:px-4"
                 >
-                  {t.label}
+                  <span className="sm:hidden">{t.short}</span>
+                  <span className="hidden sm:inline">{t.label}</span>
                 </button>
               ))}
             </div>
