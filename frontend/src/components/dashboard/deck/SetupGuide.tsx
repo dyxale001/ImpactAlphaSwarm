@@ -1,4 +1,4 @@
-import { ArrowRight, Check, PartyPopper, X } from "lucide-react";
+import { ArrowRight, Check, LayoutGrid, PartyPopper, X } from "lucide-react";
 import {
   GUIDE_STEPS,
   completedSteps,
@@ -64,137 +64,63 @@ export default function SetupGuide({
 
   const currentAction = step ? action[step] : null;
 
+  // One line, as the full redesign draws it: what this is, how far along, the
+  // step in hand and its action, and a way to close it. The board below is the
+  // point of the page; the guide should not push it down by a screen.
   return (
-    <section
-      aria-label="Dashboard setup guide"
-      className="soft-card relative space-y-4 p-5 sm:p-6"
-    >
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss the setup guide"
-        className="absolute right-4 top-4 rounded-full p-1.5 text-brand-muted-fg transition-colors hover:bg-brand-bg hover:text-brand-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+    <section aria-label="Dashboard setup guide" className="as-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
+      <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800" aria-hidden="true">
+        {allDone ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <LayoutGrid className="h-3.5 w-3.5" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-forest-900">
+          {allDone ? "Your dashboard is yours" : "Make this dashboard yours"}
+        </p>
+        <p className="text-xs leading-relaxed text-brand-muted-fg">
+          {allDone ? (
+            "That is everything. Customise is always in the banner above when you want to change it again."
+          ) : (
+            <>
+              {completed} of {total} steps done.{" "}
+              {step ? (
+                <>
+                  Next: <span className="font-semibold text-forest-900">{GUIDE_STEPS.find((g) => g.id === step)?.title}</span>.{" "}
+                  {GUIDE_STEPS.find((g) => g.id === step)?.detail}
+                </>
+              ) : null}
+            </>
+          )}
+        </p>
+      </div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full bg-forest-50 sm:w-28 sm:shrink-0"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Setup progress"
       >
-        <X className="h-4 w-4" />
-      </button>
-
-      <div className="pr-8">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary">
-          Setting up
-        </p>
-        <h2 className="mt-1.5 text-lg font-bold text-brand-fg">
-          {allDone ? "Your dashboard is yours" : "How to build your dashboard"}
-        </h2>
-        <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-brand-muted-fg">
-          {allDone
-            ? "That is everything. Customise is always in the banner above when you want to change it again."
-            : "Your dashboard starts with a few widgets to get you going, and it's yours to rearrange from there. Five steps, and each one ticks itself off as you do it."}
-        </p>
+        <div className="h-full rounded-full bg-forest-700 transition-[width] duration-500" style={{ width: `${percent}%` }} />
       </div>
-
-      {/* Progress. Worth showing because the steps complete on their own: a
-          reader who resized a widget before being told to needs to see that
-          the guide noticed. */}
-      <div>
-        <div className="mb-1 flex items-center justify-between text-[11px] text-brand-muted-fg">
-          <span>
-            {completed} of {total} done
-          </span>
-          <span className="font-mono">{percent}%</span>
-        </div>
-        <div
-          className="h-1.5 w-full overflow-hidden rounded-full bg-brand-border/40"
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Setup progress"
-        >
-          <div
-            className="h-full rounded-full bg-brand-primary transition-[width] duration-500"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      </div>
-
-      <ol className="space-y-1.5">
-        {GUIDE_STEPS.map((guideStep, i) => {
-          const isDone = done.has(guideStep.id);
-          const isCurrent = guideStep.id === step;
-
-          return (
-            <li
-              key={guideStep.id}
-              aria-current={isCurrent ? "step" : undefined}
-              className={`flex items-start gap-3 rounded-2xl border px-3 py-2.5 transition-colors ${
-                isCurrent
-                  ? "border-brand-accent bg-brand-accent/10"
-                  : "border-transparent"
-              }`}
-            >
-              <span
-                className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-bold transition-colors ${
-                  isDone
-                    ? "border-brand-primary bg-brand-primary text-brand-bg"
-                    : isCurrent
-                      ? "border-brand-primary text-brand-primary"
-                      : "border-brand-border text-brand-muted-fg"
-                }`}
-              >
-                {isDone ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}
-              </span>
-
-              <div className="min-w-0">
-                <p
-                  className={`text-xs font-semibold ${
-                    isDone
-                      ? "text-brand-muted-fg line-through"
-                      : "text-brand-fg"
-                  }`}
-                >
-                  {guideStep.title}
-                </p>
-                {/* Only the step in hand needs its instruction spelled out.
-                    Printing all five at once is the wall of text this is
-                    meant to replace. */}
-                {isCurrent ? (
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-brand-muted-fg">
-                    {guideStep.detail}
-                  </p>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2">
         {allDone ? (
-          <button
-            type="button"
-            onClick={onFinish}
-            className="inline-flex items-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            <PartyPopper className="h-4 w-4" />
+          <button type="button" onClick={onFinish} className="as-btn as-btn-sm as-btn-primary">
+            <PartyPopper className="h-3.5 w-3.5" aria-hidden="true" />
             Close the guide
           </button>
         ) : currentAction ? (
-          <button
-            type="button"
-            onClick={currentAction.run}
-            className="inline-flex items-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
+          <button type="button" onClick={currentAction.run} className="as-btn as-btn-sm as-btn-secondary">
             {currentAction.label}
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         ) : null}
-
         <button
           type="button"
           onClick={onDismiss}
-          className="text-xs font-medium text-brand-muted-fg transition-colors hover:text-brand-fg hover:underline"
+          aria-label="Dismiss the setup guide"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-brand-muted-fg transition-colors hover:bg-forest-50 hover:text-forest-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
         >
-          {allDone ? "Hide this" : "I will work it out myself"}
+          <X className="h-4 w-4" />
         </button>
       </div>
     </section>

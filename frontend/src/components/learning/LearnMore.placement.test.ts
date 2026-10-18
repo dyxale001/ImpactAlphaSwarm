@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/Portfolio.tsx','<h1'],
+ ['../../pages/Portfolio.tsx','<h1'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -20,7 +20,8 @@ it('uses existing Funds spacing and preserves one Dashboard contextual entry poi
  expect(funds).not.toContain('<LearnMore ');
  expect(funds).toContain('learnContext="funds"');
  const dashboard=read('../../pages/Dashboard.tsx');
- expect(dashboard.match(/<LearnMore /g)).toHaveLength(1);
+ expect(dashboard).not.toContain('<LearnMore ');
+ expect(read('../dashboard/deck/TodayStrip.tsx')).toContain('<LearnPopover context="dashboard"');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningNextWidget');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningProgressWidget');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).not.toContain('LearnMore');
