@@ -13,6 +13,9 @@ import { useEffect, useRef } from 'react'
 // attributes directly, so React does not re-render each frame. With reduced motion
 // it stays still and only blinks now and then. It is decorative, so screen readers
 // skip it.
+//
+// `groundShadow` puts a soft shadow under it that stays on the ground: it follows
+// the sideways sway and shrinks and fades while the mascot is in the air.
 
 export type MascotState = 'idle' | 'typing' | 'thinking'
 
@@ -38,12 +41,15 @@ export default function AskMascot({
   size = 72,
   state = 'idle',
   answers = 0,
+  groundShadow = false,
   className = '',
 }: {
   size?: number
   state?: MascotState
   /** How many answers there are so far; it hops each time this goes up. */
   answers?: number
+  /** A shadow on the ground under it (the floating panel's corner). */
+  groundShadow?: boolean
   className?: string
 }) {
   const lift = useRef<SVGGElement>(null)
@@ -53,6 +59,7 @@ export default function AskMascot({
   const open = useRef<SVGGElement>(null)
   const shut = useRef<SVGGElement>(null)
   const mouth = useRef<SVGRectElement>(null)
+  const shadow = useRef<SVGEllipseElement>(null)
   const stateRef = useRef<MascotState>(state)
   const hopRef = useRef(-1)
   const answersRef = useRef(answers)
@@ -159,6 +166,13 @@ export default function AskMascot({
       const sx = 1 + squash + breathe * 0.5, sy = 1 - squash + breathe
       body.current?.setAttribute('transform', `translate(60 104) rotate(${cur.rot.toFixed(2)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(-60 -104)`)
       lift.current?.setAttribute('transform', `translate(0 ${hy.toFixed(2)})`)
+      if (shadow.current) {
+        // Smaller and fainter the higher it is; drifts with the body's sway.
+        const air = Math.max(0.55, 1 + hy / 36)
+        const sw = air * (1 + squash * 0.8)
+        shadow.current.setAttribute('transform', `translate(${(60 + cur.dx * 0.25).toFixed(2)} 113) scale(${sw.toFixed(3)} ${air.toFixed(3)}) translate(-60 -113)`)
+        shadow.current.style.opacity = (0.32 * air).toFixed(3)
+      }
       face.current?.setAttribute('transform', `translate(${cur.dx.toFixed(2)} ${cur.dy.toFixed(2)})`)
       mouth.current?.setAttribute('transform', `translate(${(-cur.dx * 0.35).toFixed(2)} ${(-cur.dy * 0.3).toFixed(2)})`)
       const closed = now < blinkUntil
@@ -184,6 +198,9 @@ export default function AskMascot({
       focusable="false"
       className={`block shrink-0 overflow-visible ${className}`}
     >
+      {groundShadow && (
+        <ellipse ref={shadow} cx="60" cy="113" rx="30" ry="5" style={{ fill: 'rgb(8 20 18)', opacity: 0.32, filter: 'blur(1.5px)' }} />
+      )}
       <g ref={lift}>
         <g ref={body}>
           <path ref={blob} d="M60,26 C84,26 104,44 104,66 C104,88 84,104 60,104 C36,104 16,88 16,66 C16,44 36,26 60,26Z" style={{ fill: BODY }} />

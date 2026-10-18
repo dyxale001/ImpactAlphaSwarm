@@ -135,7 +135,7 @@ export default function AskAlphaSwarmChatbot() {
               It glances down while you type, looks up while an answer is being
               written, and hops when one arrives. */}
           <div className="pointer-events-none absolute -left-4 -top-8 z-10">
-            <AskMascot size={76} state={loading ? 'thinking' : query.trim() ? 'typing' : 'idle'} answers={turns.length} />
+            <AskMascot size={76} state={loading ? 'thinking' : query.trim() ? 'typing' : 'idle'} answers={turns.length} groundShadow />
           </div>
 
           {/* Messages */}
