@@ -95,8 +95,8 @@ export default function TodayStrip({
   // The hub header every page uses, with no motif. Left: the greeting, what the
   // board holds, the rand and market footing every price here rests on, and the
   // two ways into editing. Right: how fresh the run and the sentiment are, as the
-  // stat tiles Learning and Settings use, with Refresh beside them, and the book
-  // button for this page's lessons.
+  // stat tiles Learning and Settings use, and the book button for this page's
+  // lessons, with Refresh in the card's bottom-right corner.
   return (
     <div data-spotlight="dashboard" className="hero-card px-5 py-6 sm:px-8 sm:py-7">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
@@ -147,7 +147,7 @@ export default function TodayStrip({
         </div>
 
         {!isEditing ? (
-          <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <div className="flex shrink-0 flex-col gap-2 sm:items-end lg:self-stretch lg:justify-between">
             <div className="flex w-full items-start gap-2 sm:w-auto">
               <dl className="grid flex-1 grid-cols-2 gap-2 sm:flex-none">
                 <div className="min-w-0 rounded-[14px] bg-white/8 px-3 py-2.5 sm:px-4">
