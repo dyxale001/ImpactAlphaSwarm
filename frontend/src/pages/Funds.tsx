@@ -1,4 +1,3 @@
-import AboutThisPage from "../components/guidance/AboutThisPage";
 import LearnMore from '../components/learning/LearnMore';
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -180,7 +179,6 @@ export default function FundsPage() {
             {FUND_ABOUT_BUTTON}
           </button>
         </div>
-        <AboutThisPage page="funds" />
       </div>
       <LearnMore context="funds" className="mt-6" />
 
