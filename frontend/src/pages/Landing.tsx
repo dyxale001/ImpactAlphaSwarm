@@ -1,1067 +1,865 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Terminal,
-  Activity,
-  Menu,
-  Zap,
-  Flame,
-  Sparkles,
-  MessageSquare,
-  BarChart3,
-  GitMerge,
-  Waves,
   ArrowRight,
-  ArrowUpRight,
+  BookOpen,
+  Calculator,
+  CandlestickChart,
+  Check,
   ChevronDown,
-  Trophy,
-  CheckCircle2,
-  Cpu,
-  TrendingUp,
-  Bot,
+  CircleHelp,
+  Columns2,
+  Eye,
+  Flame,
+  Info,
+  Landmark,
+  Layers,
+  LayoutDashboard,
+  Menu,
+  MessageCircle,
+  Newspaper,
+  Sparkles,
+  Terminal,
+  Upload,
+  UserRound,
+  Waves,
+  X,
+  type LucideIcon,
 } from 'lucide-react'
-import InvestorProfileCard from '../components/InvestorProfileCard'
+import { FUNDS_ENABLED } from '../utils/fundsFlags'
+import { COMPARE_ENABLED } from '../utils/compareFlags'
+import { MACRO_NEWS_ENABLED } from '../utils/macroNewsFlags'
+import { sectorColour } from '../utils/sectorColours'
 
-// ─── Shared data ───────────────────────────────────────────────────────────
+// The public front door. Written to the reframe the team settled on (D-230,
+// D-231): lead with the problem, then what the platform explains, never what it
+// recommends. Nothing here says advice, predictions or live web search, and no
+// data source is named as a partner.
+//
+// Every flagged feature (Funds, Compare, Market News) appears only while its
+// flag is on, so the page never advertises a page a visitor cannot open.
 
-// Signal Scorecard factors: markers on tracks, no numbers anywhere
-const SCORECARD_ROWS = [
-  { label: 'Signal strength', pos: 82 },
-  { label: 'Agreement', pos: 90 },
-  { label: 'Evidence depth', pos: 58 },
-  { label: 'Fit with your profile', pos: 70 },
-]
+type Flag = 'funds' | 'compare' | 'news'
+const FLAGS: Record<Flag, boolean> = { funds: FUNDS_ENABLED, compare: COMPARE_ENABLED, news: MACRO_NEWS_ENABLED }
+const on = (flag?: Flag) => !flag || FLAGS[flag]
 
-const AGENTS = [
-  {
-    Icon: MessageSquare,
-    name: 'Sentiment Scout',
-    desc: 'Reads tiered financial news and StockTwits chatter, scoring tone with two independent systems, blended 70% news, 30% social over the last 7 days.',
-  },
-  {
-    Icon: BarChart3,
-    name: 'Quant Analyst',
-    desc: 'Crunches about a year of price history (momentum, volatility, risk-adjusted return) and ranks each stock against its peers in the run.',
-  },
-  {
-    Icon: Sparkles,
-    name: 'Discovery Agent',
-    desc: "Hunts overnight for trending tickers you didn't ask about. Every candidate must pass validation before it can enter your feed.",
-  },
-  {
-    Icon: GitMerge,
-    name: 'The Orchestrator',
-    desc: 'The committee chair: merges the two signals, runs the risk and hype checks, decides the order, and writes the reasoning for every pick.',
-  },
-]
+// ─── Content ───────────────────────────────────────────────────────────────
 
-const FAQS = [
+type Feature = { icon: LucideIcon; title: string; body: string; tab?: string; flag?: Flag }
+
+// Grouped like the app's sidebar.
+const FEATURE_GROUPS: { label: string; items: Feature[] }[] = [
   {
-    q: 'Is AlphaSwarm financial advice?',
-    a: 'No. AlphaSwarm is a financial-transparency tool: it centralises the evidence and explains it; it never tells you what to do. There are no buy, hold, or sell recommendations, and the final decision always stays with you. Scores are for research and education only and are not financial advice; consult a licensed financial advisor before investing.',
+    label: 'Explore',
+    items: [
+      { icon: CandlestickChart, title: 'Stocks', tab: 'stocks', body: 'Up to 30 US stocks in your sectors ranked for your profile each run, with why each one sits where it does. Every stock has its own page.' },
+      { icon: Landmark, title: 'Funds', tab: 'funds', flag: 'funds', body: 'South African unit trusts and ETFs matched to your answers, with “Why this appears” on each. Upload any fund’s fact sheet to add it.' },
+      { icon: Newspaper, title: 'Market News', tab: 'news', flag: 'news', body: 'The week’s market news scored for how relevant it is to each sector, with a short AI overview.' },
+      { icon: Waves, title: 'Whale Watching', tab: 'whale', body: 'Insider dealings, the institutions that own each stock and what the largest funds hold.' },
+    ],
   },
   {
-    q: 'Where does the data come from?',
-    a: 'Market prices and history from Yahoo Finance (15-minute delayed, with the live USD/ZAR rate), financial news from Finnhub and Marketaux weighted by publisher reliability, retail chatter from StockTwits, and insider and institutional filings from the SEC (Form 4 and 13F). Sentiment is scored by two independent systems and blended 70% news / 30% social over a 7-day window.',
+    label: 'Your tools',
+    items: [
+      { icon: LayoutDashboard, title: 'Dashboard', tab: 'dash', body: 'Your shortlist, watchlist, news and learning progress on one board you arrange yourself.' },
+      { icon: Eye, title: 'Watchlist', tab: 'stocks', body: 'Follow any US stock with live prices and 14-day charts. Watched stocks join your next analysis run.' },
+      { icon: Columns2, title: 'Compare', tab: 'compare', flag: 'compare', body: 'Line up two or three stocks or funds side by side, with the measure that differs most marked.' },
+      { icon: Calculator, title: 'Financial Tools', tab: 'learn', body: 'See what saving could grow to, what a goal takes, and how much tax-free allowance you have left.' },
+    ],
   },
   {
-    q: 'How does the AI decide what ranks first?',
-    a: "Two independent engines (one quantitative, one sentiment) measure each stock separately. Four disclosed factors then decide the order: signal strength, agreement between the engines, depth of evidence, and fit with your risk profile. They're multiplied, so weakness in any one genuinely drags a pick down, and there is no single hidden score.",
-  },
-  {
-    q: 'Do I need investing experience?',
-    a: 'No. Onboarding profiles you from novice to advanced, the committee filters everything through your risk mandate, and the Learning Centre teaches the concepts with plain-language articles, quizzes, XP and badges.',
-  },
-  {
-    q: 'What does "hype flagged" mean?',
-    a: 'When social buzz races ahead of what the market data supports, the committee flags it instead of chasing it. AlphaSwarm never ranks by how often a stock is mentioned, because that would just build a meme-stock leaderboard.',
+    label: 'Learn and ask',
+    items: [
+      { icon: BookOpen, title: 'Learning Centre', tab: 'learn', body: 'Short lessons on a roadmap matched to your level, with quizzes, XP and badges.' },
+      { icon: Sparkles, title: 'Ask AlphaSwarm', tab: 'ask', body: 'Ask about your results, any stock or fund, or what a term means. Answers explain and list their sources, never advise.' },
+      { icon: Info, title: 'Explained on every page', tab: 'stocks', body: 'A “How is this worked out?” window and short lessons sit next to every figure, so nothing is a black box.' },
+      { icon: UserRound, title: 'Your profile, your reasons', body: 'Settings shows the answers behind your risk rating in plain words, and you can retake the questions any time.' },
+    ],
   },
 ]
 
-// ─── Squiggle ribbons ──────────────────────────────────────────────────────
-
-interface SquiggleRibbonProps {
-  pathId: string
-  d: string
-  viewBox: string
-  para: number
-  rot: number
-  className: string
-  strokeClass: string
-  strokeWidth: number
-  strokeOpacity?: number
-  text: string
-  textFillClass: string
-  textSize: number
-  startOffset: string
-  textOpacity?: number
-  /** Hero-only thin offset echo line under the ribbon */
-  echo?: boolean
-}
-
-function SquiggleRibbon({
-  pathId,
-  d,
-  viewBox,
-  para,
-  rot,
-  className,
-  strokeClass,
-  strokeWidth,
-  strokeOpacity,
-  text,
-  textFillClass,
-  textSize,
-  startOffset,
-  textOpacity,
-  echo = false,
-}: SquiggleRibbonProps) {
-  return (
-    <svg
-      data-para={para}
-      data-rot={rot}
-      viewBox={viewBox}
-      className={`pointer-events-none absolute overflow-visible will-change-transform ${className}`}
-      aria-hidden="true"
-    >
-      <path
-        id={pathId}
-        data-draw=""
-        d={d}
-        fill="none"
-        className={strokeClass}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        opacity={strokeOpacity}
-      />
-      {echo && (
-        <path
-          data-draw=""
-          d={d}
-          fill="none"
-          className="stroke-forest-700"
-          strokeWidth={1.5}
-          opacity={0.18}
-          transform="translate(0,34)"
-        />
-      )}
-      <text
-        className={`font-sans font-semibold uppercase ${textFillClass}`}
-        style={{ fontSize: textSize, letterSpacing: '0.14em' }}
-        opacity={textOpacity}
-        dominantBaseline="middle"
-      >
-        <textPath href={`#${pathId}`} startOffset={startOffset}>
-          {text}
-        </textPath>
-      </text>
-    </svg>
-  )
-}
-
-// Parallax + draw-on-scroll for every [data-para] ribbon: one rAF-throttled
-// scroll listener translates/rotates each ribbon by its viewport-relative
-// progress and reveals the stroke via dasharray/dashoffset. Disabled entirely
-// under prefers-reduced-motion (ribbons then render fully drawn and static).
-function useRibbonScroll(rootRef: React.RefObject<HTMLDivElement | null>) {
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    type Ribbon = {
-      el: SVGSVGElement
-      top: number
-      h: number
-      speed: number
-      rot: number
-      items: { p: SVGPathElement; L: number }[]
-      text: SVGTextElement | null
-    }
-
-    let ribbons: Ribbon[] = []
-    let raf: number | null = null
-
-    const collect = () => {
-      ribbons = Array.from(root.querySelectorAll<SVGSVGElement>('svg[data-para]')).map((el) => {
-        el.style.transform = 'none'
-        const r = el.getBoundingClientRect()
-        const items = Array.from(el.querySelectorAll<SVGPathElement>('path[data-draw]')).map((p) => {
-          const L = p.getTotalLength()
-          p.style.strokeDasharray = String(L)
-          return { p, L }
-        })
-        return {
-          el,
-          top: r.top + window.scrollY,
-          h: r.height,
-          speed: parseFloat(el.dataset.para || '0') || 0,
-          rot: parseFloat(el.dataset.rot || '0') || 0,
-          items,
-          text: el.querySelector('text'),
-        }
-      })
-    }
-
-    const update = () => {
-      const vh = window.innerHeight || 1
-      const sc = window.scrollY
-      for (const o of ribbons) {
-        let t = (sc + vh / 2 - (o.top + o.h / 2)) / vh
-        t = Math.max(-1.8, Math.min(1.8, t))
-        o.el.style.transform = `translate3d(0, ${(t * o.speed * 140).toFixed(1)}px, 0) rotate(${(t * o.rot).toFixed(2)}deg)`
-        // draw-on-scroll: reveal the stroke as the ribbon travels through the viewport
-        let p = (sc + vh * 0.9 - o.top) / (o.h + vh * 0.55)
-        p = Math.max(0, Math.min(1, p))
-        const eased = p * p * (3 - 2 * p)
-        for (const it of o.items) {
-          it.p.style.strokeDashoffset = String(it.L * (1 - eased))
-        }
-        if (o.text) o.text.style.opacity = String(Math.max(0, Math.min(1, (eased - 0.12) / 0.55)))
-      }
-    }
-
-    const onScroll = () => {
-      if (raf !== null) return
-      raf = requestAnimationFrame(() => {
-        raf = null
-        update()
-      })
-    }
-    const onResize = () => {
-      collect()
-      update()
-    }
-
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onResize)
-    onResize()
-    // fonts/layout settle before measuring
-    const t1 = window.setTimeout(onResize, 400)
-    const t2 = window.setTimeout(onResize, 1500)
-
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onResize)
-      if (raf !== null) cancelAnimationFrame(raf)
-      window.clearTimeout(t1)
-      window.clearTimeout(t2)
-    }
-  }, [rootRef])
-}
+const FAQS: { q: string; a: string; flag?: Flag }[] = [
+  { q: 'Is AlphaSwarm financial advice?', a: 'No. It gathers the evidence and explains it, and is designed to stay on the informational side. There are no buy, hold or sell calls and no price predictions, and the decision always stays with you.' },
+  { q: 'Is it free?', a: 'Yes. The web app is free to use: open an account, set your profile and your first list is ready after one analysis run.' },
+  { q: 'Do I need investing experience?', a: 'No. Onboarding places you from novice to advanced, explanations match your level, and the Learning Centre teaches the ideas in short lessons with quizzes.' },
+  { q: 'How does AlphaSwarm decide the order of stocks?', a: 'Two independent engines, one reading sentiment and one reading price behaviour, measure each stock. Four disclosed factors then decide the order: signal strength, agreement, evidence depth and fit with your profile. There is no single hidden score.' },
+  { q: 'What does it cover?', a: 'US stocks listed on the NYSE and Nasdaq in six sectors: Technology, Green Energy, Finance, AI & Robotics, Healthcare, and Media & Communications. Each run scores up to 30 stocks for you.' },
+  { q: 'Which funds are covered, and how are they matched?', flag: 'funds', a: 'South African unit trusts and ETFs, described from their managers’ fact sheets. A fund appears in your matches when its published risk label and minimum term fit your answers. No AI picks the funds.' },
+  { q: 'What happens to a fact sheet I upload?', flag: 'funds', a: 'It is read for you, anything unclear is flagged, and you confirm or correct those values before it is saved. The PDF isn’t kept, and uploaded funds stay private to your account.' },
+  { q: 'Where does the data come from?', a: 'Prices from Yahoo Finance with the USD/ZAR rate stated, company news from Finnhub and Marketaux, social posts from StockTwits, insider and institutional filings from the SEC (Form 4 and 13F), and fund facts from managers’ published fact sheets.' },
+  { q: 'What does “Hype flagged” mean?', a: 'When social buzz runs ahead of what the price evidence supports, the stock is flagged rather than pushed up. AlphaSwarm never ranks by how often a stock is mentioned.' },
+  { q: 'Can Ask AlphaSwarm get things wrong?', a: 'Yes, so every answer lists its sources and AI-written text is labelled. It explains your data and terms, and won’t predict prices or tell you what to buy.' },
+]
 
 // ─── Small pieces ──────────────────────────────────────────────────────────
 
-function Wordmark({ size = 22 }: { size?: number }) {
+const SIGNUP = '/signup'
+const SECTION_HEAD = 'flex max-w-[720px] flex-col gap-3'
+const EYEBROW = 'text-xs font-bold uppercase tracking-[0.1em] text-forest-700'
+const H2 = 'text-balance text-[32px] font-bold leading-[1.1] tracking-[-0.02em] text-forest-900 lg:text-[40px]'
+const SUB = 'max-w-[62ch] text-base text-brand-muted-fg'
+const CARD = 'flex min-w-0 flex-col gap-3 rounded-[20px] border border-forest-900/8 bg-white p-5 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)]'
+
+function Wordmark() {
   return (
-    <span
-      className="flex items-center gap-2 font-extrabold tracking-[-0.04em] text-forest-900"
-      style={{ fontSize: size }}
-    >
-      <Terminal size={size} className="text-forest-700" strokeWidth={2} />
+    <span className="flex items-center gap-2 text-xl font-extrabold tracking-[-0.04em] text-forest-900">
+      <Terminal size={20} className="text-forest-700" strokeWidth={2} aria-hidden="true" />
       AlphaSwarm
     </span>
   )
 }
 
-function StopHeader({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
+function SparkTile({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
   return (
-    <>
-      <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted">{eyebrow}</p>
-      <h3 className="text-[28px] font-medium leading-[1.15] tracking-tight text-forest-700 md:text-4xl">{title}</h3>
-      <p className="text-base leading-relaxed text-forest-900">{body}</p>
-    </>
+    <span
+      className={`grid shrink-0 place-items-center bg-lime-500 text-forest-800 ${
+        size === 'lg' ? 'h-10 w-10 rounded-[12px]' : 'h-[22px] w-[22px] rounded-[7px]'
+      }`}
+      aria-hidden="true"
+    >
+      <Sparkles className={size === 'lg' ? 'h-[18px] w-[18px]' : 'h-3.5 w-3.5'} />
+    </span>
   )
 }
 
-function ScorecardRowsDark() {
+function Meter({ label, value, percent }: { label: string; value: string; percent: number }) {
   return (
-    <div className="my-1.5 flex w-full flex-col gap-[11px]">
-      {SCORECARD_ROWS.map((row) => (
-        <div key={row.label}>
-          <p className="mb-[5px] text-[9px] font-semibold uppercase tracking-[0.12em] text-lime-500">{row.label}</p>
-          <div className="relative h-[5px] rounded-full bg-white/15">
-            <span
-              className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-forest-900 bg-lime-500"
-              style={{ left: `${row.pos}%` }}
-            />
-          </div>
-        </div>
-      ))}
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-brand-muted-fg">{label}</span>
+        <b className="text-sm tabular-nums text-forest-900">{value}</b>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-forest-900/8">
+        <i className="block h-full rounded-full bg-forest-700" style={{ width: `${percent}%` }} />
+      </div>
     </div>
   )
 }
 
-function ScorecardRowsLight() {
+function TickerTile({ ticker, small = false, light = false }: { ticker: string; small?: boolean; light?: boolean }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-[9px]">
-      <span className="self-start rounded-sm bg-forest-700/12 px-3 py-1 text-[11px] font-bold tracking-[0.02em] text-forest-700">
-        Signals agree strongly
-      </span>
-      {SCORECARD_ROWS.map((row) => (
-        <div key={row.label}>
-          <p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-forest-700">{row.label}</p>
-          <div className="relative h-[5px] rounded-full bg-forest-900/8">
-            <span
-              className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-forest-700"
-              style={{ left: `${row.pos}%` }}
-            />
-          </div>
-        </div>
-      ))}
+    <span
+      className={`grid shrink-0 place-items-center px-1.5 text-xs font-bold ${light ? 'bg-forest-50 text-forest-700' : 'bg-forest-700 text-white'} ${
+        small ? 'h-8 min-w-8 rounded-[10px]' : 'h-9 min-w-9 rounded-[11px]'
+      }`}
+      aria-hidden="true"
+    >
+      {ticker}
+    </span>
+  )
+}
+
+function SectorDot({ sector }: { sector: string }) {
+  return <span className={`h-2 w-2 shrink-0 rounded-full ${sectorColour(sector).fill}`} aria-hidden="true" />
+}
+
+/** A forest ribbon carrying a line of copy, drawn in by the shared ribbon CSS. */
+function Ribbon({ id, d, viewBox, width, text, size, className, band = 'stroke-forest-700', copy = 'fill-lime-200' }: {
+  id: string; d: string; viewBox: string; width: number; text: string; size: number; className: string; band?: string; copy?: string
+}) {
+  return (
+    <svg viewBox={viewBox} preserveAspectRatio="none" className={`pointer-events-none absolute ${className}`} aria-hidden="true">
+      <path id={id} pathLength={1} strokeDasharray="1" d={d} fill="none" className={`ribbon-draw ${band}`} strokeWidth={width} strokeLinecap="round" />
+      <text className={`ribbon-text font-bold uppercase ${copy}`} style={{ fontSize: size, letterSpacing: '0.14em' }} dominantBaseline="middle">
+        <textPath href={`#${id}`} startOffset="2%">{text}</textPath>
+      </text>
+    </svg>
+  )
+}
+
+// ─── Tour panes (example figures, drawn with the app's own pieces) ─────────
+
+// A smooth-ish random walk ending at `end`, seeded so the picture never changes.
+function walk(seed: number, n: number, end: number) {
+  let s = seed
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647
+  const z = [0]
+  for (let i = 1; i < n; i++) z.push(z[i - 1] + (r() - 0.5) * 5)
+  return z.map((v, i) => (end * i) / (n - 1) + v - (z[n - 1] * i) / (n - 1))
+}
+
+function DarkChart() {
+  const series = [
+    { d: walk(11, 30, 42), stroke: 'var(--color-lime-500)', dash: undefined },
+    { d: walk(23, 30, 18.6), stroke: '#ffffff', dash: '6 4' },
+  ]
+  const all = series.flatMap((s) => s.d)
+  const mn = Math.min(...all)
+  const mx = Math.max(...all)
+  const y = (v: number) => (1 - (v - mn) / (mx - mn || 1)) * 100
+  return (
+    <div className="h-[140px] rounded-[14px] bg-forest-700 p-3">
+      <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="block h-full w-full overflow-visible" aria-hidden="true">
+        <line x1="0" x2="1000" y1={y(0)} y2={y(0)} stroke="rgba(255,255,255,.25)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        {series.map((s, k) => (
+          <path
+            key={k}
+            d={s.d.map((v, i) => `${i ? 'L' : 'M'}${((i / (s.d.length - 1)) * 1000).toFixed(1)},${y(v).toFixed(1)}`).join('')}
+            fill="none"
+            stroke={s.stroke}
+            strokeWidth={2.5}
+            strokeDasharray={s.dash}
+            vectorEffect="non-scaling-stroke"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </svg>
     </div>
   )
 }
+
+const ROW = 'flex min-w-0 items-center gap-3 border-t border-forest-900/8 py-2.5 first:border-t-0 first:pt-0 last:pb-0'
+
+type TourItem = { key: string; label: string; flag?: Flag; title: string; body: string; ticks: string[]; stage: ReactNode }
+
+const TOUR: TourItem[] = [
+  {
+    key: 'dash',
+    label: 'Dashboard',
+    title: 'Your board, arranged your way',
+    body: 'A starter board is ready the moment you finish setup. Add, move and resize widgets for the parts you use most.',
+    ticks: ['Your shortlist and the stocks ranked below it', 'Your watchlist with 14-day charts', 'Sector news, big investors and insider buying for any stock', 'Learning progress and your next lesson'],
+    stage: (
+      <>
+        <div className={CARD}>
+          <div className="flex items-center justify-between gap-3"><b className="text-base text-forest-900">Good afternoon, Naledi</b><span className="chip">4 widgets</span></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="as-inset p-3"><p className="text-xs text-brand-muted-fg">Last AI run</p><p className="text-sm font-bold tabular-nums text-forest-900">13 Oct, 08:12</p></div>
+            <div className="as-inset p-3"><p className="text-xs text-brand-muted-fg">Sentiment updated</p><p className="text-sm font-bold tabular-nums text-forest-900">13 Oct, 14:00</p></div>
+          </div>
+        </div>
+        <div className={CARD}>
+          <div className="flex items-center justify-between gap-3"><b className="text-sm text-forest-900">Learning progress</b><span className="chip chip-accent">2 of 6 badges</span></div>
+          <div><p className="text-2xl font-bold tabular-nums text-forest-900">240</p><p className="text-xs text-brand-muted-fg">Learning XP</p></div>
+          <Meter label="Lessons completed" value="3 of 11" percent={27} />
+        </div>
+      </>
+    ),
+  },
+  {
+    key: 'stocks',
+    label: 'Stocks',
+    title: 'A ranked list, with the reasons written down',
+    body: 'Each run ranks up to 30 US stocks in your chosen sectors. Four disclosed factors decide the order, shown as positions rather than a hidden score.',
+    ticks: ['Signal strength, agreement, evidence depth and fit with your profile', 'A plain-language “Why it ranks here” on every stock', 'Stock pages with sentiment, quant, big investors, insider trading and news', 'Hype flagged when buzz outruns the evidence'],
+    stage: (
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3"><b className="text-base text-forest-900">Also scored</b><span className="text-xs text-brand-muted-fg">Ranked in the same run</span></div>
+        <ul>
+          {[
+            { rank: 6, t: 'GOOGL', n: 'Alphabet', s: '57 · Positive', up: true, p: '58th percentile' },
+            { rank: 7, t: 'AMD', n: 'Advanced Micro Devices', s: '53 · Neutral', up: false, p: '61st percentile' },
+            { rank: 9, t: 'PLTR', n: 'Palantir', s: '71 · Strongly positive', up: true, p: '38th percentile', hype: true },
+          ].map((r) => (
+            <li key={r.t} className={`${ROW} items-start`}>
+              <span className="w-4 shrink-0 pt-0.5 text-center text-xs font-bold text-brand-muted-fg">{r.rank}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-forest-900">{r.t} <span className="text-xs font-normal text-brand-muted-fg">{r.n}</span></p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className={`chip ${r.up ? 'chip-up' : ''}`}>{r.s}</span>
+                  <span className="text-xs tabular-nums text-brand-muted-fg">{r.p} vs peers</span>
+                  {r.hype && <span className="chip chip-caution"><Flame className="h-3 w-3" aria-hidden="true" />Hype flagged</span>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ),
+  },
+  {
+    key: 'funds',
+    label: 'Funds',
+    flag: 'funds',
+    title: 'South African funds matched to you, plus any fund you upload',
+    body: 'Unit trusts and ETFs, described from the fact sheets their managers publish and matched when their published risk label fits your answers.',
+    ticks: ['Cost a year, risk label, fund size and minimum term on every card', '“Why this appears” explains each match from the rules, not AI picks', 'Upload a fact sheet: it is read for you, and you confirm anything unclear', 'Funds you upload stay private to your account'],
+    stage: (
+      <>
+        <div className={CARD}>
+          <div className="flex flex-wrap gap-1.5"><span className="chip">Unit trust</span><span className="chip chip-line">Index tracker</span><span className="chip chip-accent">Tax-free eligible</span></div>
+          <div><b className="text-base text-forest-900">Satrix Balanced Index Fund</b><p className="text-xs text-brand-muted-fg">Satrix · South African · Multi-asset</p></div>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs text-brand-muted-fg">Risk, as the manager publishes it</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="inline-flex gap-[3px]" aria-hidden="true">{[1, 2, 3, 4, 5].map((n) => <i key={n} className={`h-1.5 w-[18px] rounded-full ${n <= 3 ? 'bg-forest-700' : 'bg-forest-100'}`} />)}</span>
+                <b className="text-sm text-forest-900">3 of 5</b>
+              </div>
+            </div>
+            <div className="text-right"><p className="text-xl font-bold tabular-nums text-forest-900">0.37%</p><p className="text-xs text-brand-muted-fg">Cost a year</p></div>
+          </div>
+        </div>
+        <div className={`${CARD} flex-row items-center border-dashed border-forest-900/28`}>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[12px] bg-forest-50 text-forest-700"><Upload className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1"><b className="text-sm text-forest-900">Upload a fact sheet</b><p className="text-xs text-brand-muted-fg">Read for you, checked by you</p></div>
+          <span className="chip chip-up"><Check className="h-3 w-3" aria-hidden="true" />Confirmed</span>
+        </div>
+      </>
+    ),
+  },
+  {
+    key: 'news',
+    label: 'Market News',
+    flag: 'news',
+    title: 'The week’s news, sorted by what it means for your sectors',
+    body: 'Stories from Reuters, CNBC and Bloomberg, updated through the day. Each one shows how relevant it is to each sector, never whether it is good or bad news.',
+    ticks: ['A short AI overview per sector, labelled as possibly mistaken', 'Relevance shown for every sector on every story', 'Filter to your own sectors or see everything', 'Never changes your stock rankings'],
+    stage: (
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3"><b className="flex items-center gap-2 text-base text-forest-900"><SectorDot sector="Technology" />Technology</b><span className="text-xs text-brand-muted-fg">11 stories this week</span></div>
+        <div className="as-inset p-4">
+          <p className="mb-2 flex items-center gap-2 text-sm font-bold text-forest-900"><SparkTile />AI overview</p>
+          <p className="text-sm leading-relaxed text-forest-900">Chip export rules and AI spending lead the week, with cloud companies raising data-centre budgets.</p>
+        </div>
+        <ul>
+          {[['US weighs tighter curbs on AI chip exports', 'Reuters · Today 12:17', 94], ['Microsoft lifts data-centre spending forecast', 'CNBC · Today 09:35', 88], ['TSMC September sales jump 31%', 'Bloomberg · Yesterday', 81]].map(([h, s, p]) => (
+            <li key={h as string} className={ROW}>
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-forest-900">{h}</p><p className="text-xs text-brand-muted-fg">{s}</p></div>
+              <span className="chip shrink-0 tabular-nums">{p}% relevant</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ),
+  },
+  {
+    key: 'whale',
+    label: 'Whale Watching',
+    title: 'Follow the big money, with the context explained',
+    body: 'See which institutions own each stock and what company insiders have been buying and selling, with when it was filed and what that means.',
+    ticks: ['Institutional owners from quarterly 13F filings', 'Insider dealings from SEC Form 4, routine entries labelled', 'The largest fund positions we track', 'Information only: it never changes your rankings'],
+    stage: (
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3"><b className="text-base text-forest-900">Who owns NVDA</b><span className="chip">13F filings</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="as-inset p-3"><p className="text-xs text-brand-muted-fg">Institutions</p><p className="text-xl font-bold tabular-nums text-forest-900">61.4%</p></div>
+          <div className="as-inset p-3"><p className="text-xs text-brand-muted-fg">Insiders</p><p className="text-xl font-bold tabular-nums text-forest-900">3.5%</p></div>
+        </div>
+        <ul>
+          {[['Vanguard Group Inc', '9.3%', 100], ['BlackRock Inc', '6.0%', 65], ['FMR LLC', '4.9%', 53]].map(([n, v, w]) => (
+            <li key={n as string} className="border-t border-forest-900/8 py-2.5 first:border-t-0 first:pt-0 last:pb-0">
+              <div className="flex items-baseline justify-between gap-3"><span className="truncate text-sm font-semibold text-forest-900">{n}</span><b className="text-sm tabular-nums text-forest-900">{v}</b></div>
+              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-forest-900/8"><i className="block h-full rounded-full bg-forest-700" style={{ width: `${w}%` }} /></div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ),
+  },
+  {
+    key: 'compare',
+    label: 'Compare',
+    flag: 'compare',
+    title: 'Two or three side by side, with the difference marked',
+    body: 'Line up stocks or funds on the same measures. Compare uses change rather than price, so a R40 share and an R800 share can be read together.',
+    ticks: ['Stocks or funds, two or three at a time', '“Differs most” marks the measure that separates them', 'A plain-language note on every row', 'A written summary of what separates them'],
+    stage: (
+      <div className={CARD}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <b className="text-sm text-forest-900">Change over one year</b>
+          <span className="flex gap-3 text-xs text-brand-muted-fg">
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-3.5 bg-lime-500" />NVDA</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-3.5 bg-forest-300" />AMD</span>
+          </span>
+        </div>
+        <DarkChart />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[320px] border-collapse text-sm">
+            <thead><tr className="text-left text-xs text-brand-muted-fg"><th className="px-2 pb-2 font-semibold">Measure</th><th className="px-2 pb-2 text-right font-semibold">NVDA</th><th className="px-2 pb-2 text-right font-semibold">AMD</th><th /></tr></thead>
+            <tbody className="tabular-nums">
+              <tr className="border-t border-forest-900/8"><td className="px-2 py-2">Change</td><td className="px-2 py-2 text-right">+42.1%</td><td className="px-2 py-2 text-right">+18.6%</td><td /></tr>
+              <tr className="border-t border-forest-900/8"><td className="px-2 py-2">Largest fall</td><td className="px-2 py-2 text-right">−20.8%</td><td className="px-2 py-2 text-right">−29.1%</td><td className="px-2 py-2"><span className="chip chip-accent">Differs most</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ),
+  },
+  {
+    key: 'learn',
+    label: 'Learn and plan',
+    title: 'Learn the ideas, then try them with your own numbers',
+    body: 'A roadmap of short lessons matched to your level, with a quiz at the end of each. Financial Tools let you test growth, goals and your tax-free allowance.',
+    ticks: ['Lessons from beginner to advanced, each with a quiz', 'XP and badges as you go', 'Growth and goal calculators, with inflation shown in today’s money', 'A TFSA planner for your yearly and lifetime allowance'],
+    stage: (
+      <>
+        <div className={CARD}>
+          <div className="flex items-center justify-between gap-3"><span className="chip">Beginner</span><span className="text-xs text-brand-muted-fg">Investing basics</span></div>
+          <b className="text-base text-forest-900">Diversification: not all eggs in one basket</b>
+          <p className="text-sm text-brand-muted-fg">Spreading your money so one bad result does not sink everything.</p>
+          <span className="as-btn as-btn-sm as-btn-primary w-fit">Read lesson <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+        </div>
+        <div className={CARD}>
+          <b className="text-sm text-forest-900">Tax-free allowance · 2026/27</b>
+          <Meter label="This year" value="R12 000 of R46 000" percent={26} />
+          <Meter label="Lifetime" value="R92 000 of R500 000" percent={18} />
+        </div>
+      </>
+    ),
+  },
+  {
+    key: 'ask',
+    label: 'Ask AlphaSwarm',
+    title: 'Ask in plain English, get the evidence back',
+    body: 'Ask about your results, any stock or fund we cover, or what a term means. Answers list where they came from and never predict prices.',
+    ticks: ['Questions about your own results and rankings', 'Comparisons and definitions on request', 'Sources listed under every answer', 'On every page from the Ask button'],
+    stage: (
+      <div className="flex flex-col gap-3">
+        <p className="max-w-[85%] self-end rounded-[18px_18px_6px_18px] bg-forest-700 px-3.5 py-2.5 text-sm text-white">Why is NVDA first for me?</p>
+        <div className={CARD}>
+          <p className="flex items-center gap-2 text-sm font-bold text-forest-900"><SparkTile />AlphaSwarm</p>
+          <p className="text-sm leading-relaxed text-forest-900">
+            Both kinds of evidence point the same way. News this week scores 64 out of 100, which reads as positive, and its price trend is stronger than 84% of the stocks analysed. This describes the evidence; it isn’t a recommendation to buy.
+          </p>
+          <div className="as-inset p-3 text-xs"><b>Sources</b><br />AlphaSwarm analysis, 13 Oct 2026</div>
+        </div>
+      </div>
+    ),
+  },
+]
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default function Landing() {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [navOpen, setNavOpen] = useState(false)
-  useRibbonScroll(rootRef)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const tourItems = TOUR.filter((t) => on(t.flag))
+  const [tab, setTab] = useState(tourItems[0].key)
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  // The closing ribbon draws in when its band scrolls into view, not on load,
+  // when nobody would see it happen.
+  const ctaRef = useRef<HTMLDivElement>(null)
+  const [ctaSeen, setCtaSeen] = useState(false)
+  useEffect(() => {
+    const el = ctaRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setCtaSeen(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setCtaSeen(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.35 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const openTab = (key?: string) => {
+    if (key && tourItems.some((t) => t.key === key)) setTab(key)
+  }
+
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const i = tourItems.findIndex((t) => t.key === tab)
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    const next = tourItems[(i + step + tourItems.length) % tourItems.length].key
+    setTab(next)
+    tabRefs.current[next]?.focus()
+  }
+
+  const NAV_LINKS: [string, string][] = [['#features', 'Platform'], ['#tour', 'Explore'], ['#how', 'How it works'], ['#faq', 'FAQ']]
+  const active = tourItems.find((t) => t.key === tab) ?? tourItems[0]
 
   return (
-    <div
-      ref={rootRef}
-      className="relative min-h-screen overflow-x-clip bg-neutral-100 font-sans text-forest-900 selection:bg-lime-500 selection:text-forest-900"
-    >
+    <div className="min-h-screen overflow-x-clip bg-brand-bg text-forest-900 selection:bg-lime-500 selection:text-forest-900">
       {/* ═══ Nav ═══ */}
-      <nav className="relative z-20 mx-auto flex max-w-[1200px] items-center justify-between px-4 py-6 sm:px-8">
-        <Wordmark />
-        <div className="flex items-center gap-2">
-          <a href="#journey" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
-            The Journey
-          </a>
-          <a href="#swarm" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
-            The Swarm
-          </a>
-          <a href="#faq" className="hidden rounded-full px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-200 lg:inline-flex">
-            FAQ
-          </a>
-          <Link
-            to="/login"
-            className="ml-2 hidden rounded-full border border-forest-900/14 px-[18px] py-2 text-sm font-medium text-forest-900 transition-colors hover:border-forest-900/28 sm:inline-flex"
-          >
-            Sign In
-          </Link>
-          <Link
-            to="/signup"
-            className="rounded-full bg-forest-700 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-85 sm:px-[22px] sm:py-2.5"
-          >
-            Open Account
-          </Link>
-          <button
-            type="button"
-            onClick={() => setNavOpen((o) => !o)}
-            aria-label="Open menu"
-            aria-expanded={navOpen}
-            className="inline-flex rounded-full p-2 text-forest-900 transition-colors hover:bg-neutral-200 lg:hidden"
-          >
-            <Menu size={20} strokeWidth={2} />
-          </button>
-        </div>
-
-        {navOpen && (
-          <div className="absolute top-full right-4 z-30 flex w-56 flex-col gap-1 rounded-2xl border border-forest-900/10 bg-white p-2 shadow-xl sm:right-8 lg:hidden">
-            {[
-              ['#journey', 'The Journey'],
-              ['#swarm', 'The Swarm'],
-              ['#faq', 'FAQ'],
-            ].map(([href, label]) => (
-              <a
-                key={href}
-                href={href}
-                onClick={() => setNavOpen(false)}
-                className="rounded-xl px-4 py-2.5 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-100"
-              >
-                {label}
-              </a>
+      <nav
+        aria-label="Main"
+        className={`sticky top-0 z-50 border-b bg-brand-bg/90 backdrop-blur-md transition-colors ${scrolled ? 'border-forest-900/8' : 'border-transparent'}`}
+      >
+        <div className="relative mx-auto flex h-[68px] max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-8">
+          <a href="#top"><Wordmark /></a>
+          <div className="hidden gap-1 lg:flex">
+            {NAV_LINKS.map(([href, label]) => (
+              <a key={href} href={href} className="rounded-full px-3.5 py-2 text-sm font-semibold text-forest-900 hover:bg-forest-900/6">{label}</a>
             ))}
-            <Link
-              to="/login"
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-forest-900 transition-colors hover:bg-neutral-100 sm:hidden"
-            >
-              Sign In
-            </Link>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <Link to="/login" className="hidden h-10 items-center rounded-full px-4 text-sm font-semibold text-forest-900 hover:bg-forest-900/6 sm:inline-flex">Sign in</Link>
+            <Link to={SIGNUP} className="as-btn as-btn-primary">Open account</Link>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              className="grid h-10 w-10 place-items-center rounded-full border border-forest-900/14 bg-white lg:hidden"
+            >
+              {menuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          </div>
+          {menuOpen && (
+            <div className="absolute right-4 top-16 flex w-[min(280px,calc(100vw-32px))] flex-col gap-0.5 rounded-[20px] border border-forest-900/8 bg-white p-2 shadow-float sm:right-8 lg:hidden">
+              {NAV_LINKS.map(([href, label]) => (
+                <a key={href} href={href} onClick={() => setMenuOpen(false)} className="rounded-[12px] px-3.5 py-2.5 text-base font-semibold hover:bg-forest-50">{label}</a>
+              ))}
+              <Link to="/login" className="rounded-[12px] px-3.5 py-2.5 text-base font-semibold hover:bg-forest-50">Sign in</Link>
+            </div>
+          )}
+        </div>
       </nav>
 
-      {/* ═══ Hero ═══ */}
-      <header className="relative mx-auto max-w-[1200px] px-4 sm:px-8 pt-6">
-        {/* Hero ribbon: above the lime panel, below the bento cards */}
-        <SquiggleRibbon
-          pathId="rb-hero"
-          d="M-80,180 C240,300 480,40 760,150 C1020,250 1080,470 940,610 C830,720 620,700 560,830"
-          viewBox="0 0 1400 900"
-          para={0.16}
-          rot={5}
-          className="hidden lg:block z-3 -top-[140px] -left-[120px] h-[960px] w-[1500px]"
-          strokeClass="stroke-lime-500"
-          strokeWidth={58}
-          text="Emotionless Research · Explainable Signals · Built For Everyday Investors · Powered By A Swarm Of Specialist Agents · Emotionless Research"
-          textFillClass="fill-forest-700"
-          textSize={21}
-          startOffset="1%"
-          echo
-        />
-
-        <div className="relative z-2 rounded-3xl bg-gradient-to-b from-lime-200 to-lime-100 px-8 py-16 md:px-[72px] md:pt-[88px] md:pb-24">
-          <div className="relative z-4 flex max-w-[640px] flex-col gap-6">
-            <span className="inline-flex items-center gap-2 self-start rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">
-              <Activity size={13} strokeWidth={2} />
-              Welcome To AlphaSwarm
-            </span>
-            <h1 className="text-[34px] font-medium leading-[1.05] tracking-tight text-balance text-forest-700 sm:text-[42px] md:text-[68px]">
-              Meet Your AI Investment Committee
-            </h1>
-            <p className="max-w-[480px] text-lg leading-relaxed text-forest-900">
-              Specialist agents read the market for you: sentiment, price behaviour, and risk. Every conclusion is
-              explained in plain language. No black boxes, no hype-chasing.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-forest-700 px-[30px] py-[15px] text-[15px] font-semibold text-white transition-opacity hover:opacity-85 active:scale-[0.98]"
-              >
-                Open Account
-                <ArrowUpRight size={16} strokeWidth={2} />
-              </Link>
-              <a
-                href="#swarm"
-                className="rounded-full border border-forest-900/20 bg-white/50 px-[30px] py-[15px] text-[15px] font-semibold text-forest-700 transition-colors hover:border-forest-900/40"
-              >
-                See How the Swarm Works
-              </a>
-            </div>
-            <p className="text-[13px] text-forest-500">US stocks · prices shown in rand</p>
-          </div>
-        </div>
-
-        {/* Hero bento row */}
-        <div className="relative mt-5 grid grid-cols-1 gap-5 md:grid-cols-[1.2fr_1fr_1fr]">
-          {/* Today's top pick */}
-          <div className="relative z-4 flex flex-col gap-3.5 rounded-2xl bg-white p-6 shadow-md">
-            <p className="text-[11px] font-semibold uppercase tracking-eyebrow text-muted">Today's Top Pick</p>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-forest-900/10 bg-neutral-100/70 text-[10px] font-bold">
-                  NVD
-                </div>
-                <div>
-                  <p className="text-[15px] font-semibold text-forest-700">NVDA</p>
-                  <p className="text-xs text-forest-700">NVIDIA Corp · R 1240.50</p>
-                </div>
-              </div>
-              <span className="inline-flex rounded-sm bg-forest-700/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-forest-700">
-                Rank 1
+      <main id="top">
+        {/* ═══ Hero ═══ */}
+        <section aria-labelledby="hero-title" className="mx-auto max-w-[1200px] px-4 pt-5 sm:px-8">
+          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-36 pt-9 sm:px-10 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-40 lg:pt-[72px]">
+            <Ribbon
+              id="rb-hero"
+              viewBox="0 0 1400 760"
+              d="M-80,712 C180,742 420,700 640,690 C820,682 860,560 930,470 C1020,350 1160,320 1250,210 C1320,125 1380,60 1490,10"
+              width={56}
+              size={20}
+              text="See the evidence · Understand it · Decide for yourself · Explainable signals · No black boxes · See the evidence · Understand it · Decide for yourself"
+              className="-left-[40%] bottom-0 z-[1] h-[34%] w-[180%] lg:left-0 lg:top-0 lg:h-full lg:w-full"
+            />
+            <div className="relative z-[3] flex flex-col gap-5">
+              <span className="inline-flex items-center gap-2 self-start rounded-full bg-white py-1.5 pl-2 pr-3.5 text-xs font-bold text-forest-700 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)]">
+                <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-forest-700 text-lime-500"><Sparkles className="h-3 w-3" aria-hidden="true" /></span>
+                Free for South African investors
               </span>
-            </div>
-            <div>
-              <div className="mb-1 flex justify-between">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-forest-700">Sentiment Score</span>
-                  <span className="rounded-full bg-forest-900/6 px-1.5 py-px text-[9px] text-muted">Last 7 days</span>
-                </span>
-                <span className="text-xs font-semibold text-forest-900">72%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
-                <div className="h-full w-[72%] bg-forest-700" />
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 flex justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-forest-700">Quant Position vs Peers</span>
-                <span className="text-xs font-semibold text-forest-900">81st percentile</span>
-              </div>
-              <div className="relative h-1.5 rounded-full bg-neutral-100">
-                <span className="absolute top-1/2 left-[81%] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-forest-700 shadow-[0_2px_6px_rgba(17,35,32,0.05)]" />
-              </div>
-            </div>
-            <div className="rounded-lg border border-forest-900/7 bg-neutral-100/50 p-3">
-              <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                <Zap size={12} className="text-forest-700" strokeWidth={2} />
-                Why it ranks here
+              <h1 id="hero-title" className="text-balance text-[clamp(40px,4.6vw,56px)] font-bold leading-[1.05] tracking-[-0.02em] text-forest-900">
+                See the evidence, understand it, decide for yourself.
+              </h1>
+              <p className="max-w-[52ch] text-base leading-relaxed text-forest-900 lg:text-lg">
+                AlphaSwarm gathers the evidence on US stocks{FLAGS.funds && ' and South African funds'}, explains it in plain language at your level, and shows how it got there. The decision stays yours.
               </p>
-              <p className="text-xs leading-normal text-forest-900/85">
-                Positive coverage tone and top-quartile momentum agree, with no hype gap detected between the two
-                engines.
-              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link to={SIGNUP} className="as-btn as-btn-primary h-12 px-6 text-base">Open account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+                <a href="#tour" className="as-btn as-btn-secondary h-12 px-6 text-base">See what’s inside</a>
+              </div>
+              <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-forest-800">
+                {['US stocks priced in rand', FLAGS.funds && 'SA unit trusts and ETFs', 'Research and education, not advice'].filter(Boolean).map((t) => (
+                  <li key={t as string} className="inline-flex items-center gap-1.5"><Check className="h-4 w-4 text-forest-700" strokeWidth={2.4} aria-hidden="true" />{t}</li>
+                ))}
+              </ul>
             </div>
-          </div>
 
-          {/* Signal Scorecard (dark) */}
-          <div className="relative z-4 flex flex-col items-start gap-3 overflow-hidden rounded-2xl bg-forest-900 p-6">
-            <svg viewBox="0 0 400 220" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-[90px] w-full" aria-hidden="true">
-              <path d="M0,140 C60,110 120,170 200,148 C280,128 330,162 400,140 L400,220 L0,220 Z" className="fill-forest-600" opacity="0.7" />
-              <path d="M0,180 C80,160 160,196 260,178 C330,166 370,182 400,174 L400,220 L0,220 Z" className="fill-lime-500" opacity="0.18" />
-            </svg>
-            <span className="inline-flex items-center gap-1.5 rounded-sm bg-lime-500/18 px-3 py-1 text-[11px] font-bold tracking-[0.02em] text-lime-500">
-              Signals agree strongly
-            </span>
-            <ScorecardRowsDark />
-            <p className="text-[13px] leading-[1.55] text-neutral-100/75">
-              Every verdict is a state, not a secret score. Tap any row and the Swarm shows its working.
-            </p>
-          </div>
-
-          {/* Hype flag */}
-          <div className="relative z-2 flex flex-col justify-between gap-3 rounded-2xl bg-white p-6 shadow-md">
-            <span className="inline-flex items-center gap-1.5 self-start rounded-sm bg-warning/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-warning-strong">
-              <Flame size={12} strokeWidth={2} />
-              Hype flagged
-            </span>
-            <p className="text-[22px] font-medium leading-[1.3] tracking-tight text-forest-700">
-              We flag the hype before you chase it.
-            </p>
-            <p className="text-[13px] leading-[1.55] text-muted">
-              When social buzz outruns the fundamentals, the Swarm says so, plainly, on the card.
-            </p>
-            <a href="#journey" className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-forest-700 hover:underline">
-              Follow the journey
-              <ArrowRight size={14} strokeWidth={2} />
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* ═══ The Swarm ═══ */}
-      <section id="swarm" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
-        <div className="relative overflow-hidden rounded-3xl bg-forest-900 px-8 py-12 md:px-16 md:py-[72px]">
-          <svg viewBox="0 0 600 600" className="pointer-events-none absolute -top-[180px] -right-[160px] h-[480px] w-[480px]" aria-hidden="true">
-            <circle cx="300" cy="300" r="280" className="fill-lime-500" opacity="0.16" />
-            <circle cx="300" cy="300" r="190" className="fill-lime-500" opacity="0.12" />
-          </svg>
-          <svg viewBox="0 0 400 400" className="pointer-events-none absolute -bottom-[220px] -left-[140px] h-[420px] w-[420px]" aria-hidden="true">
-            <circle cx="200" cy="200" r="190" fill="none" className="stroke-lime-500" strokeWidth={1.5} opacity="0.35" />
-            <circle cx="200" cy="200" r="130" fill="none" className="stroke-lime-500" strokeWidth={1.5} opacity="0.25" />
-          </svg>
-          <div className="relative z-2 flex flex-col gap-12">
-            <div className="max-w-[560px]">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-lime-500">Meet The Swarm</p>
-              <h2 className="mb-4 text-4xl font-medium leading-[1.1] tracking-tight text-white md:text-[44px]">
-                One Committee. Zero Emotions.
-              </h2>
-              <p className="text-base leading-relaxed text-neutral-100/72">
-                Independent engines measure every stock, an orchestrator weighs their findings against your profile,
-                and the result arrives as a ranked, fully explained list.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {AGENTS.map(({ Icon, name, desc }) => (
-                <div key={name} className="flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/6 p-6">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-lime-500/15">
-                    <Icon size={20} className="text-lime-500" strokeWidth={2} />
+            {/* The dashboard's own shortlist card, in miniature, with example figures */}
+            <div className="relative z-[2] grid gap-3.5" aria-hidden="true">
+              <div className={`${CARD} animate-fade-up shadow-float`}>
+                <div className="flex items-center justify-between gap-3"><b className="text-base text-forest-900">Your shortlist</b><span className="text-xs text-brand-muted-fg">Example figures</span></div>
+                <div className="as-inset flex flex-col gap-3 p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3"><TickerTile ticker="NVDA" /><div className="min-w-0"><p className="text-sm font-bold">NVDA</p><p className="truncate text-xs text-brand-muted-fg">NVIDIA Corporation</p></div></div>
+                    <p className="whitespace-nowrap text-xl font-bold tabular-nums">R3 392.96</p>
                   </div>
-                  <p className="text-[15px] font-semibold text-white">{name}</p>
-                  <p className="text-[13px] leading-normal text-neutral-100/65">{desc}</p>
+                  <div className="flex flex-wrap gap-1.5"><span className="chip chip-dark">1st for your profile</span><span className="chip chip-up">Signals agree strongly</span></div>
+                  <div className="grid gap-3 sm:grid-cols-2"><Meter label="Sentiment" value="64 · Positive" percent={64} /><Meter label="Quant vs peers" value="84th percentile" percent={84} /></div>
+                </div>
+                <ul>
+                  {[['2', 'MSFT', 'Microsoft', 'Technology · R9 436.57'], ['3', 'ENPH', 'Enphase Energy', 'Green Energy · R716.54']].map(([r, t, n, s]) => (
+                    <li key={t} className={ROW}>
+                      <span className="w-4 shrink-0 text-center text-xs font-bold text-brand-muted-fg">{r}</span>
+                      <TickerTile ticker={t} small />
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{t} <span className="text-xs font-normal text-brand-muted-fg">{n}</span></p><p className="truncate text-xs tabular-nums text-brand-muted-fg">{s}</p></div>
+                      <span className="chip hidden sm:inline-flex">Lean the same way</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className={`${CARD} animate-fade-up-delayed gap-2 shadow-float`}>
+                <p className="flex items-center gap-2 text-sm font-bold"><SparkTile />Why it ranks here</p>
+                <p className="text-sm leading-relaxed">News this week has been positive (64 out of 100) and the price trend is stronger than 84% of the stocks in your run. Both signals point the same way.</p>
+                <p className="text-xs text-brand-muted-fg">Written by AI from the evidence. It can be wrong, so check the sources.</p>
+              </div>
+              <div className={`${CARD} animate-fade-up-delayed flex-row items-center px-4 py-3.5 shadow-float`}>
+                <span className="chip chip-caution shrink-0"><Flame className="h-3 w-3" />Hype flagged</span>
+                <span className="text-sm text-brand-muted-fg">When social buzz runs ahead of the price evidence, the card says so.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ The problem ═══ */}
+        <section aria-labelledby="problem-title" className="mx-auto max-w-[1200px] px-4 py-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
+            <div className={SECTION_HEAD}>
+              <span className={EYEBROW}>Why AlphaSwarm</span>
+              <h2 id="problem-title" className={`${H2} max-w-[18ch]`}>Institutions have analysts to explain the evidence. Most first-time investors have neither.</h2>
+              <p className={SUB}>The gap isn’t access to information. It’s knowing what the information means for you.</p>
+            </div>
+            <div className="grid gap-3">
+              {[
+                { icon: Layers, t: 'The evidence is scattered', b: `News, price history, company filings${FLAGS.funds ? ' and fund fact sheets' : ''} all live in different places.` },
+                { icon: CircleHelp, t: 'The numbers don’t explain themselves', b: 'A percentile, a risk label or a filing means little without someone to say what it shows.' },
+                { icon: MessageCircle, t: 'Tips tell you what, never why', b: 'So you never get better at reading the evidence yourself.' },
+              ].map(({ icon: Icon, t, b }) => (
+                <div key={t} className="grid grid-cols-[40px_minmax(0,1fr)] gap-4 rounded-[20px] border border-forest-900/8 bg-white p-5">
+                  <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-forest-50 text-forest-700"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+                  <div><p className="text-base font-bold">{t}</p><p className="text-sm text-brand-muted-fg">{b}</p></div>
                 </div>
               ))}
-            </div>
-            <div className="flex items-center justify-center gap-4">
-              <div className="h-px flex-1 bg-lime-500/25" />
-              <span className="inline-flex items-center gap-2 rounded-full bg-lime-500 px-[22px] py-2.5 text-center text-[13px] font-bold uppercase tracking-wide text-forest-900">
-                <Terminal size={14} strokeWidth={2} />
-                Your Ranked, Explained List
-              </span>
-              <div className="h-px flex-1 bg-lime-500/25" />
+              <div className="mt-1 grid grid-cols-[40px_minmax(0,1fr)] gap-4 rounded-[20px] bg-forest-700 p-5 text-white">
+                <SparkTile size="lg" />
+                <div><p className="text-base font-bold">AlphaSwarm does the explaining</p><p className="text-sm text-white/80">It gathers the evidence, explains it at your level, shows how it got there and teaches you to read it. The decision, and the platform you invest on, stay yours.</p></div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══ Journey ═══ */}
-      <section id="journey" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
-        <div className="mx-auto mb-24 max-w-[620px] text-center">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">The Journey</p>
-          <h2 className="mb-4 text-4xl font-medium leading-[1.1] tracking-tight text-balance text-forest-700 md:text-5xl">
-            From First Login to Confident Investor
-          </h2>
-          <p className="text-base leading-relaxed text-muted">
-            Scroll the path. Six stops, two investors, and a swarm doing the homework at every one.
-          </p>
-        </div>
-
-        {/* Ribbon 2: weaves from journey intro through stop 01 */}
-        <SquiggleRibbon
-          pathId="rb-two"
-          d="M1350,60 C1050,160 850,80 700,260 C610,400 680,500 640,600 C600,700 300,640 -60,700"
-          viewBox="0 0 1300 1100"
-          para={0.12}
-          rot={-2}
-          className="hidden lg:block z-1 top-[160px] -right-[180px] h-[1100px] w-[1300px]"
-          strokeClass="stroke-forest-700"
-          strokeWidth={52}
-          strokeOpacity={0.95}
-          text="A Few Minutes Of Setup · Every List Filtered Through Your Risk Profile · Pick Your Path · The Swarm Does The Rest"
-          textFillClass="fill-lime-200"
-          textSize={19}
-          startOffset="3%"
-        />
-
-        {/* Stop 01 · Your Profile */}
-        <div className="relative z-2 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
-          <div className="flex flex-col gap-[18px]">
-            <StopHeader
-              eyebrow="Stop 01 · Your Profile"
-              title="Tell the Swarm Who You Are"
-              body="Choose your investor path, tap the companies you already know, and take a short risk assessment. Ranked assets are filtered through the risk mandate that results. Fit with your profile is one of the four disclosed ranking factors."
-            />
+        {/* ═══ Everything on the platform ═══ */}
+        <section id="features" aria-labelledby="features-title" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 pb-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className={`${SECTION_HEAD} mb-10`}>
+            <span className={EYEBROW}>Everything in one place</span>
+            <h2 id="features-title" className={H2}>One way of explaining things, on every page</h2>
+            <p className={SUB}>Every part of AlphaSwarm follows the same pattern: the plain answer first, then the evidence behind it, then how it was worked out.</p>
           </div>
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-              <div className="rounded-md border border-lime-500 bg-white p-3.5 ring-4 ring-lime-500/25">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-forest-900">Technology</span>
-                  <span className="flex h-3 w-3 items-center justify-center rounded-full border border-lime-500 bg-lime-500">
-                    <span className="h-1 w-1 rounded-full bg-forest-900" />
-                  </span>
-                </div>
-                <p className="mt-1 text-[10px] leading-normal text-muted-foreground">Software, hardware &amp; semiconductors</p>
-              </div>
-              <div className="rounded-md border border-forest-900/14 bg-neutral-100/50 p-3.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-muted-foreground">Green Energy</span>
-                  <span className="h-3 w-3 rounded-full border border-forest-900/14" />
-                </div>
-                <p className="mt-1 text-[10px] leading-normal text-muted-foreground">Solar, wind, water &amp; clean infrastructure</p>
-              </div>
-              <div className="rounded-md border border-lime-500 bg-white p-3.5 ring-4 ring-lime-500/25">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-forest-900">AI &amp; Robotics</span>
-                  <span className="flex h-3 w-3 items-center justify-center rounded-full border border-lime-500 bg-lime-500">
-                    <span className="h-1 w-1 rounded-full bg-forest-900" />
-                  </span>
-                </div>
-                <p className="mt-1 text-[10px] leading-normal text-muted-foreground">Machine learning &amp; automation</p>
+          {FEATURE_GROUPS.map((group) => (
+            <div key={group.label} className="mt-8 first-of-type:mt-0">
+              <p className="mb-3 text-sm font-bold text-brand-muted-fg">{group.label}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+                {group.items.filter((f) => on(f.flag)).map(({ icon: Icon, title, body, tab: t }) => (
+                  <a
+                    key={title}
+                    href="#tour"
+                    onClick={() => openTab(t)}
+                    // A compact row on phones (icon beside the text), a card from sm up.
+                    className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-[20px] border border-forest-900/8 bg-white p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-forest-900/28 hover:shadow-[0_10px_28px_rgba(17,35,32,0.08)] sm:flex sm:flex-col sm:gap-2.5 sm:p-5"
+                  >
+                    <span className="row-span-2 grid h-10 w-10 place-items-center rounded-[12px] bg-forest-700 text-lime-500"><Icon className="h-5 w-5" aria-hidden="true" /></span>
+                    <b className="text-base tracking-[-0.01em]">{title}</b>
+                    <p className="text-sm leading-relaxed text-brand-muted-fg">{body}</p>
+                  </a>
+                ))}
               </div>
             </div>
-            <InvestorProfileCard
-              compact
-              name="Betty M."
-              archetype="Conservative"
-              experience="Novice"
-              path="Steady Builder"
-              sectors={['Technology', 'AI & Robotics']}
-            />
-          </div>
-        </div>
-
-        {/* Stop 02 · The Dashboard */}
-        <div className="relative z-2 mt-40 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
-          <div className="relative grid grid-cols-1 gap-4 max-lg:order-2 sm:grid-cols-2">
-            <div className="relative z-4 flex flex-col items-center gap-5 rounded-2xl bg-white p-[22px] shadow-md sm:col-span-2 sm:flex-row">
-              <ScorecardRowsLight />
-              <div className="flex-1">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-forest-700">Signal Scorecard</p>
-                <p className="text-[13px] leading-normal text-muted">
-                  Four disclosed factors, each shown as a position, with no composite number anywhere. Tap any row and
-                  the app explains it.
-                </p>
-              </div>
-            </div>
-            <div className="relative z-2 rounded-2xl bg-white p-5 shadow-md">
-              <span className="inline-flex items-center gap-1.5 rounded-sm bg-lime-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-forest-900">
-                <Sparkles size={11} strokeWidth={2} />
-                Discovered
-              </span>
-              <p className="mt-2.5 text-[13px] leading-[1.55] text-muted">Companies the agent found on its own carry the lime badge.</p>
-            </div>
-            <div className="relative z-2 rounded-2xl bg-white p-5 shadow-md">
-              <span className="inline-flex items-center gap-1.5 rounded-sm bg-warning/15 px-2.5 py-1 text-[10px] font-bold tracking-[0.02em] text-warning-strong">
-                <Flame size={11} strokeWidth={2} />
-                Hype flagged
-              </span>
-              <p className="mt-2.5 text-[13px] leading-[1.55] text-muted">Buzz without substance gets a warning, not a rank boost.</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-[18px] max-lg:order-1">
-            <StopHeader
-              eyebrow="Stop 02 · The Dashboard"
-              title="One Daily Pick, Fully Explained"
-              body={'Your dashboard centralizes the Swarm\'s intelligence: a ranked top pick, sentiment and quant read side by side, and a "why it ranks here" trace on every card.'}
-            />
-          </div>
-        </div>
-
-        {/* Ribbon 3: lime, crosses between stop 02 and 03 */}
-        <SquiggleRibbon
-          pathId="rb-three"
-          d="M-80,250 C260,160 560,300 900,220 C1150,150 1420,270 1680,210"
-          viewBox="0 0 1600 700"
-          para={0.12}
-          rot={3}
-          className="hidden lg:block z-1 top-[1010px] -left-[220px] h-[720px] w-[1650px]"
-          strokeClass="stroke-lime-500"
-          strokeWidth={54}
-          text="Track The Signals · Question The Hype · Learn As You Go · Track The Signals · Question The Hype · Learn As You Go"
-          textFillClass="fill-forest-700"
-          textSize={20}
-          startOffset="2%"
-        />
-
-        {/* Stop 03 · Watchlist */}
-        <div className="relative z-2 mt-40 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
-          <div className="flex flex-col gap-[18px]">
-            <StopHeader
-              eyebrow="Stop 03 · Watchlist"
-              title="A Library, Not a Second Analysis Run"
-              body="Track any stock. Watched stocks are included in your next analysis run. Until then it's live prices and 14-day charts, deliberately free of AI scores."
-            />
-            <ul className="flex flex-col gap-2.5">
-              {['Live prices & 14-day sparklines', 'No scores, just the stock', 'Watched stocks join your next analysis run'].map((item) => (
-                <li key={item} className="flex items-center gap-2.5 text-sm text-forest-700">
-                  <CheckCircle2 size={18} className="shrink-0 text-forest-700" strokeWidth={2} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="relative z-4 flex flex-col gap-3 rounded-lg bg-white p-4 shadow-md">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-forest-900/10 bg-neutral-100/70 text-[10px] font-bold">
-                    AAPL
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-forest-900">AAPL</p>
-                    <p className="text-[11px] text-muted-foreground">Apple Inc.</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-sm bg-forest-900/6 px-2 py-[3px] text-[10px] font-bold uppercase text-info">
-                  <span className="h-1.5 w-1.5 rounded-full bg-info" />
-                  Technology
-                </span>
-              </div>
-              <div className="relative">
-                <svg viewBox="0 0 200 44" className="h-12 w-full">
-                  <polyline
-                    points="0,36 18,32 36,34 54,26 72,28 90,20 108,24 126,16 144,18 162,10 180,14 200,6"
-                    fill="none"
-                    className="stroke-gain"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className="absolute right-0 bottom-0 text-xs font-bold text-gain">R 3412.80</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700">
-                  Full analysis <ArrowRight size={12} strokeWidth={2} />
-                </span>
-                <span className="text-[10px] text-muted-foreground">14-day chart</span>
-              </div>
-            </div>
-            <div className="relative z-2 flex flex-col gap-3 rounded-lg bg-white p-4 shadow-md sm:mt-7">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-forest-900/10 bg-neutral-100/70 text-[10px] font-bold">
-                    TSLA
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-forest-900">TSLA</p>
-                    <p className="text-[11px] text-muted-foreground">Tesla Inc</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-sm bg-forest-900/6 px-2 py-[3px] text-[10px] font-bold uppercase text-sector-ai-robotics-strong">
-                  <span className="h-1.5 w-1.5 rounded-full bg-sector-ai-robotics" />
-                  AI &amp; Robotics
-                </span>
-              </div>
-              <div className="relative">
-                <svg viewBox="0 0 200 44" className="h-12 w-full">
-                  <polyline
-                    points="0,10 18,14 36,12 54,20 72,18 90,26 108,22 126,30 144,28 162,34 180,32 200,38"
-                    fill="none"
-                    className="stroke-loss"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className="absolute right-0 bottom-0 text-xs font-bold text-loss">R 4302.18</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700">
-                  Full analysis <ArrowRight size={12} strokeWidth={2} />
-                </span>
-                <span className="text-[10px] text-muted-foreground">14-day chart</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stop 04 · Whale Watching */}
-        <div className="relative z-2 mt-40">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
-            <div className="relative overflow-hidden rounded-lg bg-forest-700 px-7 pt-8 pb-16 max-lg:order-2">
-              <svg viewBox="0 0 1440 220" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full" aria-hidden="true">
-                <path d="M0,140 C160,100 320,180 480,150 C640,120 800,170 960,145 C1120,120 1280,165 1440,135 L1440,220 L0,220 Z" className="fill-forest-600" opacity="0.7" />
-                <path d="M0,165 C180,135 300,197 520,170 C740,145 860,192 1080,168 C1260,150 1360,182 1440,165 L1440,220 L0,220 Z" className="fill-forest-500" opacity="0.55" />
-                <path d="M0,192 C200,172 380,207 600,193 C820,180 1000,206 1220,191 C1330,183 1390,193 1440,189 L1440,220 L0,220 Z" className="fill-lime-500" opacity="0.22" />
-              </svg>
-              <div className="relative">
-                <h4 className="mb-2 flex items-center gap-3 text-[26px] font-bold text-neutral-100">
-                  <Waves size={26} className="text-lime-500" strokeWidth={2} />
-                  Whale Watching
-                </h4>
-                <p className="max-w-[400px] text-[13px] leading-relaxed text-neutral-100/75">
-                  Insider dealings, the institutions that own each stock, and what the largest funds are buying.
-                  Informational only; this never affects your asset rankings.
-                </p>
-                <div className="mt-[18px] flex flex-wrap gap-2.5">
-                  <div className="min-w-[120px] flex-1 rounded-[14px] bg-white p-3.5">
-                    <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-[10px] bg-forest-700">
-                      <Cpu size={16} className="text-neutral-100" strokeWidth={2} />
-                    </div>
-                    <p className="text-[13px] font-semibold text-forest-900">Technology</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-forest-700">14 companies</p>
-                  </div>
-                  <div className="min-w-[120px] flex-1 rounded-[14px] bg-white p-3.5">
-                    <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-[10px] bg-forest-700">
-                      <TrendingUp size={16} className="text-neutral-100" strokeWidth={2} />
-                    </div>
-                    <p className="text-[13px] font-semibold text-forest-900">Finance</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-forest-700">11 companies</p>
-                  </div>
-                  <div className="relative min-w-[120px] flex-1 rounded-[14px] bg-white p-3.5">
-                    <span className="absolute top-2.5 right-2.5 inline-flex items-center gap-[3px] rounded-sm bg-lime-500 px-2 py-0.5 text-[9px] font-bold uppercase text-forest-900">
-                      New
-                    </span>
-                    <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-[10px] bg-forest-700">
-                      <Bot size={16} className="text-neutral-100" strokeWidth={2} />
-                    </div>
-                    <p className="text-[13px] font-semibold text-forest-900">AI &amp; Robotics</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-forest-700">9 companies</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col gap-[18px] max-lg:order-1">
-              <StopHeader
-                eyebrow="Stop 04 · Whale Watching"
-                title="Follow the Big Money"
-                body="Open any company for its insider dealings (SEC Form 4) and institutional owners (13F filings), or flip to Top Funds, with a cluster-buying callout when multiple insiders buy within 30 days."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Ribbon 4: forest S-curve behind learning */}
-        <SquiggleRibbon
-          pathId="rb-four"
-          d="M-60,200 C300,80 560,340 840,260 C1140,175 1240,430 1560,380"
-          viewBox="0 0 1500 900"
-          para={0.1}
-          rot={-3}
-          className="hidden lg:block z-1 top-[1990px] -left-[200px] h-[940px] w-[1560px]"
-          strokeClass="stroke-lime-300"
-          strokeWidth={64}
-          text="Read · Quiz · Earn The Badge · Every Concept In Plain Language · Read · Quiz · Earn The Badge"
-          textFillClass="fill-forest-700"
-          textSize={20}
-          startOffset="4%"
-          textOpacity={0.75}
-        />
-
-        {/* Stop 05 · Learning Centre */}
-        <div className="relative z-2 mt-40 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
-          <div className="flex flex-col gap-[18px]">
-            <StopHeader
-              eyebrow="Stop 05 · Learning Centre"
-              title="Learn as You Go, Earn as You Learn"
-              body="Bite-size articles by difficulty, quizzes that earn XP when you pass at 75%+, and badges that unlock as you learn. A perfect score puts a trophy on the article."
-            />
-          </div>
-          <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start">
-            <div className="relative flex-[1.2] rounded-lg border border-forest-900/14 bg-white/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_32px_-16px_rgba(17,35,32,0.2)] backdrop-blur-lg">
-              <div className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border border-forest-700/20 bg-forest-700/10 text-forest-700">
-                <Trophy size={18} strokeWidth={2} />
-              </div>
-              <span className="mb-3 inline-flex rounded-full border border-forest-900/14 bg-neutral-100/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-forest-700">
-                Beginner
-              </span>
-              <h4 className="mb-2 text-[17px] font-semibold text-forest-900">Risk vs Reward</h4>
-              <p className="mb-5 text-[13px] leading-[1.55] text-muted-foreground">
-                Why bigger potential returns come with bigger swings, and how to find the level you can live with.
-              </p>
-              <div className="flex gap-2.5">
-                <span className="rounded-full border border-forest-900/14 bg-white px-4 py-2 text-[13px] text-forest-900">Read Article</span>
-                <span className="rounded-full bg-forest-700 px-4 py-2 text-[13px] font-medium text-neutral-100">Take Quiz</span>
-              </div>
-            </div>
-            <div className="relative flex-[0.9] overflow-hidden rounded-lg bg-forest-900 p-5 sm:mt-9">
-              <svg viewBox="0 0 300 160" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-[60px] w-full" aria-hidden="true">
-                <path d="M0,120 C80,100 160,140 300,110 L300,160 L0,160 Z" className="fill-forest-600" opacity="0.7" />
-              </svg>
-              <p className="mb-3 text-[10px] font-semibold uppercase tracking-eyebrow text-lime-500">Quiz Result</p>
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border-[1.5px] border-lime-500 bg-lime-500/15">
-                <Trophy size={26} className="text-lime-500" strokeWidth={2} />
-              </div>
-              <p className="text-[15px] font-semibold text-white">Congratulations!</p>
-              <p className="mt-1 text-xs text-neutral-100/65">You earned +100 XP · Newly earned badges: 1</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Stop 06 · How It Works */}
-        <div className="relative z-2 mt-40 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
-          <div className="rounded-2xl bg-white p-8 shadow-md max-lg:order-2">
-            <p className="mb-5 text-[10px] font-semibold uppercase tracking-eyebrow text-forest-700">How these numbers are built</p>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-center">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700/10 text-sm font-bold text-forest-700">1</div>
-                <div className="mt-1 w-px flex-1 bg-forest-900/10" />
-              </div>
-              <div className="pb-7">
-                <p className="mb-1 text-sm font-semibold text-forest-900">Two engines measure independently</p>
-                <p className="text-[13px] leading-[1.55] text-muted">
-                  Sentiment reads what's being said; quant reads what the price is doing. Neither sees the other's
-                  answer.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-center">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700/10 text-sm font-bold text-forest-700">2</div>
-                <div className="mt-1 w-px flex-1 bg-forest-900/10" />
-              </div>
-              <div className="pb-7">
-                <p className="mb-1 text-sm font-semibold text-forest-900">Four disclosed factors decide the order</p>
-                <p className="text-[13px] leading-[1.55] text-muted">
-                  Signal strength, agreement, evidence depth, and fit with your profile, multiplied together, so one
-                  weak factor genuinely drags a pick down.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700/10 text-sm font-bold text-forest-700">3</div>
-              <div>
-                <p className="mb-1 text-sm font-semibold text-forest-900">Every card links to its explanation</p>
-                <p className="text-[13px] leading-[1.55] text-muted">
-                  "How is this calculated?" is a tap away from any number in the app. The walkthrough page shows the
-                  working.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-[18px] max-lg:order-1">
-            <StopHeader
-              eyebrow="Stop 06 · How It Works"
-              title="No Black Boxes. Ever."
-              body={'Transparency is the product. Every methodology (sentiment, quant, and ranking) has its own plain-language walkthrough. As the app puts it: "Four measurements decide placement: there is no single overall score."'}
-            />
-            <p className="text-[13px] text-muted-foreground">
-              Fit with your profile only ever demotes a pick, never promotes one. Research and education only, never
-              financial advice.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ FAQ ═══ */}
-      <section id="faq" className="relative z-2 mx-auto mt-40 max-w-[800px] px-8">
-        <div className="mb-12 text-center">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-forest-700">Questions &amp; Answers</p>
-          <h2 className="text-4xl font-medium tracking-tight text-forest-700 md:text-[44px]">Frequently Asked Questions</h2>
-        </div>
-        <div className="flex flex-col gap-3">
-          {FAQS.map(({ q, a }) => (
-            <details key={q} className="group rounded-lg bg-white shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 text-base font-semibold text-forest-900 [&::-webkit-details-marker]:hidden">
-                {q}
-                <ChevronDown
-                  size={18}
-                  className="shrink-0 text-forest-700 transition-transform duration-200 group-open:rotate-180"
-                  strokeWidth={2}
-                />
-              </summary>
-              <p className="px-6 pb-5 text-sm leading-relaxed text-muted">{a}</p>
-            </details>
           ))}
-        </div>
-      </section>
+        </section>
 
-      {/* ═══ CTA ═══ */}
-      <section id="cta" className="relative mx-auto mt-32 max-w-[1200px] px-4 sm:px-8">
-        <SquiggleRibbon
-          pathId="rb-cta"
-          d="M950,20 C780,90 700,50 640,140 C570,250 760,330 680,470"
-          viewBox="0 0 900 500"
-          para={0.14}
-          rot={4}
-          className="hidden lg:block z-1 -top-[120px] -right-[140px] h-[480px] w-[860px]"
-          strokeClass="stroke-lime-500"
-          strokeWidth={48}
-          text="Join The Swarm · Research Without The Noise · Join The Swarm"
-          textFillClass="fill-forest-700"
-          textSize={18}
-          startOffset="4%"
-        />
-        <div className="relative z-2 overflow-hidden rounded-3xl bg-forest-900 px-8 py-16 md:px-16 md:py-[88px]">
-          <svg viewBox="0 0 600 600" className="pointer-events-none absolute -top-[200px] -right-[180px] h-[520px] w-[520px]" aria-hidden="true">
-            <circle cx="300" cy="300" r="280" className="fill-lime-500" opacity="0.14" />
-          </svg>
-          <svg viewBox="0 0 400 400" className="pointer-events-none absolute -bottom-[240px] -left-[120px] h-[400px] w-[400px]" aria-hidden="true">
-            <circle cx="200" cy="200" r="190" fill="none" className="stroke-lime-500" strokeWidth={1.5} opacity="0.35" />
-          </svg>
-          <div className="relative z-2 flex max-w-[560px] flex-col gap-5">
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-lime-500">Ready When You Are</p>
-            <h2 className="text-4xl font-medium leading-[1.1] tracking-tight text-white md:text-5xl">
-              Let the Swarm Do the Homework
-            </h2>
-            <p className="text-base leading-relaxed text-neutral-100/72">
-              Open your account, set your profile, and get your first explained pick today.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-lime-500 px-8 py-[15px] text-[15px] font-bold text-forest-900 transition-colors hover:bg-lime-400 active:scale-[0.98]"
-              >
-                Open Account
-                <ArrowUpRight size={16} strokeWidth={2} />
-              </Link>
-              <span className="text-[13px] text-neutral-100/55">Research and education only, not financial advice</span>
+        {/* ═══ Tour ═══ */}
+        <section id="tour" aria-labelledby="tour-title" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 pb-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className={`${SECTION_HEAD} mb-10`}>
+            <span className={EYEBROW}>Explore the platform</span>
+            <h2 id="tour-title" className={H2}>See each part before you sign up</h2>
+            <p className={SUB}>Pick an area. These are the same screens you’ll use, filled with example figures.</p>
+          </div>
+          <div className="rounded-[32px] border border-forest-900/8 bg-white p-4 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)] sm:p-8">
+            <div role="tablist" aria-label="Areas of the platform" onKeyDown={onTabKey} className="as-tabs">
+              {tourItems.map((t) => (
+                <button
+                  key={t.key}
+                  ref={(el) => { tabRefs.current[t.key] = el }}
+                  type="button"
+                  role="tab"
+                  id={`tour-tab-${t.key}`}
+                  aria-controls={`tour-pane-${t.key}`}
+                  aria-selected={tab === t.key}
+                  tabIndex={tab === t.key ? 0 : -1}
+                  onClick={() => setTab(t.key)}
+                  className="as-tab"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div
+              role="tabpanel"
+              id={`tour-pane-${active.key}`}
+              aria-labelledby={`tour-tab-${active.key}`}
+              className="mt-7 grid grid-cols-1 items-center gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-14"
+            >
+              <div className="flex min-w-0 flex-col gap-4">
+                <h3 className="text-balance text-2xl font-bold leading-tight tracking-[-0.02em]">{active.title}</h3>
+                <p className={SUB}>{active.body}</p>
+                <ul className="flex flex-col gap-2.5">
+                  {active.ticks.map((t) => (
+                    <li key={t} className="flex gap-2.5 text-sm leading-relaxed"><Check className="mt-0.5 h-4 w-4 shrink-0 text-up" strokeWidth={2.4} aria-hidden="true" />{t}</li>
+                  ))}
+                </ul>
+                <Link to={SIGNUP} className="as-btn as-btn-primary w-fit">Try it free <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+              </div>
+              <div className="grid min-w-0 gap-3.5 rounded-[24px] bg-brand-bg p-3.5 sm:p-7" aria-hidden="true">{active.stage}</div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══ Footer ═══ */}
-      <footer className="relative z-2 mx-auto mt-24 max-w-[1200px] px-4 sm:px-8 pb-12">
-        <div className="flex flex-wrap justify-between gap-12 border-b border-forest-900/8 pb-10">
-          <div className="max-w-[300px]">
-            <div className="mb-3">
-              <Wordmark size={20} />
-            </div>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
-              An AI investment committee that explains its working. Research and education only, not financial advice.
-            </p>
+        {/* ═══ How it works ═══ */}
+        <section id="how" aria-labelledby="how-title" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 pb-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className={`${SECTION_HEAD} mb-10`}>
+            <span className={EYEBROW}>How it works</span>
+            <h2 id="how-title" className={H2}>Three steps from sign-up to your first explained list</h2>
           </div>
-          <div className="flex flex-wrap gap-16">
-            <div>
-              <p className="mb-3.5 text-[11px] font-semibold uppercase tracking-eyebrow text-muted">Product</p>
-              <div className="flex flex-col gap-2.5">
-                <a href="#journey" className="text-sm text-forest-900 hover:underline">Dashboard</a>
-                <a href="#journey" className="text-sm text-forest-900 hover:underline">Watchlist</a>
-                <a href="#journey" className="text-sm text-forest-900 hover:underline">Whale Watching</a>
-                <a href="#journey" className="text-sm text-forest-900 hover:underline">Learning Centre</a>
+          <ol className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Step n={1} title="Tell us who you are" body="Pick an investing style, tap the companies you already know, and answer a short risk questionnaire. Your profile shapes what you see, and Settings explains in plain words why you got your rating.">
+              <div className="flex flex-wrap gap-1.5"><span className="chip">Steady Builder</span><span className="chip">Moderate</span><span className="chip chip-line"><SectorDot sector="Technology" />Technology</span></div>
+            </Step>
+            <Step n={2} title="Specialist agents do the homework" body="Four agents measure every stock in your sectors separately. Their findings are combined, checked for hype and written up in plain language.">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[['Sentiment Scout', 'Reads tiered news and social posts'], ['Quant Analyst', 'Measures a year of price behaviour'], ['Discovery Agent', 'Finds trending stocks to check'], ['Orchestrator', 'Combines, checks hype, explains']].map(([n, d]) => (
+                  <div key={n} className="as-inset min-w-0 px-3 py-2.5"><p className="text-sm font-bold">{n}</p><p className="text-xs leading-snug text-brand-muted-fg">{d}</p></div>
+                ))}
               </div>
-            </div>
-            <div>
-              <p className="mb-3.5 text-[11px] font-semibold uppercase tracking-eyebrow text-muted">Company</p>
-              <div className="flex flex-col gap-2.5">
-                <a href="#journey" className="text-sm text-forest-900 hover:underline">How It Works</a>
-                <a href="#faq" className="text-sm text-forest-900 hover:underline">FAQ</a>
-                <Link to="/login" className="text-sm text-forest-900 hover:underline">Sign In</Link>
-              </div>
+            </Step>
+            <Step n={3} title="Read, compare and decide" body={`Open your ranked list${FLAGS.funds ? ' and fund matches' : ''} with the reasons written down. Dig into any stock, ask a question in plain English, or learn a concept in a short lesson. You make the call.`}>
+              <div className="flex flex-wrap gap-1.5"><span className="chip">Stock pages</span>{FLAGS.compare && <span className="chip">Compare</span>}<span className="chip">Ask AlphaSwarm</span></div>
+            </Step>
+          </ol>
+        </section>
+
+        {/* ═══ What it will never do ═══ */}
+        <section aria-labelledby="never-title" className="mx-auto max-w-[1200px] px-4 sm:px-8">
+          <div className="rounded-[32px] bg-forest-700 p-[clamp(28px,5vw,64px)] text-white">
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-lime-500">Transparent about its reasoning</span>
+            <h2 id="never-title" className={`${H2} mt-3 max-w-[18ch] text-white`}>What AlphaSwarm will never do</h2>
+            <p className="mt-3 max-w-[62ch] text-base text-white/80">It’s designed to explain, not to decide. These hold on every page.</p>
+            <div className="mt-9 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ['Tell you to buy or sell', 'No buy, hold or sell calls, and no price predictions. You get the evidence and what it means.'],
+                ['Hide a secret score', 'Four disclosed factors decide the order, each shown as a position, and every figure links to how it was worked out.'],
+                ['Chase the hype', 'It never ranks by how often a stock is mentioned. Buzz that outruns the evidence is flagged.'],
+                FLAGS.funds
+                  ? ['Let AI pick your funds', 'Fund matches follow fixed rules on the risk labels managers publish themselves. No AI chooses them.']
+                  : ['Learn from your data', 'Your answers shape what you see and are never used to rank anyone else’s stocks.'],
+              ].map(([t, b]) => (
+                <div key={t} className="flex min-w-0 flex-col gap-2 rounded-[20px] border border-white/12 bg-white/6 p-5">
+                  <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-lime-500/16 text-lime-500"><X className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" /></span>
+                  <p className="text-base font-bold">{t}</p>
+                  <p className="text-sm leading-relaxed text-white/75">{b}</p>
+                </div>
+              ))}
             </div>
           </div>
+        </section>
+
+        {/* ═══ Built for South Africa ═══ */}
+        <section aria-labelledby="sa-title" className="mx-auto max-w-[1200px] px-4 py-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <div className={SECTION_HEAD}>
+              <span className={EYEBROW}>Built for South African investors</span>
+              <h2 id="sa-title" className={H2}>Local where it matters</h2>
+              <p className={SUB}>
+                US stocks are shown in rand with the exchange rate stated
+                {FLAGS.funds && ', and the funds section covers South African unit trusts and ETFs you can buy on the platform you already use, such as EasyEquities'}.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                ['R18.42', 'per US$, stated next to every price, so you always know what you’re looking at'],
+                FLAGS.funds ? ['SA funds', 'Unit trusts and ETFs described from their managers’ own fact sheets'] : null,
+                ['R46 000', 'Yearly tax-free allowance, tracked in the TFSA planner with the R500 000 lifetime limit'],
+                ['Your level', 'Novice, intermediate or advanced: explanations and lessons match how much you know'],
+              ].filter((x): x is string[] => x !== null).map(([big, text]) => (
+                <div key={big} className="flex min-w-0 flex-col gap-1.5 rounded-[20px] border border-forest-900/8 bg-white p-5">
+                  <span className="text-2xl font-extrabold tabular-nums tracking-[-0.02em]">{big}</span>
+                  <span className="text-sm text-brand-muted-fg">{text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ FAQ ═══ */}
+        <section id="faq" aria-labelledby="faq-title" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 pb-[clamp(72px,9vw,112px)] sm:px-8">
+          <div className={`${SECTION_HEAD} mx-auto mb-10 items-center text-center`}>
+            <span className={EYEBROW}>Questions and answers</span>
+            <h2 id="faq-title" className={H2}>Frequently asked questions</h2>
+          </div>
+          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+            {FAQS.filter((f) => on(f.flag)).map(({ q, a }) => (
+              <details key={q} className="group rounded-[20px] border border-forest-900/8 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-base font-bold [&::-webkit-details-marker]:hidden">
+                  {q}
+                  <ChevronDown className="h-[18px] w-[18px] shrink-0 text-forest-700 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <p className="px-5 pb-4 text-sm leading-relaxed text-brand-muted-fg">{a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══ Closing call to action ═══ */}
+        <section aria-labelledby="cta-title" className="mx-auto max-w-[1200px] px-4 sm:px-8">
+          <div ref={ctaRef} className="relative isolate grid grid-cols-1 items-center gap-8 overflow-hidden rounded-[32px] bg-forest-900 p-[clamp(36px,6vw,80px)] text-white lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            {ctaSeen && (
+              <Ribbon
+                id="rb-cta"
+                viewBox="0 0 1200 420"
+                d="M520,470 C600,360 700,330 820,300 C960,264 1040,190 1110,90 C1150,30 1190,-10 1260,-40"
+                width={44}
+                size={16}
+                text="Research without the noise · Join the Swarm · Research without the noise"
+                band="stroke-lime-500"
+                copy="fill-forest-900"
+                // Wide screens only: on a narrow card it would cross the copy.
+                className="inset-0 z-[1] hidden h-full w-full opacity-90 lg:block"
+              />
+            )}
+            <div className="relative z-[2] flex flex-col gap-3.5">
+              <span className="text-xs font-bold uppercase tracking-[0.1em] text-lime-500">Ready when you are</span>
+              <h2 id="cta-title" className={`${H2} text-white`}>Let the Swarm do the homework</h2>
+              <p className="text-base text-white/75">Open your account, set your profile, and get your first explained list today.</p>
+            </div>
+            <div className="relative z-[2] flex flex-col items-start gap-3">
+              <Link to={SIGNUP} className="as-btn as-btn-lime h-12 px-6 text-base">Open account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+              <span className="text-xs text-white/65">Free to use · Research and education only, not financial advice</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ═══ Footer, grouped like the sidebar ═══ */}
+      <footer className="mx-auto max-w-[1200px] px-4 pb-10 pt-14 sm:px-8">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-8 border-b border-forest-900/8 pb-8 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] lg:gap-8">
+          <div className="col-span-3 lg:col-span-1">
+            <Wordmark />
+            <p className="mt-3 max-w-[34ch] text-sm text-brand-muted-fg">The evidence on US stocks{FLAGS.funds && ' and South African funds'}, explained in plain language.</p>
+          </div>
+          <FooterLinks title="Explore" links={[['Stocks', 'stocks'], FLAGS.funds && ['Funds', 'funds'], FLAGS.news && ['Market News', 'news'], ['Whale Watching', 'whale']]} onPick={openTab} />
+          <FooterLinks title="Your tools" links={[['Dashboard', 'dash'], ['Watchlist', 'stocks'], FLAGS.compare && ['Compare', 'compare'], ['Financial Tools', 'learn']]} onPick={openTab} />
+          <FooterLinks title="Learn" links={[['Learning Centre', 'learn'], ['Ask AlphaSwarm', 'ask'], ['How it works', '#how'], ['FAQ', '#faq']]} onPick={openTab} />
         </div>
-        <p className="mt-5 text-xs text-muted-foreground">© 2026 AlphaSwarm · Information Systems Honours Project</p>
+        <p className="mt-5 max-w-[90ch] text-xs text-brand-muted-fg">
+          AlphaSwarm is not a licensed financial services provider and does not give financial advice. Everything shown is research and education. © 2026 AlphaSwarm · Information Systems Honours Project, University of Cape Town.
+        </p>
       </footer>
+    </div>
+  )
+}
+
+function Step({ n, title, body, children }: { n: number; title: string; body: string; children: ReactNode }) {
+  return (
+    <li className="flex min-w-0 flex-col gap-3.5 rounded-[24px] border border-forest-900/8 bg-white p-6">
+      <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-forest-700 text-base font-extrabold text-lime-500" aria-hidden="true">{n}</span>
+      <h3 className="text-lg font-bold leading-snug tracking-[-0.01em]">{title}</h3>
+      <p className="text-sm text-brand-muted-fg">{body}</p>
+      {children}
+    </li>
+  )
+}
+
+/** A footer column. A link is [label, tour tab] or [label, '#section']; false drops it. */
+function FooterLinks({ title, links, onPick }: { title: string; links: (false | [string, string])[]; onPick: (tab?: string) => void }) {
+  return (
+    <div>
+      <h4 className="mb-3 text-xs font-bold text-brand-muted-fg">{title}</h4>
+      <ul className="flex flex-col gap-2">
+        {links.filter((l): l is [string, string] => Boolean(l)).map(([label, target]) => (
+          <li key={label}>
+            <a
+              href={target.startsWith('#') ? target : '#tour'}
+              onClick={() => (target.startsWith('#') ? undefined : onPick(target))}
+              className="text-sm font-medium hover:underline"
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
