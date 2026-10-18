@@ -1,10 +1,10 @@
-import { Search } from "lucide-react";
 import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import { useWatchlist } from "../../../dashboard/DashboardDataContext";
 import type { SortOption } from "../../../hooks/useWatchlistData";
 import WatchedAssetCard from "../../watchlist/WatchedAssetCard";
 import WatchlistSearch from "../../watchlist/WatchlistSearch";
-import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { WidgetEmpty, WidgetHeaderLink, WidgetLoading } from "./widgetChrome";
+import { SECTOR_COLOURS } from "../../../utils/sectorColours";
 
 // The watchlist widget, over the one shared feed from DashboardDataContext.
 
@@ -24,12 +24,10 @@ const SORT_LABELS: Record<SortOption, string> = {
  * list, leaving them no way to add without going to the watchlist page.
  *
  * Sector and sort are widget settings rather than local state, so they survive a
- * reload the way the rest of the layout does. The page's own controls are
- * reproduced here in miniature rather than reused, because the page renders them
- * in a header bar this widget does not have.
+ * reload the way the rest of the layout does, which is why the page's toolbar is
+ * reproduced here rather than reused.
  */
 export function WatchlistWidget({
-  size,
   settings,
   updateSettings,
 }: WidgetProps) {
@@ -67,40 +65,21 @@ export function WatchlistWidget({
     return (b.addedAt || "").localeCompare(a.addedAt || "");
   });
 
-  const columns =
-    size === "wide"
-      ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-      : size === "medium"
-        ? "grid-cols-1 md:grid-cols-2"
-        : "grid-cols-1";
-
   return (
-    <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed text-brand-muted-fg">
-        Track any stock here, with a fortnight of price history on each —
-        watched stocks are included automatically in your next analysis run.
-      </p>
+    <div className="@container space-y-3">
+      <WidgetHeaderLink to="/watchlist">Open</WidgetHeaderLink>
 
-      {/* Above the list, and outside every empty and loading branch below: the
-          way out of an empty watchlist is the same control as the way to grow
-          a full one, so it is always the first thing in the widget. Panelled
-          rather than loose so the search reads as its own act, and the list
-          below as the result of it. */}
-      <div className="space-y-2 rounded-2xl border border-brand-border/60 bg-brand-bg/55 p-3">
-        <div className="flex items-center gap-2">
-          <Search className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-primary">
-            Add to your watchlist
-          </p>
-        </div>
-        <WatchlistSearch
-          search={search}
-          setSearch={setSearch}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
-          onAdd={addToWatchlist}
-        />
-      </div>
+      {/* The Watchlist page's toolbar in miniature: the search on top, outside
+          every empty and loading branch below (the way out of an empty
+          watchlist is the same control as the way to grow a full one), then the
+          sort and the sector filters. */}
+      <WatchlistSearch
+        search={search}
+        setSearch={setSearch}
+        searchResults={searchResults}
+        searchLoading={searchLoading}
+        onAdd={addToWatchlist}
+      />
 
       {loading ? (
         <WidgetLoading rows={3} />
@@ -108,42 +87,46 @@ export function WatchlistWidget({
         <WidgetEmpty message="Nothing tracked yet. Search above to add your first stock." />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* The count in the forest chip, so the widget states what it holds
-                in the same voice as every other count on the dashboard. */}
-            <span className="chip shrink-0">
-              {sorted.length} tracked
-            </span>
-
-            {sectors.length > 2
-              ? sectors.map((sector) => (
+          <div className="flex flex-col gap-2 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+            {sectors.length > 2 ? (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by sector">
+                {sectors.map((sector) => (
                   <button
                     key={sector}
                     type="button"
                     onClick={() => updateSettings({ sector })}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                      sectorFilter === sector
-                        ? "border-brand-primary bg-brand-primary text-white"
-                        : "border-brand-border/40 text-brand-muted-fg hover:border-brand-primary/40 hover:text-brand-fg"
-                    }`}
+                    aria-pressed={sectorFilter === sector}
+                    className="as-fchip"
                   >
+                    {sector !== "All" && SECTOR_COLOURS[sector] && (
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${SECTOR_COLOURS[sector].fill}`} aria-hidden="true" />
+                    )}
                     {sector}
+                    {sector === "All" && <span className="tabular-nums text-brand-muted-fg">{watchedAssets.length}</span>}
                   </button>
-                ))
-              : null}
+                ))}
+              </div>
+            ) : (
+              <span className="chip w-fit">{sorted.length} tracked</span>
+            )}
 
-            <select
-              value={sortBy}
-              onChange={(e) => updateSettings({ sort: e.target.value })}
+            <div
+              className="as-tabs as-tabs-sm grid grid-cols-3 rounded-[16px] @2xl:inline-flex @2xl:shrink-0 @2xl:rounded-full"
+              role="group"
               aria-label="Sort watched stocks"
-              className="ml-auto rounded-full border border-brand-primary/30 bg-brand-primary/5 px-2.5 py-1 text-[11px] font-semibold text-brand-primary transition-colors hover:border-brand-primary/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (
-                <option key={opt} value={opt}>
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={sortBy === opt}
+                  onClick={() => updateSettings({ sort: opt })}
+                  className="as-tab"
+                >
                   {SORT_LABELS[opt]}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           {sorted.length === 0 ? (
@@ -153,14 +136,14 @@ export function WatchlistWidget({
                 <button
                   type="button"
                   onClick={() => updateSettings({ sector: "All" })}
-                  className="text-xs font-semibold text-brand-primary hover:underline"
+                  className="as-btn as-btn-sm as-btn-secondary"
                 >
                   Show all
                 </button>
               }
             />
           ) : (
-            <div className={`grid gap-4 ${columns}`}>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
               {/* No "point the dashboard at this one" button any more: each
                   ticker-scoped widget now owns its own asset, so a card here
                   has no single target to set. Each of those widgets asks for

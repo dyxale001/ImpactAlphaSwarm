@@ -513,7 +513,7 @@ export const FUND_BRACKET_NO_PROFILE =
 export const FUND_BRACKET_LOAD_FAILED =
   "Unable to work out which fund categories your profile maps to right now.";
 
-export const FUND_BRACKET_ACTION = "See the funds in your bracket";
+export const FUND_BRACKET_ACTION = "See funds";
 
 /** The attribution a tile that shows risk labels has to carry, in one line. */
 export const FUND_BRACKET_PROVENANCE =

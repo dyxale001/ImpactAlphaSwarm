@@ -30,6 +30,11 @@ function InSlot({ which, children }: { which: "subtitle" | "action"; children: R
   return slot ? createPortal(children, slot) : null;
 }
 
+/** A control in front of the header's subtitle, such as a widget's sector. */
+export function WidgetSubtitle({ children }: { children: ReactNode }) {
+  return <InSlot which="subtitle">{children}</InSlot>;
+}
+
 /** The widget's way to the full page, shown top right in its header. */
 export function WidgetHeaderLink({ to, children }: { to: string; children: ReactNode }) {
   return (
