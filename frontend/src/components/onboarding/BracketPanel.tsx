@@ -76,7 +76,6 @@ export default function BracketPanel({
         </p>
       )}
 
-      <p className="mt-3 text-xs leading-relaxed text-brand-muted-fg">{preview.not_licensed}</p>
     </div>
   );
 }
