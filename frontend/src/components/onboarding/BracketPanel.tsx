@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { previewBracket, type BracketPreview } from "../../services/api/fundCatalogue";
 
 /**
@@ -52,26 +53,21 @@ export default function BracketPanel({
   if (!preview || categories.length === 0) return null;
 
   return (
-    <div className="w-full max-w-[520px] rounded-xl bg-white p-5 shadow-sm">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
-        Fund categories open to you
-      </h3>
+    <div className="as-card p-5 sm:p-6">
+      <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">Fund categories open to you</h2>
 
-      <p className="mt-1.5 text-[13px] leading-relaxed text-forest-900">{preview.panel}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-forest-900">{preview.panel}</p>
 
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {categories.map((category) => (
-          <li
-            key={category.code}
-            className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] text-forest-900"
-          >
+          <li key={category.code} className="chip chip-line">
             {category.name}
           </li>
         ))}
       </ul>
 
       {preview.bracket?.ceiling_label && (
-        <p className="mt-3 text-[12px] leading-relaxed text-muted">
+        <p className="mt-3 text-xs leading-relaxed text-brand-muted-fg">
           Funds are included when the manager's own published risk label is{" "}
           <span className="font-semibold text-forest-900">
             {preview.bracket.ceiling_label}
@@ -84,12 +80,12 @@ export default function BracketPanel({
 
       <Link
         to="/funds"
-        className="mt-3 inline-block text-[12px] font-semibold text-forest-900 hover:underline"
+        className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
       >
-        Explore them in Funds →
+        Explore them in Funds <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-muted">{preview.not_licensed}</p>
+      <p className="mt-3 text-xs leading-relaxed text-brand-muted-fg">{preview.not_licensed}</p>
     </div>
   );
 }

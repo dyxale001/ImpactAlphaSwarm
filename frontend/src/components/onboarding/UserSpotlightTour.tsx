@@ -62,20 +62,20 @@ function Tour({ steps, dismiss }: { steps: SpotlightStep[]; dismiss: (status: 's
     };
   }, [current]);
   return createPortal(<>
-    {position.highlight && <div aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-2xl border-2 border-brand-accent shadow-[0_0_0_3px_rgba(190,242,100,0.15)]" style={position.highlight} />}
+    {position.highlight && <div aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-[20px] border-2 border-lime-500 shadow-[0_0_0_3px_rgba(190,242,100,0.15)]" style={position.highlight} />}
     <section ref={cardRef} role="dialog" aria-modal="false" aria-labelledby={id}
-      className="fixed z-[55] w-80 max-w-[calc(100vw_-_2rem)] overflow-y-auto rounded-2xl border border-brand-accent/40 bg-brand-primary p-5 text-brand-bg shadow-xl"
+      className="fixed z-[55] w-80 max-w-[calc(100vw_-_2rem)] overflow-y-auto rounded-[20px] bg-brand-primary p-5 text-brand-bg shadow-float"
       style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 16}px)` }}>
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-brand-accent">Quick tour · {step + 1} of {steps.length}</p>
+      <p className="band-eyebrow">Quick tour · {step + 1} of {steps.length}</p>
       <h2 ref={headingRef} tabIndex={-1} id={id} className="mt-2 rounded-sm text-lg font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent">{current.title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-brand-bg/85">{current.body}</p>
       {position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">Find {current.title} in the navigation menu. You can explore it after the tour; the menu stays closed.</p>}
       {position.missing && current.target === 'assistant' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">The quick-help button is not currently available as an opening control. You can finish the tour and use Ask AlphaSwarm in navigation.</p>}
       {position.missing && !position.mobile && current.target === 'navigation' && <p className="mt-2 text-xs leading-relaxed text-brand-bg/70">This entry is not currently visible. Find {current.title} in navigation when it is available.</p>}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => dismiss('skipped')} className="min-h-11 rounded-full px-2 text-xs underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-brand-accent">Skip tour</button>
-        {step > 0 && <button type="button" onClick={() => setStep(value => value - 1)} className="min-h-11 rounded-full border border-white/25 px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-brand-accent">Back</button>}
-        <button type="button" onClick={() => step === steps.length - 1 ? dismiss('finished') : setStep(value => value + 1)} className="ml-auto min-h-11 rounded-full bg-brand-accent px-4 text-xs font-bold text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent">{step === steps.length - 1 ? 'Finish' : 'Next'}</button>
+        <button type="button" onClick={() => dismiss('skipped')} className="min-h-11 rounded-full px-2 text-xs font-semibold text-brand-bg/80 underline underline-offset-4 hover:text-brand-bg focus-visible:outline-2 focus-visible:outline-lime-500">Skip tour</button>
+        {step > 0 && <button type="button" onClick={() => setStep(value => value - 1)} className="as-btn as-btn-sm as-btn-ghost-dark">Back</button>}
+        <button type="button" onClick={() => step === steps.length - 1 ? dismiss('finished') : setStep(value => value + 1)} className="as-btn as-btn-sm as-btn-lime ml-auto">{step === steps.length - 1 ? 'Finish' : 'Next'}</button>
       </div>
     </section>
   </>, document.body);

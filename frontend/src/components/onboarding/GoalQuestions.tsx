@@ -11,7 +11,7 @@ import QuestionBlock, { type QuestionAppearance } from "./QuestionBlock";
  * where they last answered.
  *
  * The two pages do not share a palette, so the look is chosen by the caller:
- * onboarding keeps its white cards on cream, Settings embeds the questions in
+ * onboarding gives each question its own card, Settings embeds them in
  * a card it already owns.
  */
 export default function GoalQuestions({
