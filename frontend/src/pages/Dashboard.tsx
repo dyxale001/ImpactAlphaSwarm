@@ -236,7 +236,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 disabled={availableWidgets.length === 0}
-                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-accent text-brand-muted-fg transition-colors hover:bg-brand-accent/10 hover:text-brand-primary disabled:opacity-40 md:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-[20px] border-2 border-dashed border-forest-900/20 text-sm font-semibold text-brand-muted-fg transition-colors hover:border-forest-700 hover:bg-white hover:text-forest-900 disabled:opacity-40 md:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
               >
                 <Plus className="h-5 w-5" />
                 <span className="text-xs font-semibold">
