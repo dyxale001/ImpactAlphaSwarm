@@ -56,21 +56,14 @@ export default function StalenessChip({
 
   const [label, tone] =
     age > STALE_DAYS
-      ? [STALENESS_STALE, onDark ? "bg-danger text-white" : "bg-danger/10 text-danger"]
+      ? [STALENESS_STALE, onDark ? "bg-danger text-white" : "chip-down"]
       : age > SOFT_STALE_DAYS
-        ? [
-            STALENESS_AGEING,
-            onDark ? "bg-warning/20 text-warning" : "bg-warning/15 text-warning-strong",
-          ]
-        : [
-            STALENESS_CURRENT,
-            onDark ? "bg-white/10 text-lime-100" : "bg-brand-bg text-forest-500",
-          ];
+        ? [STALENESS_AGEING, onDark ? "bg-warning/20 text-warning" : "chip-caution"]
+        : [STALENESS_CURRENT, onDark ? "bg-white/10 text-lime-100" : ""];
 
   return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-[0.04em] ${tone}`}
-    >
+    // The shared chip, in the platform's up/caution/down tones on a light card.
+    <span className={`chip shrink-0 ${tone}`}>
       {label}
     </span>
   );

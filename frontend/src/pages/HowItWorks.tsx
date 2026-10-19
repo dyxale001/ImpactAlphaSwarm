@@ -1,10 +1,11 @@
-import LearnMore from '../components/learning/LearnMore';
+import LearnPopover from '../components/learning/LearnPopover';
 import { useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import SentimentMethodology from "../components/howItWorks/SentimentMethodology";
-import QuantMethodology from "../components/howItWorks/QuantMethodology";
-import RankingMethodology from "../components/howItWorks/RankingMethodology";
+import {
+  METHODOLOGY_CAVEAT,
+  METHODOLOGY_SECTIONS,
+} from "../components/howItWorks/methodologySections";
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 
 // Transparency page: explains how everything shown on the analysis page is
@@ -31,7 +32,9 @@ export default function HowItWorks() {
   }, [hash]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8 pb-20 pt-6 lg:pt-10 animate-fade-in-up">
+    // Reading width (768px) inside the shared 1280px frame, pinned to the same
+    // left edge as every other page rather than centred.
+    <div className="mx-auto max-w-7xl *:max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8 pb-20 pt-6 lg:pt-10 animate-fade-in-up">
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-brand-fg"
@@ -40,11 +43,12 @@ export default function HowItWorks() {
         {ticker ? `Back to ${ticker.toUpperCase()} analysis` : "Back"}
       </button>
 
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-brand-primary">
+      <header className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="mb-2 text-xs font-semibold text-brand-muted-fg">
           How it works
         </p>
-        <h1 className="text-3xl font-bold text-brand-fg">
+        <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-forest-900">
           {SCORECARD_ENABLED
             ? "How these numbers are built"
             : "How we derive the score"}
@@ -52,7 +56,7 @@ export default function HowItWorks() {
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-brand-muted-fg">
           {SCORECARD_ENABLED ? (
             <>
-              Two independent engines measure every asset: a{" "}
+              Two independent engines measure every stock: a{" "}
               <span className="font-semibold text-brand-fg">Sentiment</span>{" "}
               signal (what people and the press are saying) and a set of{" "}
               <span className="font-semibold text-brand-fg">price</span>{" "}
@@ -73,17 +77,29 @@ export default function HowItWorks() {
           )}
         </p>
       </div>
-      <LearnMore context="stock.methodology" />
+      {/* The lessons behind the book button, as on the stock page. */}
+      <LearnPopover context="stock.methodology" className="shrink-0" />
+      </header>
 
-      {/* Ordering first: it is the question users are actually asking when they
-          tap through from a card. */}
-      {SCORECARD_ENABLED && <RankingMethodology />}
-      <SentimentMethodology />
-      <QuantMethodology />
+      {/* The same sections the stock page's "How is this calculated?" dialog shows
+          one at a time, stacked, with the ordering first: it is the question users
+          are actually asking when they tap through from a card. */}
+      {METHODOLOGY_SECTIONS.map(({ key, title, Content }) => (
+        <section
+          key={key}
+          id={key}
+          aria-labelledby={`${key}-title`}
+          className="as-card space-y-8 p-5 sm:p-6"
+          style={{ scrollMarginTop: "1.5rem" }}
+        >
+          <h2 id={`${key}-title`} className="text-xl font-bold tracking-[-0.01em] text-forest-900">
+            {title}
+          </h2>
+          <Content />
+        </section>
+      ))}
 
-      <p className="text-center text-[12px] text-brand-muted-fg">
-        Scores are for research and education only and are not financial advice.
-      </p>
+      <p className="text-xs leading-relaxed text-brand-muted-fg">{METHODOLOGY_CAVEAT}</p>
     </div>
   );
 }

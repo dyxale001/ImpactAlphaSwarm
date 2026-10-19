@@ -1,4 +1,4 @@
-import { BrainCircuit } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useDayDrivers } from "../../hooks/useDaySummary";
 import { SOCIAL_HISTORY_DAYS } from "../../data/sentimentMethodology";
 import { dayLabel, formatDay, todayKey } from "./sentimentDays";
@@ -65,54 +65,47 @@ export function DaySummaryPanel({ ticker, day, point, newsDay, newsDays }: Props
   const provisional =
     summary?.summary && !carriedFrom ? !summary.is_final : day === todayKey();
 
+  const verdictChip =
+    verdict.tone === "positive" ? "chip chip-up" : verdict.tone === "negative" ? "chip chip-down" : "chip bg-white";
+
   return (
-    // The neon-lime border and forest-toned ground are the reasoning-trace boxes'
-    // own styling, so a written account of one day reads as the same kind of object
-    // as the reasoning trace on the ranking tab: an AI-written paragraph about the
-    // run, framed the same way wherever it appears.
-    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4">
-      {/* The heading names the day the chart selection points at, and carries the two
-          badges that qualify the reading. */}
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <h4 className="text-sm font-semibold text-brand-fg">{dayLabel(day)}</h4>
+    // One soft box headed by the lime Sparkles mark, the same treatment as the
+    // reasoning trace on the overview tab: an AI-written paragraph reads as the same
+    // kind of object wherever it appears. The heading follows the day: a day still in
+    // progress is what IS driving the sentiment, a settled one is what DROVE it, and
+    // a day without news names the earlier day whose paragraph it shows, so last
+    // Tuesday's news is never read as today's.
+    <div className="as-inset p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-forest-900">
+          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          {carriedFrom
+            ? `What drove the sentiment on ${formatDay(carriedFrom)}`
+            : provisional
+              ? "What's driving the sentiment"
+              : "What drove the sentiment"}
+          <span className="font-semibold text-brand-muted-fg">· {dayLabel(day)}</span>
           {provisional && (
             <span
-              className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-primary text-white font-semibold"
+              className="chip chip-dark"
               title="This day is still being collected. The paragraph is written from what has arrived so far and is replaced once the day closes."
             >
               So far today
             </span>
           )}
-        </div>
-        {point?.score != null && (
-          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-accent text-brand-primary font-semibold">
-            {verdict.label}
-          </span>
-        )}
+        </p>
+        {point?.score != null && <span className={verdictChip}>{verdict.label}</span>}
       </div>
 
-      <p className="text-[11px] text-brand-muted-fg mt-1">
+      <p className="mt-1 text-xs text-brand-muted-fg">
         <DayFigures point={point} newsDay={newsDay} />
       </p>
 
-      {/* The AI box. The brain logo lives here rather than on the heading, so the
-          machine-written prose is the thing marked as machine-written. The heading
-          follows the day: a day still in progress is what IS driving the sentiment, a
-          settled one is what DROVE it, and a day without news names the earlier day
-          whose paragraph it is showing, so last Tuesday's news is never read as
-          today's. */}
-      <div className="mt-3 rounded-xl border border-brand-border/60 bg-brand-surface/70 p-3">
-        <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-          <BrainCircuit className="w-3 h-3 text-brand-primary" />
-          {carriedFrom
-            ? `What drove the sentiment on ${formatDay(carriedFrom)}`
-            : provisional
-              ? "What's driving the sentiment"
-              : "What drove the sentiment that day"}
-        </div>
+      <div className="mt-3">
         {carriedFrom && !isLoading && !error && (
-          <p className="text-[11px] text-brand-muted-fg mb-1.5">
+          <p className="mb-1.5 text-xs text-brand-muted-fg">
             No news articles on this day, so this is the latest day that had some.
           </p>
         )}
@@ -122,24 +115,14 @@ export function DaySummaryPanel({ ticker, day, point, newsDay, newsDays }: Props
           <p className="text-sm text-brand-muted-fg italic">{error}</p>
         ) : summary?.summary ? (
           <>
-            <p className="text-sm text-brand-fg leading-relaxed">{summary.summary}</p>
+            <p className="text-sm text-forest-900 leading-relaxed">{summary.summary}</p>
             {/* Said plainly, once, and never in a tone that asks to be trusted. A
                 generated paragraph that does not announce itself is the one thing this
                 panel could get seriously wrong. */}
-            <ul className="mt-2 space-y-1 text-[10px] text-brand-muted-fg">
-              <li>
-                Written by AI from that day's news articles and how much people posted.
-                It describes the sentiment readings only, not the share price.
-              </li>
-              <li>
-                Sources can be biased or promotional. The summary weighs them but
-                cannot check that what they say is true.
-              </li>
-              <li>
-                This looks at the last {SOCIAL_HISTORY_DAYS} days, so a short burst of
-                news may not last.
-              </li>
-            </ul>
+            <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
+              Written by AI from that day's articles and post counts. It describes the
+              sentiment, not the share price, and cannot check that its sources are true.
+            </p>
           </>
         ) : (
           <p className="text-sm text-brand-muted-fg italic">

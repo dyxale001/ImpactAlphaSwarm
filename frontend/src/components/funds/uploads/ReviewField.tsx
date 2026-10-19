@@ -1,14 +1,17 @@
 import { useId } from "react";
 import { AlertTriangle, Check, RotateCcw, X } from "lucide-react";
 import { FIELD_META, isChanged, isDecided, labelFor, type FieldState } from "../../../utils/fundUploads";
+import { formatRandAmount } from "../../../utils/fundsCopy";
 import {
   REVIEW_CHANGED_BADGE,
+  REVIEW_CHECK_BADGE,
   REVIEW_CLEAR,
   REVIEW_CLEARED_BADGE,
   REVIEW_CONFIRM,
   REVIEW_CONFIRMED_BADGE,
   REVIEW_FROM_GRAPHIC,
   REVIEW_FROM_PAGE,
+  REVIEW_READS_AS,
   REVIEW_REQUIRED,
   REVIEW_SERVER_FLAGGED,
   REVIEW_UNDO,
@@ -17,15 +20,31 @@ import {
 } from "../../../utils/fundUploadsCopy";
 
 const inputClass =
-  "min-h-10 w-full rounded-lg border border-brand-border/60 bg-brand-surface px-3 py-2 text-[13px] text-brand-primary transition-colors placeholder:text-forest-400 focus:border-brand-primary/50 focus:outline-none disabled:bg-brand-bg disabled:text-forest-400";
+  "h-10 w-full rounded-[12px] border border-forest-900/15 bg-white px-3 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none disabled:bg-forest-50 disabled:text-forest-400";
+
+/** A rand figure in words at its scale: "R27.9 billion", "R420 million". The
+ *  fact sheet prints large sums this way, so a unit read wrongly (millions for
+ *  billions) is plain beside the raw number the input holds. */
+function readsAs(input: string): string | null {
+  const digits = input.replace(/[\s, ]/g, "").replace(/^R/i, "");
+  if (!/^\d+(\.\d+)?$/.test(digits)) return null;
+  const value = Number(digits);
+  if (!Number.isFinite(value) || value < 10_000) return null;
+  if (value >= 1_000_000_000) return `R${Number((value / 1_000_000_000).toFixed(1))} billion`;
+  if (value >= 1_000_000) return `R${Number((value / 1_000_000).toFixed(1))} million`;
+  return formatRandAmount(value);
+}
 
 /**
  * One field on the review screen: its value as an input, the line it was read
- * from, and, for a flagged value, why it was flagged and the three decisions.
+ * from, and, for a flagged value, why it was flagged and the decisions.
  *
- * A flagged field is framed in amber until it is decided, then shows which
- * decision was made with a way back. The quote sits directly under the input
- * so the person compares the two without looking elsewhere.
+ * A flagged field is a two-column card: what to check on the left (the label,
+ * the value and the decision buttons), the evidence on the right (the page, the
+ * quoted line and the reason it was flagged), so the two are compared side by
+ * side. Its status chip says "Check this" until it is decided, then which
+ * decision was made, with a way back. `bare` drops the frame for a field that
+ * sits in a shared card with others.
  */
 export default function ReviewField({
   state,
@@ -33,6 +52,7 @@ export default function ReviewField({
   serverError,
   serverFlagged = false,
   categoriesListId,
+  bare = false,
   onInput,
   onConfirm,
   onClear,
@@ -43,6 +63,7 @@ export default function ReviewField({
   serverError?: string;
   serverFlagged?: boolean;
   categoriesListId?: string;
+  bare?: boolean;
   onInput: (value: string) => void;
   onConfirm: () => void;
   onClear: () => void;
@@ -56,102 +77,96 @@ export default function ReviewField({
   const cleared = state.decision === "cleared";
   const { read } = state;
   const reasons = state.status === "confirmed" ? [] : read.reasons;
+  const reads = meta?.kind === "rand" ? readsAs(state.input) : null;
 
-  const badge = !flagged
+  const status = !flagged
     ? null
-    : cleared
-      ? REVIEW_CLEARED_BADGE
-      : changed
-        ? REVIEW_CHANGED_BADGE
-        : state.decision === "confirmed"
-          ? REVIEW_CONFIRMED_BADGE
-          : null;
+    : !decided
+      ? { label: REVIEW_CHECK_BADGE, tone: "chip-caution", icon: AlertTriangle }
+      : cleared
+        ? { label: REVIEW_CLEARED_BADGE, tone: "", icon: X }
+        : { label: changed ? REVIEW_CHANGED_BADGE : REVIEW_CONFIRMED_BADGE, tone: "chip-up", icon: Check };
 
-  const frame =
-    flagged && !decided
-      ? "border-warning/60 bg-warning/5"
-      : serverError
-        ? "border-warning/60"
-        : "border-brand-border/50 bg-brand-surface";
+  const issues = [...(serverError ? [serverError] : []), ...(serverFlagged ? [REVIEW_SERVER_FLAGGED] : []), ...reasons];
+  const warn = flagged || Boolean(serverError) || serverFlagged;
+  const evidence = read.quote || issues.length > 0;
+
+  const frame = bare
+    ? ""
+    : `rounded-[16px] border p-4 ${
+        (flagged && !decided) || serverError ? "border-caution/40 bg-caution-bg/40" : "border-forest-900/10 bg-white"
+      }`;
 
   return (
-    <div className={`flex flex-col gap-2.5 rounded-brand border p-4 ${frame}`}>
+    <div className={`flex flex-col gap-3 ${frame}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <label htmlFor={id} className="text-[13px] font-bold text-brand-primary">
+        <label htmlFor={id} className="flex items-center gap-2 text-sm font-bold text-forest-900">
           {labelFor(state.field)}
-          {required && (
-            <span className="ml-2 rounded-full bg-brand-bg px-2 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-forest-500">
-              {REVIEW_REQUIRED}
-            </span>
-          )}
+          {required && <span className="chip">{REVIEW_REQUIRED}</span>}
         </label>
-        {badge && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-brand-accent/30 px-2 py-0.5 text-[11px] font-bold text-brand-fg">
-            <Check className="h-3 w-3" aria-hidden />
-            {badge}
+        {status && (
+          <span className={`chip ${status.tone}`}>
+            <status.icon className="h-3 w-3" aria-hidden />
+            {status.label}
           </span>
         )}
       </div>
 
-      <FieldInput
-        id={id}
-        state={state}
-        disabled={cleared}
-        categoriesListId={categoriesListId}
-        onInput={onInput}
-      />
-      {meta?.hint && <p className="text-[11px] text-forest-500">{meta.hint}</p>}
-
-      {read.quote && (
-        <figure className="m-0 flex flex-col gap-1">
-          <figcaption className="text-[11px] font-semibold text-forest-500">
-            {read.page ? REVIEW_FROM_PAGE.replace("{page}", String(read.page)) : null}
-            {read.source === "graphic" ? ` · ${REVIEW_FROM_GRAPHIC}` : null}
-          </figcaption>
-          <blockquote className="m-0 border-l-2 border-brand-accent pl-3 text-xs leading-relaxed text-forest-600">
-            “{read.quote}”
-          </blockquote>
-        </figure>
-      )}
-
-      {(reasons.length > 0 || serverFlagged || serverError) && (
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {[...(serverError ? [serverError] : []), ...(serverFlagged ? [REVIEW_SERVER_FLAGGED] : []), ...reasons].map(
-            (reason) => (
-              <li
-                key={reason}
-                className={`flex items-start gap-1.5 text-xs leading-relaxed ${
-                  flagged || serverError || serverFlagged ? "text-warning-strong" : "text-forest-500"
-                }`}
-              >
-                {(flagged || serverError || serverFlagged) && (
-                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-                )}
-                <span>{reason}</span>
-              </li>
-            ),
+      <div className={`grid gap-3 ${!bare && evidence ? "md:grid-cols-2 md:gap-5" : ""}`}>
+        <div className="flex flex-col gap-1.5">
+          <FieldInput id={id} state={state} disabled={cleared} categoriesListId={categoriesListId} onInput={onInput} />
+          {reads && (
+            <p className="text-xs font-semibold text-forest-900" aria-live="polite">
+              {REVIEW_READS_AS.replace("{value}", reads)}
+            </p>
           )}
-        </ul>
-      )}
+          {meta?.hint && <p className="text-xs text-brand-muted-fg">{meta.hint}</p>}
+        </div>
+
+        {evidence && (
+          <div className="flex flex-col gap-2">
+            {read.quote && (
+              <figure className="m-0 flex flex-col gap-1">
+                <figcaption className="text-xs font-semibold text-brand-muted-fg">
+                  {read.page ? REVIEW_FROM_PAGE.replace("{page}", String(read.page)) : null}
+                  {read.source === "graphic" ? ` · ${REVIEW_FROM_GRAPHIC}` : null}
+                </figcaption>
+                <blockquote className="m-0 border-l-2 border-lime-500 pl-3 text-sm leading-relaxed text-forest-900">
+                  “{read.quote}”
+                </blockquote>
+              </figure>
+            )}
+            {issues.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {issues.map((reason) => (
+                  <li
+                    key={reason}
+                    className={`flex items-start gap-1.5 text-xs leading-relaxed ${warn ? "text-caution" : "text-brand-muted-fg"}`}
+                  >
+                    {warn && <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />}
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       {flagged && (
         <div className="flex flex-wrap items-center gap-2">
           {decided ? (
-            <button type="button" onClick={onUndo} className={secondaryButton}>
+            <button type="button" onClick={onUndo} className="as-btn as-btn-sm as-btn-secondary">
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
               {REVIEW_UNDO}
             </button>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={onConfirm}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-primary px-3.5 py-1.5 text-xs font-bold text-brand-bg transition-colors hover:bg-brand-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
-              >
+              <button type="button" onClick={onConfirm} className="as-btn as-btn-sm as-btn-primary">
                 <Check className="h-3.5 w-3.5" aria-hidden />
                 {REVIEW_CONFIRM}
               </button>
-              <button type="button" onClick={onClear} className={secondaryButton}>
+              <button type="button" onClick={onClear} className="as-btn as-btn-sm as-btn-secondary">
                 <X className="h-3.5 w-3.5" aria-hidden />
                 {REVIEW_CLEAR}
               </button>
@@ -162,9 +177,6 @@ export default function ReviewField({
     </div>
   );
 }
-
-const secondaryButton =
-  "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-surface px-3.5 py-1.5 text-xs font-bold text-brand-primary transition-colors hover:border-brand-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary";
 
 /** The input for a field's kind: a date picker, a choice, a yes/no, a long
  *  passage or a line of text. Numbers stay text, so "1.15%" and "R5 000" can
@@ -184,19 +196,24 @@ function FieldInput({
 }) {
   const meta = FIELD_META[state.field];
   const kind = meta?.kind ?? "text";
-  const common = { id, disabled, value: state.input, className: inputClass };
+  const common = { id, disabled, value: state.input };
 
   if (kind === "longtext") {
-    return <textarea {...common} rows={3} onChange={(e) => onInput(e.target.value)} />;
+    return (
+      <textarea
+        {...common}
+        rows={3}
+        className={`${inputClass} h-auto py-2 leading-relaxed`}
+        onChange={(e) => onInput(e.target.value)}
+      />
+    );
   }
   if (kind === "choice" || kind === "yesno") {
     const options: Array<[string, string]> =
       kind === "yesno" ? [["yes", VALUE_YES], ["no", VALUE_NO]] : (meta?.choices ?? []);
-    // A value the model read that is not one of the choices stays visible,
-    // so the person sees what they are correcting.
     const unknown = state.input && !options.some(([value]) => value === state.input);
     return (
-      <select {...common} onChange={(e) => onInput(e.target.value)}>
+      <select {...common} className="as-select w-full rounded-[12px]" onChange={(e) => onInput(e.target.value)}>
         <option value="">—</option>
         {unknown && <option value={state.input}>{state.input}</option>}
         {options.map(([value, label]) => (
@@ -209,12 +226,11 @@ function FieldInput({
   }
   const inputMode =
     kind === "percent" || kind === "rand" || kind === "cents" || kind === "years" ? "decimal" : undefined;
-  // A date picker shows a value it cannot parse as blank. A date the model read
-  // but could not type ("August 2026") stays as text, so it is seen and fixed.
   const datePicker = kind === "date" && (state.input === "" || /^\d{4}-\d{2}-\d{2}$/.test(state.input));
   return (
     <input
       {...common}
+      className={inputClass}
       type={datePicker ? "date" : "text"}
       inputMode={inputMode}
       list={state.field === "asisa_category" ? categoriesListId : undefined}

@@ -1,5 +1,4 @@
 import AboutThisPage from "../components/guidance/AboutThisPage";
-import LearnMore from '../components/learning/LearnMore';
 import type {
   AnalysisLoadingStage,
   AnalysisProgress,
@@ -12,7 +11,6 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
-  BrainCircuit,
   CandlestickChart,
   ChevronDown,
   CircleAlert,
@@ -32,8 +30,7 @@ import { CONVERGENCE_DETAIL } from "../data/signalCopy";
 import { discoveryProvenance } from "../utils/discovery";
 import AssetsAnalysisLoading from "../components/dashboard/AssetsAnalysisLoading";
 import DashboardSkeleton from "../components/dashboard/DashboardSkeleton";
-import LadderMotif from "../components/dashboard/LadderMotif";
-import ScoredAssetRow from "../components/dashboard/ScoredAssetRow";
+import { sectorColour } from "../utils/sectorColours";
 
 import {
   startAnalysis,
@@ -47,6 +44,7 @@ import { rememberHubPage } from "../utils/lastHubPage";
 import { useStaleAutoRefresh } from "../hooks/useStaleAutoRefresh";
 import { isRunStale } from "../utils/staleness";
 import StaleDataBanner from "../components/dashboard/StaleDataBanner";
+import { ScoredSignals, UniverseLine, ordinal, scoredReadings } from "../components/dashboard/scoredStock";
 import { MarketClock } from "../components/research/MarketClock";
 import { useSentimentLastUpdated } from "../hooks/useSentimentLastUpdated";
 import { useAskChatbotStore } from "../store/askChatbotStore";
@@ -60,6 +58,7 @@ const SHORTLIST_SIZE = 5;
 /** Rows shown before the "Show all" toggle, matching the house pattern in
  *  FundHoldingsView. */
 const INITIAL_ROWS = 12;
+
 
 export default function AssetsPage() {
   // Names this as the page an asset's "Back to X" link should return to. See
@@ -91,10 +90,21 @@ export default function AssetsPage() {
   // Everything else the run scored. Same data, lighter treatment.
   const alsoScored = filteredRecs.filter((r) => r.rank > SHORTLIST_SIZE);
 
+  // The "Also scored" table filters by investment universe. Tabs list only the
+  // universes this run actually scored, in the order they first appear.
+  const [scoredUniverse, setScoredUniverse] = useState<string>("All");
+  const scoredUniverses = Array.from(
+    new Set(alsoScored.map((r) => r.universe).filter((u): u is string => Boolean(u))),
+  );
+  const filteredScored =
+    scoredUniverse === "All"
+      ? alsoScored
+      : alsoScored.filter((r) => r.universe === scoredUniverse);
+
   const [showAllScored, setShowAllScored] = useState(false);
   const visibleScored = showAllScored
-    ? alsoScored
-    : alsoScored.slice(0, INITIAL_ROWS);
+    ? filteredScored
+    : filteredScored.slice(0, INITIAL_ROWS);
 
   // Temporary toggle to hide header controls during this iteration
   const hideHeaderControls = true;
@@ -284,7 +294,7 @@ export default function AssetsPage() {
         >
           <div className="flex flex-col items-center gap-3">
             <CircleAlert
-              className="h-5 w-5 shrink-0 text-brand-accent"
+              className="h-5 w-5 shrink-0 text-forest-700"
               aria-hidden="true"
             />
             <div className="min-w-0 space-y-3">
@@ -302,7 +312,7 @@ export default function AssetsPage() {
           <button
             type="button"
             onClick={() => void handleRefresh()}
-            className="mt-4 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg"
+            className="as-btn as-btn-primary mt-4"
           >
             Try again
           </button>
@@ -333,17 +343,16 @@ export default function AssetsPage() {
 
   return (
     <div className="space-y-6 pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 max-w-7xl mx-auto">
-      {/* Header band. Forest ground with columns climbing toward the
-          bottom-right corner — the ranked universe, tallest column first.
-          Content sits on a relative layer so it clears the SVG. */}
-      <div className="hero-card overflow-hidden px-5 sm:px-7 py-6">
-        <LadderMotif className="h-16" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
+      {/* Header band. Title and "About this page" on top; one status row along
+          the foot: the market and FX footing every price relies on, on the left,
+          and the run's freshness with its Refresh button on the right. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">
               Personalised Asset Analysis
             </p>
-            <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-brand-bg flex items-center gap-3">
               <CandlestickChart className="w-7 h-7 shrink-0 text-brand-accent" />
               Stocks
             </h1>
@@ -356,71 +365,40 @@ export default function AssetsPage() {
                 </span>
               ) : null}
             </p>
-            {/* Market and FX footing for every price on the page, so it reads
-                as part of the run rather than a stray note below the header. The
-                market clock joins it, separated rather than in a pill of its own:
-                both lines are footing for the SAME prices, exchange, currency and
-                now whether the exchange trading them is open, so one strip reads
-                as one fact about the page rather than two competing pills. */}
-            {/* Full-width block on a phone, pill from sm. The strip carries about
-                470px of text against roughly 290px of hero on a 360px screen, so it
-                has to wrap — and `inline-flex` + `w-fit` cannot wrap cleanly. Width
-                resolves from the items' max-content size capped by max-w-full, but
-                the wrapped lines then lay out wider than the box that sizing
-                produced, so the text spilled straight through the px-4 padding and
-                out the right edge. A full-width block has a width to wrap inside,
-                and the rounded-full curve is dropped while it is multi-line because
-                a 30px radius on a three-line box eats its own corner words. From sm
-                there is room for one line and the original pill returns. */}
-            <div className="mt-3 flex w-full max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-brand-bg/70 sm:inline-flex sm:w-fit sm:rounded-full sm:py-1.5">
-              {exchangeRate !== null ? (
-                <>
-                  US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
-                  <span className="font-medium text-brand-bg">
-                    1 USD = R{exchangeRate.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <span className="animate-pulse">
-                  US Stock Exchanges • Fetching USD/ZAR rate...
+          </div>
+          <AboutThisPage page="stocks"
+            rankingMode={SCORECARD_ENABLED ? "scorecard" : "legacy"}
+            methodologyHref={topPick ? `/asset/${encodeURIComponent(topPick.ticker)}/how-it-works` : undefined}
+            learnContext="stocks"
+            className="shrink-0 self-start"
+          />
+        </div>
+
+        <div className="mt-6 flex flex-col gap-4 border-t border-white/12 pt-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+          {/* Market and FX footing for every price on the page. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-brand-bg/70">
+            {exchangeRate !== null ? (
+              <>
+                US Stock Exchanges • FX (USD/ZAR) from {exchangeRateSource}:{" "}
+                <span className="font-semibold text-brand-bg">
+                  1 USD = R{exchangeRate.toFixed(2)}
                 </span>
-              )}
-              <span className="text-brand-bg/30" aria-hidden="true">
-                •
+              </>
+            ) : (
+              <span className="animate-pulse">
+                US Stock Exchanges • Fetching USD/ZAR rate...
               </span>
-              <MarketClock tone="dark" bare />
-            </div>
+            )}
+            <span className="text-brand-bg/30" aria-hidden="true">
+              •
+            </span>
+            <MarketClock tone="dark" bare />
           </div>
 
-          {/* Run time and its refresh share one pill: the button acts on the
-              timestamp beside it, so they read as a single control. The sentiment
-              line joins it rather than getting a pill of its own, because "Last AI
-              run" stopped being a sufficient freshness answer the day the intraday
-              tick shipped: a run can be hours old while the sentiment behind it was
-              topped up an hour ago, and a reader needs both dates to know which one
-              answers which question. */}
-          {/* Two shapes, because the row does not fit a phone. The freshness grid
-              is about 245px and the button another 105px, against roughly 290px of
-              hero on a 360px screen: the button wrapped under the grid, leaving a
-              rounded-full box two rows tall whose pl-5 / pr-1.5 padding — measured
-              for text-then-button on ONE line — left the wrapped button jammed
-              against the right edge. Below sm it is a plain rounded block with even
-              padding and a full-width button; from sm the single-row pill returns
-              unchanged. */}
-          <div className="lg:shrink-0 flex w-full max-w-full flex-col items-stretch gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:w-fit sm:flex-row sm:flex-wrap sm:items-center sm:rounded-full sm:p-0 sm:py-2 sm:pl-5 sm:pr-1.5">
-            {/* A two-column grid, not two lines of inline text: "Last AI run" and
-                "Sentiment updated" are different lengths, so as plain text the two
-                values started at two different x positions and the pair read as
-                unrelated rather than as one small table of freshness facts. The grid
-                gives both labels one shared column width, sized to the longer of the
-                two, and the divider marks where that column ends: grid items stretch
-                to fill their track by default, so a border on the label spans draws
-                one continuous vertical rule rather than a short underline per row. */}
-            {/* minmax(0,auto) on the value track: a locale timestamp is ~120px and
-                the labels ~105px, which is wider than a small phone leaves once the
-                block's own padding is out. A bare `auto` track refuses to go below
-                its content and pushed the grid past the card; this lets the value
-                wrap under itself instead. */}
+          {/* The run's freshness beside the button that renews it. Two dates,
+              because a run can be hours old while the sentiment behind it was
+              topped up an hour ago. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5 lg:shrink-0">
             <div className="grid grid-cols-[auto_minmax(0,auto)] gap-y-0.5 text-xs leading-tight text-brand-bg/60">
               <span className="border-r border-brand-bg/15 pr-2 mr-2">
                 Last AI run
@@ -444,16 +422,14 @@ export default function AssetsPage() {
             <button
               onClick={handleRefresh}
               disabled={isRunning}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-accent/95 hover:shadow-glow-accent text-brand-fg text-sm font-medium hover:bg-accent/70 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="as-btn as-btn-sm as-btn-lime w-full sm:w-auto disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
-              <RefreshCw className="w-4 h-4 text-brand-fg" />
+              <RefreshCw className="w-3.5 h-3.5" />
               {isRunning ? "Running..." : "Refresh"}
             </button>
           </div>
         </div>
-        <AboutThisPage page="stocks" rankingMode={SCORECARD_ENABLED ? "scorecard" : "legacy"} methodologyHref={topPick ? `/asset/${encodeURIComponent(topPick.ticker)}/how-it-works` : undefined} />
       </div>
-      <LearnMore context="stocks" />
 
       <div
         className={
@@ -467,7 +443,7 @@ export default function AssetsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search stocks..."
-            className="w-full bg-brand-secondary/60 border border-brand-border rounded-full pl-10 pr-4 py-2.5 text-sm text-brand-fg focus:ring-2 focus:ring-brand-primary/40 focus:outline-none transition"
+            className="w-full h-10 bg-white border border-forest-900/14 rounded-full pl-10 pr-4 text-sm text-brand-fg focus:border-forest-700 focus:ring-[3px] focus:ring-lime-700/45 focus:outline-none transition"
           />
         </div>
       </div>
@@ -484,27 +460,77 @@ export default function AssetsPage() {
           over the shortlist cards below; it was z-50, which tied with the
           phone top bar and, coming later in the page, scrolled over it and
           hid the logo and menu button. */}
-      <div className="hero-card z-10 overflow-visible p-4 sm:p-6">
+      <div className="hero-card z-10 overflow-visible rounded-[20px] p-5 sm:p-6">
         <Link
           to={`/asset/${topPick?.ticker}`}
           className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity w-fit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
         >
           <Sparkles className="w-4 h-4 text-brand-accent" />
-          <span className="text-xs uppercase text-brand-accent font-semibold">
+          <span className="text-xs text-brand-accent font-semibold">
             {showTopPickScorecard
               ? "Highest signal for your profile"
               : "Top Pick Today"}
           </span>
         </Link>
-        <div className="flex flex-col md:flex-row gap-6">
+        {/* Ticker, price, meters and reasoning take three quarters of the card;
+            the scorecard sits on the right in the last quarter. */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+          <div className="space-y-3 w-full min-w-0">
+            <Link
+              to={`/asset/${topPick?.ticker}`}
+              className="flex items-start gap-3 hover:opacity-80 transition-opacity w-fit"
+            >
+              <div>
+                <h2 className="text-2xl font-bold tabular-nums text-brand-bg">
+                  {topPick?.ticker}
+                </h2>
+                <span className="inline-block mt-2 px-3 py-1 bg-white/10 rounded-full text-xs tabular-nums text-brand-bg">
+                  {topPick?.name}
+                </span>
+                <div className="text-xl tabular-nums text-brand-bg mt-3">
+                  R{" "}
+                  <span className="tabular-nums">
+                    {topPick?.currentPrice?.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </Link>
+            <ListingLine universe={topPick?.universe} exchange={topPick?.exchange} onDark />
+            {topPick?.isDiscovered ? (
+              <span
+                className="chip w-fit bg-lime-500 text-forest-900"
+                title={discoveryProvenance(topPick?.discoverySources)}
+              >
+                <Sparkles className="w-2.5 h-2.5" /> Discovered via trending
+              </span>
+            ) : null}
+            <div className="rounded-[14px] border border-white/12 bg-white/[0.06] p-3">
+              <DualBar
+                sentimentScore={topPick?.sentimentScore || 0}
+                quantitativeScore={topPick?.fundamentalsScore || 0}
+                quantPercentile={topPickQuantPercentile}
+                onDark
+              />
+            </div>
+            <div className="rounded-[14px] border border-white/12 bg-white/[0.06] p-3 w-full h-auto">
+              <p className="text-xs text-brand-accent mb-2 font-bold flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3" />
+                Why it ranks here
+              </p>
+              <p className="text-xs text-brand-bg/85 leading-relaxed w-full">
+                {topPickReasoning}
+              </p>
+            </div>
+          </div>
           {/* The scorecard is NOT wrapped in the asset Link: it contains its own
               explainer buttons, and nesting <button> inside <a> is invalid markup
               — it also made tapping an explainer navigate away instead of opening
               it. Only the plain ring stays clickable. */}
           {showTopPickScorecard ? (
-            <div className="w-full md:w-64 shrink-0 rounded-2xl bg-white/5 border border-white/10 p-4">
+            <div className="h-full w-full rounded-[14px] border border-white/12 bg-white/[0.06] p-4">
               <SignalScorecard
                 onDark
+                fill
                 terms={{
                   signalStrength: topPick!.signalStrength,
                   signalDirection: topPick!.signalDirection,
@@ -519,7 +545,7 @@ export default function AssetsPage() {
           ) : (
             <Link
               to={`/asset/${topPick?.ticker}`}
-              className="hover:opacity-80 transition-opacity relative z-50 rounded-2xl bg-white/5 border border-white/10 p-4 self-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="hover:opacity-80 transition-opacity relative z-50 rounded-[14px] border border-white/12 bg-white/[0.06] p-4 self-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
             >
               <ConfidenceRing
                 score={topPick?.confidenceScore || 0}
@@ -528,89 +554,44 @@ export default function AssetsPage() {
               />
             </Link>
           )}
-          <div className="flex-1 space-y-3 w-full min-w-0">
-            <Link
-              to={`/asset/${topPick?.ticker}`}
-              className="flex items-start gap-3 hover:opacity-80 transition-opacity w-fit"
-            >
-              <div>
-                <h2 className="text-2xl font-bold font-mono text-brand-bg">
-                  {topPick?.ticker}
-                </h2>
-                <span className="inline-block mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-mono text-brand-bg">
-                  {topPick?.name}
-                </span>
-                <div className="text-xl font-mono text-brand-bg mt-3">
-                  R{" "}
-                  <span className="font-mono">
-                    {topPick?.currentPrice?.toFixed(2)}
-                  </span>
+        </div>
+        {/* Bottom row of the card: the link to the full analysis on the left,
+            ask and watchlist on the bottom right. */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/12 pt-4">
+          <Link
+            to={`/asset/${topPick?.ticker}`}
+            className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+          >
+            Full analysis <ArrowRight className="w-3 h-3" />
+          </Link>
+          {/* The same two controls every other ranked stock carries
+              (RecommendationCard, the scored rows), so rank 1 is not the
+              one stock you cannot ask about or watch from this page. The
+              ask button takes a dark-ground variant of the card's
+              styling; the watchlist chip is the shared component. */}
+          {topPick?.ticker ? (
+            <div className="flex items-center gap-1.5">
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAskChatbot(`Tell me about ${topPick.ticker}`);
+                  }}
+                  aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-brand-bg/70 hover:text-brand-accent hover:bg-white/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                >
+                  <MessageCircleQuestion className="w-4 h-4" />
+                </button>
+                <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
+                  <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
+                    Ask AlphaSwarm about this
+                  </div>
                 </div>
               </div>
-            </Link>
-            <ListingLine universe={topPick?.universe} exchange={topPick?.exchange} onDark />
-            {topPick?.isDiscovered ? (
-              <span
-                className="chip bg-brand-accent text-brand-fg w-fit"
-                title={discoveryProvenance(topPick?.discoverySources)}
-              >
-                <Sparkles className="w-2.5 h-2.5" /> Discovered via trending
-              </span>
-            ) : null}
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
-              <DualBar
-                sentimentScore={topPick?.sentimentScore || 0}
-                quantitativeScore={topPick?.fundamentalsScore || 0}
-                quantPercentile={topPickQuantPercentile}
-                onDark
-              />
+              <AddToWatchlistButton ticker={topPick.ticker} onDark />
             </div>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-3 w-full h-auto">
-              <p className="text-[10px] text-brand-accent uppercase tracking-widest mb-2 font-bold flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3" />
-                Why it ranks here
-              </p>
-              <p className="text-xs text-brand-bg/85 leading-relaxed w-full">
-                {topPickReasoning}
-              </p>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <Link
-                to={`/asset/${topPick?.ticker}`}
-                className="text-xs text-brand-accent hover:underline flex items-center gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-              >
-                Full analysis <ArrowRight className="w-3 h-3" />
-              </Link>
-              {/* The same two controls every other ranked stock carries
-                  (RecommendationCard, ScoredAssetRow), so rank 1 is not the
-                  one stock you cannot ask about or watch from this page. The
-                  ask button takes a dark-ground variant of the card's
-                  styling; the watchlist chip is the shared component. */}
-              {topPick?.ticker ? (
-                <div className="flex items-center gap-1.5">
-                  <div className="relative group">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openAskChatbot(`Tell me about ${topPick.ticker}`);
-                      }}
-                      aria-label={`Ask AlphaSwarm about ${topPick.ticker}`}
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-brand-bg/70 hover:text-brand-accent hover:bg-white/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-                    >
-                      <MessageCircleQuestion className="w-4 h-4" />
-                    </button>
-                    <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute right-0 mt-2 w-max max-w-[calc(100vw-2rem)] z-50">
-                      <div className="bg-brand-fg text-brand-bg text-xs rounded-md p-2 shadow-lg border border-brand-border whitespace-nowrap">
-                        Ask AlphaSwarm about this
-                      </div>
-                    </div>
-                  </div>
-                  <AddToWatchlistButton ticker={topPick.ticker} />
-                </div>
-              ) : null}
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
 
@@ -643,32 +624,219 @@ export default function AssetsPage() {
           the whole-feed write) shows a coherent page rather than an empty
           heading. */}
       {alsoScored.length > 0 ? (
-        <div className="mt-10">
-          <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
-            <h2 className="text-2xl font-semibold text-brand-fg">
-              Also scored
+        <section className="mt-10" aria-labelledby="also-scored-heading">
+          <div className="flex items-baseline justify-between gap-3 mb-1 flex-wrap">
+            <h2
+              id="also-scored-heading"
+              className="text-xl font-bold tracking-[-0.01em] text-forest-900"
+            >
+              Also scored in this run
             </h2>
             <span className="text-xs text-brand-muted-fg">
               {alsoScored.length} more
             </span>
           </div>
           <p className="text-sm text-brand-muted-fg mb-4">
-            Ranked in the same run but outside the shortlist above. The
-            committee writes its full reasoning for the top {SHORTLIST_SIZE};
-            these carry the summary it recorded for every stock it scored.
+            Outside your shortlist, in the same order. Select a stock for its
+            full analysis.
           </p>
 
-          <ul className="divide-y divide-brand-border/40 rounded-2xl border border-brand-border/60 overflow-hidden">
-            {visibleScored.map((asset: AssetRecommendation) => (
-              <ScoredAssetRow key={asset.ticker} asset={asset} />
-            ))}
-          </ul>
+          {scoredUniverses.length > 1 ? (
+            // The same tabs as the stock page: the pill from sm up, a grid on a phone
+            // so every universe is in view. Two columns, not three: universe names
+            // run to "Media & Communications".
+            <div
+              className="as-tabs mb-4 grid w-full grid-cols-2 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full"
+              role="tablist"
+              aria-label="Filter by investment universe"
+            >
+              {["All", ...scoredUniverses].map((universe) => {
+                const count =
+                  universe === "All"
+                    ? alsoScored.length
+                    : alsoScored.filter((r) => r.universe === universe).length;
+                return (
+                  <button
+                    key={universe}
+                    type="button"
+                    role="tab"
+                    aria-selected={scoredUniverse === universe}
+                    onClick={() => {
+                      setScoredUniverse(universe);
+                      setShowAllScored(false);
+                    }}
+                    title={universe}
+                    className="as-tab min-w-0 px-3 sm:px-4"
+                  >
+                    {universe !== "All" ? (
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 shrink-0 rounded-full ${sectorColour(universe).fill}`}
+                      />
+                    ) : null}
+                    <span className="truncate">{universe}</span>
+                    <span className="as-tab-ct shrink-0">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
-          {alsoScored.length > INITIAL_ROWS && (
+          <div className="as-card overflow-hidden p-0">
+            {/* Phones: one stacked row per stock. The table needs 800px, and on a
+                phone it scrolled sideways with sentiment, quant and the watchlist
+                button all off the edge. */}
+            <ul className="divide-y divide-forest-900/8 md:hidden">
+              {visibleScored.length === 0 ? (
+                <li className="px-4 py-8 text-center text-sm text-brand-muted-fg">
+                  No other {scoredUniverse} stocks in this run.
+                </li>
+              ) : (
+                visibleScored.map((asset: AssetRecommendation) => {
+                  const { percentile, verdict, verdictTone } = scoredReadings(asset);
+                  return (
+                    <li key={asset.ticker} className="flex gap-3 px-4 py-3.5">
+                      <span className="w-5 shrink-0 pt-0.5 text-right text-xs font-semibold tabular-nums text-brand-muted-fg">
+                        {asset.rank}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Link
+                          to={`/asset/${asset.ticker}`}
+                          className="group block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                        >
+                          <span className="flex items-baseline justify-between gap-3">
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                              <span className="font-bold text-forest-900 group-hover:underline">
+                                {asset.ticker}
+                              </span>
+                              <span className="truncate text-sm font-medium text-brand-muted-fg" title={asset.name}>
+                                {asset.name}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-sm tabular-nums text-forest-900">
+                              R {asset.currentPrice.toFixed(2)}
+                            </span>
+                          </span>
+                          <UniverseLine asset={asset} />
+                        </Link>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                          <span className={`chip ${verdictTone}`}>
+                            <span className="tabular-nums">{asset.sentimentScore}</span>
+                            {verdict.label}
+                          </span>
+                          <span className="tabular-nums text-brand-muted-fg">
+                            {percentile !== null
+                              ? `${ordinal(percentile)} percentile vs peers`
+                              : "No quant percentile"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <ScoredSignals asset={asset} />
+                          </span>
+                          <span className="shrink-0">
+                            <AddToWatchlistButton ticker={asset.ticker} />
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[800px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-forest-900/8 text-left text-xs font-semibold text-brand-muted-fg">
+                    <th scope="col" className="w-12 px-4 py-3 text-right">#</th>
+                    <th scope="col" className="px-4 py-3">Stock</th>
+                    <th scope="col" className="px-4 py-3 text-right">Price</th>
+                    <th scope="col" className="px-4 py-3">Sentiment</th>
+                    <th scope="col" className="px-4 py-3 text-right">Quant vs peers</th>
+                    <th scope="col" className="px-4 py-3">Signals</th>
+                    <th scope="col" className="px-4 py-3">
+                      <span className="sr-only">Watchlist</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleScored.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-brand-muted-fg">
+                        No other {scoredUniverse} stocks in this run.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleScored.map((asset: AssetRecommendation) => {
+                      const { percentile, verdict, verdictTone } = scoredReadings(asset);
+                      return (
+                        <tr
+                          key={asset.ticker}
+                          className="border-b border-forest-900/8 last:border-b-0 transition-colors hover:bg-forest-50"
+                        >
+                          <td className="px-4 py-3 text-right text-xs font-semibold tabular-nums text-brand-muted-fg">
+                            {asset.rank}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/asset/${asset.ticker}`}
+                              className="group flex flex-col focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                            >
+                              <span className="flex min-w-0 items-baseline gap-1.5">
+                                <span className="font-bold text-forest-900 group-hover:underline">
+                                  {asset.ticker}
+                                </span>
+                                <span
+                                  className="max-w-[220px] truncate font-medium text-brand-muted-fg"
+                                  title={asset.name}
+                                >
+                                  {asset.name}
+                                </span>
+                              </span>
+                              <UniverseLine asset={asset} />
+                            </Link>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                            R {asset.currentPrice.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="flex items-center gap-2">
+                              <span className="font-semibold tabular-nums">
+                                {asset.sentimentScore}
+                              </span>
+                              <span className={`chip ${verdictTone}`}>
+                                {verdict.label}
+                              </span>
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                            {percentile !== null ? `${ordinal(percentile)} percentile` : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <ScoredSignals asset={asset} />
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="flex justify-end">
+                              <AddToWatchlistButton ticker={asset.ticker} />
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {filteredScored.length > INITIAL_ROWS && (
             <button
               type="button"
               onClick={() => setShowAllScored((v) => !v)}
-              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-4 py-2.5 text-xs font-semibold text-brand-muted-fg hover:text-brand-fg hover:border-brand-primary/40 transition-colors"
+              className="mt-3 as-btn as-btn-sm as-btn-secondary"
             >
               {showAllScored ? (
                 <>
@@ -676,32 +844,15 @@ export default function AssetsPage() {
                 </>
               ) : (
                 <>
-                  Show all {alsoScored.length} stocks{" "}
+                  Show all {filteredScored.length}{" "}
                   <ChevronDown className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
           )}
-        </div>
+        </section>
       ) : null}
 
-      {/* Disclaimer Footer */}
-      <div className="mt-12 pt-8 border-t border-brand-border/30">
-        <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 rounded-lg p-4">
-          <p className="text-xs text-brand-muted-fg leading-relaxed">
-            <strong className="text-brand-fg block mb-2">Disclaimer:</strong>
-            AlphaSwarm is an AI-powered analytical tool designed for
-            informational and educational purposes only. Every figure shown is a
-            measurement of public data produced by automated analysis, and the
-            ordering of this list reflects those measurements plus a weighting
-            we choose and disclose. Nothing here constitutes professional
-            financial, investment or legal advice, and nothing predicts future
-            prices. All trading involves risk; past performance is not
-            indicative of future results. Please consult with a licensed
-            financial advisor before making any investment decisions.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

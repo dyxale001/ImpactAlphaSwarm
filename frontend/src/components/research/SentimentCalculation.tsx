@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Sigma } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { NewsArticle } from "./NewsArticles";
 import type { SocialPost } from "./SocialPosts";
 import { tierMeta } from "./sentimentDisplay";
@@ -93,33 +93,6 @@ function fmt(n: number, digits = 1) {
   return Number.isFinite(n) ? n.toFixed(digits) : "—";
 }
 
-// One "value x weight = product" line in the blend equation.
-function BlendRow({
-  label,
-  score,
-  weightPct,
-}: {
-  label: string;
-  score: number;
-  weightPct: number;
-}) {
-  const shown = Math.round(score);
-  return (
-    // Wraps rather than squashing: on a phone the label and the sum together are
-    // wider than the panel, and a formula broken mid-way across two lines is worse
-    // than one sitting on its own line under its label.
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[12px] text-brand-fg">
-      <span className="text-forest-500">{label}</span>
-      <span className="tabular-nums whitespace-nowrap">
-        {shown} &times; {weightPct}% ={" "}
-        <span className="font-semibold text-brand-fg">
-          {fmt(shownProduct(score, weightPct))}
-        </span>
-      </span>
-    </div>
-  );
-}
-
 export default function SentimentCalculation({
   newsArticles,
   socialPosts,
@@ -195,147 +168,186 @@ export default function SentimentCalculation({
   const blendedShown =
     typeof blendedScore === "number" ? blendedScore : Math.round(blended);
 
+  const newsPoints = shownProduct(newsSub, NEWS_WEIGHT_PCT);
+  const socialPoints = shownProduct(socialSub, SOCIAL_WEIGHT_PCT);
+
   return (
-    <div className="mt-3">
+    <div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full border border-forest-200 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-700 transition-colors hover:border-lime-500 hover:bg-lime-100"
+        className="inline-flex items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
       >
-        <Sigma className="h-3.5 w-3.5" />
         {open ? "Hide the calculation" : "Show how this score was calculated"}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 
-      {/* Forest tints rather than the generic card greys this used to borrow. The
-          panel is a quiet aside off the main reading line, and forest-50 on
-          forest-200 sets it back from the white card without turning it into another
-          full-strength surface competing with the lists below. */}
+      {/* The working as the score is built: each source's sub-score side by side,
+          then the blend that turns them into the one number at the top of the
+          tab, drawn as a bar so the two contributions can be seen adding up. */}
       {open && (
-        <div className="mt-3 space-y-4 rounded-2xl border border-forest-200 bg-forest-50 p-4">
-          {/* News sub-score: tier-by-tier. */}
-          {hasNews && news.reconstructable && (
-            <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
-                News sub-score, by reliability tier
-                {newsCarried ? " (carried over, not in the score)" : ""}
-              </p>
-              <div className="space-y-1.5">
-                {news.tiers.map((t) => {
-                  const meta = tierMeta(t.tier);
-                  return (
-                    <div
-                      key={t.tier}
-                      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px]"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded-full font-medium ${meta.cls}`}
-                        >
-                          {meta.label}
-                        </span>
-                        <span className="text-forest-500">
-                          {t.count} {t.count === 1 ? "article" : "articles"}
-                        </span>
-                      </span>
-                      {/* nowrap so the sum stays one readable formula: it is only a
-                          few characters wider than the phone panel, and left to wrap
-                          it splits after the "=" with the answer alone on line two. */}
-                      <span className="font-mono tabular-nums whitespace-nowrap text-brand-fg">
-                        avg {Math.round(t.avg)} &times; {Math.round(t.sharePct)}% ={" "}
-                        <span className="font-semibold">
-                          {fmt(shownProduct(t.avg, t.sharePct))}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-forest-200 pt-1.5 text-[12px] font-semibold text-brand-fg">
-                <span>News sub-score</span>
-                <span className="font-mono tabular-nums whitespace-nowrap">
-                  {Math.round(newsSub)} / 100
-                </span>
-              </div>
-              <p className="text-[11px] text-forest-500">
-                Each tier contributes its own average at a fixed share, so a few
-                trusted wires are not drowned out by a flood of lower-tier
-                articles. Within a tier, newer articles count for more on a{" "}
-                {RECENCY_HALFLIFE_DAYS}-day half-life; that recency weighting is
-                already baked into each article's Influence in the list below. The
-                tier lines use rounded figures, so they add up to the sub-score to
-                within a point.
-              </p>
-            </div>
-          )}
-
-          {/* Social sub-score. */}
-          {hasSocial && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
-                Social sub-score
-              </p>
-              {/* A full sentence opposite a figure. Left on one row these two shrink
-                  against each other on a phone, wrapping the sentence to four lines
-                  and splitting "62 / 100" across two. The figure takes its own line
-                  instead, and keeps it whole. */}
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px] font-semibold text-brand-fg">
-                <span className="min-w-0 font-normal text-forest-500">
-                  Engagement-weighted average of every post scored in the window
-                </span>
-                <span className="font-mono tabular-nums whitespace-nowrap">
-                  {Math.round(socialSub)} / 100
-                </span>
-              </div>
-              <p className="text-[11px] text-forest-500">
-                Posts with more likes and reshares pull the average harder, on a
-                log-dampened scale so one viral post cannot dominate. That is already
-                baked into each post's Influence in the list below. Only the most
-                influential posts are listed here, so they will not add up to the
-                number above on their own; the full day by day lists are on the social
-                sentiment page.
-              </p>
-            </div>
-          )}
-
-          {/* Blend. */}
-          <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-forest-700 font-semibold">
-              Blended score
-            </p>
-            {newsInBlend && hasSocial ? (
-              <div className="space-y-1">
-                <BlendRow
-                  label="News"
-                  score={newsSub}
-                  weightPct={NEWS_WEIGHT_PCT}
+        <div className="mt-4 space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            {hasNews && news.reconstructable && (
+              <div className="as-inset space-y-3 p-4">
+                <SubScoreHeading
+                  title="News sub-score"
+                  caption={
+                    newsCarried
+                      ? "Carried over from an earlier run, so not in the score"
+                      : `${NEWS_WEIGHT_PCT}% of the blended score`
+                  }
+                  value={newsSub}
                 />
-                <BlendRow
-                  label="Social"
-                  score={socialSub}
-                  weightPct={SOCIAL_WEIGHT_PCT}
-                />
+                <ul className="space-y-2.5">
+                  {news.tiers.map((t) => {
+                    const meta = tierMeta(t.tier);
+                    return (
+                      <li key={t.tier} className="space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs">
+                          <span className="flex items-center gap-2">
+                            <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${meta.cls}`}>
+                              {meta.label}
+                            </span>
+                            <span className="text-brand-muted-fg">
+                              {t.count} {t.count === 1 ? "article" : "articles"}
+                            </span>
+                          </span>
+                          {/* nowrap so the sum stays one readable formula rather than
+                              splitting after the "=" on a phone. */}
+                          <span className="whitespace-nowrap tabular-nums text-brand-muted-fg">
+                            avg {Math.round(t.avg)} &times; {Math.round(t.sharePct)}% ={" "}
+                            <span className="font-bold text-forest-900">
+                              {fmt(shownProduct(t.avg, t.sharePct))}
+                            </span>
+                          </span>
+                        </div>
+                        {/* The tier's average on the 0 to 100 scale, with the neutral
+                            tick, so a reader sees which way each tier leaned. */}
+                        <div className="relative h-1.5 w-full rounded-full bg-forest-100" aria-hidden="true">
+                          <div className="h-full rounded-full bg-forest-700" style={{ width: `${Math.min(100, Math.max(0, t.avg))}%` }} />
+                          <div className="absolute inset-y-[-2px] left-1/2 w-px bg-forest-900/40" />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-xs leading-relaxed text-brand-muted-fg">
+                  Each tier adds its own average at a fixed share, so a few trusted
+                  wires are not drowned out by many lower-tier pieces. Newer articles
+                  count for more within a tier ({RECENCY_HALFLIFE_DAYS}-day half-life).
+                  Rounded figures, so the lines add up to within a point.
+                </p>
               </div>
-            ) : (
-              blendNote && (
-                <p className="text-[11px] text-forest-500">{blendNote}</p>
-              )
             )}
-            {/* The answer the whole panel is working towards, ruled off in the
-                signature lime rather than the same hairline as the intermediate
-                sub-totals above it. */}
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t-2 border-lime-500 mt-1 pt-2 text-sm font-semibold text-brand-fg">
-              <span>Blended Score</span>
-              <span className="font-mono tabular-nums whitespace-nowrap">
-                {blendedShown} / 100
-              </span>
+
+            {hasSocial && (
+              <div className="as-inset space-y-3 p-4">
+                <SubScoreHeading
+                  title="Social sub-score"
+                  caption={`${SOCIAL_WEIGHT_PCT}% of the blended score`}
+                  value={socialSub}
+                />
+                <div className="relative h-1.5 w-full rounded-full bg-forest-100" aria-hidden="true">
+                  <div className="h-full rounded-full bg-lime-500" style={{ width: `${Math.min(100, Math.max(0, socialSub))}%` }} />
+                  <div className="absolute inset-y-[-2px] left-1/2 w-px bg-forest-900/40" />
+                </div>
+                <p className="text-xs leading-relaxed text-brand-muted-fg">
+                  The average of every post scored in the window, where posts with
+                  more likes, replies and reshares pull harder, on a scale that
+                  flattens so one viral post cannot dominate. Only the most influential
+                  posts are listed on this page, so they will not add up to this on
+                  their own; every post is on the social sentiment page.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[16px] border border-forest-900/10 bg-white p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-sm font-bold text-forest-900">Blended score</p>
+              <p className="text-xs text-brand-muted-fg">
+                {newsInBlend && hasSocial
+                  ? `News ${NEWS_WEIGHT_PCT}%, social ${SOCIAL_WEIGHT_PCT}%`
+                  : "One source only"}
+              </p>
             </div>
+
+            {newsInBlend && hasSocial ? (
+              <>
+                {/* The two contributions laid end to end on the 0 to 100 scale: the
+                    filled length is the blended score. */}
+                <div
+                  className="relative mt-3 flex h-3 w-full overflow-hidden rounded-full bg-forest-100"
+                  role="img"
+                  aria-label={`News adds ${fmt(newsPoints)} and social adds ${fmt(socialPoints)}, making ${blendedShown} out of 100`}
+                >
+                  {/* One rounded fill sized to the score, holding both contributions,
+                      so the bar ends in a round cap at the score itself. */}
+                  <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${Math.min(100, newsPoints + socialPoints)}%` }}>
+                    <div className="h-full bg-forest-700" style={{ flexGrow: newsPoints }} />
+                    <div className="h-full bg-lime-500" style={{ flexGrow: socialPoints }} />
+                  </div>
+                  <div className="absolute inset-y-0 left-1/2 w-px bg-forest-900/40" aria-hidden="true" />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm tabular-nums text-forest-900">
+                  <BlendTerm swatch="bg-forest-700" label="News" score={newsSub} weightPct={NEWS_WEIGHT_PCT} />
+                  <span className="text-brand-muted-fg">+</span>
+                  <BlendTerm swatch="bg-lime-500" label="Social" score={socialSub} weightPct={SOCIAL_WEIGHT_PCT} />
+                  <span className="text-brand-muted-fg">=</span>
+                  <BlendResult value={blendedShown} />
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                {blendNote && (
+                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-brand-muted-fg">{blendNote}</p>
+                )}
+                <BlendResult value={blendedShown} />
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function SubScoreHeading({ title, caption, value }: { title: string; caption: string; value: number }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-forest-900">{title}</p>
+        <p className="text-xs text-brand-muted-fg">{caption}</p>
+      </div>
+      <p className="shrink-0 text-xl font-bold tabular-nums tracking-[-0.01em] text-forest-900">
+        {Math.round(value)}
+        <span className="text-xs font-semibold text-brand-muted-fg"> / 100</span>
+      </p>
+    </div>
+  );
+}
+
+// One "value x weight = points" term of the blend, keyed to its colour in the bar.
+function BlendTerm({ swatch, label, score, weightPct }: { swatch: string; label: string; score: number; weightPct: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-forest-50 px-2.5 py-1">
+      <span className={`h-2 w-2 rounded-full ${swatch}`} aria-hidden="true" />
+      <span className="text-brand-muted-fg">{label}</span>
+      {Math.round(score)} &times; {weightPct}% ={" "}
+      <span className="font-bold">{fmt(shownProduct(score, weightPct))}</span>
+    </span>
+  );
+}
+
+function BlendResult({ value }: { value: number }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap rounded-full bg-forest-700 px-3 py-1 text-white">
+      <span className="text-base font-bold tabular-nums text-lime-500">{value}</span>
+      <span className="text-xs text-white/70">/ 100</span>
+    </span>
   );
 }

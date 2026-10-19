@@ -1,4 +1,4 @@
-import { Trophy } from "lucide-react";
+import { Check, Trophy } from "lucide-react";
 import type { LearningArticle, LearningQuizStatus } from "../../types/learning";
 
 type Props = {
@@ -10,6 +10,14 @@ type Props = {
   quizStatus?: LearningQuizStatus;
 };
 
+/** "BEGINNER" as "Beginner", as the level reads everywhere else. */
+export function levelLabel(level: string) {
+  return level ? level.charAt(0).toUpperCase() + level.slice(1).toLowerCase() : level;
+}
+
+// One lesson in the Library, as the conservative design draws it: the level, the
+// title and summary, and the two ways in. A completed lesson says so beside the
+// level, and a perfect quiz score carries the trophy it always has.
 export default function LearningCard({
   article,
   onOpenArticle,
@@ -18,73 +26,34 @@ export default function LearningCard({
   hasPerfectScore,
   quizStatus,
 }: Props) {
+  const completed = quizStatus === "COMPLETED";
   return (
-    <article className="glass-card relative flex h-full flex-col rounded-2xl p-5">
-      {hasPerfectScore ? (
-        <div className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-primary/20 bg-brand-primary/10 text-brand-primary shadow-sm">
-          <Trophy className="h-5 w-5" />
-        </div>
-      ) : null}
-
-      <div className="mb-3 inline-flex self-start rounded-full border border-brand-border bg-brand-bg/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-primary">
-        {article.difficulty_level}
+    <article className="as-card flex h-full flex-col gap-3 p-5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="chip">{levelLabel(article.difficulty_level)}</span>
+        {hasPerfectScore ? (
+          <span className="chip chip-accent" title="You scored 100% on this quiz">
+            <Trophy className="h-3.5 w-3.5" aria-hidden="true" />
+            100%
+          </span>
+        ) : completed ? (
+          <span className="chip chip-up">
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            Done
+          </span>
+        ) : null}
       </div>
 
-      <h3
-        className="
-font-semibold
-text-brand-fg
-"
-      >
-        {article.title}
-      </h3>
+      <h3 className="text-base font-bold leading-snug text-forest-900">{article.title}</h3>
+      <p className="line-clamp-3 text-sm leading-relaxed text-brand-muted-fg">{article.summary}</p>
 
-      <p
-        className="
-text-sm
-text-brand-muted-fg
-mt-2
-"
-      >
-        {article.summary}
-      </p>
-
-      <div className="mt-auto flex flex-wrap gap-3 pt-5">
-        <button
-          onClick={() => onOpenArticle(article)}
-          className="
-px-4
-py-2
-rounded-full
-bg-brand-surface
-border
-border-brand-border
-text-sm
-transition-colors
-hover:border-brand-primary/30
-hover:text-brand-primary
-"
-        >
-          Read Article
+      <div className="mt-auto flex flex-wrap gap-2 pt-2">
+        <button type="button" onClick={() => onOpenArticle(article)} className="as-btn as-btn-sm as-btn-secondary">
+          Read article
         </button>
-
         {canTakeQuiz ? (
-          <button
-            type="button"
-            onClick={() => onTakeQuiz(article)}
-            className="
-px-4
-py-2
-rounded-full
-bg-brand-primary
-text-brand-bg
-text-sm
-font-medium
-transition-opacity
-hover:opacity-90
-"
-          >
-            {quizStatus === "COMPLETED" ? "Retake Quiz" : "Take Quiz"}
+          <button type="button" onClick={() => onTakeQuiz(article)} className="as-btn as-btn-sm as-btn-primary">
+            {completed ? "Retake quiz" : "Take quiz"}
           </button>
         ) : null}
       </div>

@@ -1,8 +1,5 @@
 import UserSpotlightTour from "../components/onboarding/UserSpotlightTour";
-import LearnMore from '../components/learning/LearnMore';
-import { settingsPath } from "../utils/settingsTabs";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { LayoutGrid, Plus } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { useDashboardLayout } from "../hooks/useDashboardLayout";
@@ -105,10 +102,9 @@ export default function DashboardPage() {
                 }
           }
         />
-      <LearnMore context="dashboard" />
 
         {saveError && !isEditing ? (
-          <div className="rounded-lg border border-semantic-danger/20 bg-semantic-danger/10 p-4 text-sm text-semantic-danger">
+          <div className="rounded-[12px] bg-down-bg p-4 text-sm text-down" role="alert">
             {saveError}
           </div>
         ) : null}
@@ -126,12 +122,14 @@ export default function DashboardPage() {
         ) : null}
 
         {placedWidgets.length === 0 ? (
-          <div className="soft-card flex flex-col items-center gap-3 px-6 py-14 text-center">
-            <LayoutGrid className="h-7 w-7 text-brand-muted-fg" />
-            <p className="text-sm font-medium text-brand-fg">
+          <div className="as-card flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-forest-50 text-forest-700" aria-hidden="true">
+              <LayoutGrid className="h-5 w-5" />
+            </span>
+            <p className="text-base font-bold text-forest-900">
               Your dashboard is empty
             </p>
-            <p className="max-w-sm text-xs leading-relaxed text-brand-muted-fg">
+            <p className="max-w-sm text-sm leading-relaxed text-brand-muted-fg">
               Add the pieces you want to see. Your watchlist, the stocks your
               latest run ranked, sentiment, price history, insider activity and
               your learning progress are all available.
@@ -142,7 +140,7 @@ export default function DashboardPage() {
                 setIsEditing(true);
                 setDrawerOpen(true);
               }}
-              className="mt-1 inline-flex items-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+              className="as-btn as-btn-primary mt-1"
             >
               <Plus className="h-4 w-4" />
               Add a widget
@@ -150,7 +148,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div
-            className={`bento-grid ${isEditing ? "rounded-2xl bg-brand-fg/[0.02] p-3" : ""}`}
+            className={`bento-grid ${isEditing ? "rounded-[20px] bg-forest-50 p-3" : ""}`}
           >
             {placedWidgets.map(({ entry, def }, index) => (
               // Every drag handler lives on this plain wrapper rather than on
@@ -238,7 +236,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 disabled={availableWidgets.length === 0}
-                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-accent text-brand-muted-fg transition-colors hover:bg-brand-accent/10 hover:text-brand-primary disabled:opacity-40 md:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+                className="col-span-6 flex min-h-32 flex-col items-center justify-center gap-2 rounded-[20px] border-2 border-dashed border-forest-900/20 text-sm font-semibold text-brand-muted-fg transition-colors hover:border-forest-700 hover:bg-white hover:text-forest-900 disabled:opacity-40 md:col-span-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
               >
                 <Plus className="h-5 w-5" />
                 <span className="text-xs font-semibold">
@@ -269,14 +267,6 @@ export default function DashboardPage() {
           onClose={() => setDrawerOpen(false)}
         />
 
-        <p className="pt-2 text-[11px] leading-relaxed text-brand-muted-fg">
-          Everything here is research, not financial advice. Prices are US
-          listings shown in rand.{" "}
-          <Link to={settingsPath("preferences")} className="text-brand-primary hover:underline">
-            Manage your preferences
-          </Link>
-          .
-        </p>
       </div>
     </DashboardDataProvider>
   );

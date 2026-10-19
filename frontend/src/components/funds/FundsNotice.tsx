@@ -34,7 +34,7 @@ export default function FundsNotice({
   tone?: "neutral" | "warning";
 }) {
   return (
-    <div className="soft-card flex flex-col items-center gap-2 px-6 py-8 text-center">
+    <div className="as-card flex flex-col items-center gap-2 px-6 py-8 text-center">
       <span
         className={`flex h-9 w-9 items-center justify-center rounded-full ${
           tone === "warning" ? "bg-warning/15 text-warning-strong" : "bg-brand-bg text-forest-500"
@@ -42,7 +42,7 @@ export default function FundsNotice({
       >
         <Icon className="h-4 w-4" />
       </span>
-      <p className="max-w-md text-[13px] font-bold text-brand-primary">{title}</p>
+      <p className="max-w-md text-sm font-bold text-brand-primary">{title}</p>
       <p className="max-w-md text-xs leading-relaxed text-forest-600">{body}</p>
       {actionLabel && onAction && (
         <button

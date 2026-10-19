@@ -5,9 +5,13 @@ import { useAuthStore } from '../../store/authStore'
 
 interface Props {
   ticker: string
+  /** On a dark forest card: light text and outline when not watched. */
+  onDark?: boolean
+  /** 'button' matches the 32px header buttons; 'chip' (default) sits in cards. */
+  size?: 'chip' | 'button'
 }
 
-export default function AddToWatchlistButton({ ticker }: Props) {
+export default function AddToWatchlistButton({ ticker, onDark = false, size = 'chip' }: Props) {
   const { session } = useAuthStore()
   const userId = session?.user?.id
 
@@ -91,10 +95,12 @@ export default function AddToWatchlistButton({ ticker }: Props) {
       // chip uses the same green the other way round, as a fill behind dark
       // text, so it borrows that treatment here. Both states are chips so the
       // control does not change size when it is toggled.
-      className={`chip transition-all disabled:opacity-50 ${
+      className={`${size === 'button' ? 'as-btn as-btn-sm' : 'chip'} transition-all disabled:opacity-50 ${
         isWatched
-          ? 'bg-brand-accent text-brand-fg hover:bg-brand-accent/80'
-          : 'bg-brand-bg border border-brand-border/60 text-brand-muted-fg hover:text-brand-fg hover:border-brand-primary/40'
+          ? 'chip-accent hover:bg-lime-300'
+          : onDark
+            ? 'bg-white/10 text-white ring-1 ring-inset ring-white/30 hover:bg-white/20'
+            : 'chip-line hover:bg-forest-50'
       }`}
     >
       {loading || working ? (

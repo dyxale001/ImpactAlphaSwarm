@@ -50,8 +50,8 @@ export default function RiskScale({
     <div className="flex flex-col gap-1.5">
       {!compact && (
         <span
-          className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${
-            onDark ? "text-lime-100/60" : "text-forest-500"
+          className={`text-xs font-semibold ${
+            onDark ? "text-lime-100/60" : "text-brand-muted-fg"
           }`}
         >
           {RISK_SCALE_TITLE}

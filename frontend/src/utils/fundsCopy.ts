@@ -273,6 +273,12 @@ export const COST_PER_YEAR = "a year";
 
 export const FUND_SIZE_LABEL = "Fund size";
 
+/** The card's short figure labels; the full wording sits in each one's title. */
+export const CARD_COST_LABEL = "Cost a year";
+export const CARD_TER_LABEL = "Expenses a year";
+export const CARD_MIN_TERM_LABEL = "Minimum term";
+export const CARD_SHEET_LABEL = "Fact sheet";
+
 export const DISTRIBUTIONS_LABEL = "Distributions";
 
 /** Printed where a fact sheet does not state a figure the card has a slot for.
@@ -308,11 +314,11 @@ export const RISK_NO_SHEET_NOTE =
  * be this page telling somebody what to do about a fund.
  */
 
-export const STALENESS_CURRENT = "current";
+export const STALENESS_CURRENT = "Current";
 
-export const STALENESS_AGEING = "worth re-checking";
+export const STALENESS_AGEING = "Worth re-checking";
 
-export const STALENESS_STALE = "sheet is out of date";
+export const STALENESS_STALE = "Sheet is out of date";
 
 export const VEHICLE_LABEL: Record<string, string> = {
   unit_trust: "Unit trust",
@@ -507,7 +513,7 @@ export const FUND_BRACKET_NO_PROFILE =
 export const FUND_BRACKET_LOAD_FAILED =
   "Unable to work out which fund categories your profile maps to right now.";
 
-export const FUND_BRACKET_ACTION = "See the funds in your bracket";
+export const FUND_BRACKET_ACTION = "See funds";
 
 /** The attribution a tile that shows risk labels has to carry, in one line. */
 export const FUND_BRACKET_PROVENANCE =
@@ -571,6 +577,11 @@ export function allStrings(): string[] {
     LOAD_FAILED,
     MATCHES_LOAD_FAILED,
     MATCH_INPUTS_TITLE,
+    DETAIL_CURATION_LABEL,
+    CARD_COST_LABEL,
+    CARD_TER_LABEL,
+    CARD_MIN_TERM_LABEL,
+    CARD_SHEET_LABEL,
     MATCH_INPUTS_LEAD,
     MATCH_INPUT_RISK_LABEL,
     MATCH_INPUT_HORIZON_LABEL,
@@ -1149,6 +1160,8 @@ export const FUND_ABOUT_DONE = "Got it";
 // it is among the reader's matches and why (D-218).
 
 export const FUND_TRACE_TITLE = "This fund and your profile";
+/** Leads the fund's catalogue rule under "Why this fund appears here". */
+export const DETAIL_CURATION_LABEL = "Why it's in our catalogue:";
 export const FUND_TRACE_LABEL = "Reasoning trace";
 export const FUND_TRACE_INVITE =
   "Get a short explanation of this fund in plain words: what it is, what it costs and how its manager rates its risk, and whether it is among the funds matched to your profile, and why.";

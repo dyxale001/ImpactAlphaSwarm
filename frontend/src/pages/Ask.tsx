@@ -1,10 +1,11 @@
-import LearnMore from '../components/learning/LearnMore';
 import { useEffect, useRef } from 'react'
-import { Sparkles, Loader2 } from 'lucide-react'
 import { useAskAlphaSwarm } from '../hooks/useAskAlphaSwarm'
 import AskLandingCards from '../components/ask/AskLandingCards'
-import AskAnswerCard from '../components/ask/AskAnswerCard'
+import AskAnswerCard, { AskThinking } from '../components/ask/AskAnswerCard'
 import AskComposer from '../components/ask/AskComposer'
+import AskHelp from '../components/ask/AskHelp'
+import LearnPopover from '../components/learning/LearnPopover'
+import AskMascot from '../components/ask/AskMascot'
 
 export default function AskAlphaSwarmPage() {
   const { turns, query, setQuery, pendingQuestion, loading, error, ask, reset } = useAskAlphaSwarm()
@@ -16,63 +17,61 @@ export default function AskAlphaSwarmPage() {
   }, [turns.length, pendingQuestion])
 
   return (
-    <div className="max-w-3xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-10 flex flex-col min-h-[calc(100dvh-2rem)]">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-brand-fg flex items-center gap-3">
-            <Sparkles className="w-6 h-6 shrink-0 text-brand-primary" />
-            Ask AlphaSwarm
-          </h1>
-          <p className="text-sm text-brand-muted-fg mt-2 max-w-xl leading-relaxed">
-            Understand your AlphaSwarm data. Explore. Compare. Learn.
-          </p>
+    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] max-w-7xl flex-col px-4 pb-10 pt-6 sm:px-6 lg:px-8 lg:pt-10">
+      {/* ── Header ──
+          The hub header every page uses. "What can I ask?" opens the scope and
+          how-it-works notes in the shared window; the book button holds any
+          lessons for this page. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          {/* The mascot beside the title, in place of the sparkle icon. It reacts to
+              the conversation below: typing, thinking, and a hop for each answer. */}
+          <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+            <AskMascot size={84} state={loading ? 'thinking' : query.trim() ? 'typing' : 'idle'} answers={turns.length} className="h-14 w-14 sm:h-[84px] sm:w-[84px]" />
+            <div className="min-w-0">
+              <p className="band-eyebrow mb-2">Questions about your data</p>
+              <h1 className="text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+                Ask AlphaSwarm
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
+                Ask about your results, the stocks and funds we cover, or what a term means. Answers
+                explain; they never tell you what to buy.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 self-start">
+            <LearnPopover context="ask" onDark />
+            <AskHelp onDark />
+          </div>
         </div>
-        {hasHistory && (
-          <button
-            type="button"
-            onClick={reset}
-            className="shrink-0 text-xs font-semibold text-brand-muted-fg hover:text-brand-fg transition-colors"
-          >
-            Clear conversation
-          </button>
-        )}
       </div>
 
-      {!hasHistory && !loading && <LearnMore context="ask" />}
+      {/* The conversation at reading width, centred under the header. */}
+      <div className="mx-auto mt-6 flex w-full max-w-3xl flex-1 flex-col">
+        <div className="flex-1 space-y-6">
+          {!hasHistory && !loading ? (
+            <AskLandingCards onSelect={setQuery} />
+          ) : (
+            <div className="space-y-6">
+              {turns.map(turn => (
+                <AskAnswerCard key={turn.id} turn={turn} onSuggestionClick={q => ask(q)} />
+              ))}
+              {loading && pendingQuestion && <AskThinking question={pendingQuestion} />}
+              <div ref={bottomRef} />
+            </div>
+          )}
 
-      {/* Landing or conversation */}
-      <div className="flex-1 space-y-6">
-        {!hasHistory && !loading ? (
-          <AskLandingCards onSelect={setQuery} />
-        ) : (
-          <div className="space-y-6">
-            {turns.map(turn => (
-              <AskAnswerCard key={turn.id} turn={turn} onSuggestionClick={q => ask(q)} />
-            ))}
-            {loading && pendingQuestion && (
-              <div className="space-y-2.5">
-                <p className="text-xs font-semibold text-brand-muted-fg">{pendingQuestion}</p>
-                <div className="soft-card p-4 flex items-center gap-2 text-sm text-brand-muted-fg">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Thinking…
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        )}
+          {error && (
+            <div className="rounded-[12px] bg-down-bg p-3 text-sm text-down" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
 
-        {error && (
-          <div className="p-3 rounded-lg bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger text-sm">
-            {error}
-          </div>
-        )}
-      </div>
-
-      {/* Composer */}
-      <div className="sticky bottom-0 pt-4 mt-6 bg-brand-bg">
-        <AskComposer query={query} setQuery={setQuery} loading={loading} onAsk={() => ask()} />
+        {/* Composer */}
+        <div className="sticky bottom-0 mt-6 bg-brand-bg pb-1 pt-4">
+          <AskComposer query={query} setQuery={setQuery} loading={loading} onAsk={() => ask()} onClear={hasHistory ? reset : undefined} />
+        </div>
       </div>
     </div>
   )

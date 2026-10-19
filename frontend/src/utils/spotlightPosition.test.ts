@@ -9,16 +9,16 @@ it("matches the exact displayed navigation order with separate welcome and assis
     "Welcome to AlphaSwarm",
     "Dashboard",
     "Stocks",
-    "Market News",
     "Funds",
-    "Compare",
-    "Learning",
-    "Financial Tools",
-    "Watchlist",
-    "Ask AlphaSwarm",
+    "Market News",
     "Whale Watching",
+    "Watchlist",
+    "Compare",
+    "Financial Tools",
+    "Learning",
+    "Ask AlphaSwarm",
     "Settings",
-    "Ask AlphaSwarm — Quick Help",
+    "Ask AlphaSwarm: quick help",
   ]);
   expect(steps[0].target).toBe("welcome");
   expect(steps.at(-1)?.target).toBe("assistant");

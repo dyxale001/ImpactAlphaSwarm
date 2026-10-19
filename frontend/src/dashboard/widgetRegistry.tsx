@@ -101,6 +101,8 @@ export interface WidgetDef {
   title: string;
   /** One line explaining what it is, for someone choosing from the drawer. */
   blurb: string;
+  /** The short line under the title in the widget's own header. */
+  sub?: string;
   icon: LucideIcon;
   group: WidgetGroup;
   sizes: WidgetSize[];
@@ -128,18 +130,19 @@ export const WIDGETS: WidgetDef[] = [
     // one shortlist rather than a duplicate.
     id: "top-pick",
     title: "Your shortlist",
+    sub: "The top five of your latest run, ordered for your profile",
     blurb:
-      "The strongest name in your latest run with the reasoning behind it, then ranks two to five as cards.",
+      "The strongest name in your latest run with the reasoning behind it, then ranks two to five as a list.",
     icon: Sparkles,
     group: "Signals",
     sizes: MEDIUM_UP,
     defaultSize: "wide",
-    bare: true,
     Component: ShortlistWidget,
   },
   {
     id: "also-scored",
     title: "Also scored",
+    sub: "Ranked in the same run, below your shortlist",
     blurb: "Everything else the run ranked, below the shortlist.",
     icon: BarChart3,
     group: "Signals",
@@ -150,6 +153,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "run-status",
     title: "Run status",
+    sub: "How fresh your numbers are",
     blurb: "How old your numbers are, and a button to make them newer.",
     icon: RefreshCw,
     group: "Signals",
@@ -162,6 +166,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "watchlist",
     title: "Your watchlist",
+    sub: "Included in your next analysis run",
     blurb:
       "Search any ticker to add it, and every stock you track with a fortnight of price history on each.",
     icon: Eye,
@@ -183,6 +188,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "sentiment-trend",
     title: "Sentiment trend",
+    sub: "Seven days of news and social",
     blurb: "Seven days of news and social sentiment for the stock you focus on.",
     icon: LineChart,
     group: "Sentiment",
@@ -194,6 +200,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "news-influential",
     title: "Influential news",
+    sub: "The articles driving its coverage",
     blurb: "The articles driving your focused stock's most recent coverage.",
     icon: Newspaper,
     group: "Sentiment",
@@ -205,6 +212,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "social-buzz",
     title: "Social buzz",
+    sub: "What people are posting",
     blurb: "What people are posting about your focused stock, and which way it leans.",
     icon: MessageCircle,
     group: "Sentiment",
@@ -216,6 +224,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "sentiment-freshness",
     title: "Sentiment freshness",
+    sub: "When news and social were last topped up",
     blurb: "When news and social readings were last topped up.",
     icon: Clock,
     group: "Sentiment",
@@ -231,6 +240,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "quant-window",
     title: "Price window",
+    sub: "Closing price and RSI, in rand",
     blurb:
       "Closing price and RSI for your focused stock over a month, six months, three years or five, in rand.",
     icon: Activity,
@@ -243,6 +253,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "quant-reading",
     title: "Quant reading",
+    sub: "Against the rest of your run",
     blurb:
       "Where your focused stock's momentum, risk-adjusted return and stability sit against the rest of your latest run, with RSI and beta explained.",
     icon: Gauge,
@@ -257,6 +268,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "whale-cluster",
     title: "Insider cluster buying",
+    sub: "Insiders buying on the open market",
     blurb: "Whether several insiders have been buying your focused stock at once.",
     icon: Users,
     group: "Whales",
@@ -268,6 +280,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "institutional-owners",
     title: "Who owns it",
+    sub: "Institutions and insiders",
     blurb: "Institutional and insider ownership of your focused stock.",
     icon: Building2,
     group: "Whales",
@@ -279,6 +292,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "top-funds",
     title: "Top funds",
+    sub: "The largest fund positions we track",
     blurb: "The largest fund positions across everything the platform tracks.",
     icon: Landmark,
     group: "Whales",
@@ -297,6 +311,7 @@ export const WIDGETS: WidgetDef[] = [
         {
           id: "fund-bracket",
           title: "Your fund bracket",
+    sub: "From your risk profile",
           blurb:
             "The risk bracket your profile answers map to, and the fund categories in play.",
           icon: Landmark,
@@ -317,6 +332,7 @@ export const WIDGETS: WidgetDef[] = [
         {
           id: "news-market-wide",
           title: "Market-wide news",
+    sub: "Rates, trade, oil and more this week",
           blurb: "The AI overview of this week's rates, trade, oil and other market-wide news, with the top stories.",
           icon: Globe,
           group: "Market news",
@@ -327,6 +343,7 @@ export const WIDGETS: WidgetDef[] = [
         {
           id: "news-sector",
           title: "Sector news",
+    sub: "One sector's week in the news",
           blurb: "One sector's week in the news, starting with one you chose; add more for other sectors.",
           icon: Newspaper,
           group: "Market news",
@@ -337,6 +354,7 @@ export const WIDGETS: WidgetDef[] = [
         {
           id: "news-latest",
           title: "Latest headlines",
+    sub: "The newest tagged stories",
           blurb: "The newest stories tagged to any sector, each labelled with the one it touches most.",
           icon: Clock,
           group: "Market news",
@@ -351,6 +369,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "learning-progress",
     title: "Learning progress",
+    sub: "XP, badges and lessons",
     blurb: "Your XP, badges and how far through the articles you are.",
     icon: Award,
     group: "Learning",
@@ -361,6 +380,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "learning-next",
     title: "Read next",
+    sub: "Your next lesson",
     blurb: "The next article you have not finished.",
     icon: BookOpen,
     group: "Learning",

@@ -1,16 +1,18 @@
 import type { FormEvent } from 'react'
-import { Search, Loader2, Sparkles } from 'lucide-react'
-import AskInfoTooltip from './AskInfoTooltip'
-import AskScopeTooltip from './AskScopeTooltip'
+import { Loader2, Send, Sparkles, X } from 'lucide-react'
 
 interface Props {
   query: string
   setQuery: (val: string) => void
   loading: boolean
   onAsk: () => void
+  /** Shown once there is a conversation to clear. */
+  onClear?: () => void
 }
 
-export default function AskComposer({ query, setQuery, loading, onAsk }: Props) {
+// The question box, with one quiet line under it: the disclaimer, and Clear
+// conversation once there is one. "What can I ask?" lives in the page header.
+export default function AskComposer({ query, setQuery, loading, onAsk, onClear }: Props) {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!loading) onAsk()
@@ -18,39 +20,36 @@ export default function AskComposer({ query, setQuery, loading, onAsk }: Props) 
 
   return (
     <div className="space-y-2">
-      <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
-        <div className="relative flex-1">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
           {loading
-            ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg animate-spin pointer-events-none" />
-            : <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
+            ? <Loader2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-brand-muted-fg" />
+            : <Sparkles className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-forest-700" />
           }
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Ask AlphaSwarm anything…"
+            placeholder="Ask about a stock, a fund or a term…"
             aria-label="Ask AlphaSwarm"
-            className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-4 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
+            className="h-11 w-full rounded-full border border-forest-900/15 bg-white pl-10 pr-4 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none"
           />
         </div>
-        <button
-          type="submit"
-          disabled={loading || !query.trim()}
-          className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-brand-primary text-brand-bg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all"
-        >
-          <Search className="w-4 h-4" />
-          Ask
+        {/* Icon-only on a phone, so the question box keeps the room. */}
+        <button type="submit" disabled={loading || !query.trim()} aria-label="Ask" className="as-btn as-btn-primary shrink-0 px-3 sm:px-5">
+          <Send className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden sm:inline">Ask</span>
         </button>
       </form>
 
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        <p className="text-[10px] text-brand-muted-fg/70 text-center">
-          Financial information for educational purposes only · Not personalised financial advice
-        </p>
-        <span className="text-brand-muted-fg/40 text-[10px]">·</span>
-        <AskScopeTooltip />
-        <span className="text-brand-muted-fg/40 text-[10px]">·</span>
-        <AskInfoTooltip />
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-1 text-xs text-brand-muted-fg">
+        <p>Financial information for educational purposes only · Not personalised financial advice</p>
+        {onClear && (
+          <button type="button" onClick={onClear} className="inline-flex items-center gap-1 font-semibold hover:text-forest-900">
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            Clear conversation
+          </button>
+        )}
       </div>
     </div>
   )

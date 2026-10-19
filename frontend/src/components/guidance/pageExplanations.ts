@@ -14,13 +14,14 @@ export type PageExplanation = {
 export const PAGE_EXPLANATIONS = {
   stocks: {
     title: 'How Stocks works',
-    introduction: 'See the stocks recorded in your analysis run, then open a result to inspect the evidence behind its place.',
-    process: { title: 'Read the results', steps: [
-      { title: 'Start with the leading results', body: 'The first result and shortlist show the run’s leading stocks. When more results were recorded, “Also scored” shows the others.' },
-      { title: 'Open the evidence', body: 'Open a stock to read its analysis and inspect the available price, sentiment and other research panels.' },
-      { title: 'Check the context', body: 'Saved sector preferences and watched stocks affect subsequent runs. Changing them does not rewrite an older run.' },
+    introduction: 'Each analysis run reads the news, social posts and price history for the US stocks in your sectors and on your watchlist, measures every stock two ways, and lists them in order for your profile. Every place comes with a plain-language reason, so you can see what the evidence shows and decide for yourself.',
+    process: { title: 'From your run to this list', steps: [
+      { title: 'Gather the evidence', body: 'News from the past 7 days, social posts from the past 2 days and about a year of daily prices, for every stock in your sectors and on your watchlist.' },
+      { title: 'Measure it two ways', body: 'One engine reads the tone of what is being written; the other measures how the price has behaved. Neither sees the other’s answer.' },
+      { title: 'Order it for you', body: 'Four disclosed factors decide each place. Saved sector preferences and watched stocks affect subsequent runs. Changing them does not rewrite an older run.' },
+      { title: 'Explain each place', body: 'The top result and the shortlist carry a written reason. Also scored lists every other stock from the run in the same order.' },
     ] },
-    example: { title: 'Similar sentiment, different evidence', body: 'Two stocks can have similar sentiment but different price evidence. Their analysis can differ even when the headlines sound alike. This illustrates the inputs; it does not predict which stock will perform better.' },
+    example: { title: 'Same news, different evidence', body: 'Two stocks can have similar sentiment but different price evidence. Their analysis can differ even when the headlines sound alike. This illustrates the inputs; it does not predict which stock will perform better.' },
     limitations: { title: 'Dates and missing evidence', paragraphs: [
       'The displayed run price was captured for that analysis; it is not a live quote. The analysis-run timestamp identifies the run, not the latest market observation. The sentiment update time and exchange clock describe different things.',
       'Check the source dates and available evidence before interpreting a result. Missing evidence limits the conclusion; it should not be read as proof of a neutral result.',
@@ -50,22 +51,23 @@ export const PAGE_EXPLANATIONS = {
   },
   whales: {
     title: 'How Whale Watching works',
-    introduction: 'Explore reported insider activity and institutional holdings around the stocks AlphaSwarm tracks.',
-    process: { title: 'Choose a view', steps: [
-      { title: 'Find a company', body: 'Browse a universe or search for a company. Open its research to switch between insider transactions and institutional ownership.' },
-      { title: 'Read insider transactions', body: 'These records describe reported changes in company insiders’ shareholdings. An insider is someone connected to the company, such as an executive or director. Open-market Buy/Sell labels differ from grants, exercises and other activity.' },
-      { title: 'Read institutional holdings', body: 'These records show reported positions held by investment organisations. Top Funds brings together available positions across tracked companies; it is not a ranking of investment quality or a complete view of every fund.' },
+    introduction: 'Company insiders and big investors have to report what they own and what they trade. Whale Watching gathers those reports for the stocks AlphaSwarm tracks, so you can see who owns a company and who has been buying or selling it.',
+    process: { title: 'What the page brings together', steps: [
+      { title: 'Find a company', body: 'Browse a universe or search by name or ticker. A company opens with two tabs: Insider Trading and Big Investors.' },
+      { title: 'Insider trading', body: 'Directors and executives report their own trades to the SEC on a Form 4. Open-market Buy/Sell labels differ from grants, exercises and other routine entries.' },
+      { title: 'Big investors', body: 'Funds, banks and pension managers report what they hold once a quarter on a 13F filing, up to 45 days after the quarter ends.' },
+      { title: 'Top funds', body: 'The largest holders across the companies we cover, and where each one is most invested. It is not a ranking of investment quality or a complete view of every fund.' },
     ] },
-    interpretation: { title: 'Understand the dates', cards: [
-      { title: 'Activity and disclosure', body: 'A transaction date describes when activity happened. A filing or reporting date describes the disclosure or reported position. These dates are not interchangeable.' },
-      { title: 'Retrieval and caching', body: 'The date information was fetched describes when AlphaSwarm obtained it. A newly retrieved record may still describe older activity. Reported holdings are a delayed snapshot, so a position may already have changed.' },
+    interpretation: { title: 'Three dates on every record', cards: [
+      { title: 'Traded', body: 'The transaction date: when the activity happened.' },
+      { title: 'Filed', body: 'The filing or reporting date: when it was disclosed, or the date a reported holding describes. These dates are not interchangeable.' },
+      { title: 'Fetched', body: 'When the information was fetched by AlphaSwarm. A newly retrieved record may still describe older activity, and reported holdings are a delayed snapshot, so a position may already have changed.' },
     ] },
     example: { title: 'More shares does not always mean a purchase', body: 'A share grant can increase an insider’s holding without an open-market purchase. An option exercise is also different from an ordinary share purchase. Likewise, a reported institutional holding does not establish that the institution still holds those shares today.' },
     limitations: { title: 'Sources and coverage', paragraphs: [
       'Insider records are obtained through Finnhub; institutional-holder information is obtained through yfinance. Results may be cached. Check the source and dates shown in the relevant panel. An empty result does not establish that no activity occurred.',
       'Disclosures do not reveal every transaction or an investor’s reasons. Top Funds reflects the reported positions available for tracked companies, not the whole market or each organisation’s complete portfolio.',
     ] },
-    nextSteps: { title: 'Find your way around', body: 'Use Universes to browse companies, open a company’s research for its disclosures, or choose Top Funds to explore the available holdings by institution.' },
     caveat: 'Observed disclosures do not predict future prices or provide a reason to copy a trade. Whale Watching research does not determine AlphaSwarm’s stock rankings.',
   },
 } satisfies Record<string, PageExplanation>;

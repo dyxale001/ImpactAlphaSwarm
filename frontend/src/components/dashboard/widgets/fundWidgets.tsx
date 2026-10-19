@@ -22,8 +22,7 @@ import {
   MATCH_NARROWED_BY_PURPOSE,
   formatBracketCount,
 } from "../../../utils/fundsCopy";
-import RiskScale from "../../funds/RiskScale";
-import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { WidgetEmpty, WidgetHeaderLink, WidgetLoading } from "./widgetChrome";
 
 /**
  * The funds section's one tile on the dashboard: "Your fund bracket".
@@ -69,7 +68,7 @@ export function FundBracketWidget({ size }: WidgetProps) {
         action={
           <Link
             to={settingsPath("profile")}
-            className="text-xs font-semibold text-brand-primary hover:underline"
+            className="as-btn as-btn-sm as-btn-secondary"
           >
             {COMPLETE_PROFILE_ACTION}
           </Link>
@@ -91,51 +90,48 @@ export function FundBracketWidget({ size }: WidgetProps) {
   const wide = size === "wide";
   const small = size === "small";
 
+  // The Settings risk card's ceiling box: the rating applied and the ceiling it
+  // sets as five pips, with the answers beside it when the widget is wide.
   return (
     <div className="flex h-full flex-col gap-3">
+      <WidgetHeaderLink to="/funds">{FUND_BRACKET_ACTION}</WidgetHeaderLink>
       <div className={wide ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-6" : "space-y-3"}>
         {/* ── The rating applied, and the ceiling it sets ── */}
-        <div className="space-y-2">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-accent">
-              {FUND_BRACKET_APPLIED_LABEL}
-            </p>
-            <p className="mt-0.5 text-2xl font-bold leading-none text-brand-primary">
-              {bracket.effective}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-secondary/60">
-              {MATCH_INPUT_CEILING_LABEL}
-            </p>
-            <div className="mt-1">
-              <RiskScale level={bracket.ceiling} label={bracket.ceiling_label} compact />
+        <div className="space-y-3">
+          <div className="as-inset p-4">
+            <p className="text-xs text-brand-muted-fg">{FUND_BRACKET_APPLIED_LABEL}</p>
+            <p className="mt-1 text-xl font-bold tracking-[-0.01em] text-forest-900">{bracket.effective}</p>
+            <p className="mt-3 text-xs text-brand-muted-fg">{MATCH_INPUT_CEILING_LABEL}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex gap-[3px]" role="img" aria-label={`${bracket.ceiling ?? 0} of 5`}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <i
+                    key={n}
+                    className={`h-1.5 w-[18px] rounded-full ${n <= (bracket.ceiling ?? 0) ? "bg-forest-700" : "bg-forest-100"}`}
+                  />
+                ))}
+              </span>
+              <b className="text-sm tabular-nums text-forest-900">{bracket.ceiling ?? 0} of 5</b>
+              {bracket.ceiling_label && <span className="text-xs text-brand-muted-fg">{bracket.ceiling_label}</span>}
             </div>
           </div>
           {!small && narrowedBecause && (
-            <p className="text-[11px] leading-relaxed text-brand-secondary">{narrowedBecause}</p>
+            <p className="text-xs leading-relaxed text-brand-muted-fg">{narrowedBecause}</p>
           )}
           {wide && <Answers bracket={bracket} />}
         </div>
 
         {/* ── The categories in play ── */}
         {!small && (
-          <div className={wide ? "border-l border-brand-border/40 pl-6" : "border-t border-brand-border/40 pt-3"}>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-secondary/60">
-              {FUND_BRACKET_CATEGORIES_LABEL}
-            </p>
-            <ul className="mt-1.5 flex flex-wrap gap-1.5">
+          <div className={wide ? "border-l border-forest-900/8 pl-6" : "border-t border-forest-900/8 pt-3"}>
+            <p className="text-xs font-semibold text-brand-muted-fg">{FUND_BRACKET_CATEGORIES_LABEL}</p>
+            <ul className="mt-2 flex flex-wrap gap-1.5">
               {bracket.categories.map((category) => {
                 const trackersOnly = bracket.tracker_only.includes(category.code);
                 return (
-                  <li
-                    key={category.code}
-                    className="chip border border-brand-border/60 bg-brand-bg/55 text-brand-secondary"
-                  >
+                  <li key={category.code} className="chip chip-line">
                     {category.name}
-                    {trackersOnly && (
-                      <span className="text-brand-secondary/60"> · {FUND_BRACKET_TRACKER_ONLY}</span>
-                    )}
+                    {trackersOnly && <span className="text-brand-muted-fg"> · {FUND_BRACKET_TRACKER_ONLY}</span>}
                   </li>
                 );
               })}
@@ -145,26 +141,20 @@ export function FundBracketWidget({ size }: WidgetProps) {
       </div>
 
       {/* ── The count, and the way to the list ── */}
-      <div className="mt-auto space-y-1.5 border-t border-brand-border/40 pt-3">
-        <p className="text-xs font-medium text-brand-fg">{formatBracketCount(matches.length)}</p>
+      <div className="mt-auto space-y-1.5 border-t border-forest-900/8 pt-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <Link
-            to="/funds"
-            className="text-xs font-semibold text-brand-primary hover:underline"
-          >
-            {FUND_BRACKET_ACTION} →
-          </Link>
+          <p className="text-sm font-semibold text-forest-900">{formatBracketCount(matches.length)}</p>
           {fallbackRiskOnly && (
             <Link
               to={settingsPath("profile")}
-              className="text-[11px] font-semibold text-brand-secondary hover:underline"
+              className="text-xs font-bold text-forest-700 hover:underline"
             >
               {COMPLETE_PROFILE_TITLE}
             </Link>
           )}
         </div>
         {!small && (
-          <p className="text-[10px] leading-relaxed text-brand-muted-fg">{FUND_BRACKET_PROVENANCE}</p>
+          <p className="text-xs leading-relaxed text-brand-muted-fg">{FUND_BRACKET_PROVENANCE}</p>
         )}
       </div>
     </div>
@@ -184,7 +174,7 @@ function Answers({ bracket }: { bracket: CatalogueBracket }) {
     : null;
 
   return (
-    <dl className="space-y-1 border-t border-brand-border/40 pt-2">
+    <dl className="space-y-1.5 border-t border-forest-900/8 pt-3">
       <Answer label={MATCH_INPUT_HORIZON_LABEL} value={horizon} />
       <Answer label={MATCH_INPUT_PURPOSE_LABEL} value={purpose} />
     </dl>
@@ -194,12 +184,10 @@ function Answers({ bracket }: { bracket: CatalogueBracket }) {
 function Answer({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-secondary/60">
-        {label}
-      </dt>
+      <dt className="text-xs text-brand-muted-fg">{label}</dt>
       <dd
-        className={`shrink-0 text-right text-[11px] font-semibold ${
-          value ? "text-brand-primary" : "text-brand-secondary/45"
+        className={`shrink-0 text-right text-xs font-semibold ${
+          value ? "text-forest-900" : "text-brand-muted-fg"
         }`}
       >
         {value ?? MATCH_INPUT_UNANSWERED}

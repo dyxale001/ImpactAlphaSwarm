@@ -27,7 +27,7 @@ export function spotlightSteps(
   return [
     {
       title: "Welcome to AlphaSwarm",
-      body: "Welcome to AlphaSwarm! Let’s take a quick look around.",
+      body: "Let’s take a quick look around: where each part of the platform lives and what it is for.",
       target: "welcome",
     },
     ...getVisibleNavigation({ funds, compare, news }).map((item) => ({
@@ -37,7 +37,7 @@ export function spotlightSteps(
       target: "navigation" as const,
     })),
     {
-      title: "Ask AlphaSwarm — Quick Help",
+      title: "Ask AlphaSwarm: quick help",
       body: "Need help while exploring? Use this button to ask AlphaSwarm a question from anywhere it’s available.",
       target: "assistant",
     },

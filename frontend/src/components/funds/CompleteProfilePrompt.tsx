@@ -17,7 +17,7 @@ import {
  */
 export default function CompleteProfilePrompt({ notice }: { notice?: string | null }) {
   return (
-    <div className="soft-card flex flex-col gap-2 border-l-2 border-brand-accent p-5">
+    <div className="as-card flex flex-col gap-2 border-l-2 border-brand-accent p-5">
       <h3 className="text-sm font-bold text-brand-primary">{COMPLETE_PROFILE_TITLE}</h3>
       <p className="text-xs leading-relaxed text-forest-600">
         {notice ?? COMPLETE_PROFILE_LEAD}

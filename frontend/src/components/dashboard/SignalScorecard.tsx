@@ -44,7 +44,7 @@ function TermTrack({
   return (
     <div
       className={`relative h-1.5 w-full rounded-full mt-1.5 ${
-        onDark ? "bg-white/15" : "bg-background"
+        onDark ? "bg-white/15" : "bg-forest-100"
       }`}
     >
       <div
@@ -63,11 +63,17 @@ export default function SignalScorecard({
   terms,
   compact = false,
   onDark = false,
+  fill = false,
+  title,
 }: {
   terms: SignalTerms;
   compact?: boolean;
   /** Render on a dark (forest) surface: lime labels, light text, tinted tracks. */
   onDark?: boolean;
+  /** Fill the parent's height, spreading the four rows evenly down it. */
+  fill?: boolean;
+  /** A heading set on the headline chip's row, chip to the right. */
+  title?: string;
 }) {
   const [open, setOpen] = useState<TermKey | "headline" | null>(null);
 
@@ -75,7 +81,7 @@ export default function SignalScorecard({
   const mutedTone = onDark ? "text-brand-bg/60" : "text-brand-muted-fg";
   const explainerTone = onDark
     ? "text-brand-bg/75 bg-white/10 border-white/10"
-    : "text-brand-muted-fg bg-brand-bg/55 border-brand-border/50";
+    : "text-forest-900 bg-forest-50 border-transparent";
 
   const state = terms.convergenceState;
   const rows: { key: TermKey; value: number | null }[] = [
@@ -92,10 +98,15 @@ export default function SignalScorecard({
     // rather than the screen's. It sits in a phone-width card and in the 256px
     // Top Pick column on desktop alike, and both are too narrow for a label and
     // its question side by side.
-    <div className="@container space-y-3">
+    <div className={fill ? "@container flex h-full flex-col gap-4" : "@container space-y-3"}>
       {/* Headline: a STATE, not a grade. */}
+      {title && !state && (
+        <p className="text-sm font-bold text-forest-900">{title}</p>
+      )}
       {state && (
         <div>
+          <div className={title ? "flex flex-wrap items-center justify-between gap-2" : undefined}>
+          {title && <p className="text-sm font-bold text-forest-900">{title}</p>}
           <button
             type="button"
             onClick={() => setOpen(open === "headline" ? null : "headline")}
@@ -107,6 +118,7 @@ export default function SignalScorecard({
             {CONVERGENCE_HEADLINE[state]}
             <Info className="w-3 h-3 shrink-0" />
           </button>
+          </div>
           {open === "headline" && (
             <p
               className={`mt-2 text-xs leading-relaxed border rounded-xl px-3 py-2 ${explainerTone}`}
@@ -118,7 +130,7 @@ export default function SignalScorecard({
       )}
 
       {/* Why it sits where it does — one row per disclosed factor. */}
-      <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className={fill ? "flex flex-1 flex-col justify-between gap-3" : compact ? "space-y-2" : "space-y-3"}>
         {rows.map(({ key, value }) => {
           const copy = TERM_COPY[key];
           const isOpen = open === key;
@@ -135,12 +147,12 @@ export default function SignalScorecard({
                     us?" each wrapped to two ragged lines against each other. */}
                 <div className="flex flex-col items-start gap-0.5 @sm:flex-row @sm:items-baseline @sm:justify-between @sm:gap-2">
                   <span
-                    className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+                    className={`text-xs font-semibold ${labelTone}`}
                   >
                     {copy.label}
                   </span>
                   <span
-                    className={`inline-flex items-center gap-1 text-[11px] ${mutedTone}`}
+                    className={`inline-flex items-center gap-1 text-xs ${mutedTone}`}
                   >
                     {value === null ? "not measured" : copy.question}
                     <Info className="w-3 h-3 shrink-0 opacity-60 group-hover:opacity-100" />
@@ -161,7 +173,7 @@ export default function SignalScorecard({
       </div>
 
       {quantNote && (
-        <p className={`text-[11px] ${onDark ? "text-brand-bg/60" : "text-slate-400"}`}>
+        <p className={`text-xs ${onDark ? "text-brand-bg/60" : "text-brand-muted-fg"}`}>
           {quantNote}
         </p>
       )}

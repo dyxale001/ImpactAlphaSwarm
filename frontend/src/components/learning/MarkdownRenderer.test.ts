@@ -19,10 +19,10 @@ it.each([
   const pre = host.querySelector('pre')!;
   const code = pre.querySelector('code')!;
   expect(code.textContent).toBe('const example = true\n');
-  expect(pre.classList.contains('bg-brand-bg')).toBe(true);
-  expect(pre.classList.contains('text-brand-fg')).toBe(true);
-  expect(code.classList.contains('bg-brand-bg')).toBe(true);
-  expect(code.classList.contains('text-brand-fg')).toBe(true);
+  expect(pre.classList.contains('bg-forest-50')).toBe(true);
+  expect(pre.classList.contains('text-forest-900')).toBe(true);
+  expect(code.classList.contains('bg-forest-50')).toBe(true);
+  expect(code.classList.contains('text-forest-900')).toBe(true);
   expect(code.classList.contains('text-brand-bg')).toBe(false);
   expect(pre.classList.contains('bg-brand-forest-950')).toBe(false);
 });
@@ -31,8 +31,8 @@ it('keeps inline code readable without turning it into a block', () => {
   const host = render('Use `const example = true` here.');
   const code = host.querySelector('p > code')!;
   expect(code.textContent).toBe('const example = true');
-  expect(code.classList.contains('text-brand-fg')).toBe(true);
-  expect(code.classList.contains('bg-brand-accent/15')).toBe(true);
+  expect(code.classList.contains('text-forest-900')).toBe(true);
+  expect(code.classList.contains('bg-forest-50')).toBe(true);
   expect(host.querySelector('pre')).toBeNull();
 });
 

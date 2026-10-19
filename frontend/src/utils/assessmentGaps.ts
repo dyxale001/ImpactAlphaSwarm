@@ -1,4 +1,4 @@
-/** What still stands between the user and "Generate Profile" on onboarding step 3.
+/** What still stands between the user and "Generate my profile" on onboarding step 3.
  *
  * The button stays disabled until every goal and risk question is answered and a
  * sector is picked. On a page some 7,000px long a disabled button alone does not

@@ -39,7 +39,7 @@ export default function FactSheetDropzone({
 
   if (busy) {
     return (
-      <div className="soft-card flex items-center gap-4 p-5" role="status" aria-live="polite">
+      <div className="as-card flex items-center gap-4 p-5" role="status" aria-live="polite">
         <Loader2 className="h-6 w-6 shrink-0 animate-spin text-lime-700" aria-hidden />
         <div className="flex flex-col gap-0.5">
           <p className="text-sm font-bold text-brand-primary">{DROPZONE_READING_TITLE}</p>
@@ -64,22 +64,25 @@ export default function FactSheetDropzone({
           setDragging(false);
           take(e.dataTransfer.files?.[0]);
         }}
-        className={`flex flex-col items-center gap-3 rounded-brand border-2 border-dashed px-6 py-8 text-center transition-colors ${
-          dragging ? "border-brand-primary/60 bg-brand-accent/10" : "border-brand-border bg-brand-surface"
+        // One row, as the conservative design drew it: the icon, what to do, and the
+        // button. The dashed border still says "drop here".
+        className={`flex flex-wrap items-center gap-4 rounded-[16px] border-2 border-dashed p-4 transition-colors sm:p-5 ${
+          dragging ? "border-forest-700 bg-forest-50" : "border-forest-900/15 bg-white"
         }`}
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-bg text-forest-500">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-forest-50 text-forest-700">
           <FileUp className="h-5 w-5" aria-hidden />
         </span>
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-bold text-brand-primary">{DROPZONE_TITLE}</p>
-          <p className="text-xs text-forest-500">{DROPZONE_HINT}</p>
+        <div className="flex min-w-[12rem] flex-1 flex-col gap-0.5">
+          <p className="text-base font-bold text-forest-900">{DROPZONE_TITLE}</p>
+          <p className="text-xs text-brand-muted-fg">{DROPZONE_HINT}</p>
         </div>
         <button
           type="button"
           onClick={() => input.current?.click()}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-brand-accent px-4 py-2 text-[13px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+          className="as-btn as-btn-primary shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
         >
+          <FileUp className="h-4 w-4" aria-hidden />
           {DROPZONE_CHOOSE}
         </button>
         <input

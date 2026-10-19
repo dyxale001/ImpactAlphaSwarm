@@ -1,14 +1,11 @@
-import LearnMore from '../components/learning/LearnMore';
+import LearnPopover from '../components/learning/LearnPopover';
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
-  BrainCircuit,
+  Sparkles,
   Flame,
-  BarChart3,
-  MessageSquare,
   TriangleAlert,
-  HelpCircle,
   ArrowRight,
   Columns2,
 } from "lucide-react";
@@ -21,7 +18,11 @@ import SignalScorecard, {
 import { SCORECARD_ENABLED } from "../hooks/useDashboardStats";
 import { type ConvergenceState } from "../data/signalCopy";
 import AssetDetailsSkeleton from "../components/research/AssetDetailsSkeleton";
-import QuantMetricsPanel from "../components/research/QuantMetricsPanel";
+import QuantMetricsPanel, { ordinal } from "../components/research/QuantMetricsPanel";
+import KeyReadings from "../components/research/KeyReadings";
+import { SummaryStrip } from "../components/research/sourcePageControls";
+import { formatChange, formatDrawdown, formatPrice } from "../components/research/quantSeries";
+import MethodologyDialog from "../components/howItWorks/MethodologyDialog";
 import {
   HorizonPicker,
   QuantTrendChart,
@@ -33,6 +34,7 @@ import { DaySummaryPanel } from "../components/research/DaySummaryPanel";
 import { carriedNews } from "../components/research/NewsArticles";
 import { formatDay } from "../components/research/sentimentDays";
 import { MarketClock } from "../components/research/MarketClock";
+import AddToWatchlistButton from "../components/dashboard/Addtowatchlistbutton";
 import { ListingLine } from "../components/research/ListingLine";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import WhaleWatching from "../components/research/WhaleWatching";
@@ -53,6 +55,7 @@ import { useQuantHistory } from "../hooks/useQuantHistory";
 import { useListing } from "../hooks/useListing";
 import {
   DEFAULT_QUANT_HORIZON,
+  QUANT_HORIZON_LABELS,
   type QuantHorizon,
 } from "../data/quantExplainers";
 import { HUB_PAGE_LABELS, readLastHubPage } from "../utils/lastHubPage";
@@ -123,7 +126,7 @@ function AnchoredBar({
 // articles and posts inline, which made it long and duplicated pages that already do
 // the job properly.
 //
-// That route is a named, underlined link saying what it opens, not the row itself with
+// That route is a named lime link with an arrow saying what it opens (underlined on hover), not the row itself with
 // a chevron on it. A whole row that happens to navigate is only discoverable by
 // hovering it, which never happens on touch and rarely happens on a panel where
 // nothing else is interactive: the reader has to already suspect the link is there to
@@ -157,11 +160,11 @@ function ContributorRow({
               back to whichever signal had data, so a fixed 70 / 30 badge claimed a
               weight for a signal that contributed nothing. */}
           {weightPct != null ? (
-            <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-[10px] font-medium text-forest-900">
+            <span className="px-1.5 py-0.5 rounded-full bg-lime-500 text-xs font-medium text-forest-900">
               {weightPct}%
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-medium text-white/70">
+            <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-xs font-medium text-white/70">
               Not in score
             </span>
           )}
@@ -183,7 +186,7 @@ function ContributorRow({
       </div>
       <AnchoredBar score={rightText ? null : score} tone={verdict.tone} />
       {note ? (
-        <p className="mt-1.5 text-[11px]" style={{ color: "rgba(255,255,255,0.6)" }}>
+        <p className="mt-1.5 text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
           {note}
         </p>
       ) : null}
@@ -192,7 +195,7 @@ function ContributorRow({
           anywhere near it. */}
       <Link
         to={to}
-        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-lime-500 underline underline-offset-2 decoration-lime-500/50 transition-colors hover:text-lime-400 hover:decoration-lime-400"
+        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-lime-500 underline-offset-2 transition-colors hover:text-lime-400 hover:underline focus-visible:underline"
       >
         {linkText}
         <ArrowRight className="w-3 h-3 shrink-0" />
@@ -201,28 +204,6 @@ function ContributorRow({
   );
 }
 
-// Each card owns its own explanation. One page-wide "how is this calculated?" made
-// the reader hunt for the part that applied to what they were looking at; scoping
-// the link to the section is the difference between disclosure and a document dump.
-function ExplainerLink({
-  ticker,
-  section,
-}: {
-  ticker: string;
-  section: "ranking" | "sentiment" | "quant";
-}) {
-  return (
-    <Link
-      to={`/asset/${ticker}/how-it-works#${section}`}
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-primary/90"
-      title="How is this calculated?"
-    >
-      <HelpCircle className="w-3.5 h-3.5" />
-      <span className="hidden sm:inline">How is this calculated?</span>
-      <span className="sm:hidden">How?</span>
-    </Link>
-  );
-}
 
 const ANALYSIS_TABS = [
   "ranking",
@@ -254,29 +235,30 @@ function AnalysisTabs({
   onChange: (tab: AnalysisTab) => void;
   rankingLabel: string;
 }) {
-  const tabs: { key: AnalysisTab; label: string }[] = [
-    { key: "ranking", label: rankingLabel },
-    { key: "sentiment", label: "Sentiment" },
-    { key: "quant", label: "Quant" },
-    { key: "investors", label: "Big investors" },
-    { key: "insiders", label: "Insider trading" },
+  // `short` is the phone label: six full labels need about 700px, so on a phone
+  // the tabs become a 3x2 grid and every label has to fit a third of the width.
+  const tabs: { key: AnalysisTab; label: string; short: string }[] = [
+    { key: "ranking", label: rankingLabel, short: "Overview" },
+    { key: "sentiment", label: "Sentiment", short: "Sentiment" },
+    { key: "quant", label: "Quant", short: "Quant" },
+    { key: "investors", label: "Big investors", short: "Investors" },
+    { key: "insiders", label: "Insider trading", short: "Insiders" },
     // Sector-level news (D-223), behind the Market News flag like the page itself.
-    ...(MACRO_NEWS_ENABLED ? [{ key: "news" as const, label: "Market news" }] : []),
+    ...(MACRO_NEWS_ENABLED
+      ? [{ key: "news" as const, label: "Market news", short: "News" }]
+      : []),
   ];
 
   return (
     <div
+      id="analysis-tabs"
       role="tablist"
       aria-label="Analysis sections"
-      // self-start, not just inline-flex: the parent is a flex column, and a flex
-      // child stretches to the full line width unless told otherwise, which turned
-      // the pill into a full page-width bar.
-      // One row that scrolls sideways rather than wrapping: the five labels are
-      // about 450px against 361px of phone, and wrapped they made a two-row box
-      // whose rounded-full ends no longer read as one pill. max-w-full caps the
-      // pill at the column so the overflow scrolls inside it, and the tab cut off
-      // at the right edge says there is more.
-      className="self-start inline-flex max-w-full items-center overflow-x-auto no-scrollbar rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5"
+      // The shared tab pill from sm up. self-start, not just inline-flex: the parent
+      // is a flex column, and a flex child stretches to the full line width unless
+      // told otherwise. On a phone a single scrolling row hid half the tabs off the
+      // edge, so there it is a 3x2 grid with every section in view.
+      className="as-tabs grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:self-start sm:rounded-full"
     >
       {tabs.map((tab) => (
         <button
@@ -288,42 +270,25 @@ function AnalysisTabs({
             // A tab half off the edge comes fully into view once chosen.
             event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}
-          className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-            value === tab.key
-              ? "bg-brand-accent text-brand-fg"
-              : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          className="as-tab shrink-0 px-2 sm:px-4"
         >
-          {tab.label}
+          <span className="sm:hidden">{tab.short}</span>
+          <span className="hidden sm:inline">{tab.label}</span>
         </button>
       ))}
     </div>
   );
 }
 
-// Sits under the whale tabs. Ownership and insider dealings are reference data kept
-// out of the score, and a famous fund's name next to a ticker reads as an endorsement
-// unless something says otherwise.
-function WhaleCaveat() {
-  return (
-    <p className="text-xs text-brand-muted-fg">
-      A big investor holding or trading a stock doesn't by itself mean it's a good
-      investment.
-    </p>
-  );
-}
-
 function SectionCard({
   title,
   description,
-  icon: Icon,
   badge,
   action,
   children,
 }: {
   title: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
   // Optional qualifier shown beside the title, for context that applies to the
   // whole card (e.g. the time window a score covers).
   badge?: React.ReactNode;
@@ -331,26 +296,22 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    // p-4 on a phone. The tabs nest an accent panel and an inner box inside this
-    // card, and at p-5 on all three the AI summaries read in a column about 260px
-    // wide on a 393px screen.
-    <div className="soft-card w-full p-4 sm:p-5 space-y-4 hover:border-brand-primary/30 transition-all">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-1 flex items-center gap-1.5">
-            <Icon className="w-3 h-3 text-brand-primary" />
+    // The same card and heading as the overview tab: a 16px title with a short
+    // subtitle, and the "How is this calculated?" button opposite. p-4 on a phone,
+    // where the panels nested inside would otherwise read in a narrow column.
+    <section className="as-card w-full space-y-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex flex-wrap items-center gap-2 text-base font-bold tracking-[-0.01em] text-forest-900">
             {title}
             {badge}
-          </p>
-          {/* Same weight as the body text in the panels below, not the muted grey the
-              label above it uses. It is a sentence the reader is meant to read, and at
-              muted it sat closer to the eyebrow label than to the prose it introduces. */}
-          <p className="text-sm text-brand-fg/90">{description}</p>
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-brand-muted-fg">{description}</p>
         </div>
         {action}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -420,7 +381,7 @@ function SentimentVerdict({
           {verdict.label}
         </p>
         <p
-          className="text-[10px] uppercase tracking-widest font-semibold mt-1"
+          className="text-xs mt-1"
           style={{ color: "rgba(255,255,255,0.55)" }}
         >
           Blended sentiment
@@ -462,7 +423,7 @@ function SentimentVerdict({
 export default function AssetDetailsPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
-  const { asset, recommendation, isLoading, latestRunCreatedAt } =
+  const { asset, recommendation, isLoading, latestRunCreatedAt, runSize } =
     useAssetDetails(ticker);
 
   // Read once per mount, not on every render: it only changes by navigating to a
@@ -577,36 +538,29 @@ export default function AssetDetailsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-8 animate-fade-in-up">
       <Link
         to={backTo}
-        className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
+        className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg inline-flex items-center gap-2 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to {HUB_PAGE_LABELS[backTo]}
       </Link>
 
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h1 className="text-3xl lg:text-4xl font-bold text-brand-fg">{asset.ticker}</h1>
-            <span className="px-3 py-1 bg-accent/95 rounded-full text-xs font-mono text-primary max-w-full truncate">
-              {asset.name}
-            </span>
-            {/* Right aligned from sm up, so on a wide header it reads as a status strip
-                opposite the ticker. On a phone it wraps onto its own line under the name
-                instead of being squeezed against it. */}
-            <div className="w-full sm:w-auto sm:ml-auto">
-              <MarketClock />
-            </div>
+      {/* Detail header: what the stock is and its price on the left, the market
+          status and what you can do with it on the right. */}
+      <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+        <div className="min-w-0 flex-[1_1_360px]">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-[-0.02em] text-forest-900">{asset.ticker}</h1>
+            {asset.name && <span className="chip chip-line max-w-full truncate">{asset.name}</span>}
           </div>
-          <ListingLine universe={asset.universe} exchange={exchangeName} className="mb-3" />
-          {/* Guarded: `recommendation` is nullable (see the checks below and the
-              optional chaining above), and an asset only has one once it has
-              reached a top 5. Dereferencing it here crashed the whole page for
-              every asset that never has — 48 of 88 rows at the time of writing,
-              both seeds and discovered names. price_at_run itself can also be null
-              when the price lookup fails. */}
-          <p className="text-2xl lg:text-3xl font-mono text-brand-fg">
+          <ListingLine universe={asset.universe} exchange={exchangeName} className="mt-2" />
+          {/* Guarded: `recommendation` is nullable, and an asset only has one once
+              it has reached a top 5. Dereferencing it here crashed the whole page
+              for every asset that never has — 48 of 88 rows at the time of
+              writing, both seeds and discovered names. price_at_run itself can
+              also be null when the price lookup fails. */}
+          <p className="mt-3 text-2xl lg:text-3xl font-bold tabular-nums tracking-[-0.02em] text-forest-900">
             {typeof recommendation?.price_at_run === "number"
               ? `R ${recommendation.price_at_run.toFixed(2)}`
               : "Price unavailable"}
@@ -615,26 +569,31 @@ export default function AssetDetailsPage() {
               asset reads the same way wherever you meet it. Absent for assets
               whose description hasn't been generated yet. */}
           {asset.description && (
-            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-3">
+            <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl mt-2">
               {asset.description}
             </p>
           )}
-          {/* Opens Compare with this stock already in the first column and the
-              search ready for the next. Every stock can be compared, analysed or
-              not: the page's price and tone rows do not depend on a run. */}
-          {COMPARE_ENABLED && (
-            <Link
-              to={compareHref("stocks", [asset.ticker])}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-card px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5"
-            >
-              <Columns2 className="h-4 w-4 text-brand-primary" />
-              Compare with…
-            </Link>
-          )}
         </div>
 
-        <LearnMore context={`stock.${tab}`} />
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <MarketClock />
+          <div className="flex flex-wrap items-center gap-2">
+            <AddToWatchlistButton ticker={asset.ticker} size="button" />
+            {/* Opens Compare with this stock already in the first column and the
+                search ready for the next. Every stock can be compared, analysed or
+                not: the page's price and tone rows do not depend on a run. */}
+            {COMPARE_ENABLED && (
+              <Link to={compareHref("stocks", [asset.ticker])} className="as-btn as-btn-sm as-btn-secondary">
+                <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Compare with…
+              </Link>
+            )}
+            <LearnPopover context={`stock.${tab}`} />
+          </div>
+        </div>
+      </header>
 
+      <div className="flex flex-col gap-6">
         {recommendation ? (
           <AnalysisTabs
             value={tab}
@@ -649,95 +608,112 @@ export default function AssetDetailsPage() {
           the header's flex gap and the other two in the page's, and the spacing
           jumped as you switched tabs. */}
       {recommendation && tab === "ranking" ? (
-          <div className="soft-card w-full p-4 sm:p-5 space-y-5">
-            {/* The top card had no explainer of its own, even though it carries the
-                headline judgement. It gets the ranking walkthrough. */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                {showScorecard ? "Why it ranks here" : "Overall Assessment"}
-              </div>
-              <ExplainerLink ticker={asset.ticker} section="ranking" />
+        <section className="as-card w-full space-y-6 p-5 sm:p-6">
+          {/* Where it placed and when, then the ranking walkthrough. */}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">
+                {showScorecard ? "Why it ranks here" : "Overall assessment"}
+              </h2>
+              <p className="mt-1 text-xs text-brand-muted-fg">
+                {recommendation.rank
+                  ? `${ordinal(recommendation.rank)}${runSize ? ` of ${runSize}` : ""} in your latest run · `
+                  : ""}
+                Last AI run{" "}
+                {latestRunCreatedAt
+                  ? new Date(latestRunCreatedAt).toLocaleString()
+                  : "—"}
+              </p>
+            </div>
+            <MethodologyDialog section="ranking" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <div className="as-inset p-4">
+              {showScorecard ? (
+                <SignalScorecard terms={signalTerms} title="How the evidence lines up" />
+              ) : (
+                <ConfidenceRing
+                  score={recommendation.confidence_score || 0}
+                  label="Confidence Score"
+                />
+              )}
             </div>
 
-            <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-              <div className="shrink-0 w-full lg:w-72">
-                {showScorecard ? (
-                  <SignalScorecard terms={signalTerms} />
-                ) : (
-                  <ConfidenceRing
-                    score={recommendation.confidence_score || 0}
-                    label="Confidence Score"
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="as-inset flex-1 p-4">
+                <p className="mb-2 flex items-center gap-2 text-sm font-bold text-forest-900">
+                  <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                  Reasoning trace
+                </p>
+                <p className="text-sm leading-relaxed text-forest-900">
+                  {reasoningTrace || "No reasoning trace available."}
+                </p>
+                {/* The 0-100 chip is only shown under the legacy score. With the
+                    disclosed factors there is deliberately no single figure. */}
+                {!showScorecard && (
+                  <span className="chip mt-3 bg-brand-primary/15 text-brand-primary">
+                    Score {formatMetric(recommendation.confidence_score)}/100
+                  </span>
                 )}
               </div>
 
-              <div className="flex-1 space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm text-brand-muted-fg">
-                    Last AI run:{" "}
-                    {latestRunCreatedAt
-                      ? new Date(latestRunCreatedAt).toLocaleString()
-                      : "—"}
+              {/* The legacy penalty panel, for rows without the disclosed factors.
+                  Under the disclosed factors the trace stands alone: the
+                  "what moved this asset" notes were cut on review, since the
+                  scorecard beside the trace already names each factor. */}
+              {!showScorecard && (
+                <div className="as-inset space-y-3 p-4">
+                  <p className="flex items-center gap-2 text-sm font-bold text-forest-900">
+                    <Flame className="h-4 w-4 text-forest-700" aria-hidden="true" />
+                    Risk and hype
+                  </p>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="text-brand-muted-fg">Hype penalty</span>
+                    <span className="font-semibold tabular-nums text-forest-900">
+                      {formatMetric(hypePenalty)}
+                    </span>
                   </div>
-                  {/* The 0-100 chip is only shown under the legacy score. With the
-                      disclosed factors there is deliberately no single figure. */}
-                  {!showScorecard && (
-                    <div className="chip bg-brand-primary/15 text-brand-primary">
-                      Score {formatMetric(recommendation.confidence_score)}/100
-                    </div>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="text-brand-muted-fg">Risk penalty</span>
+                    <span className="font-semibold tabular-nums text-forest-900">
+                      {formatMetric(riskPenalty)}
+                    </span>
+                  </div>
+                  {/* Stored penalties are negative (synthesize_rankings writes -25),
+                      so the old `> 0` test never fired. Any non-zero penalty counts. */}
+                  {(hypePenalty !== 0 || riskPenalty !== 0) && (
+                    <span className="chip chip-caution">
+                      <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                      Penalties applied to the final score
+                    </span>
                   )}
                 </div>
-
-                <div className={showScorecard ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
-                  <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4">
-                    <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-2 flex items-center gap-1.5">
-                      <BrainCircuit className="w-3 h-3 text-brand-primary" />
-                      Reasoning Trace
-                    </div>
-                    <p className="text-sm leading-relaxed text-brand-fg/90">
-                      {reasoningTrace || "No reasoning trace available."}
-                    </p>
-                  </div>
-
-                  {/* The legacy penalty panel, for rows without the disclosed factors.
-                      Under the disclosed factors the trace stands alone: the
-                      "what moved this asset" notes were cut on review, since the
-                      scorecard beside the trace already names each factor. */}
-                  {!showScorecard && (
-                    <div className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-4 space-y-3">
-                      <div className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold flex items-center gap-1.5">
-                        <Flame className="w-3 h-3 text-brand-primary" />
-                        Risk and Hype
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="text-brand-muted-fg">Hype penalty</span>
-                        <span className="font-semibold text-brand-fg">
-                          {formatMetric(hypePenalty)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="text-brand-muted-fg">Risk penalty</span>
-                        <span className="font-semibold text-brand-fg">
-                          {formatMetric(riskPenalty)}
-                        </span>
-                      </div>
-
-                      {(hypePenalty > 0 || riskPenalty > 0) && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 bg-semantic-warning/10 text-semantic-warning rounded-lg text-xs font-semibold">
-                          <TriangleAlert className="w-4 h-4" />
-                          Penalties applied to the final score
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </div>
-        ) : null}
+
+          <div className="border-t border-forest-900/8 pt-5">
+            <KeyReadings
+              ticker={asset.ticker}
+              sentimentScore={recommendation.sentiment_score ?? null}
+              quantPercentile={
+                recommendation.quant_lean != null
+                  ? ((recommendation.quant_lean + 1) / 2) * 100
+                  : null
+              }
+              onOpen={(next) => {
+                setTab(next);
+                document
+                  .getElementById("analysis-tabs")
+                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {!recommendation && (
         <div className="soft-card w-full p-4 sm:p-5">
@@ -750,19 +726,10 @@ export default function AssetDetailsPage() {
       {recommendation && tab === "sentiment" && (
         <>
           <SectionCard
-            title="Sentiment Data"
-            description={`A blend of trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days. News is weighted higher, so it moves the score more than social.`}
-            icon={MessageSquare}
-            badge={
-              <span
-                className="normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-fg font-medium"
-                title={`News from the last ${NEWS_LOOKBACK_DAYS} days and social posts from the last ${SOCIAL_LOOKBACK_DAYS} days. Older items are not counted at all. The trend chart covers a longer window than the score does, because history is filled in outside the run.`}
-              >
-                News {NEWS_LOOKBACK_DAYS}d · social {SOCIAL_LOOKBACK_DAYS}d
-              </span>
-            }
+            title="Sentiment"
+            description={`Trusted financial news from the past ${NEWS_LOOKBACK_DAYS} days and social posts from the past ${SOCIAL_LOOKBACK_DAYS} days, with news weighted higher. Older items are not counted.`}
             action={
-              <ExplainerLink ticker={asset.ticker} section="sentiment" />
+              <MethodologyDialog section="sentiment" />
             }
           >
             {/* One wrapper, so this card controls its own spacing. Handing SectionCard
@@ -800,26 +767,13 @@ export default function AssetDetailsPage() {
                 }
               />
 
-              {/* Outside the forest panel, not inside it: this is a light detail table
-                  of a dozen rows, and the disclosure it opens has no business being
-                  rendered on a dark ground. It stays directly under the score it
-                  derives, which is the only adjacency that matters. */}
-              <SentimentCalculation
-                newsArticles={recommendation.news_articles ?? []}
-                socialPosts={recommendation.social_posts ?? []}
-                newsScore={recommendation.news_sentiment_score}
-                socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
-                blendedScore={recommendation.sentiment_score}
-                newsCarried={newsCarried}
-              />
-
               {/* Only what nothing else on the card says. The windows are already in
                   the badge and the description above, so repeating them here would be
                   the third telling; what is genuinely new is that the chart reaches
                   further back than the scores do, and that its news line is not the
                   news score the reader just looked at. */}
               <div className="space-y-2">
-                <p className="text-[11px] text-brand-muted-fg">
+                <p className="text-xs text-brand-muted-fg">
                   The chart covers {SOCIAL_HISTORY_DAYS} days. Its news line is each
                   day's own coverage, not the weighted news score above.
                 </p>
@@ -855,11 +809,23 @@ export default function AssetDetailsPage() {
                 )}
               </div>
 
+              {/* The working, at the foot of the card: the score, the week and the
+                  day come first, and the arithmetic behind the score is there for
+                  whoever wants to check it. A light table, so outside the forest panel. */}
+              <div className="border-t border-forest-900/10 pt-4">
+                <SentimentCalculation
+                  newsArticles={recommendation.news_articles ?? []}
+                  socialPosts={recommendation.social_posts ?? []}
+                  newsScore={recommendation.news_sentiment_score}
+                  socialScore={hasSocialPosts ? recommendation.social_sentiment_score : null}
+                  blendedScore={recommendation.sentiment_score}
+                  newsCarried={newsCarried}
+                />
+              </div>
+
               {/* Sources apply to the whole card, not just one signal. On one line at
-                  footnote weight: it is provenance, not a fourth signal, and the
-                  uppercase label it used to carry gave it the same billing as News
-                  and Social. */}
-              <div className="pt-3 border-t border-brand-border/50 text-[11px] text-brand-muted-fg">
+                  footnote weight: it is provenance, not a fourth signal. */}
+              <div className="text-xs text-brand-muted-fg">
                 Sources:{" "}
                 <span className="text-brand-fg font-medium">
                   {recommendation.sources ? String(recommendation.sources) : "—"}
@@ -872,30 +838,49 @@ export default function AssetDetailsPage() {
 
       {recommendation && tab === "quant" && (
         <SectionCard
-          title="Quantitative Data"
-          description="What the price history shows: measurements and peer context, not a recommendation."
-          icon={BarChart3}
-          action={<ExplainerLink ticker={asset.ticker} section="quant" />}
+          title="Quantitative data"
+          description="How the price has behaved, shown in rand, and where this stock sits among the others in the run. Measurements, not a recommendation."
+          action={<MethodologyDialog section="quant" />}
         >
           {/* One wrapper, for the same reason the sentiment card has one: the card's
               uniform space-y would otherwise put the window switch, the chart and the
               measurements all exactly as far apart as each other. */}
           <div className="space-y-5">
-            {/* The window switch first, then the chart, then the tab's own reasoning
-                trace of that chart, then the run's own measurements. The chart leads
-                so the paragraph is read against the line it describes (a departure
-                from D-125's trace-first order, chosen on review). The switch sits
-                above both rather than on the chart so it is found before the two
-                things it changes. */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-brand-muted-fg">
-                Price history over a window you choose, shown in rand. The
-                measurements further down come from the most recent analysis run.
-              </p>
-              <HorizonPicker value={horizon} onChange={setHorizon} />
-            </div>
+            {/* The window's headline figures, then the chart, then the tab's own
+                reasoning trace of that chart, then the run's own measurements. The
+                chart leads the paragraph so it is read against the line it describes
+                (a departure from D-125's trace-first order, chosen on review). The
+                window switch sits in the chart's top row, beside what it changes. */}
+            {quantHistory.available && quantHistory.facts && !quantHistory.isLoading && (
+              <SummaryStrip
+                pills={[
+                  {
+                    label: `Change over ${QUANT_HORIZON_LABELS[horizon]}`,
+                    value: formatChange(quantHistory.facts.change_pct),
+                    tone:
+                      (quantHistory.facts.change_pct ?? 0) > 0
+                        ? "up"
+                        : (quantHistory.facts.change_pct ?? 0) < 0
+                          ? "down"
+                          : undefined,
+                    hint: `${formatPrice(quantHistory.facts.first_close, quantHistory.displayCurrency)} to ${formatPrice(quantHistory.facts.last_close, quantHistory.displayCurrency)}`,
+                  },
+                  { label: "High", value: formatPrice(quantHistory.facts.high, quantHistory.displayCurrency) },
+                  { label: "Low", value: formatPrice(quantHistory.facts.low, quantHistory.displayCurrency) },
+                  {
+                    label: "Largest fall",
+                    value: formatDrawdown(quantHistory.facts.max_drawdown_pct),
+                    // A fall, so red whenever there was one.
+                    tone: quantHistory.facts.max_drawdown_pct ? "down" : undefined,
+                    hint: "From a peak to a later low",
+                  },
+                ]}
+              />
+            )}
 
             <QuantTrendChart
+              showFigures={false}
+              toolbar={<HorizonPicker value={horizon} onChange={setHorizon} tone="dark" />}
               points={quantHistory.points}
               facts={quantHistory.facts}
               currency={quantHistory.currency}
@@ -920,10 +905,7 @@ export default function AssetDetailsPage() {
               />
             )}
 
-            <div className="pt-4 border-t border-brand-border/50">
-              <p className="text-[10px] uppercase tracking-widest text-brand-muted-fg font-semibold mb-3">
-                From the latest analysis run
-              </p>
+            <div className="border-t border-forest-900/10 pt-5">
               <QuantMetricsPanel recommendation={recommendation} />
             </div>
           </div>
@@ -933,15 +915,11 @@ export default function AssetDetailsPage() {
       {/* Mounted only while the tab is showing, so the holders are fetched on demand,
           the same way the Quant tab gates its price history. */}
       {recommendation && tab === "investors" && (
-        <div className="space-y-3">
-          <InstitutionalOwners
-            ticker={asset.ticker}
-            limit={5}
-            variant="asset"
-            showSummary
-          />
-          <WhaleCaveat />
-        </div>
+        <InstitutionalOwners
+          ticker={asset.ticker}
+          limit={5}
+          showSummary
+        />
       )}
 
       {recommendation && tab === "news" && MACRO_NEWS_ENABLED && (
@@ -949,31 +927,12 @@ export default function AssetDetailsPage() {
       )}
 
       {recommendation && tab === "insiders" && (
-        <div className="space-y-3">
-          <WhaleWatching
-            ticker={asset.ticker}
-            showTradeDate
-            variant="asset"
-            showSummary
-          />
-          <WhaleCaveat />
-        </div>
+        <WhaleWatching
+          ticker={asset.ticker}
+          showTradeDate
+          showSummary
+        />
       )}
-
-      {/* This page had no disclaimer of its own — the only not-advice statement on
-          it came from a paragraph repeated under each scorecard. With that removed,
-          state it once here, as the dashboard does. */}
-      <div className="mt-4 pt-6 border-t border-brand-border/30">
-        <p className="text-xs text-brand-muted-fg leading-relaxed">
-          <strong className="text-brand-fg">Disclaimer:</strong> every figure on
-          this page is a measurement of past and present public data, produced by
-          automated analysis for information and education. The ordering reflects
-          measurements plus a weighting we choose and disclose. It is not
-          professional financial, investment or legal advice, and nothing here
-          predicts future prices. All trading involves risk. Please consult a
-          licensed financial advisor before making investment decisions.
-        </p>
-      </div>
     </div>
   );
 }

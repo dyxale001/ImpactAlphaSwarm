@@ -38,7 +38,6 @@ import {
   SECTION_TONE,
   SECTION_WINDOW,
   SECTION_YOURS_NOTE,
-  STOCKS_DISCLAIMER,
   TONE_BUILDING,
   TONE_MEANING,
   TONE_ROW_NEWS,
@@ -177,7 +176,6 @@ export default function StockComparison({
       <CompareRow
         key={row}
         label={ROW_LABELS[row]}
-        emphasis={most === row}
         tag={
           most === row ? (
             <RowTag kind="differs">{DIFFERS_MOST}</RowTag>
@@ -216,9 +214,9 @@ export default function StockComparison({
           <button
             type="button"
             onClick={() => openAsk(askPrompt(tickers))}
-            className="inline-flex items-center gap-1.5 rounded-full border border-brand-border/60 bg-brand-card px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+            className="as-btn as-btn-sm as-btn-secondary"
           >
-            <MessageCircleQuestion className="h-4 w-4 text-brand-primary" />
+            <MessageCircleQuestion className="h-3.5 w-3.5 text-forest-700" />
             {ASK_ABOUT_THIS}
           </button>
         }
@@ -352,9 +350,9 @@ export default function StockComparison({
             <>
               <p className="max-w-3xl text-xs leading-relaxed text-brand-muted-fg">{SECTION_YOURS_NOTE}</p>
               {runLoading && !Object.keys(readings).length ? (
-                <div className="soft-card h-40 animate-pulse" />
+                <div className="as-card h-40 animate-pulse" />
               ) : !hasRun ? (
-                <p className="soft-card p-4 text-sm text-brand-muted-fg">{YOURS_NO_RUN}</p>
+                <p className="as-card p-4 text-sm text-brand-muted-fg">{YOURS_NO_RUN}</p>
               ) : (
                 <>
                   <CompareGrid columns={columns}>
@@ -383,7 +381,7 @@ export default function StockComparison({
                         values={tickers.map((t) => {
                           const state = reading(t)?.convergenceState;
                           return state ? (
-                            <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ${CHIP_TONE[state]}`}>
+                            <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${CHIP_TONE[state]}`}>
                               {CONVERGENCE_HEADLINE[state]}
                             </span>
                           ) : (
@@ -443,14 +441,12 @@ export default function StockComparison({
                   </CompareGrid>
 
                   {why && (
-                    <div className="soft-card space-y-2 p-4">
+                    <div className="as-card space-y-2 p-5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-brand-fg">{WHY_TITLE}</h3>
-                        <span className="inline-flex rounded-md bg-brand-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-muted-fg">
-                          {WHY_BADGE}
-                        </span>
+                        <h3 className="text-base font-bold text-forest-900">{WHY_TITLE}</h3>
+                        <span className="chip">{WHY_BADGE}</span>
                       </div>
-                      <p className="text-sm leading-relaxed text-brand-fg">{why.join(" ")}</p>
+                      <p className="text-sm leading-relaxed text-forest-900">{why.join(" ")}</p>
                     </div>
                   )}
 
@@ -461,10 +457,10 @@ export default function StockComparison({
                         <Link
                           key={t}
                           to={`/asset/${encodeURIComponent(t)}`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary hover:underline"
+                          className="inline-flex items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
                         >
                           <span>
-                            <span className="font-mono">{t}</span>
+                            <span>{t}</span>
                             {`'s ${OWN_TRACE}`}
                           </span>
                           <ArrowUpRight className="h-3.5 w-3.5" />
@@ -478,7 +474,6 @@ export default function StockComparison({
         </div>
       </div>
 
-      <p className="max-w-3xl text-[11px] leading-relaxed text-brand-muted-fg">{STOCKS_DISCLAIMER}</p>
     </div>
   );
 }
@@ -499,15 +494,15 @@ function RunStrip({
   onJump: () => void;
 }) {
   return (
-    <div className="soft-card flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
-      <p className="text-sm text-brand-fg">
-        <span className="font-semibold text-brand-primary">{RUN_STRIP_LABEL}: </span>
+    <div className="as-card flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5">
+      <p className="text-sm text-forest-900">
+        <span className="font-semibold text-brand-muted-fg">{RUN_STRIP_LABEL}: </span>
         {tickers.map((t, i) => {
           const rank = readings[t]?.rank;
           return (
             <span key={t}>
               {i > 0 && <span className="text-brand-muted-fg"> · </span>}
-              <span className="font-mono font-bold">{t}</span>{" "}
+              <span className="font-bold">{t}</span>{" "}
               {rank != null ? (
                 <span className="font-semibold tabular-nums">{ordinal(rank)}</span>
               ) : (
@@ -521,7 +516,7 @@ function RunStrip({
       <button
         type="button"
         onClick={onJump}
-        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+        className="inline-flex items-center gap-1 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700"
       >
         {jumpLabel}
         <ArrowRight className="h-3.5 w-3.5" />
@@ -577,11 +572,9 @@ function NotInRun({
 }) {
   return (
     <span className="flex flex-col items-start gap-1.5">
-      <span className="inline-flex rounded-md bg-brand-bg px-2 py-0.5 text-[11px] font-semibold text-brand-muted-fg">
-        {YOURS_NOT_IN_RUN}
-      </span>
+      <span className="chip">{YOURS_NOT_IN_RUN}</span>
       {watched ? (
-        <span className="inline-flex items-center gap-1 text-xs font-normal text-brand-primary">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-up">
           <Check className="h-3.5 w-3.5 shrink-0" />
           {YOURS_ON_WATCHLIST}
         </span>
@@ -590,9 +583,9 @@ function NotInRun({
           type="button"
           disabled={adding}
           onClick={() => onAdd(ticker, assetId)}
-          className="inline-flex items-center gap-1 rounded-full border border-brand-border/60 bg-brand-card px-2.5 py-1 text-xs font-semibold text-brand-fg transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary disabled:opacity-60"
+          className="as-btn as-btn-sm as-btn-secondary disabled:opacity-60"
         >
-          <Plus className="h-3.5 w-3.5 text-brand-primary" />
+          <Plus className="h-3.5 w-3.5 text-forest-700" />
           {adding ? YOURS_ADDING : YOURS_ADD_WATCHLIST}
         </button>
       ) : null}

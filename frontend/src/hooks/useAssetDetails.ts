@@ -9,6 +9,8 @@ export function useAssetDetails(ticker: string | undefined) {
   const [latestRunCreatedAt, setLatestRunCreatedAt] = useState<string | null>(
     null,
   );
+  // How many assets the latest run ranked, for "1st of 30". Null when unknown.
+  const [runSize, setRunSize] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Paper Trading State
@@ -67,14 +69,23 @@ export function useAssetDetails(ticker: string | undefined) {
           //    reported "no recent analysis" for an asset that was sitting at #1 on
           //    the dashboard. Duplicates arise when two analyses for the same user
           //    race (observed 26ms apart). Take the newest row and surface errors.
-          const { data: recData, error: recError } = await supabase
-            .from("ai_recommendation")
-            .select("*")
-            .eq("run_id", latestRun.id)
-            .eq("asset_id", assetData.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          //    The run's size comes alongside, counted the way the Stocks page
+          //    counts it, so "1st of 30" here matches "30 stocks scored" there.
+          const [{ data: recData, error: recError }, { count }] = await Promise.all([
+            supabase
+              .from("ai_recommendation")
+              .select("*")
+              .eq("run_id", latestRun.id)
+              .eq("asset_id", assetData.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+            supabase
+              .from("ai_recommendation")
+              .select("id", { count: "exact", head: true })
+              .eq("run_id", latestRun.id),
+          ]);
+          setRunSize(count ?? null);
 
           if (recError) {
             console.warn(
@@ -85,6 +96,7 @@ export function useAssetDetails(ticker: string | undefined) {
           setRecommendation(recData ?? null);
         } else {
           setRecommendation(null);
+          setRunSize(null);
         }
       } catch (error) {
         console.error("Error fetching asset details:", error);
@@ -135,5 +147,6 @@ export function useAssetDetails(ticker: string | undefined) {
     isBuying,
     buySuccess,
     latestRunCreatedAt,
+    runSize,
   };
 }

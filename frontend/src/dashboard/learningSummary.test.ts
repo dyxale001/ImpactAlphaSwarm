@@ -65,9 +65,9 @@ describe("dashboard Learning integration", () => {
     empty.categories = [];
     context.value = deriveDashboardLearning(empty, [], undefined, false, false);
     expect(render(LearningNextWidget)).toContain("No learning content available yet.");
-    expect(render(LearningNextWidget)).not.toContain("finished every article");
+    expect(render(LearningNextWidget)).not.toContain("finished every lesson");
     context.value = deriveDashboardLearning(data(["COMPLETED", "COMPLETED", "COMPLETED"]), [], undefined, false, false);
-    expect(render(LearningNextWidget)).toContain("finished every article");
+    expect(render(LearningNextWidget)).toContain("finished every lesson");
   });
   it("keeps fetch errors distinct from loading and empty content", () => {
     context.value = deriveDashboardLearning(null, null, undefined, true, false);
@@ -76,6 +76,6 @@ describe("dashboard Learning integration", () => {
     const html = render(LearningNextWidget);
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading widget content");
-    expect(html).not.toContain("finished every article");
+    expect(html).not.toContain("finished every lesson");
   });
 });

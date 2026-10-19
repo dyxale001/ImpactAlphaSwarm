@@ -40,10 +40,10 @@ export const CONVERGENCE_DETAIL: Record<ConvergenceState, string> = {
  *  confidence, not a sell signal; the others stay deliberately muted so the card
  *  never reads as a traffic light. */
 export const CONVERGENCE_TONE: Record<ConvergenceState, string> = {
-  agree_strongly: "bg-brand-primary/15 text-brand-primary",
-  lean_together: "bg-brand-primary/10 text-brand-primary",
-  mixed: "bg-slate-500/15 text-slate-400",
-  conflict: "bg-semantic-warning/15 text-semantic-warning",
+  agree_strongly: "bg-up-bg text-up",
+  lean_together: "bg-forest-50 text-forest-700",
+  mixed: "bg-forest-50 text-brand-muted-fg",
+  conflict: "bg-caution-bg text-caution",
 };
 
 // Tones for the scorecard's on-dark variant (the forest hero card): the
@@ -52,7 +52,7 @@ export const CONVERGENCE_TONE_ON_DARK: Record<ConvergenceState, string> = {
   agree_strongly: "bg-brand-accent/15 text-brand-accent",
   lean_together: "bg-brand-accent/10 text-brand-accent",
   mixed: "bg-white/10 text-brand-bg/70",
-  conflict: "bg-semantic-warning/15 text-semantic-warning",
+  conflict: "bg-caution-bg text-caution",
 };
 
 export type TermKey =
@@ -69,7 +69,7 @@ export const TERM_COPY: Record<
     label: "Signal strength",
     question: "How strongly do the measurements lean?",
     detail:
-      "How far the combined price and tone measurements sit from neutral. A high reading means the inputs are saying something definite; a low one means they are close to neutral. Direction is shown separately; strength alone says nothing about which way.",
+      "Where the price and news/social tone measurements sit when combined half and half, from unfavourable to favourable. The middle is neutral: the more both lean favourable, the higher the reading, and the more they lean unfavourable, the lower, so the most unfavourable stocks sit at the bottom.",
   },
   convergence: {
     label: "Agreement",
@@ -87,7 +87,7 @@ export const TERM_COPY: Record<
     label: "Fit with your profile",
     question: "Does it match what you told us?",
     detail:
-      "How the stock's market volatility compares with the risk preference you set during onboarding. This only ever moves a stock DOWN when it is more volatile than you asked for; it never promotes anything. It reflects your own stated preference, not a view on the stock.",
+      "Whether the stock's beta (how sharply it tends to move with the market) suits the risk preference you set during onboarding. It only applies to a Conservative profile, where a stock with a beta above 1.2 moves DOWN; it never promotes anything. It reflects your own stated preference, not a view on the stock.",
   },
 };
 

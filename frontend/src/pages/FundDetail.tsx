@@ -1,4 +1,4 @@
-import LearnMore from '../components/learning/LearnMore';
+import LearnPopover from '../components/learning/LearnPopover';
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -13,7 +13,6 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import FundTracePanel from "../components/funds/FundTracePanel";
-import RiskScale from "../components/funds/RiskScale";
 import StalenessChip from "../components/funds/StalenessChip";
 import FundsNotice from "../components/funds/FundsNotice";
 import FundDetailSkeleton from "../components/funds/FundDetailSkeleton";
@@ -29,6 +28,8 @@ import { COMPARE_ENABLED } from "../utils/compareFlags";
 import { compareHref } from "../utils/compareUrl";
 import {
   AS_AT,
+  DETAIL_CURATION_LABEL,
+  RISK_SCALE_TITLE,
   COST_LABEL,
   COST_PER_YEAR,
   COST_TER_LABEL,
@@ -60,9 +61,6 @@ import {
   DETAIL_OBJECTIVE_ATTRIB,
   DETAIL_OBJECTIVE_TITLE,
   DETAIL_PLATFORM_FEE_NOTE,
-  DETAIL_PROVENANCE_GAPS,
-  DETAIL_PROVENANCE_MANUAL,
-  DETAIL_PROVENANCE_TITLE,
   DETAIL_REG28_LABEL,
   DETAIL_REG28_NO,
   DETAIL_REG28_YES,
@@ -292,8 +290,15 @@ export function FundDetailView({
     <Shell>
       <BackLink to={back?.to} label={back?.label} />
 
-      <Hero fund={fund} asAt={asAt} compareTo={compareTo} adminHref={adminHref} badge={badge} />
-      <LearnMore context={`fund.${active}`} />
+      <Hero
+        fund={fund}
+        asAt={asAt}
+        compareTo={compareTo}
+        adminHref={adminHref}
+        badge={badge}
+        lessons={<LearnPopover context={`fund.${active}`} />}
+      />
+      <KeyFacts fund={fund} />
 
       {/* A fund with no sheet on file is not a thin page, it is a different
           statement, and it is made once at the top rather than implied by
@@ -311,7 +316,7 @@ export function FundDetailView({
           // self-start, not just inline-flex: a flex child stretches to the
           // full line width unless told otherwise, which turns the pill into a
           // page-wide bar.
-          className="inline-flex flex-wrap items-center gap-0.5 self-start rounded-full border border-brand-border/60 bg-brand-surface p-[3px]"
+          className="as-tabs self-start"
         >
           {available.map((key) => (
             <button
@@ -320,11 +325,7 @@ export function FundDetailView({
               role="tab"
               aria-selected={active === key}
               onClick={() => setTab(key)}
-              className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary ${
-                active === key
-                  ? "bg-brand-accent font-bold text-brand-fg"
-                  : "text-forest-500 hover:text-brand-fg"
-              }`}
+              className="as-tab"
             >
               {TAB_LABELS[key]}
             </button>
@@ -344,16 +345,6 @@ export function FundDetailView({
 
       {after}
 
-      {/* ── The statements the documents themselves require ──
-          Outside the tabs, on every tab. A page listing what a fund costs and
-          what it returned, with the statement that we are not licensed to
-          advise on it one click away, is the state the funds-list footer was
-          un-gated to prevent. The provenance block is in "The document"
-          because it explains the data; these two are not explanations. */}
-      <footer className="flex max-w-[90ch] flex-col gap-2 px-1 pt-2 text-xs leading-relaxed text-forest-500">
-        <p>{fund.disclaimer}</p>
-        <p>{fund.not_licensed}</p>
-      </footer>
     </Shell>
   );
 }
@@ -364,7 +355,7 @@ export function FundDetailView({
  *  funds page this is reached from is `max-w-7xl`. */
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="animate-fade-up mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
+    <div className="animate-fade-up mx-auto flex max-w-7xl flex-col gap-4 px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
       {children}
     </div>
   );
@@ -374,7 +365,7 @@ export function BackLink({ to = "/funds", label = DETAIL_BACK }: { to?: string; 
   return (
     <Link
       to={to}
-      className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-forest-500 transition-colors hover:text-brand-primary"
+      className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-forest-900"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       {label}
@@ -383,17 +374,15 @@ export function BackLink({ to = "/funds", label = DETAIL_BACK }: { to?: string; 
 }
 
 /**
- * The identity, the classification, and the figures a reader came to check.
+ * The identity, the classification, and the figures a reader came to check,
+ * laid out the way the stock page's header is so the two detail pages read as
+ * one family: name and badges, a classification line, one large figure, the
+ * one-line note, and on the right the source's date with the actions.
  *
- * On the same forest ground as the funds hub this page is reached from, so the
- * two read as one section rather than as two products. The risk scale leads
- * the panel beside the name because it is the only field the matcher reads,
- * and a reader who came from a matched card arrives asking about exactly that.
- *
- * The cost, size, term and Regulation 28 sit with it. They used to be an "At a
- * glance" tile a third of the way down the Overview, so the page opened on a
- * name and a paragraph and the figures that answer "what is this fund" came
- * after both. Each one is still dated, by the strip under the panel.
+ * What fills each slot is the fund's own. Where a stock leads with its price,
+ * a fund leads with what it costs a year, the most comparable disclosed figure
+ * and the one a beginner cannot read unaided. Where a stock shows whether its
+ * market is open, a fund shows how fresh its fact sheet is.
  */
 function Hero({
   fund,
@@ -401,16 +390,17 @@ function Hero({
   compareTo,
   adminHref,
   badge,
+  lessons,
 }: {
   fund: CatalogueFundDetail;
   asAt: string | null;
   compareTo: string | null;
   adminHref: string | null;
   badge?: React.ReactNode;
+  /** The header's book button, for the lessons on the active tab. */
+  lessons?: React.ReactNode;
 }) {
   const tiers = fund.asisa_category ? splitAsisaCategory(fund.asisa_category) : null;
-  // House and classification, whichever are known: a reader's uploaded fund
-  // may carry neither.
   const classification = tiers
     ? `${tiers.geography} · ${tiers.assetClass} · ${tiers.focus}`
     : fund.asisa_category;
@@ -418,120 +408,98 @@ function Hero({
   // says so, because it lands on an index of hundreds rather than this fund.
   const factSheetUrl = fund.mdd_url ?? fund.mdd_page_url;
   const linksToDocument = Boolean(fund.mdd_url);
+  const tic = formatPercent(fund.tic);
+  const ter = formatPercent(fund.ter);
 
   return (
-    <header className="hero-card overflow-hidden px-4 pb-5 pt-6 sm:px-8 sm:pt-8">
-      <div className="relative flex flex-col gap-5">
-        {/* The same three badges the fund card carries, styled the same way
-            round: vehicle plain, tracker outlined, the accent fill spent on
-            tax-free eligibility alone. Regulation 28 is a published fact and
-            lives with the other published facts, not up here twice. */}
+    <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+      <div className="min-w-0 flex-[1_1_360px]">
+        {/* The same badges the fund card carries: vehicle plain, tracker
+            outlined, the accent fill spent on tax-free eligibility alone. */}
         <div className="flex flex-wrap items-center gap-1.5">
           {badge}
-          {fund.vehicle && (
-            <span className="chip bg-white/12 text-lime-100">
-              {VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}
-            </span>
-          )}
+          {fund.vehicle && <span className="chip">{VEHICLE_LABEL[fund.vehicle] ?? fund.vehicle}</span>}
           {fund.is_index_tracker && (
-            <span className="chip border border-dashed border-lime-100/40 text-lime-100">
+            <span className="chip border border-dashed border-forest-500/60 bg-transparent text-forest-600">
               {TRACKER_BADGE}
             </span>
           )}
-          {fund.tfsa_eligible && (
-            <span className="chip bg-brand-accent text-brand-fg">{TFSA_BADGE}</span>
-          )}
+          {fund.tfsa_eligible && <span className="chip chip-accent">{TFSA_BADGE}</span>}
         </div>
-        <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
-          <div className="flex min-w-0 flex-[3_1_26rem] flex-col gap-2">
-            <h1 className="text-balance text-2xl font-bold leading-tight tracking-[-0.02em] text-white lg:text-[32px]">
-              {fund.name}
-            </h1>
-
-            {/* The geography carries the weight: a reader cannot tell a South
-                African fund from a global one by its name, and the classification
-                is the only place this page says so. */}
-            {(fund.fund_house || classification) && (
-              <p className="text-sm font-semibold text-lime-100/85">
-                {fund.fund_house}
-                {classification && (
-                  <span className="font-normal text-lime-100/65">
-                    {fund.fund_house ? ` · ${classification}` : classification}
-                  </span>
-                )}
-              </p>
+        <h1 className="mt-2 text-balance text-2xl font-bold tracking-[-0.02em] text-forest-900 lg:text-3xl">
+          {fund.name}
+        </h1>
+        {/* The manager, then the classification with the geography first: a
+            reader cannot tell a South African fund from a global one by its name. */}
+        {(fund.fund_house || classification) && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs font-semibold text-forest-900">
+            {fund.fund_house && <span>{fund.fund_house}</span>}
+            {fund.fund_house && classification && (
+              <span aria-hidden="true" className="font-bold text-forest-700">|</span>
             )}
-
-            {fund.vehicle_note && (
-              <p className="mt-1 max-w-[60ch] text-[13px] leading-relaxed text-lime-100/65">
-                {fund.vehicle_note}
-              </p>
-            )}
-
-            {/* The fact sheet is the page's source, so reading it is the main
-                action rather than a link in the footer strip. Compare sits
-                beside it in the stock page's words, set for the dark header. */}
-            {(factSheetUrl || compareTo) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {factSheetUrl && (
-                  <a
-                    href={factSheetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-accent px-4 py-2 text-[13px] font-bold text-brand-fg transition-colors hover:bg-lime-400 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  >
-                    {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-                {compareTo && (
-                  <Link
-                    to={compareTo}
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-lime-100/30 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:border-brand-accent/60 hover:bg-white/10 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-                  >
-                    <Columns2 className="h-4 w-4 text-brand-accent" />
-                    Compare with…
-                  </Link>
-                )}
-              </div>
-            )}
-          </div>
-
-          <KeyFacts fund={fund} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-lime-100/15 pt-3.5 text-xs text-lime-100/70">
-          {asAt && (
-            <span className="flex flex-wrap items-center gap-1.5">
-              <span className="tabular-nums">
-                {AS_AT} {asAt}
-              </span>
-              <StalenessChip asOf={fund.as_of} onDark />
+            {classification && <span>{classification}</span>}
+          </p>
+        )}
+        {(tic || ter) && (
+          <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-forest-900">
+            <span className="text-2xl font-bold tabular-nums tracking-[-0.02em] lg:text-3xl">{tic ?? ter}</span>
+            <span className="text-sm text-brand-muted-fg">
+              {tic ? COST_LABEL : COST_TER_LABEL} {COST_PER_YEAR}
             </span>
+          </p>
+        )}
+        {fund.vehicle_note && (
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-muted-fg">{fund.vehicle_note}</p>
+        )}
+      </div>
+
+      <div className="flex flex-col items-start gap-3 lg:items-end">
+        {/* How fresh the source is, where the stock page shows its market. */}
+        {asAt && (
+          <span className="flex flex-wrap items-center gap-2 text-xs text-brand-muted-fg">
+            <span className="tabular-nums">
+              {AS_AT} {asAt}
+            </span>
+            <StalenessChip asOf={fund.as_of} />
+          </span>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {factSheetUrl && (
+            <a href={factSheetUrl} target="_blank" rel="noopener noreferrer" className="as-btn as-btn-sm as-btn-primary">
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              {linksToDocument ? FACT_SHEET_ACTION : FACT_SHEET_PAGE_ACTION}
+            </a>
           )}
-          {fund.available_on && <span>{fund.available_on}</span>}
-          {adminHref && (
-            <Link
-              to={adminHref}
-              className="inline-flex items-center gap-1 font-bold text-brand-accent hover:underline"
-            >
-              <Pencil className="h-3 w-3" />
-              {DETAIL_ADMIN_EDIT}
+          {compareTo && (
+            <Link to={compareTo} className="as-btn as-btn-sm as-btn-secondary">
+              <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Compare with…
             </Link>
           )}
+          {lessons}
         </div>
+        {(fund.available_on || adminHref) && (
+          <span className="flex flex-wrap items-center gap-3 text-xs text-brand-muted-fg">
+            {fund.available_on && <span>{fund.available_on}</span>}
+            {adminHref && (
+              <Link to={adminHref} className="inline-flex items-center gap-1 font-bold text-forest-700 hover:underline">
+                <Pencil className="h-3 w-3" aria-hidden="true" />
+                {DETAIL_ADMIN_EDIT}
+              </Link>
+            )}
+          </span>
+        )}
       </div>
     </header>
   );
 }
 
-/** The risk scale and the published headline figures, beside the fund's name.
- *  Each figure appears only when the sheet states it, so a thin sheet gives a
- *  shorter panel rather than a grid of dashes. */
+/** The published headline figures under the header, as tiles: the risk scale
+ *  first (the only field the matcher reads), then size, term, Regulation 28 and
+ *  income. Each appears only when the sheet states it. The cost is the header's
+ *  large figure, so it is not repeated here. */
 function KeyFacts({ fund }: { fund: CatalogueFundDetail }) {
   const snapshot = fund.snapshot;
-  const tic = formatPercent(fund.tic);
-  const ter = formatPercent(fund.ter);
   const size = formatFundSize(fund.fund_size_zar);
   const minTerm = formatMinTerm(fund.recommended_min_term_years);
   const reg28 =
@@ -541,62 +509,44 @@ function KeyFacts({ fund }: { fund: CatalogueFundDetail }) {
         ? DETAIL_REG28_YES
         : DETAIL_REG28_NO;
 
-  const headline: { label: string; value: string; suffix?: string; accent?: boolean }[] = [];
-  if (tic || ter) {
-    headline.push({
-      label: tic ? COST_LABEL : COST_TER_LABEL,
-      value: (tic ?? ter) as string,
-      suffix: COST_PER_YEAR,
-      accent: true,
-    });
-  }
-  if (size) headline.push({ label: DETAIL_SIZE_LABEL, value: size });
-
-  const plain: { label: string; value: string }[] = [];
-  if (minTerm) plain.push({ label: MIN_TERM_LABEL, value: minTerm });
-  if (reg28) plain.push({ label: DETAIL_REG28_LABEL, value: reg28 });
+  const facts: { label: string; value: string }[] = [];
+  if (size) facts.push({ label: DETAIL_SIZE_LABEL, value: size });
+  if (minTerm) facts.push({ label: MIN_TERM_LABEL, value: minTerm });
+  if (reg28) facts.push({ label: DETAIL_REG28_LABEL, value: reg28 });
   if (fund.distribution_frequency) {
-    plain.push({ label: DETAIL_DISTRIBUTION_LABEL, value: fund.distribution_frequency });
+    facts.push({ label: DETAIL_DISTRIBUTION_LABEL, value: fund.distribution_frequency });
   }
 
   return (
-    <section
-      aria-label={DETAIL_KEY_FACTS_LABEL}
-      className="flex min-w-0 flex-[2_1_20rem] flex-col gap-4 rounded-xl border border-lime-100/12 bg-white/5 p-5"
-    >
-      <RiskScale
-        level={fund.risk_level}
-        label={fund.risk_label}
-        note={fund.risk_note ?? (snapshot ? RISK_UNPUBLISHED_NOTE : RISK_NO_SHEET_NOTE)}
-        onDark
-      />
-      {headline.length + plain.length > 0 && (
-        <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-t border-lime-100/12 pt-4">
-          {headline.map((fact) => (
-            <div key={fact.label} className="min-w-0">
-              <dt className="text-[11px] text-lime-100/65">{fact.label}</dt>
-              <dd
-                className={`mt-1 text-2xl font-bold leading-none tracking-[-0.02em] tabular-nums ${
-                  fact.accent ? "text-brand-accent" : "text-white"
-                }`}
-              >
-                {fact.value}
-                {fact.suffix && (
-                  <span className="ml-1 text-xs font-medium tracking-normal text-lime-100/65">
-                    {fact.suffix}
-                  </span>
-                )}
-              </dd>
+    <section aria-label={DETAIL_KEY_FACTS_LABEL} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="as-inset col-span-2 flex flex-col justify-center gap-2 p-4 sm:col-span-1">
+        {fund.risk_level != null ? (
+          <>
+            <p className="text-xs text-brand-muted-fg">{RISK_SCALE_TITLE}</p>
+            <div className="flex gap-1" role="img" aria-label={`Risk level ${fund.risk_level} of 5`}>
+              {[1, 2, 3, 4, 5].map((step) => (
+                <span
+                  key={step}
+                  className={`h-1.5 flex-1 rounded-full ${step <= fund.risk_level! ? "bg-brand-accent" : "bg-forest-900/10"}`}
+                />
+              ))}
             </div>
-          ))}
-          {plain.map((fact) => (
-            <div key={fact.label} className="min-w-0">
-              <dt className="text-[11px] text-lime-100/65">{fact.label}</dt>
-              <dd className="mt-1 text-[15px] font-bold text-white">{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+            <p className="text-sm font-bold text-forest-900">
+              {fund.risk_level} of 5{fund.risk_label ? ` · ${fund.risk_label}` : ""}
+            </p>
+          </>
+        ) : (
+          <p className="text-xs leading-relaxed text-brand-muted-fg">
+            {fund.risk_note ?? (snapshot ? RISK_UNPUBLISHED_NOTE : RISK_NO_SHEET_NOTE)}
+          </p>
+        )}
+      </div>
+      {facts.map((fact) => (
+        <div key={fact.label} className="as-inset flex flex-col gap-1 p-4">
+          <p className="text-xs text-brand-muted-fg">{fact.label}</p>
+          <p className="text-lg font-bold tabular-nums tracking-[-0.01em] text-forest-900">{fact.value}</p>
+        </div>
+      ))}
     </section>
   );
 }
@@ -643,7 +593,14 @@ function Overview({
             // An older backend, or the unavailable notice: one paragraph.
             <p className="text-sm leading-relaxed text-forest-600">{fund.why_this_appears}</p>
           )}
-          {fund.curation_rule && <Fine rule>{fund.curation_rule}</Fine>}
+          {/* The catalogue rule arrives as a lowercase list of reasons; said as
+              a sentence with its own label so it does not read as a fragment. */}
+          {fund.curation_rule && (
+            <Fine rule>
+              <span className="font-semibold text-forest-900">{DETAIL_CURATION_LABEL}</span>{" "}
+              {fund.curation_rule.charAt(0).toUpperCase() + fund.curation_rule.slice(1).replace(/\.?$/, ".")}
+            </Fine>
+          )}
         </Tile>
       )}
 
@@ -660,7 +617,7 @@ function Overview({
               {/* One number leads, because one number is comparable across every
                   fund in the catalogue. The parts of it follow. */}
               <div>
-                <p className="text-4xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-brand-primary">
+                <p className="text-3xl font-bold leading-none tracking-[-0.02em] tabular-nums text-forest-900">
                   {tic ?? ter}
                 </p>
                 <p className="mt-1.5 text-xs text-forest-500">
@@ -759,14 +716,14 @@ function WhyRows({
           key={row.key}
           className="flex flex-wrap gap-x-5 gap-y-1 border-t border-brand-border/40 py-3 first:border-t-0 first:pt-1"
         >
-          <dt className="w-32 shrink-0 text-[13px] font-semibold text-forest-500">{row.label}</dt>
+          <dt className="w-32 shrink-0 text-xs font-semibold text-brand-muted-fg">{row.label}</dt>
           <dd className="min-w-0 max-w-[65ch] flex-1 basis-72 text-sm leading-relaxed text-forest-900">
             {row.text}
             {row.key === "performance" && onSeeFigures && (
               <button
                 type="button"
                 onClick={onSeeFigures}
-                className="ml-1.5 inline-flex items-center gap-1 text-[13px] font-bold text-brand-primary underline decoration-brand-primary/35 underline-offset-[3px] transition-colors hover:decoration-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+                className="ml-1.5 inline-flex items-center gap-1 text-sm font-bold text-forest-700 underline decoration-brand-primary/35 underline-offset-[3px] transition-colors hover:decoration-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
               >
                 {DETAIL_SEE_FIGURES}
                 <ArrowRight className="h-3 w-3" />
@@ -807,12 +764,12 @@ function CostRow({
   return (
     <div className={`flex items-center gap-2 ${sub ? "pl-[18px]" : ""}`}>
       {swatch && <span className={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${swatch}`} aria-hidden="true" />}
-      <dt className={`flex-1 ${sub ? "text-xs text-forest-500" : "text-[13px] text-forest-900"}`}>
+      <dt className={`flex-1 ${sub ? "text-xs text-brand-muted-fg" : "text-sm text-forest-900"}`}>
         {label}
       </dt>
       <dd
         className={`tabular-nums ${
-          sub ? "text-[13px] font-semibold text-forest-500" : "text-sm font-bold text-brand-primary"
+          sub ? "text-xs font-semibold text-brand-muted-fg" : "text-sm font-bold text-forest-900"
         }`}
       >
         {value}
@@ -862,10 +819,10 @@ function Figures({
           manager can strike a price on a different day. */}
       {nav && (
         <Tile span={SPAN.half} title={DETAIL_NAV_LABEL}>
-          <p className="text-[28px] font-bold leading-none tracking-[-0.02em] tabular-nums text-brand-primary">
+          <p className="text-2xl font-bold leading-none tracking-[-0.02em] tabular-nums text-forest-900">
             {nav}
           </p>
-          {navDate && <p className="text-[11px] text-forest-500">{`Struck on ${navDate}`}</p>}
+          {navDate && <p className="text-xs text-brand-muted-fg">{`Struck on ${navDate}`}</p>}
           <Fine rule>{DETAIL_NAV_NOTE}</Fine>
         </Tile>
       )}
@@ -882,7 +839,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
   return (
     <div className="bento-grid grid-flow-row-dense">
       <Tile span={SPAN.wide} title={DETAIL_FACTS_TITLE}>
-        <dl className="flex flex-col gap-2.5">
+        <dl className="flex flex-col divide-y divide-forest-900/8">
           {/* The management company, not just the brand: it is the party that
               issues the fact sheet, and for a co-named boutique fund the two
               are different companies. */}
@@ -906,9 +863,9 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
             {fund.snapshot_history.map((entry) => (
               <li
                 key={entry.as_of}
-                className="flex items-center justify-between gap-3 border-b border-brand-border/30 py-1.5 text-xs last:border-0"
+                className="flex items-center justify-between gap-3 border-b border-forest-900/8 py-2.5 text-sm last:border-0"
               >
-                <span className="tabular-nums text-forest-600">
+                <span className="tabular-nums text-forest-900">
                   {formatAsAt(entry.as_of) ?? entry.as_of}
                 </span>
                 {entry.mdd_url && (
@@ -916,7 +873,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
                     href={entry.mdd_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1 font-semibold text-brand-primary hover:underline"
+                    className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-forest-700 hover:underline"
                   >
                     {FACT_SHEET_ACTION}
                     <ExternalLink className="h-3 w-3" />
@@ -929,12 +886,7 @@ function Document({ fund, provenance }: { fund: CatalogueFundDetail; provenance?
         </Tile>
       )}
 
-      {provenance ?? (
-        <Tile span={SPAN.full} title={DETAIL_PROVENANCE_TITLE}>
-          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_MANUAL}</p>
-          <p className="text-xs leading-relaxed text-forest-600">{DETAIL_PROVENANCE_GAPS}</p>
-        </Tile>
-      )}
+      {provenance}
     </div>
   );
 }
@@ -951,8 +903,8 @@ function Tile({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${span}`}>
-      <h2 className="text-base font-bold text-brand-primary">{title}</h2>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${span}`}>
+      <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{title}</h2>
       {children}
     </section>
   );
@@ -963,8 +915,8 @@ function Tile({
 function Fine({ children, rule = false }: { children: React.ReactNode; rule?: boolean }) {
   return (
     <p
-      className={`text-xs leading-relaxed text-forest-500 ${
-        rule ? "mt-auto border-t border-brand-border/40 pt-3" : ""
+      className={`text-xs leading-relaxed text-brand-muted-fg ${
+        rule ? "mt-auto border-t border-forest-900/8 pt-3" : ""
       }`}
     >
       {children}
@@ -988,11 +940,11 @@ function Quote({ label, children }: { label: string; children: React.ReactNode }
 /** A label and its value on one line, for a tile's list of published facts. */
 function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-[11px] text-forest-500">{label}</dt>
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="text-xs text-brand-muted-fg">{label}</dt>
       <dd
-        className={`min-w-0 text-right text-xs font-semibold text-brand-primary ${
-          mono ? "font-mono text-[11px]" : ""
+        className={`min-w-0 text-right text-sm font-semibold text-forest-900 ${
+          mono ? "font-mono tabular-nums" : ""
         }`}
       >
         {value}

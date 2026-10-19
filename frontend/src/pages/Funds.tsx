@@ -1,16 +1,13 @@
-import LearnMore from '../components/learning/LearnMore';
-import { useCallback, useMemo, useState } from "react";
+import AboutThisPage from "../components/guidance/AboutThisPage";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ChevronDown,
-  Info,
   Landmark,
   Layers,
   Search,
-  SlidersHorizontal,
 } from "lucide-react";
-import AboutFundModal from "../components/funds/AboutFundModal";
 import FundCard from "../components/funds/FundCard";
 import FundFilters from "../components/funds/FundFilters";
 import FundsNotice from "../components/funds/FundsNotice";
@@ -18,11 +15,9 @@ import FundsSkeleton from "../components/funds/FundsSkeleton";
 import CategoryNavigator from "../components/funds/CategoryNavigator";
 import CompleteProfilePrompt from "../components/funds/CompleteProfilePrompt";
 import MatchInputs from "../components/funds/MatchInputs";
-import TiersMotif from "../components/funds/TiersMotif";
 import MyFundsPanel from "../components/funds/uploads/MyFundsPanel";
 import { useFundCatalogue, useFundCatalogueMeta, useFundMatches } from "../hooks/useFundCatalogue";
 import { useUploadedFunds } from "../hooks/useFundUploads";
-import { COMPARE_ENABLED } from "../utils/compareFlags";
 import { FUND_UPLOADS_ENABLED } from "../utils/fundsFlags";
 import { MY_FUNDS_TAB } from "../utils/fundUploadsCopy";
 import {
@@ -33,7 +28,6 @@ import {
   EMPTY_FILTERED,
   EMPTY_FILTERED_TITLE,
   FILTER_CLEAR_ALL,
-  FUND_ABOUT_BUTTON,
   FUNDS_HEADER_EYEBROW,
   FUNDS_HEADER_STRIP,
   FUNDS_TABS_LABEL,
@@ -89,8 +83,6 @@ const BROWSE_ID = "browse-funds";
 export default function FundsPage() {
   const [filters, setFilters] = useState<CatalogueFilters>({});
   const [showAll, setShowAll] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
-  const closeAbout = useCallback(() => setShowAbout(false), []);
   const meta = useFundCatalogueMeta();
   const { data, funds, isLoading, error } = useFundCatalogue(filters);
   const matchState = useFundMatches();
@@ -144,45 +136,27 @@ export default function FundsPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pt-10">
-      {/* ── Header ── */}
-      <div className="hero-card overflow-hidden px-5 pb-10 pt-8 sm:px-7">
-        {/* h-10 on a phone keeps the branches inside the pb-10 band under the
-            copy. Stretched to h-full on a card that narrow, they ran up through
-            the lead paragraph. */}
-        <TiersMotif className="h-10 sm:h-full" />
-        <div className="relative">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-accent">
-            {meta.meta?.header.eyebrow ?? FUNDS_HEADER_EYEBROW}
-          </span>
-          <h1 className="mt-1 flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl">
-            <Landmark className="h-7 w-7 shrink-0 text-brand-accent" />
-            {meta.meta?.header.title ?? FUNDS_PAGE_TITLE}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
-            {FUNDS_PAGE_LEAD}
-          </p>
-          {/* Which market, which currency, and whether the rand figure is a
-              conversion — the question a reader of a stock page could not
-              answer. */}
-          <p className="mt-3 max-w-2xl text-xs leading-relaxed text-brand-bg/60">
-            {meta.meta?.header.strip ?? FUNDS_HEADER_STRIP}
-          </p>
-          {/* The same About pill as Compare and Market News, opening this page's
-              explainer. */}
-          <button
-            type="button"
-            onClick={() => setShowAbout(true)}
-            aria-haspopup="dialog"
-            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1.5 text-[11px] font-bold text-brand-fg transition-transform duration-[120ms] hover:bg-lime-400 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden />
-            {FUND_ABOUT_BUTTON}
-          </button>
+      {/* ── Header ──
+          The same title card as Stocks: title and "About this page" on top, the
+          market and currency footing underneath. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">{meta.meta?.header.eyebrow ?? FUNDS_HEADER_EYEBROW}</p>
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+              <Landmark className="h-7 w-7 shrink-0 text-brand-accent" />
+              {meta.meta?.header.title ?? FUNDS_PAGE_TITLE}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">{FUNDS_PAGE_LEAD}</p>
+          </div>
+          <AboutThisPage page="funds" learnContext="funds" className="shrink-0 self-start" />
         </div>
+        {/* Which market, which currency, and whether the rand figure is a
+            conversion — the question a reader of a stock page could not answer. */}
+        <p className="mt-6 border-t border-white/12 pt-5 text-xs leading-relaxed text-brand-bg/70">
+          {meta.meta?.header.strip ?? FUNDS_HEADER_STRIP}
+        </p>
       </div>
-      <LearnMore context="funds" className="mt-6" />
-
-      <AboutFundModal open={showAbout} onClose={closeAbout} compareEnabled={COMPARE_ENABLED} />
 
       {/* ── The two halves, one at a time ──
           Each tab carries its count, so a reader can see how much is on the
@@ -190,7 +164,9 @@ export default function FundsPage() {
       <div
         role="tablist"
         aria-label={FUNDS_TABS_LABEL}
-        className="mt-6 inline-flex max-w-full flex-wrap items-center gap-0.5 self-start rounded-full border border-brand-border/60 bg-brand-surface p-1"
+        // The shared tab pill; a grid with short labels on a phone, where the three
+        // full labels do not fit one row.
+        className="as-tabs mt-6 grid w-full grid-cols-3 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full"
       >
         <TabButton
           id="funds-tab-matched"
@@ -198,6 +174,7 @@ export default function FundsPage() {
           selected={tab === "matched"}
           onSelect={() => setTab("matched")}
           label={FUNDS_TAB_MATCHED}
+          short="Matched"
           count={matchState.isLoading ? null : matchState.matches.length}
         />
         <TabButton
@@ -206,6 +183,7 @@ export default function FundsPage() {
           selected={tab === "browse"}
           onSelect={() => setTab("browse")}
           label={FUNDS_TAB_BROWSE}
+          short="Browse"
           count={catalogueTotal}
         />
         {FUND_UPLOADS_ENABLED && (
@@ -215,6 +193,7 @@ export default function FundsPage() {
             selected={tab === "mine"}
             onSelect={() => setTab("mine")}
             label={MY_FUNDS_TAB}
+            short={MY_FUNDS_TAB}
             count={uploads.isLoading ? null : uploads.funds.length}
           />
         )}
@@ -235,14 +214,11 @@ export default function FundsPage() {
 
           <section className="flex flex-col gap-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h2 className="text-xl font-bold tracking-[-0.01em] text-brand-primary">
+              <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">
                 {matchState.sectionTitle ?? MATCHED_SECTION_TITLE}
               </h2>
               {matchState.matches.length > 0 && (
-                <p
-                  className="rounded-full bg-brand-accent px-2.5 py-0.5 text-xs font-bold tabular-nums text-brand-fg"
-                  aria-live="polite"
-                >
+                <p className="chip chip-accent tabular-nums" aria-live="polite">
                   {formatFundCount(matchState.matches.length)}
                 </p>
               )}
@@ -304,14 +280,15 @@ export default function FundsPage() {
         role="tabpanel"
         aria-labelledby="funds-tab-browse"
         hidden={tab !== "browse"}
-        className="mt-5 flex flex-col gap-4 rounded-brand border border-brand-border/40 bg-brand-bg/60 p-3 sm:p-5 lg:p-6"
+        className="mt-5 flex flex-col gap-5"
       >
+        {/* The filters in a card of their own, and the funds they narrow on the
+            page beneath, as the conservative design laid it out: fund cards are
+            never nested inside another card. */}
+        <div className="as-card flex flex-col gap-4 p-4 sm:p-6">
         <div className="flex flex-col gap-1">
-          <h2 className="flex items-center gap-2 text-xl font-bold tracking-[-0.01em] text-brand-primary">
-            <SlidersHorizontal className="h-[18px] w-[18px] shrink-0 text-lime-700" />
-            {BROWSE_TITLE}
-          </h2>
-          <p className="max-w-[60ch] text-[13px] leading-relaxed text-forest-500">{BROWSE_LEAD}</p>
+          <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{BROWSE_TITLE}</h2>
+          <p className="max-w-[60ch] text-xs leading-relaxed text-brand-muted-fg">{BROWSE_LEAD}</p>
         </div>
 
         <CategoryNavigator
@@ -323,13 +300,14 @@ export default function FundsPage() {
           onRetry={meta.reload}
         />
 
-        <div className="border-t border-brand-border/40 pt-4">
+        <div className="border-t border-forest-900/10 pt-4">
           <FundFilters
             meta={meta.meta}
             filters={filters}
             onPatch={patch}
             onClearAll={clearAll}
           />
+        </div>
         </div>
 
         {isLoading && <FundsSkeleton />}
@@ -355,7 +333,7 @@ export default function FundsPage() {
 
         {!isLoading && !error && funds.length > 0 && (
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold tabular-nums text-forest-500" aria-live="polite">
+            <p className="text-xs font-semibold tabular-nums text-brand-muted-fg" aria-live="polite">
               {formatFundCount(count, scope)}
             </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -367,7 +345,7 @@ export default function FundsPage() {
               <button
                 type="button"
                 onClick={() => setShowAll((open) => !open)}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-brand border border-brand-border/60 bg-brand-surface px-4 py-2.5 text-[13px] font-bold text-brand-primary transition-colors hover:border-brand-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+                className="inline-flex w-fit items-center gap-1.5 text-sm font-bold text-forest-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
               >
                 {showAll
                   ? SHOW_FEWER_ACTION
@@ -405,6 +383,7 @@ function TabButton({
   selected,
   onSelect,
   label,
+  short,
   count,
 }: {
   id: string;
@@ -412,6 +391,8 @@ function TabButton({
   selected: boolean;
   onSelect: () => void;
   label: string;
+  /** The phone label, for the three-column tab grid. */
+  short: string;
   count: number | null;
 }) {
   return (
@@ -422,22 +403,11 @@ function TabButton({
       aria-controls={panel}
       aria-selected={selected}
       onClick={onSelect}
-      className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary ${
-        selected
-          ? "bg-brand-accent font-bold text-brand-fg"
-          : "font-semibold text-forest-500 hover:bg-forest-50 hover:text-brand-fg"
-      }`}
+      className="as-tab px-2 sm:px-4"
     >
-      {label}
-      {count !== null && (
-        <span
-          className={`rounded-full px-2 py-px text-[11px] font-bold tabular-nums ${
-            selected ? "bg-brand-primary text-brand-accent" : "bg-forest-50 text-forest-500"
-          }`}
-        >
-          {count}
-        </span>
-      )}
+      <span className="sm:hidden">{short}</span>
+      <span className="hidden sm:inline">{label}</span>
+      {count !== null && <span className="as-tab-ct tabular-nums">{count}</span>}
     </button>
   );
 }

@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, GripVertical, X } from "lucide-react";
 import { SIZE_LABEL, type WidgetSize } from "../../../dashboard/layoutSchema";
 import type { WidgetDef } from "../../../dashboard/widgetRegistry";
+import { WidgetSlots } from "../widgets/widgetChrome";
 
 /**
  * The chrome around one widget: its title, and in edit mode the controls that
@@ -54,10 +55,15 @@ export default function WidgetFrame({
 }) {
   const reduceMotion = useReducedMotion();
   const Icon = def.icon;
+  // Two places in the header a widget fills from inside itself: the stock it
+  // watches (a picker, before the subtitle) and its way out to the full page
+  // (top right), so every card's header reads title, context, link.
+  const [subtitleSlot, setSubtitleSlot] = useState<HTMLElement | null>(null);
+  const [actionSlot, setActionSlot] = useState<HTMLElement | null>(null);
 
-  // A widget drawing its own surface (the top pick's forest hero) must not sit
-  // inside a second card, or it reads as a panel bolted onto a panel.
-  const surface = def.bare ? "" : "soft-card p-5";
+  // A widget drawing its own surface must not sit inside a second card, or it
+  // reads as a panel bolted onto a panel.
+  const surface = def.bare ? "" : "as-card p-5";
 
   return (
     <motion.section
@@ -68,23 +74,23 @@ export default function WidgetFrame({
         "relative flex h-full flex-col gap-3 transition-shadow",
         surface,
         isEditing
-          ? "rounded-2xl outline-2 outline-dashed outline-offset-2 outline-brand-accent"
+          ? "rounded-[20px] outline-2 outline-dashed outline-offset-2 outline-lime-600"
           : "",
-        isDropTarget && !isDragging ? "outline-brand-accent" : "",
+        isDropTarget && !isDragging ? "outline-forest-700" : "",
         isDragging ? "opacity-40" : "",
         isEditing ? "cursor-grab active:cursor-grabbing" : "",
       ].join(" ")}
     >
       {isEditing ? (
-        <header className="flex items-center gap-2 border-b border-brand-border/40 pb-2">
+        <header className="flex items-center gap-2 border-b border-forest-900/8 pb-2">
           {/* Decorative: the whole card is the drag target, so the grip is a
               signal that it can be dragged rather than the only place to grab. */}
           <GripVertical
             className="h-4 w-4 shrink-0 text-brand-muted-fg"
             aria-hidden="true"
           />
-          <Icon className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
-          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-brand-fg">
+          <Icon className="h-4 w-4 shrink-0 text-forest-700" />
+          <span className="min-w-0 flex-1 truncate text-sm font-bold text-forest-900">
             {def.title}
             {subtitle ? (
               <span className="font-normal text-brand-muted-fg"> · {subtitle}</span>
@@ -98,7 +104,7 @@ export default function WidgetFrame({
               onClick={() => onMove(index - 1)}
               disabled={index === 0}
               aria-label={`Move ${def.title} earlier`}
-              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-brand-bg hover:text-brand-fg disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
+              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-forest-50 hover:text-forest-900 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest-700"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
@@ -107,7 +113,7 @@ export default function WidgetFrame({
               onClick={() => onMove(index + 1)}
               disabled={index === total - 1}
               aria-label={`Move ${def.title} later`}
-              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-brand-bg hover:text-brand-fg disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
+              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-forest-50 hover:text-forest-900 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest-700"
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
@@ -120,7 +126,7 @@ export default function WidgetFrame({
                 onClick={onCycleSize}
                 aria-label={`Resize ${def.title}, currently ${size}`}
                 title={`Size: ${size}`}
-                className="rounded-full bg-brand-primary px-2 py-0.5 font-mono text-[10px] font-bold text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
+                className="chip chip-dark cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest-700"
               >
                 {SIZE_LABEL[size]}
               </button>
@@ -130,19 +136,25 @@ export default function WidgetFrame({
               type="button"
               onClick={onRemove}
               aria-label={`Remove ${def.title}`}
-              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-semantic-danger/10 hover:text-semantic-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-accent"
+              className="rounded-full p-1 text-brand-muted-fg transition-colors hover:bg-down-bg hover:text-down focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest-700"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
         </header>
       ) : !def.bare ? (
-        <header className="flex items-center gap-2">
-          <Icon className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-brand-muted-fg">
-            {def.title}
-            {subtitle ? <span className="normal-case tracking-normal"> · {subtitle}</span> : null}
-          </h2>
+        // The artifacts' card header: the title, a line saying what it is (with
+        // the stock picker in front of it on a ticker widget), and the way to
+        // the full page on the right.
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{def.title}</h2>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-brand-muted-fg">
+              <span ref={setSubtitleSlot} className="inline-flex empty:hidden" />
+              {def.sub ? <span>{def.sub}</span> : null}
+            </p>
+          </div>
+          <span ref={setActionSlot} className="inline-flex shrink-0 empty:hidden" />
         </header>
       ) : null}
 
@@ -161,7 +173,9 @@ export default function WidgetFrame({
         }`}
         inert={isEditing ? true : undefined}
       >
-        {children}
+        <WidgetSlots.Provider value={{ subtitle: isEditing ? null : subtitleSlot, action: isEditing ? null : actionSlot }}>
+          {children}
+        </WidgetSlots.Provider>
       </div>
     </motion.section>
   );

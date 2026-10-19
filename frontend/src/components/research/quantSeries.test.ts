@@ -148,7 +148,7 @@ describe("percentileReading (D-122)", () => {
   it("says which way is which for each row", () => {
     expect(percentileReading("stability", 82)).toMatch(/steadier price than about 8 in 10/);
     expect(percentileReading("stability", 18)).toMatch(/jumpier price than about 8 in 10/);
-    expect(percentileReading("momentum", 75)).toMatch(/stronger trend/);
+    expect(percentileReading("momentum", 75)).toMatch(/stronger rise/);
     expect(percentileReading("risk_adjusted_return", 30)).toMatch(/less return per unit/);
   });
 

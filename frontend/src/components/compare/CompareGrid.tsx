@@ -26,8 +26,10 @@ export interface CompareColumn {
 
 const Columns = createContext<CompareColumn[]>([]);
 
+// The measure, a column per pick, then a narrow column for the row's tag
+// ("Same", "Differs most"), so the tags line up rather than trail the labels.
 function gridStyle(n: number) {
-  return { gridTemplateColumns: `minmax(8rem, 12rem) repeat(${n}, minmax(0, 1fr))` };
+  return { gridTemplateColumns: `minmax(11rem, 30%) repeat(${n}, minmax(0, 1fr)) 7rem` };
 }
 
 /** The line a column is drawn with on the chart, as a small key. */
@@ -65,38 +67,31 @@ export function CompareGrid({
 }) {
   return (
     <Columns.Provider value={columns}>
-      <div className={`soft-card overflow-clip ${className}`}>
+      <div className={`as-card overflow-clip ${className}`}>
         {/* Header: wide screens only, pinned below the phone/tablet top bar (h-14),
             which is gone from lg up. On a phone each card names its picks. */}
         <div
-          className="hidden sm:grid sticky top-14 lg:top-0 z-10 gap-x-4 items-end px-4 py-3 bg-brand-bg border-b border-brand-border/50"
+          className="hidden sm:grid sticky top-14 lg:top-0 z-10 gap-x-4 items-end px-4 pb-2.5 pt-3 bg-white border-b border-forest-900/10"
           style={gridStyle(columns.length)}
         >
-          <span className="text-[10px] uppercase tracking-widest font-semibold text-brand-muted-fg">
-            Measure
-          </span>
+          <span className="text-xs font-semibold text-brand-muted-fg">Measure</span>
           {columns.map((c, i) => (
-            <div key={c.id} className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Swatch index={i} />
-                {c.href ? (
-                  <Link
-                    to={c.href}
-                    className="font-mono text-base font-bold text-brand-fg hover:text-brand-primary truncate"
-                  >
-                    {c.title}
-                  </Link>
-                ) : (
-                  <span className="font-mono text-base font-bold text-brand-fg truncate">{c.title}</span>
-                )}
-              </div>
-              {c.subtitle && (
-                <p className="text-[11px] text-brand-muted-fg truncate mt-0.5">{c.subtitle}</p>
+            // The line it is drawn with and its name, as the conservative table heads
+            // its columns; the full name is on hover, and on the picks above.
+            <div key={c.id} className="flex min-w-0 items-center gap-2" title={c.subtitle ?? undefined}>
+              <Swatch index={i} />
+              {c.href ? (
+                <Link to={c.href} className="truncate text-sm font-bold text-forest-900 hover:underline">
+                  {c.title}
+                </Link>
+              ) : (
+                <span className="truncate text-sm font-bold text-forest-900">{c.title}</span>
               )}
             </div>
           ))}
+          <span aria-hidden="true" />
         </div>
-        <div className="divide-y divide-brand-border/40">{children}</div>
+        <div className="divide-y divide-forest-900/8">{children}</div>
       </div>
     </Columns.Provider>
   );
@@ -104,11 +99,9 @@ export function CompareGrid({
 
 export function CompareSection({ title, aside }: { title: string; aside?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 px-4 py-2 bg-brand-bg/40">
-      <h3 className="text-[10px] uppercase tracking-widest font-semibold text-brand-primary">
-        {title}
-      </h3>
-      {aside && <span className="text-[10px] text-brand-muted-fg">{aside}</span>}
+    <div className="flex items-baseline justify-between gap-3 px-4 py-2 bg-forest-50">
+      <h3 className="text-xs font-bold text-brand-muted-fg">{title}</h3>
+      {aside && <span className="text-xs text-brand-muted-fg">{aside}</span>}
     </div>
   );
 }
@@ -117,11 +110,9 @@ export function CompareSection({ title, aside }: { title: string; aside?: ReactN
  *  a quiet outline for rows that are alike; neither says which side is preferable. */
 export function RowTag({ kind, children }: { kind: "differs" | "alike"; children: ReactNode }) {
   return kind === "differs" ? (
-    <span className="chip shrink-0 bg-brand-accent text-brand-fg">{children}</span>
+    <span className="chip chip-accent shrink-0">{children}</span>
   ) : (
-    <span className="inline-flex shrink-0 items-center rounded-md border border-dashed border-brand-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-muted-fg">
-      {children}
-    </span>
+    <span className="chip chip-line shrink-0">{children}</span>
   );
 }
 
@@ -130,60 +121,50 @@ export function CompareRow({
   tag,
   values,
   note,
-  emphasis = false,
 }: {
   label: string;
   tag?: ReactNode;
   values: ReactNode[];
   /** One line saying what the row means. Said once, under the values. */
   note?: ReactNode;
-  /** The row that differs most: a lime edge, so it is found at a glance. */
-  emphasis?: boolean;
 }) {
   const columns = useContext(Columns);
   return (
-    <div
-      className={`px-4 py-3 ${emphasis ? "shadow-[inset_3px_0_0_var(--color-lime-600)]" : ""}`}
-    >
-      {/* Wide: label, then a value under each column. */}
-      <div className="hidden sm:grid gap-x-4 items-start" style={gridStyle(columns.length)}>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-brand-muted-fg pt-0.5">
-          <span>{label}</span>
-          {tag}
+    <div className="px-4 py-3">
+      {/* Wide: the label with what it means under it, a value under each column,
+          and the row's tag at the end, as the conservative table lays it out. */}
+      <div className="hidden sm:grid gap-x-4 items-center" style={gridStyle(columns.length)}>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-forest-900">{label}</p>
+          {note && <p className="mt-0.5 text-xs leading-relaxed text-brand-muted-fg">{note}</p>}
         </div>
         {values.map((v, i) => (
-          <div key={columns[i]?.id ?? i} className="min-w-0 text-sm font-semibold text-brand-fg tabular-nums">
+          <div key={columns[i]?.id ?? i} className="min-w-0 text-sm font-semibold text-forest-900 tabular-nums">
             {v}
           </div>
         ))}
-        {note && (
-          <p
-            className="mt-2 max-w-3xl text-[11px] leading-relaxed text-brand-muted-fg"
-            style={{ gridColumn: "2 / -1" }}
-          >
-            {note}
-          </p>
-        )}
+        <div className="flex justify-end">{tag}</div>
       </div>
 
-      {/* Phone: one card per measure, each value beside its pick. */}
+      {/* Phone: one card per measure, each value beside its pick, with what the
+          measure means under its label as on a wide screen. */}
       <div className="sm:hidden space-y-2">
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-brand-muted-fg">
-          <span>{label}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-bold text-forest-900">{label}</span>
           {tag}
         </div>
+        {note && <p className="-mt-1 text-xs leading-relaxed text-brand-muted-fg">{note}</p>}
         <dl className="space-y-1.5">
           {values.map((v, i) => (
             <div key={columns[i]?.id ?? i} className="flex items-start justify-between gap-3">
-              <dt className="flex items-center gap-2 font-mono text-xs font-bold text-brand-fg shrink-0">
+              <dt className="flex items-center gap-2 text-xs font-bold text-forest-900 shrink-0">
                 <Swatch index={i} />
                 {columns[i]?.title}
               </dt>
-              <dd className="min-w-0 text-right text-sm font-semibold text-brand-fg tabular-nums">{v}</dd>
+              <dd className="min-w-0 text-right text-sm font-semibold text-forest-900 tabular-nums">{v}</dd>
             </div>
           ))}
         </dl>
-        {note && <p className="text-[11px] leading-relaxed text-brand-muted-fg">{note}</p>}
       </div>
     </div>
   );
@@ -194,7 +175,7 @@ export function Value({ main, sub }: { main: ReactNode; sub?: ReactNode }) {
   return (
     <span className="flex flex-col">
       <span>{main}</span>
-      {sub && <span className="text-[11px] font-normal text-brand-muted-fg">{sub}</span>}
+      {sub && <span className="text-xs font-normal text-brand-muted-fg">{sub}</span>}
     </span>
   );
 }

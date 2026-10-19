@@ -1,13 +1,15 @@
 import { Link } from "react-router-dom";
-import { Award, BookOpen, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, Trophy } from "lucide-react";
 import { useDashboardLearning } from "../../../dashboard/DashboardDataContext";
-import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { levelLabel } from "../../learning/LearningCard";
+import { WidgetEmpty, WidgetHeaderLink, WidgetLoading } from "./widgetChrome";
 
 // Learning widgets. The learning centre already tracks XP, quiz scores and
 // badges; these surface that progress next to the market data instead of behind
-// its own tab, which is where a reader is most likely to act on it.
+// its own tab, which is where a reader is most likely to act on it. Both are the
+// Learning page's two light top cards, in widget form.
 
-/** XP, badges and how far through the articles the reader is. */
+/** XP, badges and how far through the lessons the reader is. */
 export function LearningProgressWidget() {
   const { progress } = useDashboardLearning();
   if (progress.isLoading) return <WidgetLoading rows={2} />;
@@ -20,78 +22,57 @@ export function LearningProgressWidget() {
       : 0;
 
   return (
-    <div className="space-y-3">
-      {/* XP and the article bar go on the forest hero: they are the widget's
-          headline, and the accent bar against the dark surface shows progress
-          at a glance in a way a grey rule on white never did. */}
-      <div className="hero-card overflow-hidden p-4">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-2xl font-bold text-brand-bg">
+    <div className="flex flex-1 flex-col gap-4">
+      <WidgetHeaderLink to="/learning">Open</WidgetHeaderLink>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-2xl font-bold tabular-nums tracking-[-0.01em] text-forest-900">
             {learningXp.toLocaleString("en-GB")}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-accent">
-            Learning XP
-          </span>
+          </p>
+          <p className="text-xs text-brand-muted-fg">Learning XP</p>
         </div>
-
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] text-brand-bg/70">
-            <span>
-              {articlesCompleted} of {articlesTotal} articles
-            </span>
-            <span className="font-mono text-brand-accent">{pct}%</span>
-          </div>
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-white/15"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Articles completed"
-          >
-            <div
-              className="h-full rounded-full bg-brand-accent transition-[width] duration-500"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-2 rounded-2xl border border-brand-border/60 bg-brand-bg/55 px-3 py-2.5">
-        <span className="chip">
-          <Award className="h-2.5 w-2.5" />
+        <span className="chip chip-accent">
+          <Trophy className="h-3.5 w-3.5" aria-hidden="true" />
           {badgesEarned} of {badgesTotal} badges
         </span>
-
-        {earnedBadges.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {earnedBadges.slice(0, 6).map((badge) => (
-              <span
-                key={badge.id}
-                title={`${badge.name}: ${badge.description}`}
-                className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-brand-primary/25 bg-brand-primary/10"
-              >
-                {badge.icon_url ? (
-                  <img
-                    src={badge.icon_url}
-                    alt={badge.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <Sparkles className="h-3 w-3 text-brand-primary" />
-                )}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
 
-      <Link
-        to="/learning"
-        className="inline-block text-xs font-semibold text-brand-primary hover:underline"
-      >
-        Learning centre →
-      </Link>
+      <div>
+        <div className="flex items-baseline justify-between gap-2 text-sm">
+          <span className="font-semibold text-forest-900">Lessons completed</span>
+          <span className="tabular-nums text-brand-muted-fg">
+            {articlesCompleted} of {articlesTotal} · {pct}%
+          </span>
+        </div>
+        <div
+          className="mt-2 h-2 overflow-hidden rounded-full bg-forest-50"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Lessons completed"
+        >
+          <div className="h-full rounded-full bg-forest-700 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+
+      {earnedBadges.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {earnedBadges.slice(0, 6).map((badge) => (
+            <span
+              key={badge.id}
+              title={`${badge.name}: ${badge.description}`}
+              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-forest-50 text-forest-700"
+            >
+              {badge.icon_url ? (
+                <img src={badge.icon_url} alt={badge.name} className="h-full w-full object-cover" />
+              ) : (
+                <Trophy className="h-4 w-4" aria-hidden="true" />
+              )}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -107,12 +88,9 @@ export function LearningNextWidget() {
   if (!nextArticle) {
     return (
       <WidgetEmpty
-        message="You have finished every article in the learning centre."
+        message="You have finished every lesson in the learning centre."
         action={
-          <Link
-            to="/learning"
-            className="text-xs font-semibold text-brand-primary hover:underline"
-          >
+          <Link to="/learning" className="as-btn as-btn-sm as-btn-secondary">
             Review your badges
           </Link>
         }
@@ -121,48 +99,34 @@ export function LearningNextWidget() {
   }
 
   return (
-    <div className="space-y-3">
-      {/* The article sits on the forest hero the top pick uses. This widget is
-          a single recommendation rather than a list, so it can carry the dark
-          surface without competing with anything beside it — and it stops the
-          one piece of the dashboard asking to be read looking like a footnote
-          in grey on white. */}
-      <div className="hero-card overflow-hidden p-4">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-3.5 w-3.5 shrink-0 text-brand-accent" />
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-accent">
-            Up next
-          </p>
-        </div>
-
-        {/* Accent fill behind dark text: the chip's forest default would sink
-            into the forest surface behind it. */}
-        <span className="chip mt-2.5 bg-brand-accent text-brand-fg">
-          {nextArticle.difficulty_level}
+    <div className="flex flex-1 flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800" aria-hidden="true">
+          <Sparkles className="h-3.5 w-3.5" />
         </span>
+        <span className="chip">{levelLabel(nextArticle.difficulty_level)}</span>
+        {nextArticleCategory ? <span className="text-xs text-brand-muted-fg">{nextArticleCategory}</span> : null}
+      </div>
 
-        <h3 className="mt-2 text-sm font-semibold leading-snug text-brand-bg">
+      <div className="min-w-0">
+        <h3 className="break-words text-base font-bold leading-snug tracking-[-0.01em] text-forest-900">
           {nextArticle.title}
         </h3>
-        {nextArticleCategory ? (
-          <p className="mt-0.5 text-[11px] text-brand-bg/60">
-            {nextArticleCategory}
-          </p>
-        ) : null}
         {nextArticle.summary ? (
-          <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-brand-bg/75">
-            {nextArticle.summary}
-          </p>
+          <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-brand-muted-fg">{nextArticle.summary}</p>
         ) : null}
       </div>
 
       {/* Open the same article and preserve its quiz/progress identity. */}
-      <Link
-        to={`/learning?article=${encodeURIComponent(nextArticle.id)}`}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-accent px-4 py-2 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-accent/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-      >
-        Read this lesson →
-      </Link>
+      <div className="mt-auto">
+        <Link
+          to={`/learning?article=${encodeURIComponent(nextArticle.id)}`}
+          className="as-btn as-btn-sm as-btn-primary"
+        >
+          Read lesson
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 }

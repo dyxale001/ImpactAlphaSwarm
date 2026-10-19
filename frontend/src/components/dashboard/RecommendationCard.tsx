@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Flame, Sparkles, BrainCircuit, MessageCircleQuestion } from "lucide-react";
+import { ArrowRight, Flame, Sparkles, MessageCircleQuestion } from "lucide-react";
 import {
   type AssetRecommendation,
   SCORECARD_ENABLED,
@@ -42,7 +42,7 @@ export default function RecommendationCard({
 
   return (
     <div
-      className={`soft-card p-5 space-y-4 hover:border-brand-primary/40 transition-all flex flex-col ${sizeClass}`}
+      className={`soft-card p-6 space-y-4 hover:border-forest-900/26 hover:shadow-[0_10px_28px_rgba(17,35,32,0.08)] transition-all flex flex-col ${sizeClass}`}
       style={{ animation: `slide-up ${0.4 + delay * 0.08}s ease-out forwards` }}
     >
       <div className="flex items-center justify-between gap-3">
@@ -51,7 +51,7 @@ export default function RecommendationCard({
               matching the universe tiles on Whale Watching. The tinted version
               read as grey. */}
           <div className="relative shrink-0">
-            <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center text-[10px] font-bold font-mono text-brand-bg">
+            <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center text-xs font-bold tabular-nums text-brand-bg">
               {asset.ticker.slice(0, 3)}
             </div>
             {/* Discovered used to sit in the badge row below DualBar, where its
@@ -73,17 +73,17 @@ export default function RecommendationCard({
             <p className="text-base font-semibold truncate text-primary">
               {asset.ticker}
             </p>
-            <p className="text-[12px] text-primary truncate">
+            <p className="text-xs text-primary truncate">
               {asset.name}
             </p>
-            <p className="text-base font-mono text-primary">
+            <p className="text-base tabular-nums text-primary">
               R {asset.currentPrice.toFixed(2)}
             </p>
           </div>
         </div>
-        {/* Accent green behind dark text, the same fill the Discovered chip
-            uses. The tinted versions read as grey. */}
-        <div className="chip bg-brand-accent text-brand-fg">
+        {/* The same pale green as the "Why it ranks here" panel below, so the
+            rank reads as part of the card rather than a second accent. */}
+        <div className="chip">
           Rank {asset.rank}
         </div>
       </div>
@@ -97,11 +97,8 @@ export default function RecommendationCard({
           // The disclosed replacement for the score: a STATE, not a grade. No
           // number, because a number is what invited "how good a buy is this".
           <div className="relative group" tabIndex={0}>
-            <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
-              Signals
-            </p>
             <span
-              className={`chip ${CONVERGENCE_TONE[asset.convergenceState]} font-semibold mt-1`}
+              className={`chip ${CONVERGENCE_TONE[asset.convergenceState]} font-semibold`}
             >
               {CONVERGENCE_HEADLINE[asset.convergenceState]}
             </span>
@@ -113,10 +110,10 @@ export default function RecommendationCard({
           </div>
         ) : (
           <div className="relative group" tabIndex={0}>
-            <p className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+            <p className="text-xs text-primary font-semibold">
               Confidence Score
             </p>
-            <p className="text-xl font-bold font-mono leading-tight text-brand-fg">
+            <p className="text-xl font-bold tabular-nums leading-tight text-brand-fg">
               {asset.confidenceScore}
             </p>
             <div className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-0 translate-x-0 mt-2 w-64 max-w-[calc(100vw-2rem)] z-50">
@@ -139,18 +136,18 @@ export default function RecommendationCard({
 
       <div className="flex flex-wrap gap-2">
         {asset.isHype ? (
-          <span className="chip bg-semantic-warning/15 text-semantic-warning">
+          <span className="chip bg-caution-bg text-caution">
             <Flame className="w-3 h-3" /> Hype flagged
           </span>
         ) : null}
       </div>
 
-      <div className="bg-brand-bg/50 rounded-2xl p-3 border border-brand-accent">
-        <p className="text-[10px] text-brand-muted-fg uppercase tracking-widest mb-1 font-semibold flex items-center gap-1.5">
-          <BrainCircuit className="w-3 h-3 text-brand-primary" />
+      <div className="as-inset p-4">
+        <p className="text-sm text-forest-900 mb-2 font-bold flex items-center gap-2">
+          <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800"><Sparkles className="w-3.5 h-3.5" /></span>
           Why it ranks here
         </p>
-        <p className="text-xs text-brand-fg/85 leading-relaxed">
+        <p className="text-xs text-forest-900 leading-relaxed">
           {asset.reasoning ||
             (asset.convergenceState
               ? CONVERGENCE_DETAIL[asset.convergenceState]
@@ -161,7 +158,7 @@ export default function RecommendationCard({
       <div className="flex items-center justify-between mt-auto">
         <Link
           to={`/asset/${asset.ticker}`}
-          className="text-xs text-brand-primary hover:underline flex items-center gap-1 font-semibold"
+          className="text-sm text-forest-700 hover:underline flex items-center gap-1 font-bold whitespace-nowrap"
         >
           Full analysis <ArrowRight className="w-3 h-3" />
         </Link>

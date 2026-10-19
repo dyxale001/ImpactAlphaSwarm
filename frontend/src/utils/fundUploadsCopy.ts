@@ -6,12 +6,9 @@
 export const MY_FUNDS_TAB = "My funds";
 
 export const MY_FUNDS_TITLE = "Your uploaded funds";
-export const MY_FUNDS_LEAD =
-  "Following a fund the catalogue does not cover? Upload its fact sheet (the Minimum Disclosure Document). " +
-  "AI reads it, you check every figure it was unsure of, and the fund is kept here, visible only to you.";
+export const MY_FUNDS_LEAD = "Upload a fund's fact sheet to see it laid out like the funds we cover.";
 export const MY_FUNDS_PRIVATE_NOTE =
-  "Uploaded funds stay private to your account. They are never added to the catalogue or to anyone's matches, " +
-  "and the PDF itself is not kept once it has been read.";
+  "Uploaded funds stay private to your account, and the PDF isn't kept once it's been read.";
 
 export const DROPZONE_TITLE = "Upload a fact sheet";
 export const DROPZONE_HINT = "Drop a PDF here, or choose one. Fact sheets up to 10 MB.";
@@ -69,6 +66,12 @@ export const REVIEW_UNDO = "Undo";
 export const REVIEW_EDIT = "Edit";
 export const REVIEW_DONE = "Done";
 export const REVIEW_REQUIRED = "Required";
+/** The status chip on a flagged value that still needs a decision. */
+export const REVIEW_CHECK_BADGE = "Check this";
+/** Under a large rand figure, how the typed number reads, so a wrong unit shows. */
+export const REVIEW_READS_AS = "Reads as {value}";
+export const REVIEW_SOURCE_CHIP = "Read by AI, checked by you";
+export const REVIEW_SHEET_DATED = "Fact sheet dated {date}";
 export const REVIEW_FROM_PAGE = "Page {page}";
 export const REVIEW_FROM_GRAPHIC = "read off a chart or graphic";
 export const REVIEW_NOT_ON_SHEET = "Not on the sheet";

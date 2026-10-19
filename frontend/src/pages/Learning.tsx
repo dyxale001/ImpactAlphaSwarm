@@ -7,9 +7,8 @@ import LearningBadgeGallery from "../components/learning/LearningBadgeGallery";
 import LearningCategorySection from "../components/learning/LearningCategorySection";
 import LearningCenterSkeleton from "../components/learning/LearningCenterSkeleton";
 import LearningQuizModal from "../components/learning/LearningQuizModal";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import LearningRoadmap from "../components/learning/LearningRoadmap";
-import SproutMotif from "../components/learning/SproutMotif";
 import { useAuthStore } from "../store/authStore";
 import {
   fetchLearningBadges,
@@ -106,6 +105,13 @@ class LearningCentreSearchEngine {
 }
 
 const learningTabs = ["roadmap", "library"] as const;
+const levelFilters = ["ALL", "BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
+const levelLabels: Record<(typeof levelFilters)[number], string> = {
+  ALL: "All levels",
+  BEGINNER: "Beginner",
+  INTERMEDIATE: "Intermediate",
+  ADVANCED: "Advanced",
+};
 const learningTabLabels = { roadmap: "My Roadmap", library: "Library" };
 
 const learningCentreSearchEngine = new LearningCentreSearchEngine();
@@ -119,6 +125,7 @@ export default function LearningPage() {
   const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [activeTab, setActiveTab] = useState<(typeof learningTabs)[number]>("roadmap");
   const [search, setSearch] = useState("");
+  const [level, setLevel] = useState<(typeof levelFilters)[number]>("ALL");
   const [progressByArticleId, setProgressByArticleId] = useState<
     Record<string, LearningProgress | undefined>
   >({});
@@ -228,11 +235,27 @@ export default function LearningPage() {
     [categories, search],
   );
 
+  // The search, then the level: a level with nothing in a category drops that
+  // category rather than leaving an empty heading.
   const filteredCategories = useMemo(
     () =>
-      learningCentreSearchEngine.filterCategoriesByQuery(categories, search),
-    [categories, search],
+      learningCentreSearchEngine
+        .filterCategoriesByQuery(categories, search)
+        .map((category) => ({
+          ...category,
+          articles:
+            level === "ALL"
+              ? category.articles
+              : category.articles.filter((article) => article.difficulty_level.toUpperCase() === level),
+        }))
+        .filter((category) => category.articles.length > 0),
+    [categories, search, level],
   );
+
+  // The header's three figures: XP, lessons completed and badges earned.
+  const allArticles = categories.flatMap((category) => category.articles);
+  const lessonsCompleted = allArticles.filter((article) => progressByArticleId[article.id]?.status === "COMPLETED").length;
+  const badgesEarned = badges.filter((badge) => earnedBadgeIds.has(badge.id)).length;
 
   const hasSearchResults = filteredCategories.length > 0;
   const hasLearningContent = categories.length > 0;
@@ -346,45 +369,42 @@ export default function LearningPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-8">
-        {/* Header band. Forest ground with sprouting leaf blades bottom-right —
-            growth for the learning centre. Content sits on a relative layer so
-            it clears the SVG. */}
-        <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
-          {/* h-14 on a phone: the 1440x220 drawing at the card's width is about
-              that tall, so the blades keep their shape and stay in the pb-12
-              band. At h-full a phone-width card stretched them through the copy. */}
-          <SproutMotif className="h-14 sm:h-full" />
-          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
+      <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-6 animate-fade-in-up">
+        {/* ── Header ──
+            The same title card as the other hub pages, no motif, with the learner's
+            three figures on the right. They are counts, not an XP bar (D-240). */}
+        <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="band-eyebrow mb-2">Build your confidence</p>
+              <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+                <BookOpen className="h-7 w-7 shrink-0 text-brand-accent" />
                 Learning Centre
-              </p>
-              <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
-                <BookOpen className="w-7 h-7 shrink-0 text-brand-accent" />
-                Build confidence with guided investing lessons
               </h1>
-              <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
-                Explore structured educational content designed to help you
-                understand markets, evaluate opportunities, and grow your
-                investing toolkit.
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
+                Short lessons on how markets work and how to read what AlphaSwarm shows you. Take
+                the quiz at the end of each to earn XP.
               </p>
             </div>
-
-            <div className="lg:shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
-              <p className="text-xs uppercase tracking-widest text-brand-bg/60">
-                Learning XP
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-brand-accent">
-                {learningXp} XP
-              </p>
-            </div>
+            <dl className="grid shrink-0 grid-cols-3 gap-2 self-start">
+              {[
+                { label: "Learning XP", short: "XP", value: `${learningXp}`, accent: true },
+                { label: "Lessons", value: `${lessonsCompleted} of ${allArticles.length}` },
+                { label: "Badges", value: `${badgesEarned} of ${badges.length}` },
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-[14px] bg-white/8 px-3 py-2.5 sm:px-4">
+                  <dt className="text-xs text-brand-bg/60">
+                    {"short" in stat ? <><span className="sm:hidden">{stat.short}</span><span className="hidden sm:inline">{stat.label}</span></> : stat.label}
+                  </dt>
+                  <dd className={`whitespace-nowrap text-lg font-bold tabular-nums sm:text-xl ${stat.accent ? "text-brand-accent" : "text-brand-bg"}`}>{stat.value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
 
-        {/* One row on a phone, the same as the Settings strip: wrapped, Financial
-            Tools dropped to a second line on its own under the other two. */}
-        <div role="tablist" aria-label="Learning Centre views" className="flex gap-2 overflow-x-auto no-scrollbar border-b border-brand-border pb-3 sm:flex-wrap">
+        {/* The platform's tab bar; an even grid across the width on a phone. */}
+        <div role="tablist" aria-label="Learning Centre views" className="as-tabs grid w-full grid-cols-2 rounded-[20px] sm:inline-flex sm:w-auto sm:rounded-full">
           {learningTabs.map((tab, index) => (
             <button
               key={tab}
@@ -403,7 +423,7 @@ export default function LearningPage() {
                 setActiveTab(next);
                 document.getElementById(`learning-tab-${next}`)?.focus();
               }}
-              className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:px-5 ${activeTab === tab ? "bg-brand-primary text-brand-bg" : "text-brand-muted-fg hover:bg-brand-bg"}`}
+              className="as-tab"
             >
               {learningTabLabels[tab]}
             </button>
@@ -411,11 +431,11 @@ export default function LearningPage() {
         </div>
 
         {loadWarnings.length > 0 ? (
-          <section className="rounded-2xl border border-semantic-danger/35 bg-semantic-danger/10 p-4">
-            <p className="text-sm font-semibold text-semantic-danger">
+          <section className="rounded-[12px] bg-down-bg p-4" role="alert">
+            <p className="text-sm font-semibold text-down">
               Some learning data could not be loaded.
             </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-semantic-danger">
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-down">
               {loadWarnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
@@ -439,55 +459,45 @@ export default function LearningPage() {
         </div>
 
         <div id="learning-panel-library" role="tabpanel" aria-labelledby="learning-tab-library" hidden={activeTab !== "library"} tabIndex={0} className="space-y-8">
-        <section className="relative z-40">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search learning topics..."
-              aria-label="Search learning topics"
-              className="w-full rounded-full border border-brand-border/60 bg-brand-card pl-9 pr-9 py-2.5 text-sm text-brand-fg placeholder:text-brand-muted-fg focus:outline-none focus:border-brand-primary/50 transition-colors"
-            />
-            {search ? (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg transition-colors hover:text-brand-fg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            ) : null}
-          </div>
+        {/* ── Toolbar ── the search and the level, in one card as on the other pages. */}
+        <section className="as-card relative z-40 flex flex-col gap-3 p-3 sm:p-4 md:flex-row md:items-center">
+          <div className="relative min-w-0 flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted-fg pointer-events-none" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search learning topics..."
+                aria-label="Search learning topics"
+                className="h-10 w-full rounded-full border border-forest-900/15 bg-white pl-9 pr-9 text-sm text-forest-900 transition-colors placeholder:text-forest-400 hover:border-forest-900/30 focus:border-forest-700 focus:outline-none"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted-fg transition-colors hover:text-brand-fg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              ) : null}
+            </div>
 
-          {search.trim().length > 0 ? (
-            <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-card shadow-lg">
-              <div className="border-b border-brand-border/60 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-eyebrow text-brand-muted-fg">
+            {search.trim().length > 0 ? (
+              <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-[16px] border border-forest-900/10 bg-white shadow-float">
+                <p className="border-b border-forest-900/8 px-4 py-2.5 text-xs font-bold text-brand-muted-fg">
                   Suggestions
                 </p>
-              </div>
 
-              {suggestedArticles.length > 0 ? (
-                <div>
-                  <div className="max-h-96 divide-y divide-brand-border/50 overflow-y-auto">
+                {suggestedArticles.length > 0 ? (
+                  <div className="max-h-96 divide-y divide-forest-900/8 overflow-y-auto">
                     {suggestedArticles.map((article) => (
-                      <div
-                        key={article.id}
-                        className="w-full px-4 py-3 transition-colors hover:bg-brand-bg/60"
-                      >
+                      <div key={article.id} className="w-full px-4 py-3 transition-colors hover:bg-forest-50">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="min-w-0 space-y-1">
-                            <p className="font-semibold text-brand-fg">
-                              {article.title}
-                            </p>
-                            <p className="text-xs uppercase tracking-[0.12em] text-brand-muted-fg">
-                              {article.categoryName}
-                            </p>
-                            <p className="line-clamp-2 text-sm text-brand-muted-fg">
-                              {article.summary}
-                            </p>
+                            <p className="text-sm font-bold text-forest-900">{article.title}</p>
+                            <p className="text-xs text-brand-muted-fg">{article.categoryName}</p>
+                            <p className="line-clamp-2 text-sm text-brand-muted-fg">{article.summary}</p>
                           </div>
                           <div className="flex flex-wrap sm:shrink-0 items-center gap-2">
                             <button
@@ -497,18 +507,18 @@ export default function LearningPage() {
                                 setSearch(article.title);
                                 openArticle(article);
                               }}
-                              className="rounded-full border border-brand-border bg-brand-bg/70 px-2.5 py-1 text-[11px] font-semibold text-brand-primary transition-colors hover:bg-brand-bg"
+                              className="as-btn as-btn-sm as-btn-secondary"
                             >
-                              Read Article
+                              Read article
                             </button>
                             {(article.quiz_question_count ?? 0) > 0 ? (
                               <button
                                 type="button"
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => handleTakeQuiz(article)}
-                                className="rounded-full bg-brand-primary px-2.5 py-1 text-[11px] font-semibold text-brand-bg transition-opacity hover:opacity-90"
+                                className="as-btn as-btn-sm as-btn-primary"
                               >
-                                {progressByArticleId[article.id]?.status === "COMPLETED" ? "Retake Quiz" : "Take Quiz"}
+                                {progressByArticleId[article.id]?.status === "COMPLETED" ? "Retake quiz" : "Take quiz"}
                               </button>
                             ) : null}
                           </div>
@@ -516,14 +526,26 @@ export default function LearningPage() {
                       </div>
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="px-4 py-4 text-sm text-brand-muted-fg">
-                  No matching articles found.
-                </div>
-              )}
-            </div>
-          ) : null}
+                ) : (
+                  <p className="px-4 py-4 text-sm text-brand-muted-fg">No matching articles found.</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="as-tabs as-tabs-sm grid grid-cols-4 rounded-[16px] md:inline-flex md:shrink-0 md:rounded-full" role="group" aria-label="Filter by level">
+            {levelFilters.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={level === option}
+                onClick={() => setLevel(option)}
+                className="as-tab px-1.5 sm:px-3"
+              >
+                {option === "ALL" ? <><span className="sm:hidden">All</span><span className="hidden sm:inline">All levels</span></> : levelLabels[option]}
+              </button>
+            ))}
+          </div>
         </section>
 
         <LearningBadgeGallery
@@ -532,27 +554,17 @@ export default function LearningPage() {
           hasUserContext={Boolean(userId)}
         />
 
-        <div className="space-y-8">
+        <div className="space-y-10">
           {!hasLearningContent && !loading ? (
-            <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-8 text-center">
-              <p className="text-lg font-semibold text-brand-fg">
-                No learning articles are available right now.
-              </p>
-              <p className="mt-2 text-sm text-brand-muted-fg">
-                The Learning Centre loaded, but the article catalogue did not
-                return any records.
-              </p>
-            </div>
-          ) : !hasSearchResults && search.trim().length > 0 ? (
-            <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-8 text-center">
-              <p className="text-lg font-semibold text-brand-fg">
-                No learning articles match "{search.trim()}"
-              </p>
-              <p className="mt-2 text-sm text-brand-muted-fg">
-                Try a different title, summary, or keyword from the article
-                content.
-              </p>
-            </div>
+            <EmptyLibrary
+              title="No learning articles are available right now."
+              body="The Learning Centre loaded, but the article catalogue did not return any records."
+            />
+          ) : !hasSearchResults ? (
+            <EmptyLibrary
+              title={search.trim() ? `No learning articles match "${search.trim()}"` : `No ${levelLabels[level].toLowerCase()} lessons yet`}
+              body={search.trim() ? "Try a different title, summary, or keyword from the article content." : "Choose another level to see more lessons."}
+            />
           ) : (
             filteredCategories.map((category) => (
               <LearningCategorySection
@@ -567,7 +579,6 @@ export default function LearningPage() {
           )}
         </div>
         </div>
-        <Link to="/financial-tools" className="inline-block text-sm font-semibold text-brand-primary underline underline-offset-4">Explore Financial Tools</Link>
       </div>
 
       {requestedArticleId && !resolveArticle(categories.flatMap(category => category.articles), articleParams) && !loading && <p role="status" className="text-sm text-brand-muted-fg">This learning article is unavailable. <button onClick={closeArticle} className="underline">Return to Learning Centre</button></p>}
@@ -589,5 +600,14 @@ export default function LearningPage() {
         />
       ) : null}
     </>
+  );
+}
+
+function EmptyLibrary({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="as-card px-6 py-10 text-center">
+      <p className="text-base font-bold text-forest-900">{title}</p>
+      <p className="mt-2 text-sm text-brand-muted-fg">{body}</p>
+    </div>
   );
 }

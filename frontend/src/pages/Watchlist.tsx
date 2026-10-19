@@ -1,18 +1,22 @@
-import LearnMore from '../components/learning/LearnMore';
 import { useState, useEffect } from "react";
 import {
+  AlertTriangle,
   Eye,
   RefreshCw,
-  ArrowUpDown,
   CheckCircle2,
 } from "lucide-react";
 import { useWatchlistData, type SortOption } from "../hooks/useWatchlistData";
 import WatchlistSearch from "../components/watchlist/WatchlistSearch";
 import WatchedAssetCard from "../components/watchlist/WatchedAssetCard";
 import WatchlistSkeleton from "../components/watchlist/WatchlistSkeleton";
-import RadarMotif from "../components/watchlist/RadarMotif";
+import LearnPopover from "../components/learning/LearnPopover";
 import { SECTOR_COLOURS } from "../utils/sectorColours";
 
+const SORT_LABELS: Record<SortOption, string> = {
+  added: "Recently added",
+  ticker: "A to Z",
+  universe: "Sector",
+};
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function WatchlistPage() {
@@ -36,7 +40,6 @@ export default function WatchlistPage() {
     sectors,
   } = useWatchlistData();
 
-  const [showSortMenu, setShowSortMenu] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   useEffect(() => {
     if (!confirmation) return;
@@ -44,226 +47,173 @@ export default function WatchlistPage() {
     return () => clearTimeout(timer);
   }, [confirmation]);
 
-  const sortLabels: Record<SortOption, string> = {
-    added: "Recently added",
-    ticker: "Ticker A–Z",
-    universe: "Sector",
-  };
-
   if (loading && watchedAssets.length === 0) {
     return <WatchlistSkeleton />;
   }
 
+  const hasAssets = watchedAssets.length > 0;
+
   return (
-    <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-10">
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      {/* Header band. Forest ground with a radar sweep rippling from the
-          bottom-right corner — the watchlist as a scanner, each blip a tracked
-          contact. Content sits on a relative layer so it clears the SVG. */}
-      <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
-        <RadarMotif className="h-full" />
-        <div className="relative flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-accent mb-1">
-              Stock Library
-            </p>
-            <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
-              <Eye className="w-7 h-7 shrink-0 text-brand-accent" />
+    <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-6 animate-fade-in-up">
+      {/* ── Header ──
+          The same title card as the other hub pages: no motif. Watchlist has no
+          About dialog, so its lessons sit behind the book button, as on the stock
+          and fund pages, beside the refresh. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">Stock library</p>
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+              <Eye className="h-7 w-7 shrink-0 text-brand-accent" />
               Watchlist
             </h1>
-            <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
-              Track any stock. Watched stocks are included in your next analysis
-              run.
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
+              Track any stock. Watched stocks are included in your next analysis run.
             </p>
           </div>
-          <button
-            onClick={refreshWatchlist}
-            title="Refresh"
-            className="p-2 shrink-0 rounded-full border border-white/20 text-brand-bg/75 hover:text-brand-bg hover:border-white/40 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <LearnPopover context="watchlist" onDark />
+            <button
+              type="button"
+              onClick={refreshWatchlist}
+              aria-label="Refresh prices"
+              title="Refresh prices"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-white/5 text-brand-bg transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
-      <LearnMore context="watchlist" />
 
-      {/* ── Search ──────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <WatchlistSearch
-          search={search}
-          setSearch={setSearch}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
-          onAdd={async (result) => {
-            await addToWatchlist(result);
-            setConfirmation(`${result.ticker} added to your watchlist.`);
-          }}
-        />
+      {/* ── Toolbar ──
+          One card, as Compare's picker: the search and the sort on top, the sector
+          filters under them. */}
+      <div className="as-card relative z-20 flex flex-col gap-3 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="min-w-0 flex-1">
+            <WatchlistSearch
+              search={search}
+              setSearch={setSearch}
+              searchResults={searchResults}
+              searchLoading={searchLoading}
+              onAdd={async (result) => {
+                await addToWatchlist(result);
+                setConfirmation(`${result.ticker} added to your watchlist.`);
+              }}
+            />
+          </div>
+          {hasAssets && (
+            <div
+              className="as-tabs as-tabs-sm grid grid-cols-3 rounded-[16px] md:inline-flex md:shrink-0 md:rounded-full"
+              role="group"
+              aria-label="Sort your watchlist"
+            >
+              {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={sortBy === opt}
+                  onClick={() => setSortBy(opt)}
+                  className="as-tab"
+                >
+                  {SORT_LABELS[opt]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Sector filters, once there is more than one sector to choose between. */}
+        {hasAssets && sectors.length > 2 && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by sector">
+            {sectors.map((sector) => (
+              <button
+                key={sector}
+                type="button"
+                onClick={() => setSectorFilter(sector)}
+                aria-pressed={sectorFilter === sector}
+                className="as-fchip"
+              >
+                {sector !== "All" && SECTOR_COLOURS[sector] && (
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${SECTOR_COLOURS[sector].fill}`} aria-hidden="true" />
+                )}
+                {sector}
+                {sector === "All" && <span className="tabular-nums text-brand-muted-fg">{watchedAssets.length}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* ── Error ───────────────────────────────────────────────────── */}
+      {/* ── Messages ── */}
       {error && (
-        <div className="p-4 rounded-lg bg-semantic-danger/10 border border-semantic-danger/20 text-semantic-danger text-sm">
+        <div className="flex items-center gap-2 rounded-[12px] bg-down-bg px-4 py-3 text-sm text-down" role="alert">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </div>
       )}
-
-      {/* ── Confirmation ────────────────────────────────────────────── */}
       {confirmation && (
-        <div className="flex items-center gap-2 p-4 rounded-lg bg-semantic-success/10 border border-semantic-success/20 text-semantic-success text-sm">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-[12px] bg-up-bg px-4 py-3 text-sm font-semibold text-up" role="status">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
           {confirmation}
         </div>
       )}
 
-      {/* ── Watchlist ─────────────────────────────────────────────── */}
-      {(watchedAssets.length > 0 || loading) && (
-        <section>
-          {/* Section header + controls */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 pb-3 border-b border-brand-border/40">
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-brand-muted-fg" />
-              <h2 className="text-sm font-semibold text-brand-fg">
-                Watchlist
-              </h2>
-              {watchedAssets.length > 0 && (
-                <span className="chip bg-brand-border/30 text-brand-muted-fg text-[10px]">
-                  {watchedAssets.length} tracked
-                </span>
-              )}
+      {/* ── Watchlist ── */}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="as-card animate-pulse space-y-3 p-5">
+              <div className="h-4 w-1/4 rounded bg-forest-50" />
+              <div className="h-3 w-1/2 rounded bg-forest-50" />
+              <div className="h-11 rounded bg-forest-50" />
             </div>
-
-            {/* Sector + sort controls */}
-            {!loading && watchedAssets.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                {sectors.length > 2 &&
-                  sectors.map((sector) => (
-                    <button
-                      key={sector}
-                      onClick={() => setSectorFilter(sector)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
-                        sectorFilter === sector
-                          ? "border-brand-primary/50 bg-brand-primary/10 text-brand-primary"
-                          : "border-brand-border/40 text-brand-muted-fg hover:text-brand-fg"
-                      }`}
-                    >
-                      {sector !== "All" && SECTOR_COLOURS[sector] && (
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${SECTOR_COLOURS[sector].fill}`}
-                        />
-                      )}
-                      {sector}
-                    </button>
-                  ))}
-
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSortMenu((m) => !m)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-brand-border/40 text-[11px] text-brand-muted-fg hover:text-brand-fg transition-colors"
-                  >
-                    <ArrowUpDown className="w-3 h-3" />
-                    {sortLabels[sortBy]}
-                  </button>
-                  {showSortMenu && (
-                    <div className="absolute right-0 top-full mt-1 w-36 bg-brand-bg border border-brand-border rounded-xl shadow-xl z-10 overflow-hidden">
-                      {(Object.keys(sortLabels) as SortOption[]).map((opt) => (
-                        <button
-                          key={opt}
-                          onClick={() => {
-                            setSortBy(opt);
-                            setShowSortMenu(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-brand-border/20 ${
-                            sortBy === opt
-                              ? "text-brand-primary font-semibold"
-                              : "text-brand-fg"
-                          }`}
-                        >
-                          {sortLabels[opt]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Loading skeleton */}
-          {loading && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3].map((n) => (
-                  <div
-                    key={n}
-                    className="soft-card animate-pulse space-y-3 p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-brand-border/30 shrink-0" />
-                      <div className="space-y-1.5 flex-1">
-                        <div className="h-3 bg-brand-border/30 rounded w-1/4" />
-                        <div className="h-2.5 bg-brand-border/20 rounded w-1/2" />
-                      </div>
-                    </div>
-                    <div className="h-12 bg-brand-border/20 rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Empty */}
-          {!loading && watchedAssets.length === 0 && (
-            <div className="glass-card p-10 text-center flex flex-col items-center gap-2">
-              <Eye className="w-7 h-7 text-brand-muted-fg" />
-              <p className="text-sm font-medium text-brand-fg">
-                No stocks tracked yet
-              </p>
-              <p className="text-xs text-brand-muted-fg">
-                Search or browse above to add stocks to your library.
-              </p>
-            </div>
-          )}
-
-          {/* No filter results */}
-          {!loading &&
-            displayedAssets.length === 0 &&
-            watchedAssets.length > 0 && (
-              <div className="glass-card p-8 text-center">
-                <p className="text-sm text-brand-muted-fg">
-                  No stocks in{" "}
-                  <span className="text-brand-fg font-semibold">
-                    {sectorFilter}
-                  </span>
-                  .
-                </p>
-                <button
-                  onClick={() => setSectorFilter("All")}
-                  className="text-xs text-brand-primary mt-2 hover:underline"
-                >
-                  Show all
-                </button>
-              </div>
-            )}
-
-          {/* Asset grid */}
-          {!loading && displayedAssets.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {displayedAssets.map((asset) => (
-                <WatchedAssetCard
-                  key={asset.id}
-                  asset={asset}
-                  onRemove={async (id) => {
-                    await removeFromWatchlist(id);
-                    setConfirmation(`${asset.ticker} removed from your watchlist.`);
-                  }}
-                  isRemoving={removing.has(asset.id)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          ))}
+        </div>
+      ) : !hasAssets ? (
+        <EmptyState
+          title="No stocks tracked yet"
+          body="Search above for any US stock to add it. Watched stocks are included in your next analysis run."
+        />
+      ) : displayedAssets.length === 0 ? (
+        <EmptyState
+          title={`No stocks in ${sectorFilter}`}
+          body="Choose another sector, or show all."
+          action={
+            <button type="button" onClick={() => setSectorFilter("All")} className="as-btn as-btn-sm as-btn-secondary">
+              Show all
+            </button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {displayedAssets.map((asset) => (
+            <WatchedAssetCard
+              key={asset.id}
+              asset={asset}
+              onRemove={async (id) => {
+                await removeFromWatchlist(id);
+                setConfirmation(`${asset.ticker} removed from your watchlist.`);
+              }}
+              isRemoving={removing.has(asset.id)}
+            />
+          ))}
+        </div>
       )}
+    </div>
+  );
+}
+
+function EmptyState({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
+  return (
+    <div className="as-card flex flex-col items-center gap-2 px-6 py-10 text-center">
+      <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-forest-50 text-forest-700" aria-hidden="true">
+        <Eye className="h-5 w-5" />
+      </span>
+      <p className="text-base font-bold text-forest-900">{title}</p>
+      <p className="max-w-md text-sm leading-relaxed text-brand-muted-fg">{body}</p>
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

@@ -30,11 +30,11 @@ async function open(page: ExplanationPage = 'stocks', rankingMode?: 'legacy' | '
   await act(async () => trigger.click()); return trigger;
 }
 function dialog() { return document.querySelector('dialog')!; }
-it('starts closed with one accent pill trigger and opens a named native modal', async () => {
+it('starts closed with one outline pill trigger and opens a named native modal', async () => {
   const trigger = await mount();
   expect(document.querySelector('dialog')).toBeNull(); expect(trigger.textContent).toBe('About this page');
   expect(trigger.getAttribute('aria-haspopup')).toBe('dialog'); expect(trigger.getAttribute('aria-expanded')).toBe('false');
-  expect(trigger.className).toContain('bg-brand-accent'); expect(trigger.className).toContain('focus-visible:outline');
+  expect(trigger.className).toContain('as-btn-ghost-dark'); expect(trigger.className).toContain('focus-visible:outline');
   trigger.focus(); await act(async () => trigger.click());
   expect(showModal).toHaveBeenCalledOnce(); expect(dialog().open).toBe(true);
   expect(document.getElementById(dialog().getAttribute('aria-labelledby')!)?.textContent).toBe(PAGE_EXPLANATIONS.stocks.title);
@@ -74,10 +74,11 @@ it('uses a forest header, readable panels, mobile scrolling and no animation', a
   expect(dialog().querySelector('header')?.className).toContain('hero-card');
   expect(dialog().className).toContain('90dvh');
   expect(dialog().querySelector('.overflow-y-auto')).toBeTruthy();
-  expect(dialog().querySelector('.bg-brand-bg')).toBeTruthy();
+  expect(dialog().querySelector('.as-inset')).toBeTruthy();
   expect(dialog().className).not.toContain('animate');
 });
-it.each(Object.keys(PAGE_EXPLANATIONS) as ExplanationPage[])('renders accurate contextual content for %s', async page => {
+// Funds has its own illustrated dialog (FundsAbout), tested below.
+it.each((Object.keys(PAGE_EXPLANATIONS) as ExplanationPage[]).filter(page => page !== 'funds'))('renders accurate contextual content for %s', async page => {
   await open(page);
   const content = PAGE_EXPLANATIONS[page];
   expect(dialog().textContent).toContain(content.introduction);
@@ -100,18 +101,11 @@ it.each([
   let found = false;
   function walk(node: ts.Node) {
     if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(a => ts.isJsxAttribute(a) && a.name.getText(sf) === 'className' && a.initializer?.getText(sf).includes('hero-card'))) {
-      const trigger = page === 'funds' ? '{FUND_ABOUT_BUTTON}' : `<AboutThisPage page="${page}"`;
-      if (node.getText(sf).includes(trigger)) found = true;
+      if (node.getText(sf).includes(`<AboutThisPage page="${page}"`)) found = true;
     }
     ts.forEachChild(node, walk);
   }
-  walk(sf); expect(found).toBe(true);
-  if (page === 'funds') {
-    expect(source.match(/<AboutThisPage /g) ?? []).toHaveLength(0);
-    expect(source.match(/<AboutFundModal /g)).toHaveLength(1);
-  } else {
-    expect(source.match(/<AboutThisPage /g)).toHaveLength(1);
-  }
+  walk(sf); expect(found).toBe(true); expect(source.match(/<AboutThisPage /g)).toHaveLength(1);
 });
 it('restores the actual trigger even when pointer activation did not focus it', async () => {
   const trigger = await mount();
@@ -154,15 +148,16 @@ it('distinguishes whale transactions, dates, coverage and sources without fixed 
   for (const phrase of ['Open-market Buy/Sell', 'grants, exercises', 'not a ranking of investment quality', 'not the whole market', 'transaction date', 'filing or reporting date', 'information was fetched', 'Finnhub', 'yfinance', 'may be cached', 'does not establish that no activity occurred', 'does not determine']) expect(text).toContain(phrase);
   expect(text).not.toMatch(/every \d|every hour|every day|live feed/i);
 });
-it.each(['stocks', 'funds', 'whales'] as const)('orders the %s purpose, process, example and caveats clearly', async page => {
+it.each(['stocks', 'whales'] as const)('orders the %s purpose, process, example and caveats clearly', async page => {
   await open(page);
   const content = PAGE_EXPLANATIONS[page]; const text = dialog().textContent!;
   expect(text.indexOf(content.introduction)).toBeLessThan(text.indexOf(content.process.title));
   expect(text.indexOf(content.process.title)).toBeLessThan(text.indexOf(content.example.title));
   expect(text.indexOf(content.example.title)).toBeLessThan(text.indexOf(content.limitations.title));
   expect(text.indexOf(content.limitations.title)).toBeLessThan(text.indexOf(content.caveat));
-  expect(dialog().querySelectorAll('ol > li')).toHaveLength(3);
-  expect(dialog().querySelector('ol')?.className).toContain('sm:grid-cols-3');
+  const steps = dialog().querySelector('ol')!;
+  expect(steps.querySelectorAll(':scope > li')).toHaveLength(content.process.steps.length);
+  expect(steps.className).toContain(`sm:grid-cols-${content.process.steps.length}`);
 });
 it('shows no methodology link without a valid destination', async () => {
   await act(async () => root.render(createElement(AboutThisPage, { page: 'stocks' })));
@@ -183,4 +178,29 @@ it('does not restore Stocks scroll onto the methodology destination', async () =
     expect(main.scrollTop).toBe(0); expect(main.style.overflow).toBe('auto');
     expect(document.querySelector('dialog')).toBeNull();
   } finally { router.dispose(); }
+});
+
+it('lets the Stocks worked example switch between agreeing and conflicting evidence', async () => {
+  await open('stocks', 'scorecard');
+  expect(dialog().textContent).toContain('Signals agree strongly');
+  const stockB = [...dialog().querySelectorAll('button')].find(button => button.textContent === 'Stock B')!;
+  await act(async () => stockB.click());
+  expect(stockB.getAttribute('aria-selected')).toBe('true');
+  expect(dialog().textContent).toContain('the signals disagree');
+});
+
+it('shows the illustrated Funds explainer with every match limit kept', async () => {
+  const copy = await import('../../utils/fundsCopy');
+  await open('funds'); const text = dialog().textContent!;
+  const content = PAGE_EXPLANATIONS.funds;
+  expect(document.getElementById(dialog().getAttribute('aria-labelledby')!)?.textContent).toBe(copy.FUND_ABOUT_TITLE);
+  expect(text).toContain(copy.FUND_ABOUT_INTRO);
+  for (const step of copy.FUND_ABOUT_STEPS) expect(text).toContain(step.title);
+  expect(text).toContain(copy.FUND_ABOUT_COST_TITLE);
+  expect(text).toContain(content.example.body);
+  for (const paragraph of content.limitations.paragraphs.slice(0, 2)) expect(text).toContain(paragraph);
+  expect(text).toContain(content.caveat);
+  expect(text).toContain(copy.FUND_ABOUT_FOOTER);
+  expect(text.indexOf(copy.FUND_ABOUT_INTRO)).toBeLessThan(text.indexOf(content.example.body));
+  expect(text.indexOf(content.example.body)).toBeLessThan(text.indexOf(content.caveat));
 });

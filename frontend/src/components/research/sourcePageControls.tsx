@@ -1,8 +1,7 @@
-// Shared building blocks for the full news / social sentiment pages: page
-// header, summary strip, filter chips, the sort toggle and the sorting logic.
+// Shared building blocks for the sentiment evidence page's news and social panels:
+// summary tiles, filter chips, the sort toggle and the sorting logic.
 
-import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { sentimentVerdict } from "./sentimentDisplay";
 
 export type SortKey = "influence" | "newest" | "sentiment";
 
@@ -53,86 +52,37 @@ export function sortItems<T extends Sortable>(items: T[], key: SortKey): T[] {
 }
 
 // Back link, icon, title and subtitle shared by both source pages.
-export function SourcePageHeader({
-  ticker,
-  icon: Icon,
-  title,
-  subtitle,
-  backHref,
-}: {
-  ticker: string;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  subtitle: string;
-  // Where "Back to <ticker>" goes. Defaults to the asset page's own default tab;
-  // the sentiment source pages point it back at the sentiment tab they came from.
-  backHref?: string;
-}) {
-  return (
-    <>
-      <Link
-        to={backHref ?? `/asset/${ticker}`}
-        className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to {ticker}
-      </Link>
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold text-brand-fg flex items-center gap-3">
-          <Icon className="w-7 h-7 shrink-0 text-brand-primary" />
-          {title}
-        </h1>
-        <p className="text-sm text-brand-muted-fg mt-1">{subtitle}</p>
-      </div>
-    </>
-  );
-}
-
-// Grid of stat pills so the page stands alone without going back.
+// Headline figures as soft tiles. `hint` qualifies a figure in small type (e.g. "top
+// 15 shown") rather than inflating it, `chip` sits beside a figure that has a word for
+// it, and `tone` colours a signed figure green for up and red for down.
 export function SummaryStrip({
   pills,
-  accent = false,
 }: {
-  pills: { label: string; value: React.ReactNode }[];
-  // Colours the figures brand forest green, on a soft tint of the same. Opt in rather
-  // than the default: it belongs on the page that carries the trend chart, and on the
-  // news page there is nothing for it to agree with.
-  //
-  // forest-700 rather than the forest-500 the chart draws its bars in. The bars are
-  // deliberately recessive against a dark panel; the same tone on a light card at text
-  // size reads washed out, and these are the figures the page is about.
-  accent?: boolean;
+  pills: {
+    label: string;
+    value: React.ReactNode;
+    hint?: string;
+    chip?: React.ReactNode;
+    tone?: "up" | "down";
+  }[];
 }) {
   return (
-    // One strip on the page's own background, no outer border: the only rules are
-    // the neon-lime ones dividing the figures, the same accent the framed panels use.
-    <div className="grid grid-cols-2 sm:grid-cols-4 bg-brand-bg">
-      {pills.map((pill, i) => (
-        <div
-          key={pill.label}
-          className={[
-            "px-4 py-3 border-brand-accent",
-            // Vertical rule between the two mobile columns, then before every
-            // column on the single desktop row.
-            i % 2 === 1 ? "border-l" : "",
-            i > 0 ? "sm:border-l" : "",
-            // Horizontal rule between the two mobile rows only; the desktop row is
-            // unbroken.
-            i >= 2 ? "border-t sm:border-t-0" : "",
-          ].join(" ")}
-        >
-          <div className="text-[10px] uppercase tracking-widest text-brand-fg font-semibold mb-1">
-            {pill.label}
-          </div>
-          <div
-            className={`text-sm font-semibold ${
-              accent ? "text-brand-primary" : "text-brand-fg"
+    <dl className={`grid grid-cols-2 gap-2 ${pills.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
+      {pills.map((pill) => (
+        <div key={pill.label} className="as-inset flex flex-col gap-1 p-3 sm:p-4">
+          <dt className="text-xs text-brand-muted-fg">{pill.label}</dt>
+          <dd
+            className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xl font-bold tabular-nums tracking-[-0.01em] ${
+              pill.tone === "up" ? "text-up" : pill.tone === "down" ? "text-down" : "text-forest-900"
             }`}
           >
             {pill.value}
-          </div>
+            {pill.chip}
+          </dd>
+          {pill.hint ? <dd className="text-xs text-brand-muted-fg">{pill.hint}</dd> : null}
         </div>
       ))}
-    </div>
+    </dl>
   );
 }
 
@@ -150,20 +100,16 @@ export function FilterChip({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      // shrink-0 and nowrap: on a phone the chip groups are a sideways-scrolling
-      // row (FilterChipRow), where a chip would otherwise squash and wrap its count.
-      className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-        active
-          ? "bg-brand-primary/10 text-brand-primary border-brand-primary/40"
-          : "border-brand-border/60 text-brand-muted-fg hover:text-brand-fg hover:border-brand-border"
-      }`}
+      aria-pressed={active}
+      // shrink-0: on a phone the chip groups are a sideways-scrolling row
+      // (FilterChipRow), where a chip would otherwise squash and wrap its count.
+      className="as-fchip shrink-0"
     >
       {label}
       {count != null && (
-        <span className="ml-1.5 font-mono tabular-nums opacity-70">
-          {count}
-        </span>
+        <span className="tabular-nums text-brand-muted-fg">{count}</span>
       )}
     </button>
   );
@@ -252,20 +198,15 @@ export function SortToggle({
   onChange: (key: SortKey) => void;
 }) {
   return (
-    <div className="inline-flex items-center rounded-full border border-brand-border/60 bg-brand-bg/55 p-0.5 flex-wrap">
+    // The shared small tab pill, as on the Stocks page's universe filter.
+    <div className="as-tabs as-tabs-sm" role="group" aria-label="Sort by">
       {SORT_OPTIONS.map((opt) => (
         <button
           key={opt.key}
+          type="button"
           onClick={() => onChange(opt.key)}
-          // Selected uses the accent green as a fill behind dark text, the same way
-          // the Discovered chip and the Watched chip do. A washed 15% tint of the
-          // primary read as disabled next to those, which is the opposite of what a
-          // selected control should say.
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-            value === opt.key
-              ? "bg-brand-accent text-brand-fg"
-              : "text-brand-muted-fg hover:text-brand-fg"
-          }`}
+          aria-pressed={value === opt.key}
+          className="as-tab"
         >
           {opt.label}
         </button>
@@ -294,7 +235,7 @@ export function SourceList({
     <ul
       className={`divide-y divide-brand-border/40 overflow-x-auto ${
         nested
-          ? "rounded-xl border border-brand-border/60 bg-brand-surface/70"
+          ? "rounded-[12px] border border-forest-900/10 bg-white"
           : "rounded-2xl border border-brand-accent bg-brand-bg/40"
       }`}
     >
@@ -306,8 +247,42 @@ export function SourceList({
 // Soft-card empty state used when nothing was analysed or nothing matches.
 export function EmptyStateCard({ message }: { message: string }) {
   return (
-    <div className="soft-card w-full p-4 sm:p-5">
+    <div className="as-card w-full p-4 sm:p-6">
       <p className="text-brand-muted-fg text-sm italic">{message}</p>
     </div>
   );
+}
+
+// The selected day's list: a white card headed by the day, with the filters and sort
+// above the items. Shared so the news and social panels frame their lists alike.
+export function EvidenceDayCard({
+  title,
+  caption,
+  controls,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  controls: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="as-card w-full space-y-4 p-4 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{title}</h2>
+        {caption ? <span className="text-xs text-brand-muted-fg">{caption}</span> : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">{controls}</div>
+      {children}
+    </section>
+  );
+}
+
+// A sentiment figure's word as a chip, toned up, down or neutral.
+export function VerdictChip({ score }: { score: number | null | undefined }) {
+  if (score == null) return null;
+  const verdict = sentimentVerdict(score);
+  const tone =
+    verdict.tone === "positive" ? "chip-up" : verdict.tone === "negative" ? "chip-down" : "";
+  return <span className={`chip ${tone} text-xs`}>{verdict.label}</span>;
 }

@@ -55,11 +55,11 @@ export default function FundHoldings({
   const largest = Math.max(...rows.map((row) => row.share), 0) || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <h2 className="text-base font-bold text-brand-primary">{DETAIL_HOLDINGS_TITLE}</h2>
       <p className="text-xs leading-relaxed text-forest-500">{DETAIL_HOLDINGS_LEAD}</p>
       {dated && (
-        <p className="w-fit rounded-full bg-forest-50 px-2 py-0.5 text-[11px] font-bold text-forest-500">
+        <p className="w-fit rounded-full bg-forest-50 px-2 py-0.5 text-xs font-bold text-forest-500">
           {dated}
         </p>
       )}
@@ -67,10 +67,10 @@ export default function FundHoldings({
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (
           <li key={row.name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-            <span className="min-w-0 truncate text-[13px] text-forest-900" title={row.name}>
+            <span className="min-w-0 truncate text-sm text-forest-900" title={row.name}>
               {row.name}
             </span>
-            <span className="text-[13px] font-bold tabular-nums text-brand-primary">
+            <span className="text-sm font-bold tabular-nums text-forest-900">
               {formatShare(row.share)}
             </span>
             <span

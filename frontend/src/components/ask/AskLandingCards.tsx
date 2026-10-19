@@ -40,14 +40,16 @@ export default function AskLandingCards({ onSelect }: Props) {
           key={cat.title}
           type="button"
           onClick={() => onSelect(cat.example)}
-          className="soft-card p-5 text-left space-y-3 hover:border-brand-primary/30 transition-all"
+          className="as-card flex flex-col gap-3 p-5 text-left transition-shadow hover:shadow-float focus-visible:shadow-float focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
         >
-          <cat.icon className="w-5 h-5 text-brand-primary" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-forest-50 text-forest-700" aria-hidden="true">
+            <cat.icon className="h-5 w-5" />
+          </span>
           <div>
-            <p className="text-sm font-semibold text-brand-fg">{cat.title}</p>
-            <p className="text-xs text-brand-muted-fg leading-relaxed mt-1">{cat.description}</p>
+            <p className="text-base font-bold text-forest-900">{cat.title}</p>
+            <p className="mt-1 text-sm leading-relaxed text-brand-muted-fg">{cat.description}</p>
           </div>
-          <p className="text-xs text-brand-primary font-medium italic">"{cat.example}"</p>
+          <p className="mt-auto text-sm font-semibold italic text-forest-700">"{cat.example}"</p>
         </button>
       ))}
     </div>

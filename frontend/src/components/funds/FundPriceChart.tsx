@@ -46,10 +46,10 @@ export default function FundPriceChart({
   const pad = (high - low) * 0.08 || 1;
 
   return (
-    <section className={`soft-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
+    <section className={`as-card flex flex-col gap-3 p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-bold text-brand-primary">{DETAIL_PRICE_TITLE}</h2>
-        <span className="text-[11px] text-forest-500">
+        <span className="text-xs text-brand-muted-fg">
           {data[0].date} to {data[data.length - 1].date}
         </span>
       </div>
@@ -60,14 +60,14 @@ export default function FundPriceChart({
             <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "rgba(0,0,0,0.45)" }}
+              tick={{ fontSize: 12, fill: "rgba(0,0,0,0.45)" }}
               tickLine={false}
               axisLine={false}
               minTickGap={48}
             />
             <YAxis
               domain={[low - pad, high + pad]}
-              tick={{ fontSize: 10, fill: "rgba(0,0,0,0.45)" }}
+              tick={{ fontSize: 12, fill: "rgba(0,0,0,0.45)" }}
               tickLine={false}
               axisLine={false}
               width={46}

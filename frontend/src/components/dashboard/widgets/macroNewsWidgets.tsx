@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import {
   SECTOR_SETTING,
@@ -15,7 +14,8 @@ import { useAuthStore } from "../../../store/authStore";
 import { displayHeadline, shortLabel, shortWhen, storiesFor } from "../../../utils/macroNews";
 import { sectorColour } from "../../../utils/sectorColours";
 import { AIOverviewBox, StoryRow } from "../../macroNews/SectorSummary";
-import { WidgetEmpty, WidgetLoading } from "./widgetChrome";
+import { sectorDot } from "../../macroNews/MacroArticleCard";
+import { WidgetEmpty, WidgetHeaderLink, WidgetLoading, WidgetSubtitle } from "./widgetChrome";
 
 // The Market News page on the dashboard (D-223): market-wide news, one sector's
 // news, and the latest headlines. Each reads the same feed the page does, through
@@ -38,16 +38,11 @@ function newsHref(group: string): string {
 
 function Updated({ feed }: { feed: MacroFeed }) {
   if (!feed.updated_at) return null;
-  return <span className="text-[11px] text-brand-muted-fg">Updated {shortWhen(feed.updated_at)}</span>;
+  return <p className="mt-auto text-xs text-brand-muted-fg">Updated {shortWhen(feed.updated_at)}</p>;
 }
 
-function SeeAll({ to, label }: { to: string; label: string }) {
-  return (
-    <Link to={to} className="mt-auto inline-block text-xs font-semibold text-brand-primary hover:underline">
-      {label} →
-    </Link>
-  );
-}
+/** The Market News page's story list: bordered, one divided row per story. */
+const STORY_LIST = "divide-y divide-forest-900/8 overflow-hidden rounded-[12px] border border-forest-900/10";
 
 /** One group's week: its AI overview (from medium up) and its most relevant stories. */
 function GroupNews({
@@ -70,23 +65,30 @@ function GroupNews({
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {header}
-        <Updated feed={feed} />
-      </div>
+      {header ? <WidgetSubtitle>{header}</WidgetSubtitle> : null}
+      <WidgetHeaderLink to={newsHref(group)}>
+        {all.length > stories.length ? `All ${all.length} stories` : "Open"}
+      </WidgetHeaderLink>
       {stories.length === 0 ? (
         <WidgetEmpty grow message={emptyMessage} />
       ) : (
         <>
           {showsOverview(size) && overview && <AIOverviewBox summary={overview.summary} />}
-          <ul className="flex flex-col">
+          <ul className={STORY_LIST}>
             {stories.map((a) => (
-              <StoryRow key={a.id} article={a} group={group} marketWideLabel={mw} tint={tintFor(group, mw)} />
+              <StoryRow
+                key={a.id}
+                article={a}
+                group={group}
+                marketWideLabel={mw}
+                tint={tintFor(group, mw)}
+                variant="list"
+              />
             ))}
           </ul>
-          <SeeAll to={newsHref(group)} label={all.length > stories.length ? `All ${all.length} stories` : "Open Market News"} />
         </>
       )}
+      <Updated feed={feed} />
     </div>
   );
 }
@@ -118,20 +120,18 @@ export function SectorNewsWidget({ size, settings, updateSettings }: WidgetProps
   if (!sector) return <WidgetEmpty grow message="No sectors are being followed in the news yet." />;
 
   const picker = (
-    <label className="flex items-center gap-2 text-[11px] font-semibold text-brand-muted-fg">
-      <span className="sr-only">Sector</span>
-      <select
-        value={sector}
-        onChange={(e) => updateSettings({ [SECTOR_SETTING]: e.target.value })}
-        className="min-h-8 rounded-full border border-brand-border/60 bg-brand-surface px-3 py-1 text-xs font-semibold text-brand-primary focus:border-brand-primary/50 focus:outline-none"
-      >
+    <select
+      aria-label="Sector"
+      value={sector}
+      onChange={(e) => updateSettings({ [SECTOR_SETTING]: e.target.value })}
+      className="as-select as-select-sm"
+    >
         {feed.universes.map((u) => (
           <option key={u} value={u}>
             {u}
           </option>
-        ))}
-      </select>
-    </label>
+      ))}
+    </select>
   );
 
   return (
@@ -158,42 +158,40 @@ export function LatestHeadlinesWidget({ size }: WidgetProps) {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex justify-end">
-        <Updated feed={feed} />
-      </div>
-      <ul className="flex flex-col">
+      <WidgetHeaderLink to="/news?tab=stories">All stories</WidgetHeaderLink>
+      <ul className={STORY_LIST}>
         {stories.map((a) => (
           <HeadlineRow key={a.id} article={a} marketWideLabel={mw} />
         ))}
       </ul>
-      <SeeAll to="/news?tab=stories" label="All stories" />
+      <Updated feed={feed} />
     </div>
   );
 }
 
 function HeadlineRow({ article, marketWideLabel }: { article: MacroArticle; marketWideLabel: string }) {
   const tag = leadTag(article, marketWideLabel);
+  const marketWide = tag === marketWideLabel;
   return (
     <li>
       <a
         href={article.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="-mx-2 flex items-start gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-brand-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
+        className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-forest-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest-700"
       >
         <span className="min-w-0 flex-1">
-          <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-brand-primary">
+          <span className="line-clamp-2 text-sm font-semibold leading-snug text-forest-900">
             {displayHeadline(article.headline, article.source)}
           </span>
-          <span className="mt-0.5 block text-[11px] text-brand-muted-fg">
+          <span className="mt-0.5 block text-xs text-brand-muted-fg">
             {article.source} · {shortWhen(article.published_at)}
           </span>
         </span>
         {tag && (
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-brand-primary ${tintFor(tag, marketWideLabel)}`}
-          >
-            {tag === marketWideLabel ? "Market-wide" : shortLabel(tag)}
+          <span className="chip shrink-0">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${sectorDot(tag, marketWide)}`} aria-hidden="true" />
+            {marketWide ? "Market-wide" : shortLabel(tag)}
           </span>
         )}
       </a>

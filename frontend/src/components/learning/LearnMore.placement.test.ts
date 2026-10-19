@@ -3,7 +3,7 @@ import { expect,it } from 'vitest';
 import ts from 'typescript';
 const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
 it.each([
- ['../../pages/Assets.tsx','hero-card'],['../../pages/Watchlist.tsx','hero-card'],['../../pages/WhaleWatching.tsx','hero-card'],['../../pages/MarketNews.tsx','hero-card'],['../../pages/Funds.tsx','hero-card'],['../../pages/Compare.tsx','hero-card'],['../../pages/Dashboard.tsx','<TodayStrip'],['../../pages/FundDetail.tsx','<Hero fund='],['../../pages/AssetDetailsPage.tsx','<ListingLine'],['../../pages/NewsSentimentPage.tsx','<SourcePageHeader'],['../../pages/SocialSentimentPage.tsx','<SourcePageHeader'],['../../pages/HowItWorks.tsx','<h1'],['../../pages/Portfolio.tsx','<h1'],['../../pages/Settings.tsx','<SettingsHero'],['../../pages/Ask.tsx','<h1'],['./FinancialTools.tsx','hero-card'],
+ ['../../pages/Portfolio.tsx','<h1'],
 ])('places one callout after the existing header in %s',(path,header)=>{
  const source=read(path);expect(source.indexOf('<LearnMore ')).toBeGreaterThan(source.indexOf(header));
  expect(source.match(/<LearnMore /g)).toHaveLength(1);
@@ -13,19 +13,92 @@ it.each([
 });
 it('removes layout/footer and nested calculator/widget duplicates',()=>{
  for(const path of ['../layout/AppLayout.tsx','../dashboard/widgets/learningWidgets.tsx','./InvestmentPlanner.tsx'])expect(read(path)).not.toContain('<LearnMore ');
- expect(read('../../pages/Settings.tsx')).toContain('tab !== "account"');
- expect(read('../../pages/Ask.tsx')).toContain('!hasHistory && !loading && <LearnMore');
 });
 
 it('uses existing Funds spacing and preserves one Dashboard contextual entry point',()=>{
- expect(read('../../pages/Funds.tsx')).toContain('<LearnMore context="funds" className="mt-6" />');
+ const funds=read('../../pages/Funds.tsx');
+ expect(funds).not.toContain('<LearnMore ');
+ expect(funds).toContain('learnContext="funds"');
  const dashboard=read('../../pages/Dashboard.tsx');
- expect(dashboard.match(/<LearnMore /g)).toHaveLength(1);
+ expect(dashboard).not.toContain('<LearnMore ');
+ expect(read('../dashboard/deck/TodayStrip.tsx')).toContain('<LearnPopover context="dashboard"');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningNextWidget');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).toContain('export function LearningProgressWidget');
  expect(read('../dashboard/widgets/learningWidgets.tsx')).not.toContain('LearnMore');
 });
 
-it('gives Market News a local gap without an empty wrapper', () => {
- expect(read('../../pages/MarketNews.tsx')).toContain('<LearnMore context="news" className="mt-6" />');
+it('moves the Market News lessons into its About dialog', () => {
+ const page = read('../../pages/MarketNews.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('learnContext="news"');
+});
+
+it('moves the Stocks lessons into About this page', () => {
+ const assets = read('../../pages/Assets.tsx');
+ expect(assets).not.toContain('<LearnMore ');
+ expect(assets).toContain('learnContext="stocks"');
+});
+
+it('folds the stock page lessons into a header book button', () => {
+ const page = read('../../pages/AssetDetailsPage.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('<LearnPopover context={`stock.${tab}`} />');
+ expect(page.indexOf('<LearnPopover ')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the sentiment evidence lessons behind the header book button', () => {
+ const page = read('../../pages/SentimentEvidencePage.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the How it works lessons behind the header book button', () => {
+ const page = read('../../pages/HowItWorks.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the fund page lessons behind the header book button', () => {
+ const page = read('../../pages/FundDetail.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('lessons={<LearnPopover context={`fund.${active}`} />}');
+});
+
+it('moves the Compare lessons into its About dialog', () => {
+ const page = read('../../pages/Compare.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('learnContext={`compare.${kind}`}');
+});
+
+it('moves the Whale Watching lessons into its About dialog', () => {
+ const page = read('../../pages/WhaleWatching.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('learnContext="whales"');
+});
+
+it('puts the Watchlist lessons behind a book button in its header', () => {
+ const page = read('../../pages/Watchlist.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('<LearnPopover context="watchlist" onDark />');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('Toolbar'));
+});
+
+it('puts the Financial Tools lessons behind a book button in its header', () => {
+ const page = read('./FinancialTools.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('</header>'));
+});
+
+it('puts the Ask lessons behind a book button in its header', () => {
+ const page = read('../../pages/Ask.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('<LearnPopover context="ask" onDark />');
+ expect(page.indexOf('<LearnPopover')).toBeLessThan(page.indexOf('AskLandingCards onSelect'));
+});
+
+it('puts the Settings lessons behind the header book button, per tab and none on Account', () => {
+ const page = read('../../pages/Settings.tsx');
+ expect(page).not.toContain('<LearnMore ');
+ expect(page).toContain('learnContext={tab !== "account"');
+ expect(read('../settings/SettingsHero.tsx')).toContain('<LearnPopover');
 });

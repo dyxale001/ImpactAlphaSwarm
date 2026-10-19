@@ -17,7 +17,6 @@ import {
 } from "../../utils/compareFunds";
 import {
   DIFFERS_MOST,
-  FUNDS_DISCLAIMER,
   FUND_COST_MEANING,
   FUND_HOLDINGS_MEANING,
   FUND_RETURNS_MEANING,
@@ -153,7 +152,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
         <CompareSection title={FUND_SECTION_COST} />
         <CompareRow
           label="TER (yearly)"
-          emphasis={most === "ter"}
           tag={tag("ter", sameText(facts.map((f) => (f.ter === null ? null : String(f.ter)))))}
           values={facts.map((f, i) =>
             f.ter !== null ? (
@@ -172,7 +170,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
         <CompareSection title={FUND_SECTION_RISK} />
         <CompareRow
           label="Risk"
-          emphasis={most === "risk"}
           tag={tag("risk", sameText(facts.map((f) => (f.riskLevel === null ? null : String(f.riskLevel)))))}
           values={funds.map((f) =>
             f.risk_level !== null ? (
@@ -202,7 +199,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
             <CompareRow
               key={period}
               label={PERIOD_LABELS[period]}
-              emphasis={period === "1y" && most === "return1y"}
               tag={period === "1y" && most === "return1y" ? <RowTag kind="differs">{DIFFERS_MOST}</RowTag> : undefined}
               values={snaps.map((s, i) => (
                 <Value
@@ -260,7 +256,6 @@ export default function FundComparison({ funds }: { funds: CatalogueFundDetail[]
         />
       </CompareGrid>
 
-      <p className="max-w-3xl text-[11px] leading-relaxed text-brand-muted-fg">{FUNDS_DISCLAIMER}</p>
     </div>
   );
 }

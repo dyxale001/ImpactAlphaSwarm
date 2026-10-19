@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import PurchasingPower from './PurchasingPower';
+import { useState, type ReactNode } from 'react';
+import PurchasingPower, { InflationNotes } from './PurchasingPower';
 import { Leaf, TrendingUp } from 'lucide-react';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { calculateCompoundInterest, MAX_INVESTMENT_AMOUNT } from '../../utils/compoundInterest';
+import { FIELD_ERROR, FIELD_HINT, FIELD_INPUT, FIELD_LABEL, FIELD_RANGE, HowWorkedOut, RESULT_CARD, RESULT_LABEL, TOOL_CARD, ToolChart } from './toolChrome';
 
 const currency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
-const compactCurrency = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', notation: 'compact', maximumFractionDigits: 1 });
 const fields = [
   { key: 'initialInvestment', label: 'Starting investment (R)', min: 0, max: MAX_INVESTMENT_AMOUNT, step: '0.01' },
   { key: 'monthlyContribution', label: 'Monthly contribution (R)', min: 0, max: MAX_INVESTMENT_AMOUNT, step: '0.01' },
@@ -13,7 +12,7 @@ const fields = [
   { key: 'years', label: 'Investment period (years)', min: 1, max: 60, step: '1' },
 ] as const;
 
-export default function CompoundInterestCalculator({ inflationRate, onInflationChange }: { inflationRate: string; onInflationChange?: (value: string) => void }) {
+export default function CompoundInterestCalculator({ inflationRate, onInflationChange, modeSwitch }: { inflationRate: string; onInflationChange?: (value: string) => void; /** The Project growth / Plan a goal tray, in the card's header. */ modeSwitch?: ReactNode }) {
   const [inputs, setInputs] = useState({ initialInvestment: '10000', monthlyContribution: '1000', annualRate: '7', years: '20' });
   const values = { initialInvestment: Number(inputs.initialInvestment), monthlyContribution: Number(inputs.monthlyContribution), annualRate: Number(inputs.annualRate), years: Number(inputs.years) };
   const errors = fields.map(field => {
@@ -27,16 +26,22 @@ export default function CompoundInterestCalculator({ inflationRate, onInflationC
   const result = errors.some(Boolean) ? null : calculateCompoundInterest(values);
 
   return (
-    <section className="min-w-0 space-y-6 rounded-3xl border border-brand-border bg-brand-card p-5 shadow-card sm:p-8" aria-labelledby="compound-title">
-      <div className="space-y-2">
-        <h3 id="compound-title" className="flex items-center gap-2 text-xl font-semibold text-brand-fg"><Leaf className="h-5 w-5 text-brand-primary" aria-hidden="true" />What could my investment grow to?</h3>
-        <p className="text-sm text-brand-muted-fg">See how time, regular contributions and reinvested growth can work together. These example inputs are yours to explore.</p>
+    <section className={TOOL_CARD} aria-labelledby="compound-title">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 id="compound-title" className="flex items-center gap-2 text-lg font-bold tracking-[-0.015em] text-forest-900"><Leaf className="h-5 w-5 text-forest-700" aria-hidden="true" />What could my investment grow to?</h3>
+          <p className="text-sm text-brand-muted-fg">See how time, regular contributions and reinvested growth can work together. These example inputs are yours to explore.</p>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {modeSwitch}
+          <HowWorkedOut title="Projecting growth" sections={[{ heading: 'Assumptions and limits', body: <p>Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Actual investment returns will vary.</p> }, { heading: 'In today’s money', body: <InflationNotes /> }]} />
+        </div>
       </div>
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-        <div className="space-y-5">
+        <div className="grid content-start gap-x-4 gap-y-5 sm:grid-cols-2">
           {fields.map((field, index) => (
             <div key={field.key} className="space-y-2">
-              <label htmlFor={`compound-${field.key}`} className="block text-sm font-medium text-brand-fg">{field.label}</label>
+              <label htmlFor={`compound-${field.key}`} className={FIELD_LABEL}>{field.label}</label>
               <input id={`compound-${field.key}`} type="number" inputMode={field.key === 'years' ? 'numeric' : 'decimal'} min={field.min} max={field.max} step={field.step}
                 value={inputs[field.key]}
                 onKeyDown={event => { if (event.key === '-') event.preventDefault(); }}
@@ -54,52 +59,45 @@ export default function CompoundInterestCalculator({ inflationRate, onInflationC
                   setInputs(current => ({ ...current, [field.key]: value }));
                 }}
                 aria-invalid={Boolean(errors[index])} aria-describedby={errors[index] ? `compound-${field.key}-error` : field.key === 'annualRate' ? 'compound-rate-note' : undefined}
-                className="min-h-11 w-full rounded-xl border border-brand-border bg-brand-bg/60 px-4 py-3 text-brand-fg outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15" />
+                className={FIELD_INPUT} />
               {(field.key === 'annualRate' || field.key === 'years') && (
                 <input type="range" aria-label={`${field.label} slider`} min={field.min} max={field.max} step={field.step}
                   value={Number.isFinite(values[field.key]) ? Math.min(field.max, Math.max(field.min, values[field.key])) : field.min}
                   onChange={event => setInputs(current => ({ ...current, [field.key]: event.target.value }))}
-                  className="h-6 w-full cursor-pointer accent-brand-primary" />
+                  className={FIELD_RANGE} />
               )}
-              {errors[index] && <p id={`compound-${field.key}-error`} className="text-xs text-semantic-danger">{errors[index]}</p>}
-              {field.key === 'annualRate' && <p id="compound-rate-note" className="text-xs text-brand-muted-fg">Nominal annual rate, compounded monthly. An assumption you choose, not a predicted return.</p>}
+              {errors[index] && <p id={`compound-${field.key}-error`} className={FIELD_ERROR}>{errors[index]}</p>}
+              {field.key === 'annualRate' && <p id="compound-rate-note" className={FIELD_HINT}>Nominal annual rate, compounded monthly. An assumption you choose, not a predicted return.</p>}
             </div>
           ))}
         </div>
-        <div className="min-w-0 self-start space-y-5 rounded-3xl bg-brand-primary p-5 text-brand-bg sm:p-7" aria-live="polite" aria-atomic="true">
-          <TrendingUp className="h-7 w-7 text-brand-accent" aria-hidden="true" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-bg/75">Projected Value</p>
-          {result ? <>
-            <p className="break-words text-3xl font-semibold tracking-tight text-brand-accent sm:text-4xl">{currency.format(result.projectedValue)}</p>
-
-            <p className="text-sm text-brand-bg/75">After {values.years} {values.years === 1 ? 'year' : 'years'}</p>
-            <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-5 sm:grid-cols-2">
-              <div><dt className="text-xs text-brand-bg/70">Total Contributed</dt><dd className="mt-1 break-words text-lg font-semibold">{currency.format(result.totalContributed)}</dd></div>
-              <div><dt className="text-xs text-brand-bg/70">Investment Growth</dt><dd className="mt-1 break-words text-lg font-semibold">{currency.format(result.investmentGrowth)}</dd></div>
-            </dl>
-            <p className="text-sm leading-relaxed text-brand-bg/85">{result.projectedValue > 0 ? `${result.growthPercentage.toFixed(1)}% of the projected final value comes from investment growth.` : 'Add a starting investment or monthly contribution to explore growth.'}</p>
-          </> : <p className="text-sm text-brand-bg/85">Complete the inputs with valid values to see your projection.</p>}
+        <div className="min-w-0 space-y-4 self-start">
+          <div className={RESULT_CARD} aria-live="polite" aria-atomic="true">
+            <p className={`flex items-center gap-2 ${RESULT_LABEL}`}><TrendingUp className="h-4 w-4 text-lime-500" aria-hidden="true" />Projected value</p>
+            {result ? <>
+              <div>
+                <p className="break-words text-3xl font-bold tabular-nums tracking-[-0.02em] text-lime-500 sm:text-4xl">{currency.format(result.projectedValue)}</p>
+                <p className="mt-1 text-sm text-white/70">After {values.years} {values.years === 1 ? 'year' : 'years'}</p>
+              </div>
+              <dl className="grid min-w-0 gap-4 border-t border-white/15 pt-4 sm:grid-cols-2">
+                <div><dt className={RESULT_LABEL}>Total contributed</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.totalContributed)}</dd></div>
+                <div><dt className={RESULT_LABEL}>Investment growth</dt><dd className="mt-1 break-words text-lg font-bold tabular-nums">{currency.format(result.investmentGrowth)}</dd></div>
+              </dl>
+              <p className="text-sm leading-relaxed text-white/85">{result.projectedValue > 0 ? `${result.growthPercentage.toFixed(1)}% of the projected final value comes from investment growth.` : 'Add a starting investment or monthly contribution to explore growth.'}</p>
+            </> : <p className="text-sm text-white/85">Complete the inputs with valid values to see your projection.</p>}
+          </div>
+          {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.initialInvestment} monthlyContribution={values.monthlyContribution} />}
         </div>
       </div>
-      {result && <PurchasingPower futureValue={result.projectedValue} years={values.years} inflationRate={inflationRate} onInflationChange={onInflationChange} startingCapital={values.initialInvestment} monthlyContribution={values.monthlyContribution} />}
-      <div className="min-w-0 space-y-3 border-t border-brand-border pt-6">
-        <h4 className="font-semibold text-brand-fg">Your growth over time</h4>
-        {result ? <div className="h-72 w-full min-w-0 sm:h-80" role="img" aria-label={`Illustrative growth over ${values.years} years: ${currency.format(result.projectedValue)} projected value, including ${currency.format(result.totalContributed)} contributed.`}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <LineChart data={result.timeline} margin={{ top: 10, right: 12, bottom: 8, left: 0 }}>
-              <CartesianGrid stroke="var(--color-brand-border)" strokeDasharray="3 3" opacity={0.5} />
-              <XAxis dataKey="year" tickFormatter={year => `Year ${year}`} minTickGap={25} tick={{ fill: 'var(--color-brand-muted-fg)', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis width={72} tickFormatter={value => compactCurrency.format(value)} tick={{ fill: 'var(--color-brand-muted-fg)', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip labelFormatter={year => `Year ${year}`} formatter={(value, name) => [currency.format(Number(value)), name]} contentStyle={{ background: 'var(--color-brand-card)', border: '1px solid var(--color-brand-border)', borderRadius: 12, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line name="Projected Portfolio Value" dataKey="projectedValue" stroke="var(--color-brand-primary)" strokeWidth={3} dot={false} isAnimationActive={false} />
-              <Line name="Cumulative Contributions" dataKey="totalContributed" stroke="var(--color-brand-muted-fg)" strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div> : <p className="py-8 text-sm text-brand-muted-fg">Your chart will appear when all inputs are valid.</p>}
-        <p className="text-sm leading-relaxed text-brand-muted-fg">Contributions show the money you put in. The gap to projected value shows investment growth, including growth on earlier returns.</p>
-        <p className="rounded-xl bg-brand-bg p-4 text-xs leading-relaxed text-brand-muted-fg">Illustrative projection: assumes a constant annual return, monthly compounding, reinvested growth and contributions at the end of each month. Nominal projections exclude fees, tax and inflation; the separate figure in today’s money uses your inflation assumption. Actual investment returns will vary.</p>
-      </div>
+      {result ? (
+        <ToolChart
+          title="Your growth over time"
+          data={result.timeline}
+          series={[{ key: 'projectedValue', name: 'Projected portfolio value' }, { key: 'totalContributed', name: 'Cumulative contributions' }]}
+          label={`Illustrative growth over ${values.years} years: ${currency.format(result.projectedValue)} projected value, including ${currency.format(result.totalContributed)} contributed.`}
+          caption="Contributions show the money you put in. The gap to projected value shows investment growth, including growth on earlier returns."
+        />
+      ) : <p className="as-inset p-5 text-sm text-brand-muted-fg">Your chart will appear when all inputs are valid.</p>}
     </section>
   );
 }

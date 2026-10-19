@@ -18,7 +18,7 @@ export default function StaleDataBanner({
   isRefreshing,
 }: StaleDataBannerProps) {
   return (
-    <div className="bg-brand-bg/60 backdrop-blur-xl border border-brand-border/50 border-l-4 border-l-accent rounded-lg p-4 flex items-center gap-3">
+    <div className="as-card px-4 py-3.5 flex items-center gap-3">
       <RefreshCw
         className={`w-4 h-4 text-brand-primary shrink-0 ${isRefreshing ? "animate-spin" : ""}`}
       />

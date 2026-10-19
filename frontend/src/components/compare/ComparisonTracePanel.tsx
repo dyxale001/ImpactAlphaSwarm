@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BrainCircuit, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useComparisonTrace, type TraceKind } from "../../hooks/useComparisonTrace";
 import {
   TRACE_BUTTON,
@@ -63,17 +63,20 @@ export default function ComparisonTracePanel({
   const source = text ? trace?.source ?? null : null;
 
   return (
-    <section
-      className="rounded-2xl border border-brand-accent bg-brand-bg/55 p-3 sm:p-4"
-      aria-live="polite"
-      aria-busy={isLoading || isWriting}
-    >
+    // The soft box with the lime Sparkles mark that every AI-written paragraph on
+    // the platform uses.
+    <section className="as-inset p-4 sm:p-5" aria-live="polite" aria-busy={isLoading || isWriting}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-brand-fg">{TRACE_TITLE}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-forest-900">
+            <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-lime-500 text-forest-800">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+            {TRACE_TITLE}
+          </h2>
           {source && (
             <span
-              className="rounded-full bg-brand-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary"
+              className="chip chip-accent"
               title={
                 source === "model"
                   ? "Written by a language model from the figures on this page, then checked: every number in it appears in those figures, every stock is named, and verdict, advice or suitability wording fails it."
@@ -87,12 +90,7 @@ export default function ComparisonTracePanel({
         {text && followUp}
       </div>
 
-      <div className="mt-3 rounded-xl border border-brand-border/60 bg-brand-surface/70 p-3">
-        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-          <BrainCircuit className="h-3 w-3 text-brand-primary" />
-          Reasoning trace
-        </div>
-
+      <div className="mt-3">
         {isLoading || isWriting ? (
           <div className="space-y-2" aria-label={isWriting ? TRACE_WRITING : "Loading"}>
             {isWriting && <p className="text-xs font-semibold text-brand-muted-fg">{TRACE_WRITING}</p>}
@@ -104,8 +102,8 @@ export default function ComparisonTracePanel({
           </div>
         ) : text ? (
           <>
-            <p className="text-sm leading-relaxed text-brand-fg">{text}</p>
-            <p className="mt-2 text-[10px] text-brand-muted-fg">
+            <p className="text-sm leading-relaxed text-forest-900">{text}</p>
+            <p className="mt-2 text-xs leading-relaxed text-brand-muted-fg">
               {!funds && trace?.personal && trace.run_at ? `${traceFromRun(localDay(trace.run_at))}. ` : ""}
               {funds
                 ? trace?.personal
@@ -124,7 +122,7 @@ export default function ComparisonTracePanel({
             <button
               type="button"
               onClick={explain}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-xs font-semibold text-brand-bg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+              className="as-btn as-btn-sm as-btn-primary shrink-0"
             >
               <Sparkles className="h-3.5 w-3.5 text-brand-accent" />
               {TRACE_BUTTON}

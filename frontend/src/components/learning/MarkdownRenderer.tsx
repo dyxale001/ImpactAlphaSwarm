@@ -82,21 +82,21 @@ const markdownComponents: Components = {
 
     if (isBlockCode || className?.includes("language-")) {
       return (
-        <code className="block overflow-x-auto rounded-2xl border border-brand-border/60 bg-brand-bg px-4 py-3 font-mono text-[13px] leading-7 text-brand-fg">
+        <code className="block overflow-x-auto rounded-[12px] bg-forest-50 px-4 py-3 font-mono text-sm leading-7 text-forest-900">
           {children}
         </code>
       );
     }
 
     return (
-      <code className="rounded-md border border-brand-accent/60 bg-brand-accent/15 px-1.5 py-0.5 font-mono text-[0.92em] text-brand-fg">
+      <code className="rounded-md border border-forest-900/10 bg-forest-50 px-1.5 py-0.5 font-mono text-[0.92em] text-forest-900">
         {children}
       </code>
     );
   },
 
   pre: ({ children }) => (
-    <pre className="my-8 overflow-hidden rounded-2xl border border-brand-border/60 bg-brand-bg text-brand-fg shadow-sm">
+    <pre className="my-8 overflow-hidden rounded-[12px] border border-forest-900/10 bg-forest-50 text-forest-900">
       {children}
     </pre>
   ),

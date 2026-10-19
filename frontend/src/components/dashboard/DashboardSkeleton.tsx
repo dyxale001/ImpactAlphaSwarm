@@ -5,7 +5,7 @@ export default function DashboardSkeleton() {
         Loading...
       </div>
 
-      <div className="bg-brand-bg/60 backdrop-blur-xl rounded-lg p-4 -mx-4 px-4">
+      <div className="rounded-lg p-4 -mx-4 px-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-3">
             <div className="h-8 w-64 rounded bg-brand-border/40" />
@@ -19,7 +19,7 @@ export default function DashboardSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-2xl p-6 bg-brand-primary">
+      <div className="rounded-[24px] p-6 bg-brand-primary">
         <div className="h-4 w-32 rounded bg-white/15 mb-5" />
         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
           <div className="h-48 rounded-2xl bg-white/15" />
@@ -39,7 +39,7 @@ export default function DashboardSkeleton() {
           {Array.from({ length: 4 }).map((_, idx) => (
             <div
               key={idx}
-              className="rounded-lg border border-brand-border/40 bg-brand-bg/70 p-4 space-y-3"
+              className="as-inset p-4 space-y-3"
             >
               <div className="h-5 w-24 rounded bg-brand-border/35" />
               <div className="h-4 w-40 rounded bg-brand-border/30" />
@@ -50,7 +50,7 @@ export default function DashboardSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-lg p-4 border border-brand-border/40 bg-brand-bg/60">
+      <div className="as-inset p-4">
         <div className="h-4 w-full rounded bg-brand-border/30" />
       </div>
     </div>

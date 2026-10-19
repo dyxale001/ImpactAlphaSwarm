@@ -25,17 +25,15 @@ import {
  * chose the funds — deriving them in the browser would eventually disagree with
  * the list they claim to explain.
  *
- * ## Why a row and not a tile
+ * ## Why columns
  *
- * It used to be a full two-column card between the page header and the first
- * fund, so a reader met a panel about their answers before any fund. The answers
- * are short labelled values, and as chips they fit one line on a laptop. The
- * figure that actually decides the list, the highest published risk label shown,
- * is the one dark chip, so it is found first.
+ * It used to be a row of answer chips, then one line of running text. As
+ * labelled columns each answer is found where its label says, and the result
+ * they produce, the highest published risk label shown, sits last on a panel of
+ * its own, drawn on the same five steps as the fund cards.
  *
- * The applied rating gets a chip of its own only when it differs from the
- * answered one, with the sentence saying which rule lowered it. Unchanged, it
- * would be the same word twice.
+ * When the horizon or purpose lowered the rating, that column says "Applied to
+ * this list" and the sentence underneath says which rule lowered it.
  *
  * `ceiling` sits apart from the answers because it is derived rather than
  * answered, and it moves independently of the applied bracket — `HorizonRule`
@@ -67,71 +65,65 @@ export default function MatchInputs({ bracket }: { bracket: CatalogueBracket }) 
     ? `${bracket.ceiling_label} (${bracket.ceiling} of 5)`
     : null;
 
-  return (
-    <section
-      aria-label={MATCH_INPUTS_TITLE}
-      className="soft-card flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4"
-    >
-      <h2 className="flex items-center gap-2 text-[13px] font-bold text-brand-primary">
-        <SlidersHorizontal className="h-4 w-4 shrink-0 text-lime-700" />
-        {MATCH_INPUTS_TITLE}
-      </h2>
+  const answers = [
+    { label: MATCH_ANSWERED_LABEL, value: bracket.risk_tolerance },
+    { label: MATCH_INPUT_HORIZON_LABEL, value: horizon },
+    { label: MATCH_INPUT_PURPOSE_LABEL, value: purpose },
+  ];
 
-      <dl className="flex min-w-0 flex-[1_1_32rem] flex-wrap gap-2">
-        <Chip label={MATCH_ANSWERED_LABEL} value={bracket.risk_tolerance} />
-        <Chip label={MATCH_INPUT_HORIZON_LABEL} value={horizon} />
-        <Chip label={MATCH_INPUT_PURPOSE_LABEL} value={purpose} />
-        {narrowed && <Chip label={MATCH_APPLIED_LABEL} value={bracket.effective} dark />}
-        <Chip label={MATCH_INPUT_CEILING_LABEL} value={ceiling} dark />
+  return (
+    // A title row, then the inputs as labelled columns with the result they produce,
+    // the highest risk label shown, as the last column on a soft panel of its own.
+    <section aria-label={MATCH_INPUTS_TITLE} className="as-card flex flex-col gap-4 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-forest-900">
+          <SlidersHorizontal className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+          {MATCH_INPUTS_TITLE}
+        </h2>
+        <Link to={settingsPath("profile")} className="as-btn as-btn-sm as-btn-secondary">
+          {MATCH_INPUTS_ACTION}
+        </Link>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {answers.map((answer) => (
+          <div key={answer.label} className="flex flex-col gap-1 py-1">
+            <dt className="text-xs text-brand-muted-fg">{answer.label}</dt>
+            <dd className={`text-sm ${answer.value ? "font-bold text-forest-900" : "font-semibold text-forest-400"}`}>
+              {answer.value ?? MATCH_INPUT_UNANSWERED}
+            </dd>
+          </div>
+        ))}
+        <div className="as-inset flex flex-col gap-1.5 px-3 py-2">
+          <dt className="text-xs text-brand-muted-fg">
+            {narrowed ? MATCH_APPLIED_LABEL : MATCH_INPUT_CEILING_LABEL}
+          </dt>
+          <dd>
+            {bracket.ceiling != null && ceiling ? (
+              // The fund cards' five steps, stretched across the panel with the
+              // words underneath, so it fits a phone's half-width column.
+              <div className="flex flex-col gap-1.5">
+                <div className="flex gap-1" role="img" aria-label={`Risk level ${bracket.ceiling} of 5`}>
+                  {[1, 2, 3, 4, 5].map((step) => (
+                    <span
+                      key={step}
+                      className={`h-1.5 flex-1 rounded-full ${step <= bracket.ceiling! ? "bg-brand-accent" : "bg-forest-900/10"}`}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm font-bold text-forest-900">{ceiling}</span>
+              </div>
+            ) : (
+              <span className="text-sm font-semibold text-forest-400">{MATCH_INPUT_UNANSWERED}</span>
+            )}
+          </dd>
+        </div>
       </dl>
 
-      <Link
-        to={settingsPath("profile")}
-        className="text-xs font-bold text-brand-primary underline decoration-brand-primary/35 underline-offset-[3px] transition-colors hover:decoration-brand-primary"
-      >
-        {MATCH_INPUTS_ACTION}
-      </Link>
-
-      <p className="basis-full text-xs leading-relaxed text-forest-500">
+      <p className="border-t border-forest-900/8 pt-3 text-xs leading-relaxed text-brand-muted-fg">
         {MATCH_INPUTS_LEAD}
         {because ? ` ${because}` : ""}
       </p>
     </section>
-  );
-}
-
-/** One answer as a labelled chip. An unanswered question is not a zero: it is
- *  the reason the list is wider than it could be, so it is stated rather than
- *  hidden. `dark` marks what the matcher derived, rather than what was answered. */
-function Chip({
-  label,
-  value,
-  dark = false,
-}: {
-  label: string;
-  value: string | null;
-  dark?: boolean;
-}) {
-  return (
-    <div
-      className={`inline-flex items-baseline gap-1.5 rounded-full px-3 py-1.5 ${
-        dark ? "bg-brand-primary" : "bg-forest-50"
-      }`}
-    >
-      <dt className={`text-[11px] ${dark ? "text-lime-100/70" : "text-forest-500"}`}>{label}</dt>
-      <dd
-        className={`text-xs font-bold ${
-          value
-            ? dark
-              ? "text-brand-accent"
-              : "text-brand-primary"
-            : dark
-              ? "text-lime-100/70"
-              : "text-forest-500"
-        }`}
-      >
-        {value ?? MATCH_INPUT_UNANSWERED}
-      </dd>
-    </div>
   );
 }

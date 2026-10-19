@@ -68,17 +68,17 @@ export default function MyFundsPanel({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <h2 className="text-xl font-bold tracking-[-0.01em] text-brand-primary">{MY_FUNDS_TITLE}</h2>
-        <p className="max-w-[70ch] text-[13px] leading-relaxed text-forest-500">{MY_FUNDS_LEAD}</p>
-        <p className="flex max-w-[70ch] items-start gap-1.5 text-xs leading-relaxed text-forest-500">
+        <h2 className="text-base font-bold tracking-[-0.01em] text-forest-900">{MY_FUNDS_TITLE}</h2>
+        <p className="text-xs leading-relaxed text-brand-muted-fg">{MY_FUNDS_LEAD}</p>
+        <p className="flex items-start gap-1.5 text-xs leading-relaxed text-brand-muted-fg">
           <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           {MY_FUNDS_PRIVATE_NOTE}
         </p>
       </div>
 
       {saved && (
-        <div className="soft-card flex flex-col gap-2 p-4" role="status">
-          <p className="flex items-center gap-2 text-[13px] font-bold text-brand-primary">
+        <div className="as-card flex flex-col gap-2 p-4" role="status">
+          <p className="flex items-center gap-2 text-sm font-bold text-brand-primary">
             <CheckCircle2 className="h-4 w-4 text-lime-700" aria-hidden />
             {SAVED_TITLE}: {saved.fund.name}
           </p>
@@ -121,7 +121,9 @@ export default function MyFundsPanel({
         {!uploads.isLoading && !uploads.error && uploads.funds.length === 0 && !reading && (
           <FundsNotice icon={FolderOpen} title={LIST_EMPTY_TITLE} body={LIST_EMPTY_BODY} />
         )}
-        {uploads.funds.length > 0 && (
+        {/* Out of the way while a sheet is under review, so the screen is only
+            the review; the list is back the moment it is saved or discarded. */}
+        {uploads.funds.length > 0 && !reading && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {uploads.funds.map((fund) => (
               <UploadedFundCard key={fund.id} fund={fund} />

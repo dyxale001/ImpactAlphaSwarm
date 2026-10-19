@@ -9,6 +9,8 @@ type Props = {
   getArticleQuizStatus?: (articleId: string) => LearningQuizStatus | undefined;
 };
 
+// A category's lessons as a wrapping grid, so every lesson is in view without a
+// sideways scroll (the cards used to run off the right edge in one row).
 export default function LearningCategorySection({
   category,
   onOpenArticle,
@@ -19,35 +21,21 @@ export default function LearningCategorySection({
   return (
     <section className="space-y-4">
       <div>
-        <h2
-          className="
-text-xl font-semibold text-brand-fg
-"
-        >
-          {category.name}
-        </h2>
-
-        <p
-          className="
-text-sm text-brand-muted-fg
-"
-        >
-          {category.description}
-        </p>
+        <h2 className="text-lg font-bold tracking-[-0.015em] text-forest-900">{category.name}</h2>
+        {category.description && <p className="mt-1 text-sm text-brand-muted-fg">{category.description}</p>}
       </div>
 
-      <div className="flex gap-4 overflow-x-auto py-6 pb-10 scroll-smooth [scrollbar-width:thin] [scrollbar-color:theme(colors.brand-border)_transparent]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {category.articles.map((article) => (
-          <div key={article.id} className="w-[min(20rem,80vw)] shrink-0 snap-start">
-            <LearningCard
-              article={article}
-              onOpenArticle={onOpenArticle}
-              onTakeQuiz={onTakeQuiz}
-              canTakeQuiz={(article.quiz_question_count ?? 0) > 0}
-              hasPerfectScore={getArticleQuizScore(article.id) === 100}
-              quizStatus={getArticleQuizStatus?.(article.id)}
-            />
-          </div>
+          <LearningCard
+            key={article.id}
+            article={article}
+            onOpenArticle={onOpenArticle}
+            onTakeQuiz={onTakeQuiz}
+            canTakeQuiz={(article.quiz_question_count ?? 0) > 0}
+            hasPerfectScore={getArticleQuizScore(article.id) === 100}
+            quizStatus={getArticleQuizStatus?.(article.id)}
+          />
         ))}
       </div>
     </section>

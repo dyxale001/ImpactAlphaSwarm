@@ -1,10 +1,10 @@
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
+import LearnPopover from "../learning/LearnPopover";
+import type { LearningContext } from "../../data/learningContexts";
 import {
   SETTINGS_EYEBROW,
   SETTINGS_LEAD,
-  SETTINGS_SIGN_OUT,
   SETTINGS_TITLE,
-  SUMMARY_ANSWERED_LABEL,
   SUMMARY_GOALS_LABEL,
   SUMMARY_NOT_ANSWERED,
   SUMMARY_NO_SECTORS,
@@ -13,31 +13,28 @@ import {
 } from "../../utils/settingsCopy";
 
 /**
- * The page header, on the same forest band every other main page opens with.
+ * The page header, the hub header every main page opens with: no motif, the
+ * profile at a glance as stat tiles on the right (as the Learning Centre shows
+ * its progress), and the book button for this tab's lessons.
  *
- * Settings used to open on a bare heading in a narrow column, which made the
- * nav jump feel like leaving the app. The band is flat forest, no gradient —
- * decided for this page specifically back in May.
- *
- * The block on the right is the profile at a glance, in the position the
- * dashboard puts its "last run" facts. Sign out lives here as a quiet outline
- * chip, where the dashboard also puts it, so red on this page can mean one
- * thing only: the deactivate card.
+ * Sign out is not here: it lives in the profile control at the bottom of the
+ * sidebar and in the phone menu (D-212), so red on this page can mean one thing
+ * only: the deactivate card. When the risk answers were saved is shown in the
+ * risk card, where it is explained.
  */
 export default function SettingsHero({
   riskLabel,
-  savedAt,
   goalsAnswered,
   goalsTotal,
   sectors,
-  onSignOut,
+  learnContext,
 }: {
   riskLabel: string | null;
-  savedAt: string | null;
   goalsAnswered: number;
   goalsTotal: number;
   sectors: string[];
-  onSignOut: () => void;
+  /** The lessons for the tab in view, or none (the Account tab). */
+  learnContext: LearningContext | null;
 }) {
   const sectorSummary =
     sectors.length === 0
@@ -46,75 +43,53 @@ export default function SettingsHero({
         ? sectors[0]
         : `${sectors[0]} +${sectors.length - 1}`;
 
+  const stats = [
+    { label: SUMMARY_RISK_LABEL, value: riskLabel ?? SUMMARY_NOT_ANSWERED },
+    { label: SUMMARY_GOALS_LABEL, value: `${goalsAnswered} of ${goalsTotal}` },
+    // On a phone the tile is too narrow for a sector's name, so it says how many.
+    {
+      label: SUMMARY_SECTORS_LABEL,
+      value: sectorSummary,
+      short: sectors.length === 0 ? SUMMARY_NO_SECTORS : `${sectors.length} ${sectors.length === 1 ? "sector" : "sectors"}`,
+    },
+  ];
+
   return (
-    <div className="hero-card overflow-hidden px-5 pb-7 pt-8 sm:px-7">
-      <RingsMotif />
-      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-brand-accent">
-            {SETTINGS_EYEBROW}
-          </p>
-          <h1 className="flex items-center gap-3 text-2xl font-bold text-brand-bg lg:text-3xl">
+    <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <p className="band-eyebrow mb-2">{SETTINGS_EYEBROW}</p>
+            {learnContext && <LearnPopover context={learnContext} onDark className="shrink-0 lg:hidden" />}
+          </div>
+          <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
             <SettingsIcon className="h-7 w-7 shrink-0 text-brand-accent" />
             {SETTINGS_TITLE}
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-bg/75">{SETTINGS_LEAD}</p>
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-brand-bg/85 transition-colors hover:border-white/50 hover:text-brand-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              {SETTINGS_SIGN_OUT}
-            </button>
-          </div>
         </div>
 
-        <dl
-          className="grid shrink-0 grid-cols-[auto_auto] gap-x-5 gap-y-1.5 self-start rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-xs lg:self-end"
-          aria-label="Profile summary"
-        >
-          <dt className="text-brand-bg/60">{SUMMARY_RISK_LABEL}</dt>
-          <dd className="text-right font-bold text-brand-bg">{riskLabel ?? SUMMARY_NOT_ANSWERED}</dd>
-          {savedAt && (
-            <>
-              <dt className="text-brand-bg/60">{SUMMARY_ANSWERED_LABEL}</dt>
-              <dd className="text-right font-bold text-brand-bg">{savedAt}</dd>
-            </>
-          )}
-          <dt className="text-brand-bg/60">{SUMMARY_GOALS_LABEL}</dt>
-          <dd className="text-right font-bold tabular-nums text-brand-bg">
-            {goalsAnswered} of {goalsTotal}
-          </dd>
-          <dt className="text-brand-bg/60">{SUMMARY_SECTORS_LABEL}</dt>
-          <dd className="text-right font-bold text-brand-bg">{sectorSummary}</dd>
-        </dl>
+        <div className="flex shrink-0 items-start gap-3">
+          <dl className="grid grid-cols-3 gap-2" aria-label="Profile summary">
+            {stats.map((stat) => (
+              <div key={stat.label} className="min-w-0 rounded-[14px] bg-white/8 px-3 py-2.5 sm:px-4">
+                <dt className="text-xs text-brand-bg/60">{stat.label}</dt>
+                <dd className="text-sm font-bold leading-snug text-brand-bg sm:text-lg">
+                  {"short" in stat ? (
+                    <>
+                      <span className="sm:hidden">{stat.short}</span>
+                      <span className="hidden sm:inline">{stat.value}</span>
+                    </>
+                  ) : (
+                    stat.value
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {learnContext && <LearnPopover context={learnContext} onDark className="hidden shrink-0 lg:block" />}
+        </div>
       </div>
     </div>
-  );
-}
-
-/** Three concentric rings with a few lime points: the profile as the centre
- *  the rest of the app is set from. Sits behind the copy, right of centre,
- *  and hides on narrow screens where it would collide with the summary. */
-function RingsMotif() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 220 260"
-      className="pointer-events-none absolute -top-8 bottom-[-32px] right-[260px] hidden h-[calc(100%+64px)] w-[220px] opacity-60 lg:block"
-    >
-      <g stroke="#c7f269" strokeOpacity=".22" strokeWidth="2" fill="none">
-        <circle cx="110" cy="130" r="38" />
-        <circle cx="110" cy="130" r="70" />
-        <circle cx="110" cy="130" r="104" />
-      </g>
-      <g fill="#c7f269">
-        <circle cx="110" cy="92" r="4" />
-        <circle cx="176" cy="150" r="4" opacity=".7" />
-        <circle cx="52" cy="184" r="3" opacity=".5" />
-      </g>
-    </svg>
   );
 }

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import PurchasingPower from './PurchasingPower';
 
-it('starts closed and retains edited assumptions, values and validation across reopening', async () => {
+it('starts closed with the headline figure in view, and keeps edited assumptions, values and validation across reopening', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const container = document.createElement('div');
   document.body.append(container);
@@ -15,11 +15,15 @@ it('starts closed and retains edited assumptions, values and validation across r
   }
   try {
     await act(async () => root.render(createElement(Harness)));
-    const outer = container.querySelector('details')!;
+    // A dropdown under the result: closed, its row still shows the figure in today's money.
+    const outer = container.querySelector('details[aria-label="In today’s money"]') as HTMLDetailsElement;
     expect(outer.open).toBe(false);
-    expect(outer.querySelector('summary')?.textContent).toBe('Understanding inflation');
+    expect(outer.querySelector('summary')?.textContent).toContain('In today’s money');
+    expect(outer.querySelector('summary')?.textContent).toContain('≈ R');
     outer.open = true;
     const editor = outer.querySelector('details')!;
+    expect(editor.open).toBe(false);
+    expect(editor.querySelector('summary')?.textContent).toBe('Edit');
     editor.open = true;
     const input = editor.querySelector('input')!;
     async function edit(value: string) {
@@ -31,12 +35,12 @@ it('starts closed and retains edited assumptions, values and validation across r
     await edit('10');
     expect(container.textContent).toContain('Based on 10% assumed annual inflation');
     const values = container.querySelector('dl')!.textContent;
-    outer.open = false; outer.open = true;
+    editor.open = false; editor.open = true;
     expect(editor.querySelector('input')).toBe(input);
     expect(input.value).toBe('10');
     expect(container.querySelector('dl')!.textContent).toBe(values);
     await edit('-1');
-    outer.open = false; outer.open = true;
+    editor.open = false; editor.open = true;
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(container.textContent).toContain('Enter an inflation rate from 0 to 100%');
     expect(container.querySelector('dl')).toBeNull();

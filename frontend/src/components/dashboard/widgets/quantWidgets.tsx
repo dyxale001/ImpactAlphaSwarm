@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { WidgetProps } from "../../../dashboard/layoutSchema";
 import { HORIZON_SETTING, readHorizon } from "../../../dashboard/quantWidgetSettings";
 import { useAssetDetails } from "../../../hooks/useAssetDetails";
@@ -19,7 +18,7 @@ import {
   type RsiBand,
   type SubDimensionKey,
 } from "../../../data/quantExplainers";
-import { WidgetEmpty, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChrome";
+import { WidgetEmpty, WidgetHeaderLink, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChrome";
 
 // Quant widgets: the asset page's Quant tab, one card at a time, each scoped to
 // the asset chosen for that widget alone. They follow the sentiment widgets
@@ -32,14 +31,7 @@ import { WidgetEmpty, WidgetLoading, PinPrompt, PinnedHeader } from "./widgetChr
 // state has to say so rather than look like a fetch that failed.
 
 function FullAnalysisLink({ ticker }: { ticker: string }) {
-  return (
-    <Link
-      to={`/asset/${ticker}`}
-      className="text-xs font-semibold text-brand-primary hover:underline"
-    >
-      Full analysis →
-    </Link>
-  );
+  return <WidgetHeaderLink to={`/asset/${ticker}?tab=quant`}>Full analysis</WidgetHeaderLink>;
 }
 
 /** Closes and RSI over a horizon of the reader's choosing, in rand. */
@@ -58,18 +50,14 @@ export function QuantWindowWidget({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PinnedHeader ticker={ticker} setTicker={setTicker} />
-        <div className="flex flex-wrap items-center gap-3">
-          {/* The horizon is this widget's own, stored beside its ticker, so two
-              windows on the same asset can show a month and five years. */}
-          <HorizonPicker
-            value={horizon}
-            onChange={(next) => updateSettings({ [HORIZON_SETTING]: next })}
-          />
-          <FullAnalysisLink ticker={ticker} />
-        </div>
-      </div>
+      <PinnedHeader ticker={ticker} setTicker={setTicker} />
+      <FullAnalysisLink ticker={ticker} />
+      {/* The horizon is this widget's own, stored beside its ticker, so two
+          windows on the same asset can show a month and five years. */}
+      <HorizonPicker
+        value={horizon}
+        onChange={(next) => updateSettings({ [HORIZON_SETTING]: next })}
+      />
       <QuantTrendChart
         points={window.points}
         facts={window.facts}
@@ -99,10 +87,10 @@ export function QuantReadingWidget({ ticker, setTicker }: WidgetProps) {
   }
 
   const header = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    <>
       <PinnedHeader ticker={ticker} setTicker={setTicker} />
       <FullAnalysisLink ticker={ticker} />
-    </div>
+    </>
   );
 
   if (isLoading) {
@@ -185,30 +173,32 @@ function QuantReadingCompact({
     );
   }
 
+  // The Quant tab's tiles, cut down to what a card holds: each sub-dimension
+  // as an inset with its percentile and track, then RSI and beta with their
+  // band and one-line meaning.
   return (
-    <div className="space-y-4">
+    <div className="@container space-y-4">
       {hasPercentiles ? (
-        <div className="space-y-3">
-          {SUB_DIMENSION_ORDER.map((key) => {
-            const pctile = percentiles[key];
-            return (
-              <div key={key}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-                    {SUB_DIMENSIONS[key].label}
-                  </span>
-                  <span className="whitespace-nowrap font-mono text-sm font-semibold text-brand-fg">
-                    {pctile !== null ? `${ordinal(Math.round(pctile))} percentile` : "—"}
-                  </span>
+        <div className="space-y-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @md:grid-cols-3">
+            {SUB_DIMENSION_ORDER.map((key) => {
+              const pctile = percentiles[key];
+              return (
+                <div key={key} className="as-inset flex flex-col gap-1 p-3">
+                  <p className="text-xs font-semibold text-brand-muted-fg">{SUB_DIMENSIONS[key].label}</p>
+                  <p className="text-xl font-bold tabular-nums tracking-[-0.01em] text-forest-900">
+                    {pctile !== null ? ordinal(Math.round(pctile)) : "—"}
+                    {pctile !== null && <span className="text-xs font-semibold text-brand-muted-fg"> percentile</span>}
+                  </p>
+                  {pctile !== null && <PercentileTrack pctile={pctile} />}
                 </div>
-                {pctile !== null && <PercentileTrack pctile={pctile} />}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
           {/* Relative to the other assets in THIS user's run. Said under the
               tracks because a dashboard card is where a percentile is most
               easily read as an absolute score. */}
-          <p className="text-[11px] text-brand-muted-fg">{PERCENTILE_CAPTION}</p>
+          <p className="text-xs text-brand-muted-fg">{PERCENTILE_CAPTION}</p>
         </div>
       ) : (
         normalisation === "insufficient_universe" && (
@@ -217,42 +207,29 @@ function QuantReadingCompact({
       )}
 
       {hasBands && (
-        <div className="space-y-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted-fg">
-            Context readings
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {rsiBand && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1 text-xs">
-                <span className="font-mono font-semibold text-brand-fg">
-                  RSI {formatMetric(recommendation.rsi, 0)}
-                </span>
-                {/* Neutral slate on purpose: colouring "oversold" green would
-                    re-encode the buy signal the bands replace. */}
-                <span className="font-medium text-slate-600">{RSI_BANDS[rsiBand]}</span>
-              </span>
-            )}
-            {betaBand && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-brand-border/60 bg-brand-bg/55 px-3 py-1 text-xs">
-                <span className="font-mono font-semibold text-brand-fg">
-                  Beta {formatMetric(recommendation.beta, 2)}
-                </span>
-                <span className="font-medium text-slate-600">{BETA_BANDS[betaBand]}</span>
-              </span>
-            )}
-          </div>
-          <div className="space-y-1 text-[11px] text-brand-fg/80">
-            {rsiBand && (
-              <p>
-                <span className="font-medium text-brand-fg">RSI:</span> {RSI_BAND_MEANING[rsiBand]}
-              </p>
-            )}
-            {betaBand && (
-              <p>
-                <span className="font-medium text-brand-fg">Beta:</span> {BETA_BAND_MEANING[betaBand]}
-              </p>
-            )}
-          </div>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @md:grid-cols-2">
+          {rsiBand && (
+            <div className="as-inset flex flex-col gap-1.5 p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-bold text-forest-900">RSI</p>
+                <p className="text-xl font-bold tabular-nums text-forest-900">{formatMetric(recommendation.rsi, 0)}</p>
+              </div>
+              {/* Neutral on purpose: colouring "oversold" green would re-encode
+                  the buy signal the bands replace. */}
+              <span className="chip chip-line w-fit">{RSI_BANDS[rsiBand]}</span>
+              <p className="text-xs leading-relaxed text-brand-muted-fg">{RSI_BAND_MEANING[rsiBand]}</p>
+            </div>
+          )}
+          {betaBand && (
+            <div className="as-inset flex flex-col gap-1.5 p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-bold text-forest-900">Beta</p>
+                <p className="text-xl font-bold tabular-nums text-forest-900">{formatMetric(recommendation.beta, 2)}</p>
+              </div>
+              <span className="chip chip-line w-fit">{BETA_BANDS[betaBand]}</span>
+              <p className="text-xs leading-relaxed text-brand-muted-fg">{BETA_BAND_MEANING[betaBand]}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -77,7 +77,7 @@ export default function DashboardPreferencesSection() {
               Your watchlist, holdings and learning progress are not affected.
             </span>
           ) : (
-            <Link to="/dashboard" className="font-semibold text-brand-primary hover:underline">
+            <Link to="/dashboard" className="font-semibold text-forest-900 hover:underline">
               Open the dashboard to rearrange it →
             </Link>
           )
@@ -122,7 +122,7 @@ export default function DashboardPreferencesSection() {
           <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-brand-muted-fg" />
           <p className="text-sm text-brand-muted-fg">
             You have not set a dashboard up yet.{" "}
-            <Link to="/dashboard" className="font-semibold text-brand-primary hover:underline">
+            <Link to="/dashboard" className="font-semibold text-forest-900 hover:underline">
               Build it now
             </Link>
             .
@@ -139,7 +139,7 @@ export default function DashboardPreferencesSection() {
             return def ? (
               <span
                 key={w.instanceId}
-                className="rounded-full border border-brand-border/60 px-2 py-0.5 text-[11px] text-brand-muted-fg"
+                className="rounded-full border border-brand-border/60 px-2 py-0.5 text-xs text-brand-muted-fg"
               >
                 {def.title}
                 {ticker ? ` · ${ticker}` : ""}

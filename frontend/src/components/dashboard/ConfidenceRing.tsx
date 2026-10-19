@@ -55,7 +55,7 @@ export default function ConfidenceRing({
           />
         </svg>
         <span
-          className={`absolute text-xl font-bold font-mono ${
+          className={`absolute text-xl font-bold tabular-nums ${
             onDark ? "text-brand-bg" : ""
           }`}
         >
@@ -66,7 +66,7 @@ export default function ConfidenceRing({
       <div className="relative group">
         <button
           type="button"
-          className={`text-[10px] uppercase font-semibold ${
+          className={`text-xs font-semibold ${
             onDark ? "text-brand-accent" : "text-primary"
           }`}
         >

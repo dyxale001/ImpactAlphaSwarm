@@ -1,8 +1,5 @@
-import LearnMore from '../components/learning/LearnMore';
 import { useCallback } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { useAuthStore } from "../store/authStore"
-import { supabase } from "../lib/supabase"
+import { useSearchParams } from "react-router-dom"
 import { useUserSettings } from "../hooks/useUserSettings"
 import { useProfileAnswers } from "../hooks/useProfileAnswers"
 import SettingsHero from "../components/settings/SettingsHero"
@@ -24,13 +21,12 @@ import {
   ACCOUNT_TAB_INTRO,
   PREFERENCES_TAB_INTRO,
   PROFILE_TAB_INTRO,
-  formatSavedDate,
 } from "../utils/settingsCopy"
 
 /**
  * Settings: the same skeleton as every other main page.
  *
- * Forest hero, tab strip, cards on cream. Three tabs, split by what reads the
+ * Hub header, tab strip, platform cards. Three tabs, split by what reads the
  * data: the fund matcher reads the risk answers and goals together, the
  * analysis run reads sectors and expertise, and the account tab is the login
  * itself. Each card saves on its own — see `SettingsCard` for why there is no
@@ -41,8 +37,6 @@ import {
  * to `?tab=profile`, not to the top of the page.
  */
 export default function SettingsPage() {
-  const { setSession } = useAuthStore()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tab = parseSettingsTab(searchParams.get(SETTINGS_TAB_PARAM))
@@ -58,35 +52,16 @@ export default function SettingsPage() {
   const settings = useUserSettings()
   const profile = useProfileAnswers()
 
-  // setSession(null) alone only empties this tab's state: the Supabase token
-  // stays in storage and the next load signs straight back in. Clearing both is
-  // what the admin pages and the dashboard banner do.
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut()
-    } catch {
-      /* leaving anyway */
-    }
-    setSession(null)
-    navigate("/", { replace: true })
-  }
-
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-10 animate-fade-in-up">
       <SettingsHero
         riskLabel={profile.riskLabel}
-        savedAt={formatSavedDate(profile.lastSavedAt)}
         goalsAnswered={profile.answeredGoals}
         goalsTotal={GOAL_QUESTIONS.length}
         sectors={settings.formData.investment_universe}
-        onSignOut={() => void handleSignOut()}
+        learnContext={tab !== "account" ? (tab === "profile" ? "settings.risk" : "settings.sectors") : null}
       />
 
-      {tab !== "account" && <LearnMore context={tab === "profile" ? "settings.risk" : "settings.sectors"} topics={tab === "profile" ? [
-        { context: "settings.risk", label: "Risk Profile" }, { context: "settings.goals", label: "Investment Goals" },
-      ] : [
-        { context: "settings.sectors", label: "Investment Sectors" }, { context: "settings.expertise", label: "Expertise" },
-      ]} />}
       <SettingsTabs active={tab} onChange={setTab} />
 
       <div
@@ -96,7 +71,7 @@ export default function SettingsPage() {
         hidden={tab !== "profile"}
         className="space-y-4"
       >
-        <p className="text-xs text-brand-muted-fg">{PROFILE_TAB_INTRO}</p>
+        <p className="text-sm text-brand-muted-fg">{PROFILE_TAB_INTRO}</p>
         <RiskProfileCard profile={profile} />
         <GoalsCard profile={profile} />
       </div>
@@ -108,7 +83,7 @@ export default function SettingsPage() {
         hidden={tab !== "preferences"}
         className="space-y-4"
       >
-        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{PREFERENCES_TAB_INTRO}</p>
+        <p className="max-w-[70ch] text-sm text-brand-muted-fg">{PREFERENCES_TAB_INTRO}</p>
         <SectorsCard settings={settings} />
         <ExpertiseCard settings={settings} />
         <DashboardPreferencesSection />
@@ -121,7 +96,7 @@ export default function SettingsPage() {
         hidden={tab !== "account"}
         className="space-y-4"
       >
-        <p className="max-w-[70ch] text-xs text-brand-muted-fg">{ACCOUNT_TAB_INTRO}</p>
+        <p className="max-w-[70ch] text-sm text-brand-muted-fg">{ACCOUNT_TAB_INTRO}</p>
         <AccountDetailsCard settings={settings} />
         <ChangePasswordSection />
         <DeactivateAccountSection />

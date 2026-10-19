@@ -46,7 +46,7 @@ export default function DualBar({
   // 255,255,0.8), about three levels of grey apart, so the track was invisible:
   // the percentile read as a marker floating in space with no scale behind it,
   // and the sentiment bar read as an arbitrary length rather than a proportion.
-  const trackTone = onDark ? "bg-white/15" : "bg-brand-border";
+  const trackTone = onDark ? "bg-white/15" : "bg-forest-100";
   const fillTone = onDark ? "bg-brand-accent" : "bg-primary";
 
   return (
@@ -62,7 +62,7 @@ export default function DualBar({
         <div className="flex justify-between gap-2">
           <span className="relative group inline-block min-w-0" tabIndex={0}>
             <span
-              className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+              className={`text-xs font-semibold ${labelTone}`}
             >
               Sentiment Score
             </span>
@@ -78,7 +78,7 @@ export default function DualBar({
           {/* Out of 100, not a percentage: the scale's meaningful point is 50, and
               "62%" reads as "62 per cent positive", which is not what it measures. */}
           <span
-            className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
+            className={`shrink-0 whitespace-nowrap tabular-nums font-semibold ${valueTone}`}
           >
             {sentimentScore} / 100
           </span>
@@ -87,7 +87,7 @@ export default function DualBar({
             reads as middling, when it is in fact on the positive side. */}
         <div className={`relative h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
           <div
-            className={`h-full ${fillTone}`}
+            className={`h-full rounded-full ${fillTone}`}
             style={{ width: `${sentimentScore}%` }}
           />
           <div
@@ -104,7 +104,7 @@ export default function DualBar({
         <div className="flex justify-between gap-2">
           <span className="relative group inline-block min-w-0" tabIndex={0}>
             <span
-              className={`text-[10px] uppercase tracking-widest font-semibold ${labelTone}`}
+              className={`text-xs font-semibold ${labelTone}`}
             >
               {hasPercentile ? "Quant Position vs Peers" : "Quantitative Score"}
             </span>
@@ -117,7 +117,7 @@ export default function DualBar({
             </div>
           </span>
           <span
-            className={`shrink-0 whitespace-nowrap font-mono font-semibold ${valueTone}`}
+            className={`shrink-0 whitespace-nowrap tabular-nums font-semibold ${valueTone}`}
           >
             {hasPercentile
               ? `${ordinal(Math.round(quantPercentile as number))} percentile`
@@ -139,7 +139,7 @@ export default function DualBar({
         ) : (
           <div className={`h-1.5 w-full rounded-full overflow-hidden ${trackTone}`}>
             <div
-              className={`h-full ${fillTone}`}
+              className={`h-full rounded-full ${fillTone}`}
               style={{ width: `${quantitativeScore}%` }}
             />
           </div>

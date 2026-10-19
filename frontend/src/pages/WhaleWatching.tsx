@@ -1,5 +1,4 @@
 import AboutThisPage from "../components/guidance/AboutThisPage";
-import LearnMore from '../components/learning/LearnMore';
 import { useMemo, useState } from "react";
 import {
   Waves,
@@ -11,8 +10,6 @@ import {
   Tv,
   ArrowLeft,
   ChevronRight,
-  Building2,
-  Layers,
   Sparkles,
 } from "lucide-react";
 import {
@@ -22,7 +19,8 @@ import {
 import WhaleWatching from "../components/research/WhaleWatching";
 import InstitutionalOwners from "../components/research/InstitutionalOwners";
 import CompanySearch from "../components/research/CompanySearch";
-import WaveMotif from "../components/research/WaveMotif";
+import { ListingLine } from "../components/research/ListingLine";
+import { useListing } from "../hooks/useListing";
 import WhaleWatchingSkeleton from "../components/research/WhaleWatchingSkeleton";
 import FundHoldingsView, {
   FundHoldingsDetail,
@@ -45,24 +43,58 @@ const UNIVERSE_TILES = [
 
 type Section = "universes" | "funds";
 
-// Pill for companies the asset-discovery agent added in the last week.
-//
-// Picks up the lime accent the dashboard puts on a discovered top pick, since
-// it marks the same thing: a company the agent found rather than one we seeded.
-// Lime is the brand's signature and appears nowhere else here, so it reads as
-// "new" without a caption.
-//
-// Solid lime with forest text rather than the dashboard's tinted
-// `bg-brand-accent/15 text-brand-accent`: lime is a very light hue, so lime text
-// on a white card lands near 1.4:1 contrast and is effectively unreadable. The
-// design system already defines forest-900 as the colour to put on accent
-// (--fg-on-accent), which is legible and no less on-brand.
+// The clickable card every level of the page uses (universe tiles, the companies in
+// a universe), lifting on hover as the platform's other clickable cards do.
+const CARD_BUTTON =
+  "as-card group text-left transition-shadow hover:shadow-float focus-visible:shadow-float focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary disabled:cursor-not-allowed disabled:opacity-50";
+
+// The back link the stock page and the fund page use.
+const BACK_LINK =
+  "inline-flex items-center gap-2 text-sm font-semibold text-brand-muted-fg transition-colors hover:text-brand-fg";
+
+// Pill for companies the asset-discovery agent added in the last week: the lime
+// accent chip, which marks the same thing on the dashboard's discovered pick.
 function NewBadge() {
   return (
-    <span className="chip shrink-0 bg-brand-accent text-brand-fg">
-      <Sparkles className="w-2.5 h-2.5" />
+    <span className="chip chip-accent shrink-0">
+      <Sparkles className="h-3 w-3" aria-hidden="true" />
       New
     </span>
+  );
+}
+
+// The platform's tab bar, as on the stock page: full size, and on a phone an even
+// grid across the width.
+function Tabs<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: { id: T; label: string }[];
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="as-tabs grid w-full grid-cols-2 rounded-[20px] sm:inline-flex sm:w-auto sm:self-start sm:rounded-full"
+    >
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="tab"
+          aria-selected={value === o.id}
+          onClick={() => onChange(o.id)}
+          className="as-tab"
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -106,6 +138,8 @@ export default function WhaleWatchingPage() {
   };
 
   const selected = ticker ? assetByTicker[ticker] : undefined;
+  // The exchange beside the universe, looked up the way the stock page does.
+  const exchangeName = useListing(ticker ?? undefined, null);
 
   if (isLoading && all.length === 0) {
     return <WhaleWatchingSkeleton />;
@@ -113,50 +147,39 @@ export default function WhaleWatchingPage() {
 
   return (
     <div className="max-w-7xl mx-auto pt-6 lg:pt-10 px-4 sm:px-6 lg:px-8 pb-20 space-y-6 animate-fade-in-up">
-      {/* Header band. Forest ground with the wave motif breaking along the
-          bottom edge, which is the one place on this page a literal wave earns
-          its keep. Text sits on a relative layer so it clears the SVG. */}
-      <div className="hero-card overflow-hidden px-5 sm:px-7 pt-8 pb-12 sm:pb-16">
-        <WaveMotif className="h-24" />
-        <div className="relative">
-          <h1 className="text-2xl lg:text-3xl font-bold text-brand-bg flex items-center gap-3">
-            <Waves className="w-7 h-7 shrink-0 text-brand-accent" />
-            Whale Watching
-          </h1>
-          <p className="text-sm text-brand-bg/75 mt-2 max-w-2xl leading-relaxed">
-            Follow the big money: insider dealings, the institutions and funds
-            that own each stock, and what the largest investors are buying.
-            Informational only; this never affects your asset rankings.
-          </p>
+      {/* ── Header ──
+          The same title card as Stocks, Funds, Compare and Market News: no motif,
+          and the caveat (this never changes the rankings) and the lessons live in
+          About this page. */}
+      <div className="hero-card px-5 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="band-eyebrow mb-2">Big money</p>
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.02em] text-brand-bg lg:text-3xl">
+              <Waves className="h-7 w-7 shrink-0 text-brand-accent" />
+              Whale Watching
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-bg/75">
+              Follow the big money: insider dealings, the institutions and funds
+              that own each stock, and what the largest investors are buying.
+            </p>
+          </div>
+          <AboutThisPage page="whales" learnContext="whales" className="shrink-0 self-start" />
         </div>
-        <AboutThisPage page="whales" />
       </div>
-      <LearnMore context="whales" />
 
       {/* Tabs and search share a row, so search sits with the content it
           filters rather than competing with the header. */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
-          {(
-            [
-              { id: "universes", label: "Universes", Icon: Layers },
-              { id: "funds", label: "Top Funds", Icon: Building2 },
-            ] as const
-          ).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => goToSection(s.id)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                section === s.id
-                  ? "bg-brand-primary text-brand-bg"
-                  : "text-brand-muted-fg hover:text-brand-fg"
-              }`}
-            >
-              <s.Icon className="w-3.5 h-3.5" />
-              {s.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs
+          label="Whale Watching sections"
+          value={section}
+          onChange={goToSection}
+          options={[
+            { id: "universes", label: "Universes" },
+            { id: "funds", label: "Top Funds" },
+          ]}
+        />
         <div className="w-full sm:w-auto sm:min-w-[18rem]">
           <CompanySearch
             assets={all}
@@ -170,74 +193,53 @@ export default function WhaleWatchingPage() {
           reachable from search and the universe grid alike. */}
       {ticker ? (
         <div className="space-y-6">
-          <button
-            onClick={closeCompany}
-            className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
-          >
+          <button type="button" onClick={closeCompany} className={BACK_LINK}>
             <ArrowLeft className="w-4 h-4" />
             {universe && section === "universes"
               ? `Back to ${universe}`
               : "Back"}
           </button>
 
-          <div className="soft-card p-5 space-y-2">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-2xl font-bold font-mono text-brand-fg">
+          {/* The stock page's header, so a company reads the same way in both
+              places: the ticker, its name in an outline chip, the universe, and
+              the same cached one-line description. */}
+          <header className="as-card p-4 sm:p-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-forest-900">
                 {ticker}
               </h2>
-              {/* Solid green name pill, the same treatment the dashboard gives
-                  its top pick, so a company reads the same way in both places. */}
               {selected?.name && (
-                <span className="px-3 py-1 rounded-full bg-brand-primary text-brand-bg text-xs font-mono truncate max-w-full">
-                  {selected.name}
-                </span>
+                <span className="chip chip-line max-w-full truncate">{selected.name}</span>
               )}
               {selected?.isNew && <NewBadge />}
             </div>
+            <ListingLine universe={selected?.universe} exchange={exchangeName} className="mt-2" />
             {selected?.description && (
-              <p className="text-sm text-brand-muted-fg leading-relaxed max-w-2xl">
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-muted-fg">
                 {selected.description}
               </p>
             )}
-          </div>
+          </header>
 
-          {/* Tabs: insider dealings vs institutional owners */}
-          <div className="inline-flex items-center gap-1 rounded-full border border-brand-border/50 bg-brand-bg/60 p-1 flex-wrap">
-            {(
-              [
-                // The same names the asset page's tabs and the AI summaries use.
-                { id: "insiders", label: "Insider Trading", Icon: Waves },
-                {
-                  id: "institutions",
-                  label: "Big Investors",
-                  Icon: Building2,
-                },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTickerTab(t.id)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                  tickerTab === t.id
-                    ? "bg-brand-primary text-brand-bg"
-                    : "text-brand-muted-fg hover:text-brand-fg"
-                }`}
-              >
-                <t.Icon className="w-3.5 h-3.5" />
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {/* The stock page's tab names and tab bar. */}
+          <Tabs
+            label="Company research"
+            value={tickerTab}
+            onChange={setTickerTab}
+            options={[
+              { id: "insiders", label: "Insider Trading" },
+              { id: "institutions", label: "Big Investors" },
+            ]}
+          />
 
           {tickerTab === "insiders" ? (
             <WhaleWatching
               ticker={ticker}
-              variant="asset"
               showTradeDate
               showSummary
             />
           ) : (
-            <InstitutionalOwners ticker={ticker} variant="asset" showSummary />
+            <InstitutionalOwners ticker={ticker} showSummary />
           )}
         </div>
       ) : section === "funds" ? (
@@ -251,16 +253,13 @@ export default function WhaleWatchingPage() {
           <FundHoldingsView onOpenFund={setOpenFund} />
         )
       ) : universe ? (
-        /* Companies within a universe */
+        /* Companies within a universe: the tiles' card, with the same chevron. */
         <div className="space-y-6">
-          <button
-            onClick={() => setUniverse(null)}
-            className="text-sm font-semibold text-brand-muted-fg hover:text-brand-fg flex items-center gap-2 transition-colors"
-          >
+          <button type="button" onClick={() => setUniverse(null)} className={BACK_LINK}>
             <ArrowLeft className="w-4 h-4" /> All universes
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-brand-fg">{universe}</h2>
+            <h2 className="text-2xl font-bold tracking-[-0.02em] text-forest-900">{universe}</h2>
             <p className="text-sm text-brand-muted-fg mt-1">
               Pick a company to see its insider dealings and institutional
               owners.
@@ -270,20 +269,22 @@ export default function WhaleWatchingPage() {
             {assetsFor(universe).map((a) => (
               <button
                 key={a.ticker}
+                type="button"
                 onClick={() => openCompany(a.ticker, a.universe)}
-                className="group text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98]"
+                className={`${CARD_BUTTON} flex flex-col gap-2 p-5`}
               >
-                <div className="flex items-baseline gap-2">
-                  <p className="text-lg font-bold font-mono text-brand-primary">
-                    {a.ticker}
-                  </p>
-                  {a.isNew && <NewBadge />}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2">
+                      <span className="text-lg font-bold text-forest-900">{a.ticker}</span>
+                      {a.isNew && <NewBadge />}
+                    </p>
+                    <p className="truncate text-xs text-brand-muted-fg">{a.name}</p>
+                  </div>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-brand-muted-fg transition-colors group-hover:text-forest-900" />
                 </div>
-                <p className="text-xs text-brand-muted-fg mt-0.5 truncate">
-                  {a.name}
-                </p>
                 {a.description && (
-                  <p className="text-xs text-brand-muted-fg mt-2 leading-snug line-clamp-3">
+                  <p className="line-clamp-3 text-sm leading-relaxed text-brand-muted-fg">
                     {a.description}
                   </p>
                 )}
@@ -312,34 +313,31 @@ export default function WhaleWatchingPage() {
                   // and a line of copy, and the six filled two screens.
                   <button
                     key={id}
+                    type="button"
                     onClick={() => setUniverse(id)}
                     disabled={isLoading || assets.length === 0}
-                    className="group flex items-center gap-4 text-left p-4 rounded-2xl border border-brand-border/60 bg-brand-card hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed sm:block sm:p-5"
+                    className={`${CARD_BUTTON} flex items-center gap-4 p-4 sm:block sm:p-5`}
                   >
                     <div className="flex shrink-0 items-start justify-between sm:mb-4">
-                      {/* Solid forest tile with the icon knocked out in the
-                          page background, the same weight the dashboard gives
-                          its primary actions. The old 10% tint read as grey. */}
-                      <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Icon className="w-5 h-5 text-brand-bg" />
+                      {/* Solid forest tile with the icon knocked out in the page
+                          background, the weight the dashboard gives its primary
+                          actions. */}
+                      <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-forest-800">
+                        <Icon className="h-5 w-5 text-brand-bg" />
                       </div>
-                      <ChevronRight className="hidden w-4 h-4 text-brand-muted-fg group-hover:text-brand-primary transition-colors sm:block" />
+                      <ChevronRight className="hidden h-4 w-4 text-brand-muted-fg transition-colors group-hover:text-forest-900 sm:block" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-brand-fg">
-                        {id}
-                      </p>
-                      <p className="text-xs text-brand-muted-fg mt-0.5">{desc}</p>
-                      <p className="text-[11px] mt-2 font-semibold flex items-center gap-1.5 sm:mt-3">
-                        <span className="text-brand-primary">
-                          {isLoading
-                            ? "Loading…"
-                            : `${assets.length} ${assets.length === 1 ? "company" : "companies"}`}
-                        </span>
+                      <p className="text-base font-bold text-forest-900">{id}</p>
+                      <p className="mt-0.5 text-xs text-brand-muted-fg">{desc}</p>
+                      <p className="mt-2 flex items-center gap-2 text-xs font-bold text-forest-700 sm:mt-3">
+                        {isLoading
+                          ? "Loading…"
+                          : `${assets.length} ${assets.length === 1 ? "company" : "companies"}`}
                         {newCount > 0 && <NewBadge />}
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 shrink-0 text-brand-muted-fg group-hover:text-brand-primary transition-colors sm:hidden" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-brand-muted-fg transition-colors group-hover:text-forest-900 sm:hidden" />
                   </button>
                 );
               })}
