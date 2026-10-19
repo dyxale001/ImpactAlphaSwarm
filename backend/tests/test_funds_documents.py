@@ -51,6 +51,7 @@ class TestFetchingIsBounded:
         with pytest.raises(FetchError, match="https"):
             check_allowed("http://satrix.co.za/fund/mdd/STX40")
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_listed_host_passes(self):
         check_allowed("https://satrix.co.za/fund/mdd/STX40")
 

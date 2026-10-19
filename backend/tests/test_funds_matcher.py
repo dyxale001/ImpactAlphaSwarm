@@ -45,6 +45,8 @@ from src.funds.matcher import (  # noqa: E402
 )
 from src.funds.models import FundCandidate, Goals, Profile  # noqa: E402
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 TODAY = date(2026, 9, 4)
 
 # One fund per category, with the risk label and minimum term such a fund really
@@ -168,6 +170,7 @@ class TestTheWorkedCases:
         }
         assert outcome.bracket.effective == "Conservative"
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_moderate_over_three_years_sees_balanced_and_bonds(self, matcher, catalogue):
         # High Equity is dropped by the ceiling (its label is 4, above 3) and
         # the five-year funds are dropped by the horizon. What is left is what a

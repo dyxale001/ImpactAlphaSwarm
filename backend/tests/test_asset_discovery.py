@@ -129,6 +129,7 @@ class TestExchangeGate:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestProfileGate:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_good_profile_passes(self):
         assert profile_gate(a_candidate(), a_profile(), TODAY) is None
 

@@ -46,6 +46,8 @@ from src.orchestration.ranking import (
     strength_variants,
 )
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # helpers
@@ -376,6 +378,7 @@ class TestProfileFit:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestRankTerms:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_composite_is_exactly_the_product_of_the_four_disclosed_terms(self):
         # INVARIANT and the whole product promise: the four factors shown to the
         # user ARE the sort key. If this drifts, the displayed breakdown stops

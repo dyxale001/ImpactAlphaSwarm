@@ -31,6 +31,8 @@ from src.funds import prices as prices_module  # noqa: E402
 from src.funds.prices import refresh_fund, rows_for  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 class _Series(dict):
     """Just enough of a pandas column for the loop under test."""
@@ -83,6 +85,7 @@ def stub_yfinance(monkeypatch):
 class TestRandCents:
     """INVARIANT: a cent-quoted close is stored in rand."""
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_cents_are_divided_by_a_hundred(self, stub_yfinance):
         stub_yfinance["closes"] = {_Stamp(date(2026, 9, 4)): 11010.0}
         assert prices_module.fetch_closes("STX40.JO") == [(date(2026, 9, 4), 110.10)]

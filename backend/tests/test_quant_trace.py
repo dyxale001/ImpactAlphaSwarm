@@ -222,6 +222,7 @@ def service(config=None, repo=None, history=None, generator=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestGuard:
+	@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 	def test_a_grounded_paragraph_passes(self):
 		assert TraceGuard(cfg()).check(GOOD_REPLY, evidence()) is None
 

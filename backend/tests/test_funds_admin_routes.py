@@ -225,6 +225,7 @@ class TestOneStandardForFormsAndCsv:
         payload = call[1][0]
         assert payload["performance"] == {"1y": 14.41, "3y": -2.5}
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_valid_fund_is_written(self, client):
         res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
         assert res.status_code == 201

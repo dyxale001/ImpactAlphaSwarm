@@ -32,6 +32,7 @@ from src.funds.asisa import (  # noqa: E402
     TRACKER_ONLY,
     AsisaClassification,
 )
+import pytest  # noqa: E402
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 
@@ -221,6 +222,7 @@ class TestThe2025Standard:
 class TestClassification:
     """INVARIANT: lookups are exact, and an uncovered category is None not a guess."""
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_lookup_by_name_and_code_round_trips(self):
         for category in ASISA.categories:
             assert ASISA.by_name(category.name) is category
