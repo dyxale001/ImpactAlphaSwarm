@@ -19,6 +19,8 @@ from src.utils.ww_config import WhaleConfig  # noqa: E402
 from src.utils.ww_insider_trace import InsiderEvidence, InsiderMeaning  # noqa: E402
 from src.utils.ww_sources import FinnhubInsiderSource, InsiderWindow  # noqa: E402
 from src.utils.ww_store import InsiderCache  # noqa: E402
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 
 TODAY = datetime.date(2026, 10, 12)
 NOW = datetime.datetime(2026, 10, 12, 12, 0, tzinfo=datetime.timezone.utc).isoformat()
@@ -120,6 +122,7 @@ def test_the_backstop_cap_still_applies_inside_the_window():
 
 # ── the cache ────────────────────────────────────────────────────────────────
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_serving_applies_the_window_and_says_what_it_is():
     cache = InsiderCache(WhaleConfig(insider_window_days=30))
     recent = {"name": "A", "transaction_date": datetime.date.today().isoformat(), "lots": 1}

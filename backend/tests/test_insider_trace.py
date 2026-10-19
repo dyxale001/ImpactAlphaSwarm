@@ -31,6 +31,7 @@ from src.utils.ww_insider_trace import (  # noqa: E402
     format_name,
     money,
 )
+import pytest  # noqa: E402
 
 NOW = datetime.datetime(2026, 10, 1, 12, 0, tzinfo=datetime.timezone.utc)
 
@@ -183,6 +184,7 @@ def test_prompt_matches_the_other_summaries_and_never_advises():
     assert "Ryan Cohen, Chief Executive Officer, bought $26.4 million of shares on the open market" in prompt
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_template_passes_the_guard_and_is_summary_length():
     guard = InsiderTraceGuard(cfg())
     for ev in (with_price(evidence(*PURCHASE_CLUSTER)), evidence(*SALE_CLUSTER), evidence(deal("A", "S", "2026-09-01", value=900_000))):
@@ -191,6 +193,7 @@ def test_template_passes_the_guard_and_is_summary_length():
         assert len(text.split()) <= 110, len(text.split())
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_allows_describing_what_insiders_bought_or_sold():
     guard = InsiderTraceGuard(cfg())
     ev = with_price(evidence(*PURCHASE_CLUSTER))
@@ -198,6 +201,7 @@ def test_guard_allows_describing_what_insiders_bought_or_sold():
     assert guard.check("Several insiders sold shares, and others were buying. " + GOOD, ev) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_refuses_advice_causes_and_gendered_pronouns():
     guard = InsiderTraceGuard(cfg())
     ev = with_price(evidence(*PURCHASE_CLUSTER))
@@ -214,6 +218,7 @@ def test_guard_refuses_advice_causes_and_gendered_pronouns():
     assert guard.check(GOOD.replace("it is worth seeing", "you could buy and see"), ev) is not None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_reads_millions_as_figures_and_refuses_invented_ones():
     guard = InsiderTraceGuard(cfg())
     ev = with_price(evidence(*PURCHASE_CLUSTER))
@@ -246,6 +251,7 @@ class CountingGenerator:
         return self.text
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_service_writes_once_and_looks_up_the_price_only_when_writing():
     prices = FakePrices({"2026-09-21": 100.0, "2026-09-30": 108.3})
     repo, gen = FakeRepository(), CountingGenerator(GOOD)

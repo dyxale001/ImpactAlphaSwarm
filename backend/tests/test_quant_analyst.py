@@ -44,8 +44,6 @@ from src.agents.quant_analyst import (
     score_universe,
 )
 
-pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # helpers
@@ -446,6 +444,7 @@ class TestMeanOfPresent:
 # This is the engine PR #16 silently reverted on main.
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestScoreUniverse:
     @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_full_universe_is_normalised_cross_sectionally(self):

@@ -5,19 +5,20 @@ guards, the funds catalogue and the frontend calculations. The suite is split
 into **tiers** (below) so that the part which gates a merge is small and fast,
 and the part which needs a real database is named rather than hidden.
 
-Counts as collected on `main` at `258c72d` (2026-09-14); parametrised cases
-counted individually, which is what `pytest` and `vitest` report:
+Counts as collected on `chore/test-tiers-iteration4` (the UI audit branch at
+`6426289` plus the tiers, 2026-10-19); parametrised cases counted individually,
+which is what `pytest` and `vitest` report:
 
 | Tier | Backend | Frontend | Runs |
 |---|---|---|---|
-| smoke | 47 in 40 files (one test each) | 127 in 11 files | every push to any branch |
-| core | 431 in 12 files | 129 in 5 files | every pull request (`.github/workflows/tests.yml`) |
-| full, offline | 1,562 in 40 files (core included) | 506 in 27 files | every push to `main`, and nightly |
+| smoke | 70 in 62 files (one test each) | 187 in 19 files | every push to any branch |
+| core | 397 in 28 files (marked per test) | 235 in 12 files | every pull request (`.github/workflows/tests.yml`) |
+| full, offline | 2,682 in 62 files (core included) | 1,219 in 79 files | every push to `main`, and nightly |
 | live | 318 in 7 files | — | locally only, needs `backend/.env` |
-| everything | 1,880 in 47 files | 506 in 27 files | |
+| everything | 3,000 in 69 files | 1,219 in 79 files | |
 
-Counted as `def test_` functions instead, the backend is 1,588 tests, of which
-345 are core and 40 are smoke. Say which basis you are using when you quote a number.
+Counted as `def test_` functions instead, the backend is 2,283 tests, of which
+333 are core and 62 are smoke. Say which basis you are using when you quote a number.
 
 ## Running them
 
@@ -40,33 +41,55 @@ npm run test:watch
 
 **smoke** — a thin slice through *every* feature, in seconds. Backend: exactly **one**
 happy-path test in each offline test file, marked `@pytest.mark.smoke` on the test itself
-(the only per-test marker in the suite; a file's smoke pick is named in the marker's
-comment). Frontend: one small file per feature area, listed in
-`frontend/vitest.smoke.config.ts` — dashboard widgets, onboarding tour and questionnaire,
-learning roadmap, badges, research sentiment, funds, discovery, profile history, loading
-screen, settings. Frontend files are table-driven, so this tier ends up about the size of
-the frontend core; it is different content, not less of it. Smoke answers "does every
+(a file's smoke pick is named in the marker's comment). Frontend: one small file per
+feature area, listed in `frontend/vitest.smoke.config.ts`: dashboard widgets, setup guide,
+onboarding questionnaire, learning roadmap, badges, research sentiment, funds, discovery,
+profile history, loading screen, settings, Compare, Market News, the spotlight tour,
+analysis notifications, purchasing power, the Settings risk card, account status and the
+lesson video. Fact-sheet uploads have no frontend smoke file, because their only frontend
+file holds 169 cases; their six backend smoke tests cover them. Smoke answers "does every
 feature still do its one obvious thing"; it does not answer "are the numbers right" — that
 is core.
 
 **core** — a test is core when its failure means a user sees a wrong number, a
-wrong recommendation, or a guard that did not fire. Money-path maths, ranking,
-personalisation and the LLM guards. Deliberately *not* core: the orchestration
-phase plumbing and the risk-scale label normaliser (`test_orchestration.py`,
-`test_funds_risk_scale.py`) — structural and wording tests whose user-facing
-consequence, no fund above its ceiling, is asserted in the matcher file. Marked file-by-file with
-`pytestmark = pytest.mark.core` (backend) and listed in
-`frontend/vitest.core.config.ts` (frontend). Runs in under twenty seconds.
+wrong recommendation, or a guard that did not fire. The tier is balanced **per feature**:
+every feature puts in the tests that assert its deciding rule, and the rest of its tests
+stay in full. Backend core is therefore marked per class or per test with
+`@pytest.mark.core`, or with a module-level `pytestmark = pytest.mark.core` where the
+whole file is the rule. Frontend core is listed file by file in
+`frontend/vitest.core.config.ts`, because Vitest selects files. The frontend core runs in
+a few seconds. The backend core takes about 40 s, and about 30 s of that is one test,
+`test_funds_isolation.py`'s AST scan of `src/api.py`. The scan calls
+`ast.get_source_segment` once per `if`, re-splitting the whole file each time, so it gets
+slower as `api.py` grows; it is also the file's smoke pick. Making it fast is a change to
+the test body, so it is left for its own commit.
 
-| Purpose | Backend file(s) | Frontend file(s) |
+Core per feature, backend and frontend together (cases on 2026-10-19):
+
+| Feature | Core tests | Cases |
 |---|---|---|
-| Quant indicator maths, universe scoring | `test_quant_analyst.py` | `scoringEngine.test.ts` |
-| Ranking terms, profile fit, stability, convergence | `test_ranking.py` | |
-| Sentiment aggregation and blending; GCP scoring; NLP budget | `test_ss_aggregation.py`, `test_scoring.py`, `test_nlp_budget.py` | |
-| Reasoning-trace style by expertise level | `test_gr_reasoningtracestyle.py` | `learningRoadmap.test.ts` |
-| Rand prices | `test_zar_prices.py`, `test_funds_prices.py` | |
-| Fund matching to the risk profile (incl. the bracket ceiling); funds isolated behind the flag | `test_funds_matcher.py`, `test_funds_isolation.py` | `tfsaPlanner.test.ts`, `compoundInterest.test.ts` |
-| Ask AlphaSwarm output validator; API search guard | `test_ask_output_validator.py`, `test_api_search_guard.py` | `validation.test.ts` |
+| Quant analysis, ranking, rand prices, Quant trace | `TestScoreUniverse`; `TestRankTerms`, `TestProfileFit`; `test_zar_prices.py`; the Quant trace `TestGuard` | 67 |
+| Sentiment | `TestAggregateSigned`, `TestBlendSentiment`; `test_scoring.py`, `test_nlp_budget.py`, `test_sentiment_card_truth.py` | 55 |
+| Whale watching | `test_insider_window.py`, `test_whale_display_truth.py`; the insider and institutional summary guards; `whaleFormat.test.ts` | 43 |
+| Market News | the tagging rule, the overview guard and tip filtering in `test_macro_news.py`; `macroNews.test.ts` | 30 |
+| Investment Comparison | the stock comparison `TestGuard`; the fund comparison `TestPlacing`; `compareFunds.test.ts` | 47 |
+| Fact-sheet uploads | the flagged-value, review-token, saved and refused classes of `test_funds_upload_service.py`; reader-to-reader privacy and catalogue isolation; the reader's `TestReview` | 50 |
+| Funds catalogue and matching | six matcher classes (worked cases, the ceiling, bracket lowering, eligibility, trackers, missing answers); `test_funds_isolation.py`; rand cents and unlisted prices; the fund trace `TestPlacing` | 42 |
+| Discovery and reasoning-trace style | `TestClassificationChain`, `TestUniverses`; `test_gr_reasoningtracestyle.py` | 20 |
+| Ask AlphaSwarm | `test_ask_output_validator.py` | 49 |
+| Accounts, sign-in and access | the access rules in `test_account_status.py`; the US-listing `TestTheFilter`; `validation.test.ts` | 58 |
+| Admin console | `test_non_admin_is_rejected` | 7 |
+| Onboarding, investor profile and Settings | `scoringEngine.test.ts`, `riskProfileReasoning.test.ts` | 51 |
+| Spotlight tour | `spotlightTourService.test.ts` (eligibility, failing closed) | 11 |
+| Dashboard and run status | `staleness.test.ts` | 20 |
+| Financial tools | `tfsaPlanner.test.ts`, `purchasingPower.test.ts` | 57 |
+| Learning Centre | `learningRoadmap.test.ts`, `learningExpertise.test.ts` | 25 |
+
+Deliberately left in full: indicator micro-tests, convergence and the stability pass,
+the rest of each guard file (prompts, templates, services, caching), the Ask routing
+evaluation, the upload structural scans, `compoundInterest.test.ts`, `fundsCopy.test.ts`,
+`fundUploads.test.ts`, `compareStocks.test.ts`, and the fetching, scheduling and seeding
+files. They run on every push to `main` and nightly; they just do not gate a pull request.
 
 **full** — everything else that runs offline: the characterisation tests that
 pinned the September OOP refactor (see the design notes in the knowledge base),
@@ -80,6 +103,18 @@ real `SUPABASE_URL` in `backend/.env` (the `conftest.py` placeholders point at
 `localhost:54321`, which refuses the connection). Their docstrings say "no live
 Supabase calls"; that is not currently true, and until the asset lookup is
 faked they cannot run in CI. Marked `pytestmark = pytest.mark.live`.
+
+What a live run reaches, besides the read-only `assets`, `ai_runs`, `learning_articles`
+and funds tables:
+- No test writes to the database. The `ask_query_logs` insert is faked everywhere.
+- About fifteen tests make real Groq calls, and a few make real SerpApi calls (a
+  quota-limited key). This is because `_get_ask_intent_client` and
+  `_get_ask_narration_client` are not faked in every test. Faking both, and unsetting
+  `SERPAPI_API_KEY`, in an autouse fixture would stop that.
+
+Result on 2026-10-19: 317 of 318. `test_ask_learning.py::test_unrelated_token_does_not_get_a_fabricated_typo_match`
+fails because the live `assets` table now holds ABCL, the only ticker one edit from
+"ABCD", so the unique one-edit typo rule resolves it. The data moved under the test, not the code.
 
 ```bash
 # backend, from backend/
@@ -95,53 +130,71 @@ npm run test:core
 npm run test:full                    # same as npm test
 ```
 
-Adding a test: put it in the file that owns the module. It inherits the file's
-tier (core / live are per file). Promote a whole file to core only when it meets
-the rule above, and say why in the commit message. The only per-test marker is
-`smoke`: one per file, the plainest happy path; if you add a new test file, pick
-its smoke test in the same commit, and if you rename a smoke test keep the marker
-on it.
+Adding a test: put it in the file that owns the module. It is full unless it asserts
+its feature's deciding rule, in which case mark it (or its class) `@pytest.mark.core`
+and say why in the commit message; keep each feature's core to its deciding rule, not
+its whole file. `live` stays per file. Every test file has exactly one `smoke` test, the
+plainest happy path: if you add a new test file, pick its smoke test in the same commit,
+and if you rename a smoke test keep the marker on it.
 
-Known state on `main` at `258c72d`: one offline test fails,
-`test_fund_seed_loader.py::TestTheSeedIsWellFormed::test_every_fact_sheet_has_a_manager_url_and_a_date`
-(a fact sheet in the seed has an empty manager URL). It is data, not code, and
-it is not core.
+Known state on 2026-10-19: every offline test passes (2,682 of 2,682; the seed
+manager-URL failure noted at `258c72d` no longer occurs).
+`test_funds_admin_routes.py::TestTheStalenessOrdering::test_the_oldest_sheet_comes_first_and_no_sheet_beats_it`
+used to date its "current" sheet `2026-09-01`, so it failed from 2026-10-16 when that
+sheet aged past the 45-day threshold. It now uses a date relative to today. The route
+under test reads the real clock, so any fixture it judges for freshness must too.
 
 ## What is covered
 
-| Suite | Module | Tests |
+| Suite | Module | Cases |
 |---|---|---|
+| `backend/tests/test_ask_routing_eval.py` | Ask routing and resolution, frozen offline eval (`src/api.py`) | 223 |
+| `backend/tests/test_funds_upload_isolation.py` | uploaded funds stay private and out of the catalogue | 205 |
+| `backend/tests/test_asset_discovery.py` | `src/agents/asset_discovery.py` | 176 |
 | `backend/tests/test_funds_repository.py` | `src/funds/repository.py`, `validators.py` | 132 |
 | `backend/tests/test_quant_analyst.py` | `src/agents/quant_analyst.py` | 106 |
-| `backend/tests/test_asset_discovery.py` | `src/agents/asset_discovery.py` | 106 |
+| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 105 |
 | `backend/tests/test_ranking.py` | `src/orchestration/ranking.py` | 102 |
-| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 72 |
-| `backend/tests/test_supabase_repositories.py` | `src/utils/supabase_client.py` | 66 |
-| `backend/tests/test_funds_copy.py` | `src/funds/copy.py` | 50 |
+| `backend/tests/test_compare_trace.py` | `src/compare/trace.py` | 86 |
+| `backend/tests/test_supabase_repositories.py` | `src/utils/supabase_client.py` | 75 |
+| `backend/tests/test_quant_trace.py` | `src/quant/trace.py` | 62 |
+| `backend/tests/test_funds_admin_routes.py` | `src/funds/admin_routes.py` | 55 |
+| `backend/tests/test_orchestration.py` | `src/orchestration/langgraph_orchestrator.py` | 54 |
+| `backend/tests/test_funds_copy.py` | `src/funds/copy.py` | 51 |
+| `backend/tests/test_funds_upload_service.py` | `src/funds/upload_service.py`, `upload_routes.py` | 50 |
+| `backend/tests/test_macro_news.py` | `src/macro/` | 50 |
+| `backend/tests/test_ask_output_validator.py` | `src/utils/ask_output_validator.py` | 49 |
 | `backend/tests/test_ss_aggregation.py` | `src/utils/ss_aggregation.py` | 49 |
-| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 45 |
-| `backend/tests/test_funds_common_core.py` | migration 025's snapshot columns | 41 |
-| `backend/tests/test_funds_matcher.py` | `src/funds/matcher.py` | 37 |
-| `backend/tests/test_funds_admin_routes.py` | `src/funds/admin_routes.py` | 36 |
-| `backend/tests/test_funds_explain.py` | `src/funds/explain.py` | 32 |
-| `backend/tests/test_fund_seed_loader.py` | `scripts/load_fund_seed.py` | 29 |
-| `backend/tests/test_api_search_guard.py` | asset-search exchange guard | 28 |
-| `backend/tests/test_funds_documents.py` | `src/funds/documents.py` — the fetch allowlist | 26 |
-| `backend/tests/test_funds_asisa.py` | `src/funds/asisa.py` | 26 |
-| `backend/tests/test_funds_text_archive.py` | archiving a sheet's text (migration 026) | 24 |
-| `backend/tests/test_funds_isolation.py` | funds stay out of the pipeline | 9 |
-| `backend/tests/test_funds_config.py` | `src/funds/config.py` | 7 |
-| `frontend/src/utils/fundsCopy.test.ts` | funds copy + forbidden-term scan | 35 |
+| `backend/tests/test_compare_funds_trace.py` | `src/compare/funds_trace.py` | 47 |
+| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 47 |
+| `backend/tests/test_day_summary.py` | `src/utils/day_summary.py` | 46 |
+| `backend/tests/test_funds_common_core.py` | migration 025's snapshot columns | 46 |
+| `backend/tests/test_institutional_trace.py` | `src/utils/ww_trace.py` | 45 |
+| `backend/tests/test_funds_matcher.py` | `src/funds/matcher.py` | 44 |
+| `backend/tests/test_quant_history.py` | `src/quant/history.py` | 43 |
+| `backend/tests/test_social_daily.py` | `src/utils/ss_daily.py` | 41 |
+| `backend/tests/test_fund_trace.py` | `src/funds/trace.py` | 40 |
+| `frontend/src/utils/fundUploads.test.ts` | fact-sheet upload review and save | 169 |
+| `frontend/src/utils/fundsCopy.test.ts` | funds copy + forbidden-term scan | 56 |
+| `frontend/src/services/supabase/learningService.test.ts` | Learning Centre data access | 37 |
+| `frontend/src/utils/tfsaPlanner.test.ts` | TFSA planner | 34 |
 | `frontend/src/utils/validation.test.ts` | email + password rules | 32 |
 | `frontend/src/utils/scoringEngine.test.ts` | onboarding psychometrics | 31 |
-| `frontend/src/utils/goals.test.ts` | onboarding goals + horizon | 28 |
+| `frontend/src/utils/goals.test.ts` | onboarding goals + horizon | 31 |
+| `frontend/src/components/guidance/AboutThisPage.test.ts` | per-page guidance | 28 |
+| `frontend/src/utils/compareStocks.test.ts` | Compare page, stocks | 27 |
+| `frontend/src/components/research/quantSeries.test.ts` | Quant tab chart series | 27 |
+| `frontend/src/components/learning/ResourceViewerModal.test.ts` | learning resource viewer | 27 |
+| `frontend/src/dashboard/layoutSchema.test.ts` | dashboard layout schema | 26 |
+| `frontend/src/components/funds/fundTiles.test.ts` | funds grid tiles | 25 |
+| `frontend/src/utils/learningBadgeMilestones.test.ts` | learning badges | 25 |
+| `frontend/src/utils/purchasingPower.test.ts` | purchasing power | 23 |
+| `frontend/src/utils/compoundInterest.test.ts` | compound interest calculator | 21 |
 | `frontend/src/utils/staleness.test.ts` | nightly-run staleness | 20 |
-| `frontend/src/utils/stringFormatters.test.ts` | display formatting | 18 |
-| `frontend/src/utils/fundsCommonCore.test.ts` | common-core field display | 17 |
-| `frontend/src/utils/discovery.test.ts` | discovery provenance copy | 11 |
-| `frontend/src/utils/profileHistory.test.ts` | archiving previous survey answers | 10 |
+| `frontend/src/utils/riskProfileReasoning.test.ts` | saved risk reasoning | 20 |
 
-Suites under ten tests are omitted; the totals above are the full run.
+Cases as collected on 2026-10-19. Backend suites under 40 cases and frontend suites
+under 20 are omitted; the tier table at the top has the full totals.
 
 The target is the pure logic that decides what a user is shown and in what
 order: the four ranking terms and their composition, the two-stage quant

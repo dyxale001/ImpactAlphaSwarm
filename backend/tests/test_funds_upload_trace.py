@@ -220,6 +220,7 @@ class TestHttp:
         app.dependency_overrides[current_user_id] = lambda: USER
         return TestClient(app), fid, theirs_repo_fund
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_the_trace(self, api):
         http, fid, theirs = api
         body = http.post(f"/api/fund-uploads/{fid}/trace").json()

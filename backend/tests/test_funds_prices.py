@@ -31,8 +31,6 @@ from src.funds import prices as prices_module  # noqa: E402
 from src.funds.prices import refresh_fund, rows_for  # noqa: E402
 from src.funds.repository import FundRepository  # noqa: E402
 
-pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
-
 
 class _Series(dict):
     """Just enough of a pandas column for the loop under test."""
@@ -82,6 +80,7 @@ def stub_yfinance(monkeypatch):
     return state
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestRandCents:
     """INVARIANT: a cent-quoted close is stored in rand."""
 
@@ -103,6 +102,7 @@ class TestRandCents:
         assert prices_module.fetch_closes("X")[0][1] == 50.0
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestUnlistedFundsHaveNoPrice:
     """INVARIANT: nothing fabricates a series for a unit trust."""
 

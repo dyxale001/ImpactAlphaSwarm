@@ -11,10 +11,17 @@ export default defineConfig({
     environment: 'node',
     include: [
       'src/utils/scoringEngine.test.ts',
-      'src/utils/compoundInterest.test.ts',
       'src/utils/tfsaPlanner.test.ts',
       'src/utils/validation.test.ts',
       'src/utils/learningRoadmap.test.ts',
+      'src/utils/purchasingPower.test.ts',
+      'src/utils/riskProfileReasoning.test.ts',
+      'src/utils/compareFunds.test.ts',
+      'src/utils/macroNews.test.ts',
+      'src/components/research/whaleFormat.test.ts',
+      'src/services/supabase/spotlightTourService.test.ts',
+      'src/utils/staleness.test.ts',
+      'src/utils/learningExpertise.test.ts',
     ],
   },
 })

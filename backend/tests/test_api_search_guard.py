@@ -31,8 +31,6 @@ from src.api import (  # noqa: E402
     _is_us_listed,
 )
 
-pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
-
 
 def quote(symbol: str, exchange: str, quote_type: str = "EQUITY") -> dict:
     return {"symbol": symbol, "exchange": exchange, "quoteType": quote_type, "shortname": symbol}
@@ -97,6 +95,7 @@ class TestUsListings:
         assert _is_us_listed(quote("AAPL", "nms")) is True
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheFilter:
     def test_a_jse_fund_never_reaches_the_results(self):
         quotes = [quote("STX40.JO", "JNB"), quote("AAPL", "NMS")]

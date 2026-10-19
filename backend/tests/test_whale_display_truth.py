@@ -21,6 +21,8 @@ from src.utils.ww_config import WhaleConfig  # noqa: E402
 from src.utils.ww_sources import YFinanceInstitutionalSource  # noqa: E402
 from src.utils.ww_trace import InstitutionalEvidence, PlainMeaning  # noqa: E402
 
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 def fund(name, total, *positions):
     return {"fund": name, "total_value": total, "positions": list(positions)}
@@ -33,6 +35,7 @@ def pos(ticker, value, pct_held, shares=None, pct_change=None):
 
 # ── Vanguard files under two names ───────────────────────────────────────────
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_one_firms_filers_are_shown_as_one_fund_and_named():
     funds = [
         fund("Blackrock Inc.", 3_393, pos("AAPL", 300, 0.06)),

@@ -204,6 +204,7 @@ class TestKey:
 		assert normalise_fund_ids(["b", "a", "b", "", "x; drop"]) == ["b", "a"]
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestPlacing:
 	"""Each fund lands where the Funds page's own matcher puts it, for the reason it does."""
 
@@ -409,6 +410,7 @@ def test_reading_back_before_asking_gives_no_paragraph(client, monkeypatch):
 	assert body["available"] is True and body["trace"] is None and body["fund_ids"] == ["f-stx40", "f-coro"]
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_asking_writes_one_and_reading_back_finds_it(client, monkeypatch):
 	monkeypatch.setattr(routes, "_fund_trace_instance", service())
 	body = client.post("/api/compare/funds/trace", json={"fund_ids": ["f-coro", "f-stx40"]}).json()

@@ -66,6 +66,7 @@ class TestQuoteFound:
         assert not quote_found("1.33", SHEET_TEXT)
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestReview:
     def test_a_sure_quoted_reading_is_confirmed(self):
         got, _ = statuses({"readings": [reading("ter", "1.15%", "Total expense ratio (TER) 1.15%")]})
@@ -197,6 +198,7 @@ class FakeClient:
 
 
 class TestReader:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_reads_a_pdf_end_to_end(self):
         client = FakeClient({"is_fact_sheet": True,
                              "readings": [reading("ter", "1.15", "Total expense ratio (TER) 1.15%")],

@@ -58,6 +58,7 @@ def client_and_backfiller(monkeypatch):
 
 
 @pytest.mark.parametrize("ticker", ["AAPL", "brk.b", "BF-B", "T"])
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_a_real_looking_ticker_is_seeded(client_and_backfiller, ticker):
 	client, _ = client_and_backfiller
 

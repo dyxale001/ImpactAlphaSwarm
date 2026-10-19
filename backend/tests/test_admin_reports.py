@@ -62,6 +62,7 @@ BASE_USERS = [
     ("admin_reports_retention", {}),
     ("admin_reports_chatbot", {}),
 ])
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_non_admin_is_rejected(monkeypatch, endpoint_coro_name, kwargs):
     _patch_auth(monkeypatch, "u1")
     _install(monkeypatch, {"users": BASE_USERS})

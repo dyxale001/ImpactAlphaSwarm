@@ -23,8 +23,6 @@ import pytest
 from src.utils.ss_aggregation import SentimentAggregator
 from src.utils.ss_config import SentimentConfig
 
-pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
-
 # ─────────────────────────────────────────────────────────────────────────────
 # The behaviour under test moved out of module-level functions and into
 # ``SentimentAggregator`` when the scout was rebuilt as classes (cf1505e). Every
@@ -139,6 +137,7 @@ class TestRecencyWeightedAverage:
 # _aggregate_signed
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestAggregateSigned:
     def test_no_items_is_neutral(self):
         assert _aggregate_signed([]) == 0.0
@@ -269,6 +268,7 @@ class TestInfluenceWeights:
 # _blend_sentiment
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestBlendSentiment:
     def test_no_data_from_either_source_is_neutral_fifty(self):
         assert _blend_sentiment(counted(0, 0), counted(0, 0)) == 50

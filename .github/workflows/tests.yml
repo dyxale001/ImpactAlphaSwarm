@@ -25,6 +25,13 @@ on:
     - cron: "0 2 * * *"   # 02:00 UTC nightly, after the analysis run
   workflow_dispatch:
 
+# Placeholders, not secrets: five frontend test files import the Supabase client,
+# which throws at import without these. Nothing in the offline tiers connects.
+# The backend sets its own placeholders in tests/conftest.py.
+env:
+  VITE_SUPABASE_URL: http://localhost:54321
+  VITE_SUPABASE_ANON_KEY: placeholder
+
 jobs:
   backend-smoke:
     name: backend / smoke

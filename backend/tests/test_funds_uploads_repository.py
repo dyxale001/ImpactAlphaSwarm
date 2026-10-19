@@ -36,6 +36,7 @@ class TestEveryQueryIsTheReadersOwn:
     """The backend holds the service-role key, so the owner filter is the only
     thing between one reader's request and another reader's fund."""
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_listing(self):
         r, client = repo({"uploaded_funds": [{"id": "f1", "user_id": USER}]})
         r.list_funds(USER)

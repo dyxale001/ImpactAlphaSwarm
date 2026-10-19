@@ -221,6 +221,7 @@ def service(config=None, repo=None, history=None, generator=None):
 # the guard
 # ─────────────────────────────────────────────────────────────────────────────
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestGuard:
 	@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 	def test_a_grounded_paragraph_passes(self):

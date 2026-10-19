@@ -23,6 +23,14 @@ export default defineConfig({
       'src/utils/profileHistory.test.ts',               // profile / risk history
       'src/utils/assetsLoading.test.ts',                // staged loading screen
       'src/utils/settingsCopy.test.ts',                 // settings
+      'src/utils/compareUrl.test.ts',                   // Compare page
+      'src/dashboard/macroNewsWidgets.test.ts',         // Market News
+      'src/utils/spotlightPosition.test.ts',            // app-wide spotlight tour
+      'src/utils/notificationCountdown.test.ts',        // analysis notifications
+      'src/components/learning/PurchasingPower.test.ts',// financial tools: purchasing power
+      'src/components/settings/RiskProfileCard.test.ts',// settings: saved risk reasoning
+      'src/services/api/accountStatus.test.ts',         // account deactivation / reactivation
+      'src/components/learning/LearningVideo.test.ts',  // learning centre: lesson video
     ],
   },
 })
