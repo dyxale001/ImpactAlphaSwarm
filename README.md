@@ -27,6 +27,9 @@ selects funds, and the investment decision always remains with the user.
 
 **Live site:** https://impact-alpha-swarm.vercel.app/
 
+**Marking guide:** [`MARKING_GUIDE.md`](MARKING_GUIDE.md) maps each item on the
+Iteration 4 coding marksheet to where it is in the code and why it was built that way.
+
 ## What's in the app
 
 Every page follows the same pattern: the plain answer first, then the evidence
