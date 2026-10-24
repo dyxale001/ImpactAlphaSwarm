@@ -25,7 +25,7 @@ limits: where each figure comes from, how fresh it is, and what is not live.
 AlphaSwarm informs; it does not advise. It makes no buy, hold or sell calls, no AI
 selects funds, and the investment decision always remains with the user.
 
-**Live site:** https://impact-alpha-swarm.vercel.app/
+**Live site:** https://alphaswarm.site/
 
 **Marking guide:** [`MARKING_GUIDE.md`](MARKING_GUIDE.md) maps each item on the
 Iteration 4 coding marksheet to where it is in the code and why it was built that way.
@@ -391,12 +391,17 @@ npm run test:watch
 ## Deployment
 
 - **Frontend**: Vercel, deployed automatically on push to `main`, and served at
-  https://impact-alpha-swarm.vercel.app/. The `VITE_*` variables above are set as
-  Vercel environment variables.
+  https://alphaswarm.site/ (custom domain on Vercel; the original
+  https://impact-alpha-swarm.vercel.app/ address still works). The `VITE_*` variables
+  above are set as Vercel environment variables.
 - **Backend**: Google Cloud Run, built from `backend/Dockerfile` (gunicorn with a
   uvicorn worker, bound to the injected `$PORT`). Set the backend `.env` values as
-  Cloud Run environment variables, and include the deployed frontend origin in
-  `API_CORS_ORIGINS`.
+  Cloud Run environment variables, and include the deployed frontend origins in
+  `API_CORS_ORIGINS` (`https://alphaswarm.site` and the Vercel address).
+- **Supabase Auth**: under Authentication → URL Configuration, the Site URL is
+  `https://alphaswarm.site` and each frontend origin is listed in Redirect URLs
+  (e.g. `https://alphaswarm.site/**`). Password-reset links return to
+  `<origin>/reset-password`, so an origin missing from that list cannot reset passwords.
 - **Scheduled jobs**: Cloud Scheduler calls these endpoints, each sending
   `DAILY_RUN_SECRET` in the `X-Daily-Run-Secret` header. An endpoint returns 503 if
   the secret is not configured and 401 if the header does not match. Raise each job's

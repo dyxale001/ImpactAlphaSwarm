@@ -413,12 +413,7 @@ Feature routers are mounted under their own prefixes (`/api/fund-catalogue`, `/a
 
 These limits are deliberate or known, each with the reason it stands.
 
-- **`backend/src/api.py` is large.**
-  - It holds the original core endpoints and Ask AlphaSwarm.
-  - Everything built since then has its own package with the router → service → repository split
-    (`funds/`, `compare/`, `macro/`, `quant/`).
-  - Moving the remaining endpoints is mechanical, but it was left until after the final review to
-    avoid changing working code close to it.
+
 - **The frontend is mostly function components.** That is idiomatic React 19. Classes are used for
   services and repositories where they add value (§4).
 - **Some free data sources are unofficial.** yfinance and StockTwits have no service agreement. Every
