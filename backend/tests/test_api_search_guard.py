@@ -47,6 +47,7 @@ class TestUsListings:
             ("IMO", "ASE"),     # NYSE American
         ],
     )
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_nyse_or_nasdaq_listing_passes(self, symbol, exchange):
         assert _is_us_listed(quote(symbol, exchange)) is True
 
@@ -94,6 +95,7 @@ class TestUsListings:
         assert _is_us_listed(quote("AAPL", "nms")) is True
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheFilter:
     def test_a_jse_fund_never_reaches_the_results(self):
         quotes = [quote("STX40.JO", "JNB"), quote("AAPL", "NMS")]

@@ -219,6 +219,7 @@ class TestEvidence:
         assert not evidence("f-bare").has_evidence
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestPlacing:
     """The fund lands where the Funds page's own matcher puts it, for the reason it does."""
 
@@ -406,6 +407,7 @@ class TestRoutes:
         app.dependency_overrides[routes.get_trace_service] = lambda: svc
         return TestClient(app)
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_post_writes_a_paragraph(self):
         body = self.client(service()).post("/api/fund-catalogue/f-coro/trace").json()
         assert body["trace"] == GOOD_REPLY and body["available"] is True and body["fund_id"] == "f-coro"

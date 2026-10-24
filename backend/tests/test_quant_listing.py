@@ -77,6 +77,7 @@ def test_an_empty_lookup_is_not_cached():
 	assert source.calls == 2
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_the_endpoint_serves_the_listing(client, monkeypatch):
 	monkeypatch.setattr(routes, "_listing_instance", ListingService(data_source=FakeSource("NYQ")))
 	res = client.get("/api/assets/ko/listing")

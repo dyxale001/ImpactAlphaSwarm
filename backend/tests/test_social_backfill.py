@@ -30,6 +30,7 @@ from src.agents import sentiment_scout  # noqa: F401,E402  (import order breaks 
 from src.utils.ss_backfill import SeedRegistry, SocialBackfiller  # noqa: E402
 from src.utils.ss_config import SentimentConfig  # noqa: E402
 from src.utils.ss_social import SocialCollector, StockTwitsSource  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -226,6 +227,7 @@ def test_the_run_walk_is_shallower_than_the_backfill_walk():
 # ── the walk stays inside its bounds ─────────────────────────────────────────
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_the_backfill_reaches_the_whole_window_on_a_busy_ticker():
 	"""The reason the backfill gets its own page ceiling. A page is about thirty posts,
 	so the run's six pages is under two days for a ticker posting all day, and

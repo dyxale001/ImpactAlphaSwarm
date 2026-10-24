@@ -1052,6 +1052,7 @@ def test_a_refusal_carries_no_link():
     assert api._ask_response_link(resp) is None
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_a_single_asset_answer_links_to_that_asset():
     resp = api.AskResponse(
         intent="ANALYSIS_EXPLANATION", narration="ok", data={"ticker": "AAPL"},

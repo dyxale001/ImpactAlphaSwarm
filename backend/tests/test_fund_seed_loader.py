@@ -152,6 +152,7 @@ class TestTheSeedIsWellFormed:
         assert fund_rows, "funds.csv is empty"
         assert snapshot_rows, "snapshots.csv is empty"
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_every_fund_passes_its_validators(self, fund_rows):
         findings = fund_validators().check_all([as_fund(row) for row in fund_rows])
         blocking = [f"row {i}: {p}" for i, p in findings if p.blocking]

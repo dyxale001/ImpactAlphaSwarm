@@ -62,6 +62,7 @@ BASE_USERS = [
     ("admin_reports_retention", {}),
     ("admin_reports_chatbot", {}),
 ])
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_non_admin_is_rejected(monkeypatch, endpoint_coro_name, kwargs):
     _patch_auth(monkeypatch, "u1")
     _install(monkeypatch, {"users": BASE_USERS})
@@ -71,6 +72,7 @@ def test_non_admin_is_rejected(monkeypatch, endpoint_coro_name, kwargs):
     assert exc_info.value.status_code == 403
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_admin_can_access_overview(monkeypatch):
     _patch_auth(monkeypatch, "admin-1")
     _install(monkeypatch, {"users": BASE_USERS}, active_ids=["u1", "u2"])

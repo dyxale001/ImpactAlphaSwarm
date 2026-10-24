@@ -26,6 +26,7 @@ from src.utils.ss_backfill import SeedRegistry  # noqa: E402
 from src.utils.ss_config import SentimentConfig  # noqa: E402
 from src.utils.ss_social import StockTwitsSource  # noqa: E402
 from src.utils.ss_tick import SocialTicker  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -179,6 +180,7 @@ def test_a_ticker_with_nothing_new_costs_no_scoring_at_all():
 	assert summary["rows"] == 0
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_a_ticker_with_no_mark_scores_everything_it_walked():
 	"""A day nothing is stored for has no mark, and no post is dropped.
 

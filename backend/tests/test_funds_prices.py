@@ -80,9 +80,11 @@ def stub_yfinance(monkeypatch):
     return state
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestRandCents:
     """INVARIANT: a cent-quoted close is stored in rand."""
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_cents_are_divided_by_a_hundred(self, stub_yfinance):
         stub_yfinance["closes"] = {_Stamp(date(2026, 9, 4)): 11010.0}
         assert prices_module.fetch_closes("STX40.JO") == [(date(2026, 9, 4), 110.10)]
@@ -100,6 +102,7 @@ class TestRandCents:
         assert prices_module.fetch_closes("X")[0][1] == 50.0
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestUnlistedFundsHaveNoPrice:
     """INVARIANT: nothing fabricates a series for a unit trust."""
 

@@ -23,6 +23,8 @@ from src.agents import sentiment_scout  # noqa: F401,E402  (import order breaks 
 from src.utils.rec_writer import CarriedNews, RecommendationWriter  # noqa: E402
 from src.utils.ss_config import SentimentConfig  # noqa: E402
 from src.utils.ss_daily import SocialDayBuilder, SocialHistory  # noqa: E402
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 
 TODAY = datetime.date(2026, 10, 10)
 
@@ -88,6 +90,7 @@ def test_a_day_with_no_total_weight_claims_no_shares():
 	assert shares[0]["influence"] is None
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_the_history_point_serves_day_shares():
 	row = {
 		"as_of_night": "2026-10-10",

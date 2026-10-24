@@ -190,6 +190,7 @@ class TestTheFlag:
 
 
 class TestBrowse:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_the_catalogue_lists_every_active_fund(self, client):
         body = client.get("/api/fund-catalogue").json()
         assert body["count"] == 2

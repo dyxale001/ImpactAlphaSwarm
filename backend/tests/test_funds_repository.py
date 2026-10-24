@@ -166,6 +166,7 @@ class TestRetiredFundsStayOffThePublicSide:
 
 
 class TestListingAndFiltering:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_only_active_funds_are_listed(self):
         client = FakeClient()
         FundRepository(client).list_active()

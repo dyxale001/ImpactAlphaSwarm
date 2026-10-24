@@ -30,6 +30,7 @@ from src.utils.ww_trace import (  # noqa: E402
     InstitutionalTraceTemplate,
     spell_date,
 )
+import pytest  # noqa: E402
 
 NOW = datetime.datetime(2026, 9, 30, 12, 0, tzinfo=datetime.timezone.utc)
 
@@ -158,28 +159,33 @@ GOOD = (
 )
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_accepts_a_grounded_paragraph():
     assert InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40)).check(GOOD, evidence()) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_rejects_a_number_it_was_not_given():
     text = GOOD.replace("24.8 percent", "31.5 percent")
     reason = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40)).check(text, evidence())
     assert reason and "31.5" in reason
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_holds_decimals_to_their_last_digit_but_lets_whole_numbers_round():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
     assert guard.ungrounded_numbers("about 86 percent", evidence()) == []
     assert guard.ungrounded_numbers("86.7 percent", evidence()) == ["86.7"]
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_rejects_advice():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
     for phrase in ("You should buy it.", "It is a good investment.", "Funds are selling.", "The outlook is strong."):
         assert guard.check(phrase + " " + GOOD, evidence()) is not None, phrase
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_ignores_forbidden_words_and_numbers_inside_a_holders_name():
     names = [holder("1832 Asset Management Advisors", 0.05, 0.01)]
     ev = evidence(holders=names)
@@ -188,6 +194,7 @@ def test_guard_ignores_forbidden_words_and_numbers_inside_a_holders_name():
     assert InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40)).check(text, ev) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_rejects_a_figure_spelled_out_but_allows_thousands_of_holders():
     # Seen live: "Eight thousand one hundred eighty-three" slipped past the digit check.
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
@@ -195,6 +202,7 @@ def test_guard_rejects_a_figure_spelled_out_but_allows_thousands_of_holders():
     assert guard.check("Thousands of holders is normal. " + GOOD, evidence()) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_refuses_a_style_guessed_for_an_unclassified_holder():
     # Seen live: "FMR, LLC is not described as an index fund, so it is an active manager".
     ev = InstitutionalEvidence.from_payload("AAPL", payload(), top_n=6)
@@ -205,6 +213,7 @@ def test_guard_refuses_a_style_guessed_for_an_unclassified_holder():
     assert guard.check(quoted, ev) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_allows_the_word_holding():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
     assert guard.check("Holding a stock is not an endorsement. " + GOOD, evidence()) is None
@@ -212,6 +221,7 @@ def test_guard_allows_the_word_holding():
 
 # ── template and prompt ──────────────────────────────────────────────────────
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_template_passes_its_own_guard_for_a_mega_cap():
     ev = evidence()
     text = InstitutionalTraceTemplate().render(ev)
@@ -221,6 +231,7 @@ def test_template_passes_its_own_guard_for_a_mega_cap():
     assert "Capital Research Global Investors is a stock picker" in text
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_template_passes_its_own_guard_for_a_small_company_with_no_holders_classified():
     small = [holder("Some Adviser LLC", 0.05, -0.02, value=0.05 * 500e6)]
     ev = evidence(holders=small, institutions_pct=0.35, insiders_pct=0.18)
@@ -321,6 +332,7 @@ def test_generator_strips_dashes():
     assert "—" not in out
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_requires_a_so_this_means_closing_that_does_not_advise():
     guard = InstitutionalTraceGuard(cfg(institutions_trace_min_chars=40))
     without = GOOD.replace(" So this means it is worth checking the Sentiment tab before you make up your own mind.", "")
@@ -442,6 +454,7 @@ def test_service_is_quiet_when_disabled():
     assert gen.calls == 0
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_service_writes_once_and_then_serves_the_stored_trace():
     repo, gen = FakeRepository(), CountingGenerator(GOOD)
     svc = service(repo, gen)

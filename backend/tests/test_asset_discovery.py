@@ -129,6 +129,7 @@ class TestExchangeGate:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestProfileGate:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_good_profile_passes(self):
         assert profile_gate(a_candidate(), a_profile(), TODAY) is None
 
@@ -434,6 +435,7 @@ class TestParseJsonObject:
 # Module wiring
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestUniverses:
     def test_the_universe_labels_are_the_five_the_product_ships(self):
         # These must match the seed labels and onboardingData.ts exactly, or a
@@ -595,6 +597,7 @@ class TestValidationFunnel:
         assert rejections[0]["stage"] == "custom"
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestClassificationChain:
     def test_the_static_map_places_what_it_can(self):
         cands = [a_candidate("AAA", industry="Software")]

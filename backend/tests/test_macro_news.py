@@ -82,12 +82,14 @@ def test_one_question_per_universe_plus_gate_and_market_wide():
     assert uni.question_id("Media & Communications") == "u_media_communications"
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_every_question_asks_for_relevance_not_direction():
     for qid, q in uni.build_questions().items():
         if qid != uni.GATE_ID:
             assert q["instructions"].endswith(uni.RELEVANCE_ONLY), qid
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_universe_questions_exclude_general_market_effects():
     for universe, rule in uni.NEWS_RULES.items():
         text = rule.question()
@@ -108,20 +110,24 @@ def test_question_version_moves_when_wording_does(monkeypatch):
 # ── the tag rule ─────────────────────────────────────────────────────────────
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_gate_blocks_every_tag():
     assert tags_for(_scores(gate=0.59, mw=0.99, Finance=0.99)) == []
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_market_wide_first_then_universes_in_order():
     tags = tags_for(_scores(mw=0.98, Finance=0.97, Technology=0.8))
     assert tags == [uni.MARKET_WIDE, "Technology", "Finance"]
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_threshold_is_inclusive_and_low_scores_earn_nothing():
     assert tags_for(_scores(Healthcare=0.6)) == ["Healthcare"]
     assert tags_for(_scores(Healthcare=0.59)) == []
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_unscored_article_earns_no_tags():
     assert tags_for(None) == []
 
@@ -213,6 +219,7 @@ def test_parse_answers_maps_question_ids_back_to_universe_names():
     assert list(scores.universes) == UNIVERSES
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_parse_answers_refuses_partial_or_impossible_answers():
     body = _answers()
     del body["answers"][uni.question_id("Healthcare")]
@@ -354,6 +361,7 @@ def _service(articles, table, repo=None, digester=None, sleeps=None):
     )
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_pull_scores_tags_and_stores_new_stories():
     arts = [_article(1, "Fed signals pause"), _article(2, "Photos of the week")]
     svc = _service(arts, {"Fed signals pause": _scores(gate=0.99, mw=0.98, Finance=0.98)})
@@ -478,6 +486,7 @@ def test_prompt_lists_most_relevant_first_caps_the_list_and_drops_repeat_blurbs(
     assert "markets broadly" in MacroDigestPromptBuilder().build(uni.MARKET_WIDE, stories[:1], total=1)
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_guard_discards_advice_direction_and_bad_lengths():
     gen = MacroDigestGenerator(client=object())
     ok = "Reuters reported that the Bank of England admitted mishandling its first response to the Iran shock."
@@ -630,6 +639,7 @@ def test_generator_asks_again_when_the_reply_runs_long():
     assert "too long" in client.prompts[1] and "broke a rule" in client.prompts[1]
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_stock_tips_never_reach_the_prompt_and_boilerplate_blurbs_are_dropped():
     class Recorder:
         model = "m"
@@ -649,6 +659,7 @@ def test_stock_tips_never_reach_the_prompt_and_boilerplate_blurbs_are_dropped():
     assert "Lilly's mixed trial data" in Recorder.prompt
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_a_reply_that_judges_the_news_gets_one_corrected_retry():
     class Judgy:
         model = "m"
@@ -668,6 +679,7 @@ def test_a_reply_that_judges_the_news_gets_one_corrected_retry():
     assert '"good news"' in client.prompts[1]
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_a_second_bad_reply_is_discarded():
     class Stubborn:
         model = "m"
@@ -678,6 +690,7 @@ def test_a_second_bad_reply_is_discarded():
     assert MacroDigestGenerator(client=Stubborn()).generate("Technology", [DigestStory("CNBC", NOW, "h", "")], total=1) is None
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 def test_feed_flags_stock_tips_as_commentary():
     repo = FakeRepo()
     _service([_article(1, "Jim Cramer sees a huge catalyst for Apple. How to play the stock"), _article(2, "Fed signals pause")],
