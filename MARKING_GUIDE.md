@@ -88,8 +88,7 @@ idempotent, so each can be re-run safely. Examples worth opening:
 - **`021` and `022`:** upserts that are safe to repeat. A day's row is only replaced by one built
   from at least as much evidence, and a closed day is never rewritten.
 - **Row level security** is enabled on the backend-owned tables with no browser policy, so only the
-  backend's service role can read or write them. A test enforces this for the upload tables
-  (`backend/tests/test_funds_upload_isolation.py:360-368`).
+  backend's service role can read or write them.
 - **The per-user run lock** is an atomic conditional update (`AiRunRepository.acquire`,
   `supabase_client.py:558`). It stops a user from starting two analyses at once, and a lock left by
   a crashed run expires.
@@ -122,8 +121,10 @@ unit-tested logic) and `data/` (copy and configuration).
 - No hard-coded hosts: every backend URL is built from `VITE_API_BASE` (typed at
   `frontend/src/vite-env.d.ts:6`), and every key and flag comes from the environment.
 - Feature flags fail closed: anything other than `"true"` is off (`backend/src/funds/config.py:18-31`).
-- 3,000 backend tests (pytest) and 1,222 frontend tests (Vitest), none of which need an LLM or a
-  live API key.
+- Two tiers of automated tests ([TESTING.md](TESTING.md)), run by GitHub Actions
+  (`.github/workflows/tests.yml`). **Smoke** runs a thin slice through every feature on every
+  push (70 backend, 187 frontend). **Core** asserts each feature's deciding rule on every pull
+  request (397 backend, 235 frontend). Neither needs a database, an API key or an LLM.
 
 ## 4. Object-oriented concepts
 
@@ -211,7 +212,8 @@ components. Classes are used where they fit:
     `frontend/src/App.tsx`.
 - **The user id always comes from the token, never from a request parameter,** so one user can't
   request another's data (`backend/src/funds/routes.py:67-69`). Tests check that one reader can't
-  see another's uploads (`backend/tests/test_funds_upload_isolation.py`).
+  see another's uploads (core: `TestOneReaderCannotReachAnothers`,
+  `backend/tests/test_funds_upload_isolation.py:305`).
 - **Scheduled endpoints need a shared secret,** compared in constant time with
   `secrets.compare_digest` (`backend/src/api.py:6526`). They return 503 when no secret is configured.
 
@@ -255,23 +257,24 @@ ever holds the public anon key; the service role key and every third-party key s
 ## 6. Key features work correctly (MVP)
 
 Run the app as described in the README, or use the deployed site. Areas marked "flag" need their
-switch on (see the README's "What's in the app" table).
+switch on (see the README's "What's in the app" table). Every feature also has a smoke test; the
+last column lists its core tests.
 
-| Feature | Frontend | Backend | Tests |
+| Feature | Frontend | Backend | Core tests |
 |---|---|---|---|
-| Onboarding and risk profile | `frontend/src/pages/Onboarding.tsx` | profile stored in `user_analysis` | `frontend/src/utils/riskProfileReasoning.test.ts` |
-| Nightly multi-agent analysis and ranked stocks | `frontend/src/pages/Assets.tsx` | `backend/src/orchestration/` | `backend/tests/test_orchestration.py`, `test_ranking*.py` |
-| Stock page with evidence tabs | `frontend/src/pages/AssetDetailsPage.tsx` | `backend/src/api.py`, `backend/src/quant/` | `backend/tests/test_quant_*.py` |
-| Funds catalogue and profile matching (flag) | `frontend/src/pages/Funds.tsx` | `backend/src/funds/matcher.py` | `backend/tests/test_funds_matcher.py` |
-| Fact-sheet upload with human review (flag) | `frontend/src/components/funds/` | `backend/src/funds/upload_service.py`, `reading.py` | `backend/tests/test_funds_upload*.py` |
-| Compare (flag) | `frontend/src/pages/Compare.tsx` | `backend/src/compare/` | `backend/tests/test_compare*.py` |
-| Market News (flag) | `frontend/src/pages/MarketNews.tsx` | `backend/src/macro/` | `backend/tests/test_macro*.py` |
-| Whale Watching | `frontend/src/pages/WhaleWatching.tsx` | `backend/src/utils/whale_watching.py` | `backend/tests/test_whale*.py` |
-| Watchlist | `frontend/src/pages/Watchlist.tsx` | `WatchlistRepository` | `backend/tests/test_run_daily_watchlist.py` |
-| Learning Centre, quizzes, XP, badges | `frontend/src/pages/Learning.tsx` | `learning_*` tables | `frontend/src/components/learning/*.test.ts` |
-| Financial Tools | `frontend/src/pages/FinancialTools.tsx` | (client-side maths) | `frontend/src/utils/compoundInterest.test.ts`, `tfsaPlanner.test.ts` |
-| Ask AlphaSwarm | `frontend/src/pages/Ask.tsx` | `backend/src/api.py` (`/api/ask`) | `backend/tests/test_ask*.py` |
-| Admin: users, reports, learning content, funds | `frontend/src/pages/Admin*.tsx` | `backend/src/api.py:6672-7233`, `backend/src/funds/admin_routes.py` | `backend/tests/test_funds_admin_routes.py` |
+| Onboarding and risk profile | `frontend/src/pages/Onboarding.tsx` | profile stored in `user_analysis` | `frontend/src/utils/scoringEngine.test.ts`, `riskProfileReasoning.test.ts` |
+| Nightly multi-agent analysis and ranked stocks | `frontend/src/pages/Assets.tsx` | `backend/src/orchestration/` | `TestRankTerms`, `TestProfileFit` (`backend/tests/test_ranking.py`); `TestScoreUniverse` (`test_quant_analyst.py`) |
+| Stock page with evidence tabs | `frontend/src/pages/AssetDetailsPage.tsx` | `backend/src/api.py`, `backend/src/quant/` | `TestGuard` (`backend/tests/test_quant_trace.py`); `test_sentiment_card_truth.py` |
+| Funds catalogue and profile matching (flag) | `frontend/src/pages/Funds.tsx` | `backend/src/funds/matcher.py` | six matcher classes in `backend/tests/test_funds_matcher.py` |
+| Fact-sheet upload with human review (flag) | `frontend/src/components/funds/` | `backend/src/funds/upload_service.py`, `reading.py` | `backend/tests/test_funds_upload_service.py`; `TestOneReaderCannotReachAnothers` (`test_funds_upload_isolation.py`) |
+| Compare (flag) | `frontend/src/pages/Compare.tsx` | `backend/src/compare/` | `TestGuard` (`backend/tests/test_compare_trace.py`); `TestPlacing` (`test_compare_funds_trace.py`); `frontend/src/utils/compareFunds.test.ts` |
+| Market News (flag) | `frontend/src/pages/MarketNews.tsx` | `backend/src/macro/` | `backend/tests/test_macro_news.py` (tagging rule, overview guard); `frontend/src/utils/macroNews.test.ts` |
+| Whale Watching | `frontend/src/pages/WhaleWatching.tsx` | `backend/src/utils/whale_watching.py` | `backend/tests/test_insider_window.py`, `test_whale_display_truth.py`; `frontend/src/components/research/whaleFormat.test.ts` |
+| Watchlist | `frontend/src/pages/Watchlist.tsx` | `WatchlistRepository` | smoke: `backend/tests/test_run_daily_watchlist.py` |
+| Learning Centre, quizzes, XP, badges | `frontend/src/pages/Learning.tsx` | `learning_*` tables | `frontend/src/utils/learningRoadmap.test.ts`, `learningExpertise.test.ts` |
+| Financial Tools | `frontend/src/pages/FinancialTools.tsx` | (client-side maths) | `frontend/src/utils/tfsaPlanner.test.ts`, `purchasingPower.test.ts` |
+| Ask AlphaSwarm | `frontend/src/pages/Ask.tsx` | `backend/src/api.py` (`/api/ask`) | `backend/tests/test_ask_output_validator.py` |
+| Admin: users, reports, learning content, funds | `frontend/src/pages/Admin*.tsx` | `backend/src/api.py:6672-7299`, `backend/src/funds/admin_routes.py` | `test_non_admin_is_rejected` (`backend/tests/test_admin_reports.py`) |
 
 ## 7. User interface
 
@@ -349,8 +352,9 @@ Feature routers are mounted under their own prefixes (`/api/fund-catalogue`, `/a
   users' tickers, then personalises per user, with each user's failure isolated. Cloud Scheduler runs
   it, along with four other jobs (README, "Deployment").
 - **Features are isolated.** Funds, uploads, Compare and Market News are only imported and mounted
-  when their flag is on (`backend/src/api.py:188-251`). Tests enforce the isolation
-  (`backend/tests/test_funds_isolation.py`, `test_funds_upload_isolation.py`).
+  when their flag is on (`backend/src/api.py:188-251`). Core tests enforce the isolation
+  (`backend/tests/test_funds_isolation.py`, and `TestTheCatalogueNeverReturnsAnUpload` at
+  `backend/tests/test_funds_upload_isolation.py:191`).
 - **Built for Cloud Run.**
   - Heavy modules load lazily, so the container starts quickly.
   - Shared state that must survive across instances lives in Postgres: the run lock, the NLP budget,
@@ -390,7 +394,8 @@ Feature routers are mounted under their own prefixes (`/api/fund-catalogue`, `/a
 
 - **History:** 525 commits and 69 merged pull requests since 28 April 2026, from all four members
   (`git shortlog -sn --no-merges`).
-- **Tests:** 3,000 backend tests across 69 files and 1,222 frontend tests across 80 files.
+- **Tests:** a smoke tier (70 backend, 187 frontend) covering every feature, and a core tier
+  (397 backend, 235 frontend) balanced per feature, both run in CI ([TESTING.md](TESTING.md)).
 - **Schema:** 44 migration files, numbered 001–039, each with a header explaining its reasoning.
 - **Documentation in the code:** module docstrings explain why, not only what.
   `backend/.env.example` documents every setting with its cost and failure mode.
