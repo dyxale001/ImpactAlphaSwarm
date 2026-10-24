@@ -498,27 +498,28 @@ export default function Landing() {
       <main id="top">
         {/* ═══ Hero ═══ */}
         <section aria-labelledby="hero-title" className="mx-auto max-w-[1200px] px-4 pt-5 sm:px-8">
-          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-9 pt-9 sm:px-10 sm:pb-14 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:px-16 lg:pb-48 lg:pt-[72px]">
+          <div className="relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-[32px] bg-lime-200 px-6 pb-9 pt-9 sm:px-10 sm:pb-14 sm:pt-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-16 lg:pb-24 lg:pt-12 lg-short:py-10 lg-shorter:py-8">
             {/* A squiggle like the sign-in panel's: alternating bends along the
                 open band at the foot, then a hook that curls back on itself under
                 the cards before it leaves. Pinned to the bottom so its bends keep
-                their shape. */}
+                their shape. It needs a band of its own below the copy, so on short
+                desktop windows it goes, as on phones, and the card stays on screen. */}
             <Ribbon
               viewBox="0 0 1140 880"
               anchor="xMidYMax"
-              d="M-60,800 C80,735 190,705 305,745 C425,787 470,850 590,835 C700,821 725,745 805,705 C885,665 965,700 985,770 C1000,828 935,860 902,822 C872,787 915,724 1010,722 C1090,720 1130,768 1220,758"
-              width={38}
-              className="inset-0 z-[1] h-full w-full"
+              d="M-60,838 C80,806 190,790 305,810 C425,832 470,863 590,856 C700,841 725,788 805,743 C885,711 965,739 985,793 C1000,839 935,864 902,834 C872,807 915,757 1010,756 C1090,754 1130,792 1220,784"
+              width={32}
+              className="inset-0 z-[1] h-full w-full lg-short:hidden"
             />
-            <div className="relative z-[3] flex flex-col gap-5">
+            <div className="relative z-[3] flex flex-col gap-5 lg-shorter:gap-4">
               <span className="inline-flex items-center gap-2 self-start rounded-full bg-white py-1.5 pl-2 pr-3.5 text-xs font-bold text-forest-700 shadow-[0_1px_2px_rgba(17,35,32,.04),0_6px_18px_rgba(17,35,32,.04)]">
                 <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-forest-700 text-lime-500"><Sparkles className="h-3 w-3" aria-hidden="true" /></span>
                 For first-time South African investors
               </span>
-              <h1 id="hero-title" className="text-balance text-[clamp(40px,4.6vw,56px)] font-bold leading-[1.05] tracking-[-0.02em] text-forest-900">
+              <h1 id="hero-title" className="text-balance text-[clamp(40px,4.6vw,56px)] lg-short:text-[48px] lg-shorter:text-[40px] font-bold leading-[1.05] tracking-[-0.02em] text-forest-900">
                 See the evidence, understand it, decide for yourself.
               </h1>
-              <p className="max-w-[52ch] text-base leading-relaxed text-forest-900 lg:text-lg">
+              <p className="max-w-[52ch] text-base leading-relaxed text-forest-900 lg:text-lg lg-shorter:text-base">
                 AlphaSwarm gathers the evidence on US stocks{FLAGS.funds && ' and South African funds'}, explains it in plain language at your level, and shows how it got there. The decision stays yours.
               </p>
               <div className="flex flex-wrap gap-3">
@@ -545,22 +546,27 @@ export default function Landing() {
                   <div className="grid gap-3 sm:grid-cols-2"><Meter label="Sentiment" value="64 · Positive" percent={64} /><Meter label="Quant vs peers" value="84th percentile" percent={84} /></div>
                 </div>
                 <ul>
-                  {[['2', 'MSFT', 'Microsoft', 'Technology · R9 436.57'], ['3', 'ENPH', 'Enphase Energy', 'Green Energy · R716.54']].map(([r, t, n, s]) => (
+                  {[['2', 'MSFT', 'Microsoft', 'Technology · R9 436.57'], ['3', 'ENPH', 'Enphase Energy', 'Green Energy · R716.54', 'hype']].map(([r, t, n, s, hype]) => (
                     <li key={t} className={ROW}>
                       <span className="w-4 shrink-0 text-center text-xs font-bold text-brand-muted-fg">{r}</span>
                       <TickerTile ticker={t} small />
                       <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{t} <span className="text-xs font-normal text-brand-muted-fg">{n}</span></p><p className="truncate text-xs tabular-nums text-brand-muted-fg">{s}</p></div>
-                      <span className="chip hidden sm:inline-flex">Lean the same way</span>
+                      {hype ? (
+                        <span className="chip chip-caution hidden shrink-0 sm:inline-flex"><Flame className="h-3 w-3" />Hype flagged</span>
+                      ) : (
+                        <span className="chip hidden sm:inline-flex">Lean the same way</span>
+                      )}
                     </li>
                   ))}
                 </ul>
               </div>
-              <div className={`${CARD} animate-fade-up-delayed gap-2 shadow-float`}>
+              <div className={`${CARD} animate-fade-up-delayed gap-2 shadow-float lg-shorter:hidden`}>
                 <p className="flex items-center gap-2 text-sm font-bold"><SparkTile />Why it ranks here</p>
                 <p className="text-sm leading-relaxed">News this week has been positive (64 out of 100) and the price trend is stronger than 84% of the stocks in your run. Both signals point the same way.</p>
                 <p className="text-xs text-brand-muted-fg">Written by AI from the evidence. It can be wrong, so check the sources.</p>
               </div>
-              <div className={`${CARD} animate-fade-up-delayed flex-row items-center px-4 py-3.5 shadow-float`}>
+              {/* Explains the row's chip; on desktop the chip alone, so the hero fits the screen */}
+              <div className={`${CARD} animate-fade-up-delayed flex-row items-center px-4 py-3.5 shadow-float lg:hidden`}>
                 <span className="chip chip-caution shrink-0"><Flame className="h-3 w-3" />Hype flagged</span>
                 <span className="text-sm text-brand-muted-fg">When social buzz runs ahead of the price evidence, the card says so.</span>
               </div>

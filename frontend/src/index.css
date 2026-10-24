@@ -1,6 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
+/* Desktop windows that are short for their width (a 1080p laptop at 125%
+   scaling leaves about 730px under the browser bar, a 1366x768 one about
+   650px). Used to keep the landing hero card on one screen. */
+@custom-variant lg-short (@media (min-width: 64rem) and (max-height: 785px));
+@custom-variant lg-shorter (@media (min-width: 64rem) and (max-height: 700px));
+
 @theme {
   /* -------------------- Verdant Design System Tokens -------------------- */
 
