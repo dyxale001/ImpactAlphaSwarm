@@ -17,6 +17,7 @@ rp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(rp)
 
 from src.agents.asset_discovery import UNIVERSES  # noqa: E402
+import pytest  # noqa: E402
 
 SeedCorrection = rp.SeedCorrection
 SeedCorrectionPlan = rp.SeedCorrectionPlan
@@ -27,6 +28,7 @@ def seed(ticker, universe="Technology", is_active=True):
 
 
 class TestSeedCorrectionPlan:
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_seed_in_the_wrong_universe_is_pending(self):
         plan = SeedCorrectionPlan([SeedCorrection("NVDA", universe="AI & Robotics")], [seed("NVDA")])
         assert [c.ticker for c in plan.pending] == ["NVDA"]

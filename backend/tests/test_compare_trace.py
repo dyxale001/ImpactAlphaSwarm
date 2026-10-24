@@ -308,6 +308,7 @@ class TestKey:
 # the guard
 # ─────────────────────────────────────────────────────────────────────────────
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestGuard:
 	def guard(self):
 		return ComparisonGuard(cfg())
@@ -744,6 +745,7 @@ def test_reading_back_before_asking_gives_no_paragraph(client, monkeypatch):
 	assert body["trace"] is None
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_asking_writes_one_in_the_order_asked_and_reading_back_finds_it(client, monkeypatch):
 	monkeypatch.setattr(routes, "_trace_instance", service())
 	body = client.post("/api/compare/trace", json={"tickers": ["GOOGL", "AAPL"], "horizon": "6m"}).json()

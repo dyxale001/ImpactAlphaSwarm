@@ -120,6 +120,7 @@ class TestRecencyWeightedAverage:
     def test_equal_weights_give_a_plain_mean(self):
         assert _recency_weighted_avg([(1.0, 1.0), (-1.0, 1.0)]) == pytest.approx(0.0)
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_heavier_items_pull_the_average(self):
         assert _recency_weighted_avg([(1.0, 3.0), (-1.0, 1.0)]) == pytest.approx(0.5)
 
@@ -136,6 +137,7 @@ class TestRecencyWeightedAverage:
 # _aggregate_signed
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestAggregateSigned:
     def test_no_items_is_neutral(self):
         assert _aggregate_signed([]) == 0.0
@@ -266,6 +268,7 @@ class TestInfluenceWeights:
 # _blend_sentiment
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestBlendSentiment:
     def test_no_data_from_either_source_is_neutral_fifty(self):
         assert _blend_sentiment(counted(0, 0), counted(0, 0)) == 50

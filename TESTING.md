@@ -1,8 +1,18 @@
 # Testing
 
-Automated unit tests covering the scoring and ranking core, and the funds
-catalogue. **1265 backend tests and 202 frontend tests**, both suites run in a
-few seconds combined, and neither touches the network, the database, or an LLM.
+Two tiers of automated tests guard the platform:
+
+- **smoke**, a thin slice through every feature, run on every push;
+- **core**, the deciding rule of every feature, run on every pull request.
+
+| Tier | Backend | Frontend | Runs |
+|---|---|---|---|
+| smoke | 70 in 62 files (one test each) | 187 in 19 files | every push to any branch |
+| core | 397 in 28 files | 235 in 12 files | every pull request |
+
+Counts are as `pytest` and `vitest` report them, with parametrised cases counted
+individually. Both tiers run offline: no test in them needs the database, an API key or
+an LLM. The CI workflow is `.github/workflows/tests.yml`.
 
 ## Running them
 
@@ -11,102 +21,91 @@ few seconds combined, and neither touches the network, the database, or an LLM.
 ```bash
 source venv/bin/activate
 pip install -r requirements-dev.txt   # first time only
-pytest
+pytest -m smoke                       # every feature once
+pytest -m core                        # the merge gate
 ```
 
 **Frontend** (from `frontend/`):
 
 ```bash
-npm test          # single run
-npm run test:watch
+npm run test:smoke
+npm run test:core
 ```
 
-## What is covered
+## Smoke
 
-| Suite | Module | Tests |
+Smoke answers "does every feature still do its one obvious thing", in seconds.
+
+- **Backend:** exactly **one** happy-path test in each of 62 test files, marked
+  `@pytest.mark.smoke` on the test itself. The marker's comment names why that test
+  was picked.
+- **Frontend:** one small file per feature area, listed in
+  `frontend/vitest.smoke.config.ts`. The areas are dashboard widgets, setup guide,
+  onboarding questionnaire, learning roadmap, badges, research sentiment, funds,
+  discovery, profile history, loading screen, settings, Compare, Market News, the
+  spotlight tour, analysis notifications, purchasing power, the Settings risk card,
+  account status and the lesson video. Fact-sheet uploads are covered by their six
+  backend smoke tests.
+
+Smoke does not answer "are the numbers right"; that is core.
+
+## Core
+
+A test is core when its failure means a user sees a wrong number, a wrong
+recommendation, or a guard that did not fire. The tier is balanced **per feature**:
+every feature contributes the tests that assert its deciding rule.
+
+- **Backend:** marked per class or per test with `@pytest.mark.core`, or with a
+  module-level `pytestmark = pytest.mark.core` where the whole file is the rule.
+- **Frontend:** listed file by file in `frontend/vitest.core.config.ts`, because Vitest
+  selects files.
+
+The frontend core runs in a few seconds and the backend core in under a minute.
+
+| Feature | Core tests | Cases |
 |---|---|---|
-| `backend/tests/test_funds_repository.py` | `src/funds/repository.py`, `validators.py` | 132 |
-| `backend/tests/test_quant_analyst.py` | `src/agents/quant_analyst.py` | 106 |
-| `backend/tests/test_asset_discovery.py` | `src/agents/asset_discovery.py` | 106 |
-| `backend/tests/test_ranking.py` | `src/orchestration/ranking.py` | 102 |
-| `backend/tests/test_funds_risk_scale.py` | `src/funds/risk_scale.py` | 72 |
-| `backend/tests/test_supabase_repositories.py` | `src/utils/supabase_client.py` | 66 |
-| `backend/tests/test_funds_copy.py` | `src/funds/copy.py` | 50 |
-| `backend/tests/test_ss_aggregation.py` | `src/utils/ss_aggregation.py` | 49 |
-| `backend/tests/test_funds_routes.py` | `src/funds/routes.py`, `service.py` | 45 |
-| `backend/tests/test_funds_common_core.py` | migration 025's snapshot columns | 41 |
-| `backend/tests/test_funds_matcher.py` | `src/funds/matcher.py` | 37 |
-| `backend/tests/test_funds_admin_routes.py` | `src/funds/admin_routes.py` | 36 |
-| `backend/tests/test_funds_explain.py` | `src/funds/explain.py` | 32 |
-| `backend/tests/test_fund_seed_loader.py` | `scripts/load_fund_seed.py` | 29 |
-| `backend/tests/test_api_search_guard.py` | asset-search exchange guard | 28 |
-| `backend/tests/test_funds_documents.py` | `src/funds/documents.py` — the fetch allowlist | 26 |
-| `backend/tests/test_funds_asisa.py` | `src/funds/asisa.py` | 26 |
-| `backend/tests/test_funds_text_archive.py` | archiving a sheet's text (migration 026) | 24 |
-| `backend/tests/test_funds_isolation.py` | funds stay out of the pipeline | 9 |
-| `backend/tests/test_funds_config.py` | `src/funds/config.py` | 7 |
-| `frontend/src/utils/fundsCopy.test.ts` | funds copy + forbidden-term scan | 35 |
-| `frontend/src/utils/validation.test.ts` | email + password rules | 32 |
-| `frontend/src/utils/scoringEngine.test.ts` | onboarding psychometrics | 31 |
-| `frontend/src/utils/goals.test.ts` | onboarding goals + horizon | 28 |
-| `frontend/src/utils/staleness.test.ts` | nightly-run staleness | 20 |
-| `frontend/src/utils/stringFormatters.test.ts` | display formatting | 18 |
-| `frontend/src/utils/fundsCommonCore.test.ts` | common-core field display | 17 |
-| `frontend/src/utils/discovery.test.ts` | discovery provenance copy | 11 |
-| `frontend/src/utils/profileHistory.test.ts` | archiving previous survey answers | 10 |
+| Quant analysis, ranking, rand prices, Quant trace | `TestScoreUniverse`; `TestRankTerms`, `TestProfileFit`; `test_zar_prices.py`; the Quant trace `TestGuard` | 67 |
+| Sentiment | `TestAggregateSigned`, `TestBlendSentiment`; `test_scoring.py`, `test_nlp_budget.py`, `test_sentiment_card_truth.py` | 55 |
+| Whale watching | `test_insider_window.py`, `test_whale_display_truth.py`; the insider and institutional summary guards; `whaleFormat.test.ts` | 43 |
+| Market News | the tagging rule, the overview guard and tip filtering in `test_macro_news.py`; `macroNews.test.ts` | 30 |
+| Investment Comparison | the stock comparison `TestGuard`; the fund comparison `TestPlacing`; `compareFunds.test.ts` | 47 |
+| Fact-sheet uploads | the flagged-value, review-token, saved and refused classes of `test_funds_upload_service.py`; reader-to-reader privacy and catalogue isolation; the reader's `TestReview` | 50 |
+| Funds catalogue and matching | six matcher classes (worked cases, the ceiling, bracket lowering, eligibility, trackers, missing answers); `test_funds_isolation.py`; rand cents and unlisted prices; the fund trace `TestPlacing` | 42 |
+| Discovery and reasoning-trace style | `TestClassificationChain`, `TestUniverses`; `test_gr_reasoningtracestyle.py` | 20 |
+| Ask AlphaSwarm | `test_ask_output_validator.py` | 49 |
+| Accounts, sign-in and access | the access rules in `test_account_status.py`; the US-listing `TestTheFilter`; `validation.test.ts` | 58 |
+| Admin console | `test_non_admin_is_rejected` | 7 |
+| Onboarding, investor profile and Settings | `scoringEngine.test.ts`, `riskProfileReasoning.test.ts` | 51 |
+| Spotlight tour | `spotlightTourService.test.ts` (eligibility, failing closed) | 11 |
+| Dashboard and run status | `staleness.test.ts` | 20 |
+| Financial tools | `tfsaPlanner.test.ts`, `purchasingPower.test.ts` | 57 |
+| Learning Centre | `learningRoadmap.test.ts`, `learningExpertise.test.ts` | 25 |
 
-Suites under ten tests are omitted; the totals above are the full run.
+## Adding a test
 
-The target is the pure logic that decides what a user is shown and in what
-order: the four ranking terms and their composition, the two-stage quant
-percentile engine, the tier/recency sentiment blend, and the onboarding survey
-that produces a user's risk tolerance. Components, pages and hooks are
-deliberately out of scope — they are expensive to test and the risk in them is
-lower.
-
-The funds catalogue extends that scope in two places, for reasons specific to it.
-Its **API routes** are tested (`test_funds_routes.py`) because the matching
-rules, the fact-sheet data and the wording are only correct *together*: a route
-returning the right funds in the wrong shape, or a reason sentence that lost its
-disclaimer, is the failure that matters and no unit test sees it. The tests use
-the real service over a fake Supabase client, so nothing reaches a network. Its
-**database access** is tested (`test_funds_repository.py`) because a repository
-that silently returns nothing looks exactly like a catalogue that is empty.
-
-Two funds suites defend properties rather than behaviour, and are worth knowing
-about before changing anything nearby. `test_funds_copy.py` scans every
-user-facing string for wording that would turn information into financial
-advice. `test_funds_isolation.py` fails if the nightly pipeline ever imports the
-funds package — a fund has no social coverage, so the sentiment phase would hand
-it a neutral score that convergence reads as conflict, and it would be demoted
-rather than simply unscored.
+Put it in the file that owns the module. If it asserts its feature's deciding rule,
+mark it (or its class) `@pytest.mark.core` and say why in the commit message; keep
+each feature's core to its deciding rule, not its whole file. A new backend test file
+gets exactly one `smoke` test, the plainest happy path, picked in the same commit; if
+you rename a smoke test, keep the marker on it.
 
 ## What the assertions mean
 
 Three kinds, and the distinction matters when one goes red:
 
-- **Invariants** — properties the design promises for any input: terms stay
-  within their bounds, `profile_fit` only ever demotes, the stability pass never
-  drops a candidate, a tier's influence does not depend on its article count. A
-  failure here is a real defect.
+- **Invariants**: properties the design promises for any input. Ranking terms stay
+  within their bounds, `profile_fit` only ever demotes, and a sentiment tier's
+  influence does not depend on its article count. A failure here is a real defect.
 
-- **Pinned values** — the arithmetic today's constants produce. A failure means a
+- **Pinned values**: the arithmetic today's constants produce. A failure means a
   threshold moved. That is not automatically wrong, but it must be deliberate,
   because these numbers are the feed order users see. Update the expectation in
   the same commit that changes the constant.
 
-- **Regression guards** — named for bugs this project has already paid for once.
-  A negative beta must never be labelled "low" (observed live on DUK at −0.29);
+- **Regression guards**: named for bugs this project has already fixed once.
+  `score_universe` must keep ranking low volatility as high stability, and
   `risk_tolerance` must be compared against exactly one normalised spelling (six
-  spellings once left personalisation silently dead for ~39% of profiles);
-  `compute_raw_metrics` must use the shared SPY series rather than downloading
-  the benchmark once per ticker; and `score_universe` must keep ranking low
-  volatility as high stability — the two-stage engine that PR #16 silently
-  reverted on main, which took three days and a manual code review to notice.
-
-A handful of tests are marked `PINNED BEHAVIOUR` or `PINNED DEFECT`. Those record
-what the code does today where it is arguably wrong, with the reasoning in a
-comment. They are documentation, not endorsement — see the notes below.
+  spellings once left personalisation silently off for about 39% of profiles).
 
 ## Determinism
 
@@ -115,29 +114,7 @@ Every env-tunable constant is pinned to its documented default in
 `quant_analyst.py` and `ss_aggregation.py` all read their thresholds via
 `os.getenv` at import time, and `langgraph_orchestrator` calls `load_dotenv()`,
 so without that pinning a value added to `backend/.env` would shift every
-expectation in the suite and the failures would look like real regressions.
+expectation and the failures would look like real regressions.
 
 If a default legitimately changes, update `conftest.py` and the failing
 expectations will show exactly which behaviour moved.
-
-## Known issues these tests document but do not fix
-
-Each is pinned by a test with a comment explaining it. None is urgent; all are
-behaviour changes that deserve their own commit.
-
-1. `formatNumberWithSpaces(0)` returns `''`, because the guard is
-   `if (!value)` and `0` is falsy. A genuine zero renders as a blank field.
-2. `validatePassword` accepts special characters only from
-   `!@#$%^&*(),.?":{}|<>` — hyphen, underscore, plus and the bracket family are
-   rejected, which is a real source of signup friction.
-3. `determinePsychometrics` returns `Conservative` when any answer is
-   non-numeric, because `NaN` fails both band comparisons. It fails safe, but
-   silently.
-4. `_recency_weight` fails open at `1.0` for a `Z`-suffixed timestamp, since
-   `datetime.fromisoformat` rejects `Z` before Python 3.11. The live path is safe
-   because `created_at` is written with `datetime.isoformat()` (which emits
-   `+00:00`), but a raw Supabase JSON timestamp wired in directly would silently
-   disable recency decay.
-5. `calculate_macd` labels an exactly-flat histogram `bearish_crossover`, since
-   the test is `hist > 0`. Worth knowing before that string is shown to a user as
-   an explanation.

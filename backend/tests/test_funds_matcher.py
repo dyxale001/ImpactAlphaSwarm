@@ -140,6 +140,7 @@ def categories(outcome) -> set[str]:
 # The specification
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheWorkedCases:
     def test_aggressive_saving_an_emergency_fund_sees_only_accessible_money(self, matcher, catalogue):
         # The panel's own example, and the case the equity side of the product
@@ -168,6 +169,7 @@ class TestTheWorkedCases:
         }
         assert outcome.bracket.effective == "Conservative"
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_moderate_over_three_years_sees_balanced_and_bonds(self, matcher, catalogue):
         # High Equity is dropped by the ceiling (its label is 4, above 3) and
         # the five-year funds are dropped by the horizon. What is left is what a
@@ -238,6 +240,7 @@ class TestTheWorkedCases:
 # The properties that keep it honest
 # ═════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheCeilingIsAbsolute:
     def test_a_fund_with_no_published_label_never_matches_anyone(self, matcher, catalogue):
         # The single most important behaviour in the feature. A manager who
@@ -305,6 +308,7 @@ class TestPurpose:
         assert names(with_purpose) == names(without)
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestEligibility:
     def test_a_tax_free_account_excludes_funds_that_cannot_be_held_in_one(self, matcher):
         eligible = build_candidate("sa_ma_income", "Sierra TFSA Fund", 2, 1.0, False, tfsa=True)
@@ -326,6 +330,7 @@ class TestEligibility:
         assert names(outcome) == {"Uniform Fund"}
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestMissingAnswers:
     def test_no_goals_degrades_one_axis_not_the_whole_match(self, matcher, catalogue):
         outcome = matcher.match(profile("Conservative"), catalogue)
@@ -350,6 +355,7 @@ class TestMissingAnswers:
         assert outcome.bracket.ceiling == 3
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTrackerRestriction:
     def test_a_moderate_bracket_sees_broad_equity_only_as_a_tracker(self, matcher, catalogue):
         # Both funds sit in the same category with the same published risk label.
@@ -441,6 +447,7 @@ class TestTheOutcome:
         assert first.rules_applied == second.rules_applied
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestWhatCanLowerTheAppliedBracket:
     """INVARIANT: only the horizon and an emergency fund lower `effective`.
 

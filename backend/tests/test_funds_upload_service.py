@@ -328,6 +328,7 @@ class TestReading:
 
 # ── the review token ────────────────────────────────────────────────────────
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheReviewToken:
     def test_round_trips(self):
         assert verify(sign({"a": 1}, KEY), KEY) == {"a": 1}
@@ -362,6 +363,7 @@ class TestTheReviewToken:
 
 # ── saving ──────────────────────────────────────────────────────────────────
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestAFlaggedValueNeedsADecision:
     def test_it_cannot_be_saved_unconfirmed(self):
         svc, _ = service()
@@ -412,6 +414,7 @@ class TestAFlaggedValueNeedsADecision:
         assert sheet["provenance"]["risk_indicator_raw"]["model_value"] == "Moderate - High"
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestWhatIsSaved:
     def test_identity_on_the_fund_and_figures_under_the_catalogues_names(self):
         svc, _ = service()
@@ -456,6 +459,7 @@ class TestWhatIsSaved:
         assert any(w["field"] == "fee_period" for w in saved["warnings"])
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestWhatIsRefused:
     def save(self, **changes):
         svc, _ = service()
@@ -553,6 +557,7 @@ class TestHttp:
         assert mount_fund_uploads(app) is False
         assert TestClient(app).get("/api/fund-uploads").status_code == 404
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_round_trip(self, api):
         client, _ = api
         read = client.post("/api/fund-uploads/read", files={"file": ("sheet.pdf", pdf(), "application/pdf")})

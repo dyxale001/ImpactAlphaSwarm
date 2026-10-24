@@ -35,6 +35,7 @@ from src.utils.ss_daily import (  # noqa: E402
 )
 from src.utils.ss_scoring import MentionScorer  # noqa: E402
 from src.utils.ss_social import StockTwitsSource  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -190,6 +191,7 @@ def test_posts_without_a_timestamp_are_skipped():
 # ── bucketing and the numbers on the row ─────────────────────────────────────
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_posts_are_bucketed_by_utc_day():
 	builder = SocialDayBuilder(cfg())
 	rows = builder.build(

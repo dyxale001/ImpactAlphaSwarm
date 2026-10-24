@@ -225,6 +225,7 @@ class TestOneStandardForFormsAndCsv:
         payload = call[1][0]
         assert payload["performance"] == {"1y": 14.41, "3y": -2.5}
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_a_valid_fund_is_written(self, client):
         res = client.post("/api/admin/fund-catalogue/funds", json=VALID_FUND_BODY)
         assert res.status_code == 201
@@ -252,6 +253,10 @@ class TestTheStalenessOrdering:
         # Three funds: one never transcribed, one long overdue, one current.
         # The page exists to answer "what needs re-reading", so that is the
         # order it must return regardless of name or insertion order.
+        from datetime import timedelta
+
+        # The route reads the real clock, so "current" has to be relative to it.
+        recent = (date.today() - timedelta(days=5)).isoformat()
         never = {**FUND, "id": "f-never", "isin": "ZAE000000009", "name": "Aaa Never Read"}
         current = {**FUND, "id": "f-current", "isin": "ZAE000000008", "name": "Zzz Current"}
         app = build_app(
@@ -259,7 +264,7 @@ class TestTheStalenessOrdering:
                 "funds": [current, FUND, never],
                 "fund_factsheet_snapshots": [
                     {**SHEET, "id": "s-old", "fund_id": "f-1", "as_of": "2025-01-31"},
-                    {**SHEET, "id": "s-new", "fund_id": "f-current", "as_of": "2026-09-01"},
+                    {**SHEET, "id": "s-new", "fund_id": "f-current", "as_of": recent},
                 ],
             }
         )

@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import src.api as api  # noqa: E402
 import src.orchestration.langgraph_orchestrator as orch  # noqa: E402
 import src.utils.supabase_client as sc  # noqa: E402
+import pytest  # noqa: E402
 
 
 def run_nightly(monkeypatch, watchlists):
@@ -50,6 +51,7 @@ def run_nightly(monkeypatch, watchlists):
     return {u["user_id"]: u for u in captured["users"]}
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_each_users_watchlist_reaches_the_nightly_batch(monkeypatch):
     users = run_nightly(monkeypatch, {"u1": ["AAPL", "COST"], "u2": []})
     assert users["u1"]["watchlist"] == ["AAPL", "COST"]

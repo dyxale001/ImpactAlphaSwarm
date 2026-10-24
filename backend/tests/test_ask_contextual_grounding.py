@@ -23,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.api as api  # noqa: E402
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.live  # tier: live -- _resolve_asset() reads the real `assets` table; needs backend/.env (see TESTING.md, 'Tiers')
+
 
 def _ctx(**kwargs):
     return api.AskContext(**kwargs)

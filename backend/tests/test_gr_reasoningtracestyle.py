@@ -17,9 +17,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.utils.gr_reasoningtracestyle import HOUSE_STYLE  # noqa: E402
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 DASHES = ("—", "–", "―", "‒")
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_an_em_dash_becomes_a_comma():
 	out = HOUSE_STYLE.apply(
 		"AAPL sits here because the two signals disagree — the price data is "

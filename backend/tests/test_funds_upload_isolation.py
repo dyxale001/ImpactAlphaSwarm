@@ -187,6 +187,7 @@ def leaked(payload) -> bool:
     return UPLOADED_NAME in text or UPLOADED_ID in text or "ZAE000999999" in text
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestTheCatalogueNeverReturnsAnUpload:
     @pytest.fixture
     def api(self):
@@ -300,6 +301,7 @@ MINE = str(uuid.uuid4())
 THEIRS = str(uuid.uuid4())
 
 
+@pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
 class TestOneReaderCannotReachAnothers:
     """Through HTTP, with the real service and repository over one database
     holding both readers' funds."""
@@ -323,6 +325,7 @@ class TestOneReaderCannotReachAnothers:
         app.dependency_overrides[current_user_id] = lambda: USER
         return TestClient(app), client
 
+    @pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
     def test_the_list_holds_only_their_own(self, api):
         http, _ = api
         body = http.get("/api/fund-uploads").json()

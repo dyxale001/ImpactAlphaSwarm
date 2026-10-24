@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.utils.market_calendar import MarketCalendar  # noqa: E402
+import pytest  # noqa: E402
 
 calendar = MarketCalendar()
 
@@ -48,6 +49,7 @@ def test_saturday_and_sunday_are_named_by_their_own_day_names():
 	assert sunday is not None and sunday.name == "Sunday"
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_an_ordinary_trading_day_is_not_a_closure():
 	assert calendar.closure("2026-11-25") is None
 

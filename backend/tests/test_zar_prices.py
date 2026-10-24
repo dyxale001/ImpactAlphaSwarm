@@ -19,6 +19,9 @@ import pandas as pd  # noqa: E402
 
 from src.utils import supabase_client as sc  # noqa: E402
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.core  # tier: core -- see TESTING.md, 'Tiers'
+
 
 class FakeYf:
 	"""Stands in for yfinance, counting the symbols it was asked about.
@@ -82,6 +85,7 @@ def test_a_ticker_currency_is_looked_up_once():
 	assert fake.counts("AAPL") == 3
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_the_price_is_converted_with_the_inverted_pair():
 	converter = _converter(FakeYf())
 

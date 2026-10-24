@@ -24,6 +24,7 @@ from src.utils.day_drivers import (  # noqa: E402
 )
 from src.utils.day_summary import DayEvidence, DaySummaryGenerator, WeekDay  # noqa: E402
 from src.utils.ss_config import SentimentConfig  # noqa: E402
+import pytest  # noqa: E402
 
 UTC = datetime.timezone.utc
 
@@ -365,6 +366,7 @@ def stored(day, *, is_final, news_count=5, post_count=63, age_minutes=0):
 	}
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_a_past_day_is_generated_once_stored_final_and_served():
 	svc, gen = service()
 

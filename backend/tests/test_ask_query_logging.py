@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import src.api as api
 from _fake_supabase import FakeSupabase
 
+import pytest  # noqa: E402
+pytestmark = pytest.mark.live  # tier: live -- _resolve_asset() reads the real `assets` table; needs backend/.env (see TESTING.md, 'Tiers')
+
 # Captured at collection time, before conftest's autouse fixture patches
 # api._log_ask_query to a no-op for every test — tests that want to exercise
 # the REAL function restore this reference explicitly.

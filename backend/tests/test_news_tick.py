@@ -302,6 +302,7 @@ def test_it_fetches_yesterday_and_today_only():
 	assert repo.score_reads == [(["AAPL"], today() - datetime.timedelta(days=1))]
 
 
+@pytest.mark.smoke  # tier: smoke -- one happy path per file (TESTING.md, 'Tiers')
 def test_each_day_in_the_fetch_becomes_its_own_row():
 	"""Yesterday's late articles land on yesterday, which is the gap the nightly leaves."""
 	yesterday = today() - datetime.timedelta(days=1)
