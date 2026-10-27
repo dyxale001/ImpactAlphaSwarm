@@ -4,35 +4,35 @@
   "steps": [
     {
       "title": "Relational data",
-      "description": "Our data is relational. For example, users have analysis runs, those runs have recommendations, and each recommendation links to an asset.\n\nThat makes PostgreSQL and Supabase a good fit, because we can define those relationships using foreign keys and enforce rules through check constraints."
+      "description": "- Relational data in PostgreSQL / Supabase\n- Users → analysis runs → recommendations → assets\n- Foreign keys and check constraints"
     },
     {
       "title": "Backend connection",
-      "description": "The backend connects through a shared Supabase client. If the required connection settings are missing, it fails immediately, so we catch configuration problems at startup.",
+      "description": "- Shared Supabase client\n- Environment-based configuration\n- Startup check for missing settings",
       "file": "backend/src/utils/supabase_client.py",
       "line": 53
     },
     {
       "title": "Frontend connection",
-      "description": "The frontend has a separate client configured with the public anon key. The privileged service-role key stays on the backend.",
+      "description": "- Separate frontend client\n- Public anon key\n- Service-role key stays on the backend",
       "file": "frontend/src/lib/supabase.ts",
       "line": 1
     },
     {
       "title": "Repository base and analysis-run repository",
-      "description": "To organise database access, our main backend repositories share a common base class. This provides shared client and table access, and here’s the analysis-run repository extending it.",
+      "description": "- Common Repository base class\n- Shared client and table access\n- AiRunRepository extends Repository",
       "file": "backend/src/utils/supabase_client.py",
       "line": 282
     },
     {
       "title": "Schema migrations",
-      "description": "Our schema updates are recorded in numbered migration files, from 001 to 039, with headers explaining the reason for each change.",
+      "description": "- Numbered schema updates: 001–039\n- Explanatory migration headers",
       "file": "backend/migrations/039_uploaded_funds.sql",
       "line": 1
     },
     {
       "title": "Uploaded-funds constraints",
-      "description": "This uploaded-funds migration is one example. Each upload is linked to a user account, so deleting that user also deletes their uploaded-fund records. This check constraint also restricts the permitted fund vehicle types.",
+      "description": "- User-linked uploaded funds\n- ON DELETE CASCADE\n- Vehicle constraint: unit_trust, etf or null",
       "file": "backend/migrations/039_uploaded_funds.sql",
       "line": 31
     }
