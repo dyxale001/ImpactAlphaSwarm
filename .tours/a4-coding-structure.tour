@@ -1,0 +1,81 @@
+{
+  "title": "A4 - Coding structure",
+  "description": "Demo section 3:45–5:30. Funds backend and frontend walkthrough.",
+  "steps": [
+    {
+      "title": "Backend layers",
+      "description": "**Point out:** routes.py, service.py and repository.py.\n\n**Say:** In feature packages such as funds, the backend follows a router–service–repository structure. This separates how we handle requests, coordinate business rules and access the database.",
+      "directory": "backend/src/funds"
+    },
+    {
+      "title": "Router — HTTP",
+      "description": "**Point out:** @router.get, query parameters, service.list_funds (lines 76–98).\n\n**Say:** The router handles the HTTP request and response. Here, it receives the filter parameters and passes them to the service.",
+      "file": "backend/src/funds/routes.py",
+      "line": 76
+    },
+    {
+      "title": "Service — coordination",
+      "description": "**Point out:** Injected repositories and FundMatcher, then list_funds at line 49.\n\n**Say:** The service coordinates the business rules, working with the repositories and delegating matching rules to the fund matcher.\n\n**Note:** The browse list_funds method shapes catalogue results; profile matching is a separate responsibility of this service.",
+      "file": "backend/src/funds/service.py",
+      "line": 28
+    },
+    {
+      "title": "Repository — queries",
+      "description": "**Point out:** Filters, name ordering and execute (lines 80–115).\n\n**Say:** The repository handles the database queries. Here, it applies the filters, orders the funds by name and executes the query.",
+      "file": "backend/src/funds/repository.py",
+      "line": 80
+    },
+    {
+      "title": "Frontend responsibilities",
+      "description": "**Point out:** pages, components, hooks, services and utils.\n\n**Say:** On the frontend, we also separate responsibilities. Pages bring the screen together, components provide reusable interface elements, hooks manage state and logic, and services communicate with the backend and Supabase.",
+      "directory": "frontend/src"
+    },
+    {
+      "title": "Utility function",
+      "description": "**Point out:** formatPercent handles rounding and missing values (lines 861–865).\n\n**Say:** Utilities contain smaller, tested functions. This percentage formatter, for example, has tests covering formatting and missing values.",
+      "file": "frontend/src/utils/fundsCopy.ts",
+      "line": 861
+    },
+    {
+      "title": "Utility tests",
+      "description": "**Point out:** Formatting, floating-point noise and missing-value tests (lines 92–108).\n\n**Presenter cue:** Briefly show the evidence; no extra spoken paragraph needed.",
+      "file": "frontend/src/utils/fundsCopy.test.ts",
+      "line": 92
+    },
+    {
+      "title": "Page assembles components",
+      "description": "**Point out:** FundFilters receives filters and onPatch at lines 304–309; FundCard is rendered at lines 340–341.\n\n**Say:** The funds catalogue shows how these layers work together. The page brings together components such as the filters and fund cards.",
+      "file": "frontend/src/pages/Funds.tsx",
+      "line": 304
+    },
+    {
+      "title": "Page updates filter state",
+      "description": "**Point out:** useState and useFundCatalogue(filters) at lines 84–87; patch updates state at lines 129–130.\n\n**Say:** When a user changes a filter, the page updates its state and passes the filters to the catalogue hook.",
+      "file": "frontend/src/pages/Funds.tsx",
+      "line": 84
+    },
+    {
+      "title": "Hook — data lifecycle",
+      "description": "**Point out:** useEffect depends on filter values; getFundCatalogue, loading and error state (lines 18–52).\n\n**Say:** The hook reloads the data when those filters change and manages the loading and error states.",
+      "file": "frontend/src/hooks/useFundCatalogue.ts",
+      "line": 18
+    },
+    {
+      "title": "API service — backend request",
+      "description": "**Point out:** fetch to /api/fund-catalogue with filters and response check (lines 268–271).\n\n**Say:** It calls this API service, which makes the backend request with the selected filters.",
+      "file": "frontend/src/services/api/fundCatalogue.ts",
+      "line": 268
+    },
+    {
+      "title": "Page renders results",
+      "description": "**Point out:** Loading skeleton, error notice, empty results and FundCard mapping (lines 313–342).\n\n**Say:** The page then uses that state to show loading, an error, an empty result or the fund cards.",
+      "file": "frontend/src/pages/Funds.tsx",
+      "line": 313
+    },
+    {
+      "title": "Maintainability and optional live check",
+      "description": "**Optional:** Switch to the running app, open Browse funds and change Fund type. Return here afterwards.\n\n**Say:** This separation gives us a consistent way to organise, test and maintain the code.",
+      "directory": "frontend/src"
+    }
+  ]
+}
