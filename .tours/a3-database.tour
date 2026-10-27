@@ -1,0 +1,58 @@
+{
+  "title": "A3 - Database",
+  "description": "Demo section 2:00–3:45. Spoken script and evidence pointers.",
+  "nextTour": "A4 - Coding structure",
+  "steps": [
+    {
+      "title": "Relational data — schema diagram",
+      "description": "**Show manually:** Switch to Supabase’s schema diagram: users, ai_runs, ai_recommendation and assets. Point to foreign-key relationships, then return to VS Code.\n\n**Say:** Our data is relational. For example, users have analysis runs, those runs have recommendations, and each recommendation links to an asset. That makes PostgreSQL a good fit, because we can define those relationships using foreign keys and enforce rules through check constraints."
+    },
+    {
+      "title": "Backend connection",
+      "description": "**Point out:** Environment variable names, missing-settings check and create_client (lines 53–59).\n\n**Say:** The backend connects through a shared Supabase client. If the required connection settings are missing, it fails immediately, so we catch the configuration problem at startup.",
+      "file": "backend/src/utils/supabase_client.py",
+      "line": 53
+    },
+    {
+      "title": "Frontend connection",
+      "description": "**Point out:** Public anon key and createClient (lines 1–10).\n\n**Say:** The frontend has a separate client that uses only the public key. The privileged service-role key stays on the backend.",
+      "file": "frontend/src/lib/supabase.ts",
+      "line": 3
+    },
+    {
+      "title": "Shared repository base",
+      "description": "**Point out:** Repository, client property and table() (lines 282–306).\n\n**Say:** Our main backend repositories share a common base class. This provides the shared client and table access.",
+      "file": "backend/src/utils/supabase_client.py",
+      "line": 282
+    },
+    {
+      "title": "Concrete repository",
+      "description": "**Point out:** AiRunRepository(Repository), table_name = ai_runs (lines 549–556).\n\n**Say:** Here’s the analysis-run repository extending it.",
+      "file": "backend/src/utils/supabase_client.py",
+      "line": 549
+    },
+    {
+      "title": "Numbered schema updates",
+      "description": "**Show:** Numbered files 001–039 in the Explorer.\n\n**Say:** Our schema updates are recorded in numbered migration files, from 001 to 039, with headers explaining the reason for each change.",
+      "directory": "backend/migrations"
+    },
+    {
+      "title": "Migration header",
+      "description": "**Point out:** Explanatory comment header (lines 1–24).\n\n**Say:** This uploaded-funds migration is one example.",
+      "file": "backend/migrations/039_uploaded_funds.sql",
+      "line": 1
+    },
+    {
+      "title": "Relationships and constraints",
+      "description": "**Point out:** user_id foreign key and ON DELETE CASCADE at line 33; vehicle check constraint at line 42.\n\n**Say:** The user’s uploads are linked to their account, so deleting the user also deletes those records.\n\n**Evidence:** The vehicle check permits null, unit_trust or etf.",
+      "file": "backend/migrations/039_uploaded_funds.sql",
+      "line": 33
+    },
+    {
+      "title": "Unique fund per user",
+      "description": "**Point out:** Partial unique index (user_id, isin), WHERE isin IS NOT NULL (lines 49–53).\n\n**Say:** There’s also a unique index that prevents the same ISIN from being saved twice for one user, where an ISIN is available.",
+      "file": "backend/migrations/039_uploaded_funds.sql",
+      "line": 52
+    }
+  ]
+}
