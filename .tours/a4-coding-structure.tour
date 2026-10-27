@@ -1,81 +1,69 @@
 {
   "title": "A4 - Coding structure",
-  "description": "Funds feature architecture and frontend data flow.",
   "steps": [
     {
       "title": "Backend layers",
-      "description": "The funds package separates HTTP handling, business coordination and database access into routers, services and repositories.",
+      "description": "In feature packages such as funds, the backend follows a router–service–repository structure. This separates how we handle requests, coordinate business rules and access the database.",
       "directory": "backend/src/funds"
     },
     {
-      "title": "Router — HTTP",
-      "description": "The catalogue endpoint receives filter parameters and delegates to service.list_funds.",
+      "title": "Router",
+      "description": "The router handles the HTTP request and response. Here, it receives the filter parameters and passes them to the service.",
       "file": "backend/src/funds/routes.py",
       "line": 76
     },
     {
-      "title": "Service — coordination",
-      "description": "FundCatalogueService coordinates repositories and FundMatcher. list_funds retrieves candidates and shapes the catalogue response; matching rules are delegated to the matcher.",
+      "title": "Service",
+      "description": "The service coordinates the business rules, working with the repositories and delegating matching rules to the fund matcher.",
       "file": "backend/src/funds/service.py",
       "line": 28
     },
     {
-      "title": "Repository — queries",
-      "description": "The repository builds the Supabase query, applies filters, orders by name and executes the request.",
+      "title": "Repository",
+      "description": "The repository handles the database queries. Here, it applies the filters, orders the funds by name and executes the query.",
       "file": "backend/src/funds/repository.py",
       "line": 80
     },
     {
       "title": "Frontend responsibilities",
-      "description": "Pages compose screens, components provide interface elements, hooks manage state and data loading, services handle external communication, and utilities hold supporting functions.",
+      "description": "On the frontend, we also separate responsibilities. Pages bring the screen together, components provide reusable interface elements, hooks manage state and logic, and services communicate with the backend and Supabase.",
       "directory": "frontend/src"
     },
     {
-      "title": "Utility function",
-      "description": "formatPercent formats percentages, trims floating-point noise and handles missing values.",
+      "title": "Utilities",
+      "description": "Utilities contain smaller, tested functions. This percentage formatter, for example, has tests covering formatting and missing values.",
       "file": "frontend/src/utils/fundsCopy.ts",
       "line": 861
     },
     {
-      "title": "Utility tests",
-      "description": "Tests cover percentage formatting, floating-point rounding and missing values.",
-      "file": "frontend/src/utils/fundsCopy.test.ts",
-      "line": 92
-    },
-    {
-      "title": "Page assembles components",
-      "description": "FundsPage composes FundFilters and FundCard components, passing state and callbacks through props.",
+      "title": "Page components",
+      "description": "The funds catalogue shows how these layers work together. The page brings together components such as the filters and fund cards.",
       "file": "frontend/src/pages/Funds.tsx",
-      "line": 304
+      "line": 294
     },
     {
-      "title": "Page updates filter state",
-      "description": "Filter state is held in the page and passed to useFundCatalogue. The patch callback updates selected filters.",
+      "title": "Filter state",
+      "description": "When a user changes a filter, the page updates its state and passes the filters to the catalogue hook.",
       "file": "frontend/src/pages/Funds.tsx",
       "line": 84
     },
     {
-      "title": "Hook — data lifecycle",
-      "description": "useFundCatalogue reloads data when filter values change and maintains data, loading and error state.",
+      "title": "Catalogue hook",
+      "description": "The hook reloads the data when those filters change and manages the loading and error states.",
       "file": "frontend/src/hooks/useFundCatalogue.ts",
       "line": 18
     },
     {
-      "title": "API service — backend request",
-      "description": "getFundCatalogue sends filters to /api/fund-catalogue and rejects unsuccessful responses.",
+      "title": "API service",
+      "description": "It calls this API service, which makes the backend request with the selected filters.",
       "file": "frontend/src/services/api/fundCatalogue.ts",
       "line": 268
     },
     {
-      "title": "Page renders results",
-      "description": "Conditional rendering handles loading, errors, empty results and the fund-card list.",
+      "title": "Results and maintainability",
+      "description": "The page then uses that state to show loading, an error, an empty result or the fund cards.\n\nThis separation gives us a consistent way to organise, test and maintain the code.",
       "file": "frontend/src/pages/Funds.tsx",
       "line": 313
-    },
-    {
-      "title": "Separation of concerns",
-      "description": "Separating interface composition, state, API requests and supporting logic helps keep the feature maintainable.",
-      "directory": "frontend/src"
     }
   ]
 }
