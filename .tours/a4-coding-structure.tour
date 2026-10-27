@@ -3,65 +3,65 @@
   "steps": [
     {
       "title": "Backend layers",
-      "description": "In feature packages such as funds, the backend follows a router–service–repository structure. This separates how we handle requests, coordinate business rules and access the database.",
+      "description": "- Router → service → repository\n- Separate responsibilities",
       "directory": "backend/src/funds"
     },
     {
       "title": "Router",
-      "description": "The router handles the HTTP request and response. Here, it receives the filter parameters and passes them to the service.",
+      "description": "- HTTP requests and responses\n- Filter parameters\n- Delegates to service.list_funds",
       "file": "backend/src/funds/routes.py",
       "line": 76
     },
     {
       "title": "Service",
-      "description": "The service coordinates the business rules, working with the repositories and delegating matching rules to the fund matcher.",
+      "description": "- Coordinates business rules\n- Works with repositories\n- Delegates matching to FundMatcher",
       "file": "backend/src/funds/service.py",
       "line": 28
     },
     {
       "title": "Repository",
-      "description": "The repository handles the database queries. Here, it applies the filters, orders the funds by name and executes the query.",
+      "description": "- Builds database queries\n- Applies filters\n- Orders by name and executes",
       "file": "backend/src/funds/repository.py",
       "line": 80
     },
     {
       "title": "Frontend responsibilities",
-      "description": "On the frontend, we also separate responsibilities. Pages bring the screen together, components provide reusable interface elements, hooks manage state and logic, and services communicate with the backend and Supabase.",
+      "description": "- Pages and reusable components\n- Hooks: state and logic\n- Services: backend / Supabase access",
       "directory": "frontend/src"
     },
     {
       "title": "Utilities",
-      "description": "Utilities contain smaller, tested functions. This percentage formatter, for example, has tests covering formatting and missing values.",
+      "description": "- Small utility functions\n- Percentage formatting\n- Tests for formatting and missing values",
       "file": "frontend/src/utils/fundsCopy.ts",
       "line": 861
     },
     {
       "title": "Page components",
-      "description": "The funds catalogue shows how these layers work together. The page brings together components such as the filters and fund cards.",
+      "description": "- Funds page composes the interface\n- Filter controls and fund cards",
       "file": "frontend/src/pages/Funds.tsx",
       "line": 294
     },
     {
       "title": "Filter state",
-      "description": "When a user changes a filter, the page updates its state and passes the filters to the catalogue hook.",
+      "description": "- Page owns filter state\n- Changes update state\n- Filters passed to catalogue hook",
       "file": "frontend/src/pages/Funds.tsx",
       "line": 84
     },
     {
       "title": "Catalogue hook",
-      "description": "The hook reloads the data when those filters change and manages the loading and error states.",
+      "description": "- Reloads when filters change\n- Manages loading and errors",
       "file": "frontend/src/hooks/useFundCatalogue.ts",
       "line": 18
     },
     {
       "title": "API service",
-      "description": "It calls this API service, which makes the backend request with the selected filters.",
+      "description": "- Calls /api/fund-catalogue\n- Sends selected filters\n- Checks response status",
       "file": "frontend/src/services/api/fundCatalogue.ts",
       "line": 268
     },
     {
       "title": "Results and maintainability",
-      "description": "The page then uses that state to show loading, an error, an empty result or the fund cards.\n\nThis separation gives us a consistent way to organise, test and maintain the code.",
+      "description": "- Loading, error and empty states\n- Fund-card results\n- Separation supports testing and maintenance",
       "file": "frontend/src/pages/Funds.tsx",
       "line": 313
     }
