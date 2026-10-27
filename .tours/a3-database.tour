@@ -1,58 +1,40 @@
 {
   "title": "A3 - Database",
-  "description": "Database relationships, connections, repositories and schema migrations.",
   "nextTour": "A4 - Coding structure",
   "steps": [
     {
-      "title": "Relational data — schema diagram",
-      "description": "Users, analysis runs, recommendations and assets form related records in PostgreSQL. Foreign keys represent these relationships."
+      "title": "Relational data",
+      "description": "Our data is relational. For example, users have analysis runs, those runs have recommendations, and each recommendation links to an asset.\n\nThat makes PostgreSQL and Supabase a good fit, because we can define those relationships using foreign keys and enforce rules through check constraints."
     },
     {
       "title": "Backend connection",
-      "description": "Shared backend Supabase client, configured through environment variables. Missing connection settings raise an error at startup.",
+      "description": "The backend connects through a shared Supabase client. If the required connection settings are missing, it fails immediately, so we catch configuration problems at startup.",
       "file": "backend/src/utils/supabase_client.py",
       "line": 53
     },
     {
       "title": "Frontend connection",
-      "description": "Separate frontend Supabase client using the public anon key. The privileged service-role key remains on the backend.",
+      "description": "The frontend has a separate client configured with the public anon key. The privileged service-role key stays on the backend.",
       "file": "frontend/src/lib/supabase.ts",
-      "line": 3
+      "line": 1
     },
     {
-      "title": "Shared repository base",
-      "description": "The Repository base class provides shared client resolution and table access.",
+      "title": "Repository base and analysis-run repository",
+      "description": "To organise database access, our main backend repositories share a common base class. This provides shared client and table access, and here’s the analysis-run repository extending it.",
       "file": "backend/src/utils/supabase_client.py",
       "line": 282
     },
     {
-      "title": "Concrete repository",
-      "description": "AiRunRepository extends Repository and targets the ai_runs table.",
-      "file": "backend/src/utils/supabase_client.py",
-      "line": 549
-    },
-    {
-      "title": "Numbered schema updates",
-      "description": "Numbered migration files record schema updates.",
-      "directory": "backend/migrations"
-    },
-    {
-      "title": "Migration header",
-      "description": "This migration documents the user-uploaded funds schema and its supporting controls.",
+      "title": "Schema migrations",
+      "description": "Our schema updates are recorded in numbered migration files, from 001 to 039, with headers explaining the reason for each change.",
       "file": "backend/migrations/039_uploaded_funds.sql",
       "line": 1
     },
     {
-      "title": "Relationships and constraints",
-      "description": "The user_id foreign key uses ON DELETE CASCADE. The vehicle check constraint permits unit_trust, etf or null.",
+      "title": "Uploaded-funds constraints",
+      "description": "This uploaded-funds migration is one example. Each upload is linked to a user account, so deleting that user also deletes their uploaded-fund records. This check constraint also restricts the permitted fund vehicle types.",
       "file": "backend/migrations/039_uploaded_funds.sql",
-      "line": 33
-    },
-    {
-      "title": "Unique fund per user",
-      "description": "A partial unique index on (user_id, isin) prevents duplicate ISINs per user when an ISIN is available.",
-      "file": "backend/migrations/039_uploaded_funds.sql",
-      "line": 52
+      "line": 31
     }
   ]
 }
